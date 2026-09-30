@@ -1,0 +1,1 @@
+"""Pipeline view object package."""
