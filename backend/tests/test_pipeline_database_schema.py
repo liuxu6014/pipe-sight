@@ -28,6 +28,8 @@ CORE_TABLES = {
     'generation_tasks',
     'reports',
     'report_versions',
+    'pipeline_prompt_versions',
+    'pipeline_template_versions',
 }
 COLLECTION_TABLES = {
     'data_sources',
@@ -36,7 +38,7 @@ COLLECTION_TABLES = {
     'papers',
 }
 DOMAIN_TABLES = CORE_TABLES | COLLECTION_TABLES
-FULL_TABLE_COUNT = 23
+FULL_TABLE_COUNT = 25
 DEFERRED_TABLES = {
     'collection_records',
     'taxonomy_terms',

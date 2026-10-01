@@ -2,7 +2,7 @@
   <div class="ps-editor-page">
     <header class="ps-editor-topbar">
       <div class="ps-editor-title"><button type="button" aria-label="返回科研工作台" @click="router.push('/portal/research')"><ArrowLeft /></button><span><strong>{{ report.title }}</strong><small>{{ reportTypeLabel }} · {{ report.version }}</small></span></div>
-      <div class="ps-save-state"><span :class="{ 'is-saving': saving }"></span>{{ saving ? '正在保存…' : '已自动保存' }}<b>{{ wordCount.toLocaleString() }} 字</b></div>
+      <div class="ps-save-state"><span :class="{ 'is-saving': saving }"></span>{{ saveLabel }}<b>{{ wordCount.toLocaleString() }} 字</b></div>
       <div class="ps-editor-actions"><el-button @click="saveVersion"><CollectionTag />保存版本</el-button><el-button @click="openCurrentPreview"><View />预览</el-button><el-button type="primary" @click="exportReport"><Download />导出 Markdown</el-button></div>
     </header>
     <div class="ps-editor-layout">
@@ -23,14 +23,12 @@
             <h2>{{ currentSection.title }}</h2>
             <p v-for="paragraph in sectionParagraphs" :key="paragraph">{{ paragraph }}</p>
           </section>
-          <div class="ps-ai-selection-toolbar"><button v-for="action in ['改写', '扩写', '压缩', '专业化', '补充引用']" :key="action" type="button" @click="runAiAction(action)"><MagicStick />{{ action }}</button></div>
         </article>
       </main>
 
       <aside class="ps-editor-inspector">
         <div class="ps-inspector-tabs"><button v-for="tab in rightTabs" :key="tab" type="button" :class="{ 'is-active': activeRightTab === tab }" @click="activeRightTab = tab">{{ tab }}</button></div>
         <div v-if="activeRightTab === '引用来源'" class="ps-inspector-content"><div class="ps-inspector-summary"><strong>{{ citations.length }} 条引用</strong><span>引用均可回到来源条目</span></div><button v-for="source in citations" :key="source.id" type="button" class="ps-citation-card"><span>{{ source.type }}</span><strong>{{ source.title }}</strong><small>{{ source.location }}</small><p>{{ source.quote }}</p></button></div>
-        <div v-else-if="activeRightTab === '生成建议'" class="ps-inspector-content"><label>对当前章节的补充要求<el-input v-model="aiRequirement" type="textarea" :rows="5" placeholder="例如：补充国内外技术路线差异，并引用近三年论文" /></label><el-button type="primary" class="ps-block-action" :loading="generating" @click="generateSuggestion"><MagicStick />基于知识库生成</el-button><div v-if="candidateVisible" class="ps-ai-candidate"><span>知识库候选内容</span><p>{{ candidateText }}</p><small v-if="candidateReferences.length">关联 {{ candidateReferences.length }} 条授权资料，采用后仍建议打开原文复核。</small><div><el-button size="small" @click="dismissCandidate">保留原文</el-button><el-button size="small" type="primary" @click="acceptCandidate">采用内容</el-button></div></div></div>
         <div v-else-if="activeRightTab === '质量问题'" class="ps-inspector-content"><div v-for="issue in issues" :key="issue.title" class="ps-quality-card" :class="`is-${issue.level}`"><span>{{ issue.levelLabel }}</span><strong>{{ issue.title }}</strong><p>{{ issue.description }}</p><el-button text @click="locateIssue(issue)">定位并处理</el-button></div><p v-if="!issues.length" class="ps-inspector-empty">当前没有待处理的质量问题</p></div>
         <div v-else class="ps-inspector-content"><div v-for="version in versions" :key="version.versionNo" class="ps-version-row"><span></span><div><strong>{{ version.name }}</strong><small>{{ version.time }} · {{ version.owner }}</small></div><el-dropdown @command="handleVersionCommand($event, version)"><button type="button" :aria-label="`${version.name}操作`"><MoreFilled /></button><template #dropdown><el-dropdown-menu><el-dropdown-item command="preview">预览</el-dropdown-item><el-dropdown-item command="compare">与当前版本对比</el-dropdown-item><el-dropdown-item command="restore">恢复此版本</el-dropdown-item></el-dropdown-menu></template></el-dropdown></div><p v-if="!versions.length" class="ps-inspector-empty">还没有可用的历史版本</p></div>
       </aside>
@@ -42,32 +40,28 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, CollectionTag, Download, Grid, Link, MagicStick, MoreFilled, Picture, Plus, Rank, View } from '@element-plus/icons-vue'
+import { ArrowLeft, CollectionTag, Download, Grid, Link, MoreFilled, Picture, Plus, Rank, View } from '@element-plus/icons-vue'
 import usePortalStore from '@/store/modules/portal'
-import { askPipelineKnowledge, exportPipelineResearchReport, getPipelineResearchReport, getPipelineResearchReportVersion, listPipelineResearchReportVersions, restorePipelineResearchReportVersion, updatePipelineResearchReport } from '@/api/pipeline/intelligence'
+import { exportPipelineResearchReport, getPipelineResearchReport, getPipelineResearchReportVersion, listPipelineResearchReportVersions, restorePipelineResearchReportVersion, updatePipelineResearchReport } from '@/api/pipeline/intelligence'
 
 const route = useRoute()
 const router = useRouter()
 const portalStore = usePortalStore()
 const report = ref(portalStore.researchReports.find(item => item.id === route.params.id) || { id: String(route.params.id), title: '科研报告', type: 'research-demand', version: 'V1.0', words: 0 })
 const saving = ref(false)
+const saveState = ref('saved')
 const previewVisible = ref(false)
 const editorContentRef = ref()
 const currentSectionId = ref(1)
 const activeRightTab = ref('引用来源')
-const aiRequirement = ref('')
-const generating = ref(false)
-const candidateVisible = ref(false)
-const candidateText = ref('')
-const candidateReferences = ref([])
 const wordCount = ref(0)
 const versionPreview = ref(null)
 const compareVisible = ref(false)
 const comparisonVersion = ref({ version: '', content: '' })
 const formatTools = ['H1', 'H2', 'B', 'I', '•', '1.']
-const rightTabs = ['引用来源', '生成建议', '质量问题', '版本记录']
+const rightTabs = ['引用来源', '质量问题', '版本记录']
 const sections = ref([{ id: 1, title: '新建章节', content: '', words: 0, citations: 0, status: 'draft' }])
 const citations = ref([])
 const issues = ref([])
@@ -83,55 +77,51 @@ const completeness = computed(() => {
   return Math.round(earned / sections.value.length)
 })
 let saveTimer
+let dirty = false
+let savePromise = Promise.resolve()
+const saveLabel = computed(() => ({ saved: '已保存', dirty: '有未保存修改', saving: '正在保存…', error: '保存失败，请重试' })[saveState.value] || '保存状态未知')
 watch(() => [report.value?.id, report.value?.words], ([, words]) => { wordCount.value = Number(words || 0) }, { immediate: true })
-function buildMarkdown() { return [`# ${report.value.title}`, '', ...sections.value.flatMap((section, index) => [`## ${index + 1}. ${section.title}`, '', section.content || '', ''])].join('\n') }
+function buildMarkdown() { return [`# ${report.value.title}`, '', ...sections.value.flatMap((section, index) => [`## ${index + 1}. ${section.title}`, '', section.content || '', '']), '## 参考资料', '', ...citations.value.map(item => `[${item.id}] ${item.title}（${item.source || item.type}，${item.location || '来源条目'}）`)].join('\n') }
 function markSaving() {
+  dirty = true
+  saveState.value = 'dirty'
   saving.value = true
   clearTimeout(saveTimer)
-  saveTimer = setTimeout(async () => {
-    try {
-      const res = await updatePipelineResearchReport(report.value.id, { title: report.value.title, content: buildMarkdown(), sections: sections.value })
-      report.value = { ...report.value, ...res.data }
-    } catch (error) {
-      ElMessage.error('自动保存失败，请检查后端服务')
-    } finally {
-      saving.value = false
-    }
-  }, 700)
+  saveTimer = setTimeout(() => { savePromise = savePromise.then(saveCurrent) }, 700)
+}
+async function saveCurrent() {
+  if (!dirty) return
+  dirty = false
+  saving.value = true
+  saveState.value = 'saving'
+  try {
+    const res = await updatePipelineResearchReport(report.value.id, { title: report.value.title, content: buildMarkdown(), sections: sections.value, citations: citations.value, expectedVersion: report.value.versionNo, expectedRevision: report.value.revision })
+    report.value = { ...report.value, ...res.data }
+    saveState.value = dirty ? 'dirty' : 'saved'
+  } catch (error) {
+    dirty = true
+    saveState.value = 'error'
+    ElMessage.error('自动保存失败，当前修改尚未保存')
+  } finally {
+    saving.value = false
+  }
+}
+async function ensureSaved() {
+  clearTimeout(saveTimer)
+  if (dirty) savePromise = savePromise.then(saveCurrent)
+  await savePromise
+  if (dirty || saveState.value === 'error') throw new Error('report has unsaved changes')
 }
 function updateTitle(event) { report.value.title = event.currentTarget.innerText.trim() || report.value.title; markSaving() }
 function updateSectionContent(event) { currentSection.value.content = event.currentTarget.innerText.replace(currentSection.value.title, '').trim(); currentSection.value.words = currentSection.value.content.length; wordCount.value = sections.value.reduce((sum, item) => sum + Number(item.words || 0), 0); markSaving() }
-function addSection() { const id = Date.now(); sections.value.push({ id, title: '新增章节', content: '', words: 0, citations: 0, status: 'draft' }); currentSectionId.value = id; markSaving() }
-function runAiAction(action) { activeRightTab.value = '生成建议'; aiRequirement.value = `请对当前章节执行“${action}”，保持专业术语、事实边界和引用含义不变。`; generateSuggestion() }
-async function generateSuggestion() {
-  if (generating.value || !currentSection.value) return
-  generating.value = true
-  candidateVisible.value = false
-  try {
-    const question = [
-      `报告：${report.value.title}`,
-      `章节：${currentSection.value.title}`,
-      `当前正文：${currentSection.value.content || '暂无正文'}`,
-      `编辑要求：${aiRequirement.value || '补充能够被授权资料支持的专业内容'}`,
-      '请只依据当前账号可访问资料给出可直接写入报告的候选段落，并保留证据编号。'
-    ].join('\n')
-    const res = await askPipelineKnowledge(question)
-    candidateText.value = String(res.data?.answer || '').trim()
-    candidateReferences.value = res.data?.references || []
-    if (!candidateText.value) throw new Error('empty suggestion')
-    candidateVisible.value = true
-  } catch (error) {
-    candidateText.value = ''
-    candidateReferences.value = []
-    ElMessage.error('知识库建议生成失败，请确认资料已解析并重试')
-  } finally {
-    generating.value = false
-  }
+function handleBeforeUnload(event) {
+  if (!dirty) return
+  event.preventDefault()
+  event.returnValue = ''
 }
-function dismissCandidate() { candidateVisible.value = false; candidateText.value = ''; candidateReferences.value = [] }
-function acceptCandidate() { if (!candidateText.value || !currentSection.value) return; currentSection.value.content = `${currentSection.value.content || ''}\n${candidateText.value}`.trim(); currentSection.value.words = currentSection.value.content.length; wordCount.value = sections.value.reduce((sum, item) => sum + Number(item.words || 0), 0); dismissCandidate(); markSaving() }
-async function saveVersion() { try { const res = await updatePipelineResearchReport(report.value.id, { title: report.value.title, content: buildMarkdown(), sections: sections.value, saveVersion: true, versionSource: 'manual' }); report.value = { ...report.value, ...res.data }; await loadVersions(); ElMessage.success('已保存为新的可恢复版本') } catch (error) { ElMessage.error('版本保存失败') } }
-async function exportReport() { try { const res = await exportPipelineResearchReport(report.value.id); const blob = new Blob([res.data.content], { type: 'text/markdown;charset=utf-8' }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = res.data.fileName || `${report.value.title}.md`; link.click(); URL.revokeObjectURL(url); ElMessage.success('Markdown 报告已导出') } catch (error) { ElMessage.error('报告导出失败') } }
+function addSection() { const id = Date.now(); sections.value.push({ id, title: '新增章节', content: '', words: 0, citations: 0, status: 'draft' }); currentSectionId.value = id; markSaving() }
+async function saveVersion() { try { await ensureSaved(); const res = await updatePipelineResearchReport(report.value.id, { title: report.value.title, content: buildMarkdown(), sections: sections.value, citations: citations.value, expectedVersion: report.value.versionNo, expectedRevision: report.value.revision, saveVersion: true, versionSource: 'manual' }); report.value = { ...report.value, ...res.data }; await loadVersions(); ElMessage.success('已保存为新的可恢复版本') } catch (error) { ElMessage.error(error.message === 'report has unsaved changes' ? '当前修改未保存，无法创建版本' : '版本保存失败，请刷新后重试') } }
+async function exportReport() { try { await ensureSaved(); const res = await exportPipelineResearchReport(report.value.id); const blob = new Blob([res.data.content], { type: 'text/markdown;charset=utf-8' }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = res.data.fileName || `${report.value.title}.md`; link.click(); URL.revokeObjectURL(url); ElMessage.success('Markdown 报告已导出') } catch (error) { ElMessage.error(error.message === 'report has unsaved changes' ? '当前修改未保存，请先重试保存' : '报告导出失败') } }
 async function loadVersions() {
   try {
     const res = await listPipelineResearchReportVersions(report.value.id)
@@ -196,6 +186,22 @@ async function loadReport() {
     ElMessage.error('报告加载失败，请确认后端服务和访问权限')
   }
 }
-onMounted(loadReport)
-onBeforeUnmount(() => clearTimeout(saveTimer))
+onMounted(() => {
+  loadReport()
+  window.addEventListener('beforeunload', handleBeforeUnload)
+})
+onBeforeRouteLeave(async () => {
+  if (!dirty) return true
+  try {
+    await ensureSaved()
+    return true
+  } catch (error) {
+    ElMessage.warning('当前修改尚未保存，已留在编辑页')
+    return false
+  }
+})
+onBeforeUnmount(() => {
+  clearTimeout(saveTimer)
+  window.removeEventListener('beforeunload', handleBeforeUnload)
+})
 </script>

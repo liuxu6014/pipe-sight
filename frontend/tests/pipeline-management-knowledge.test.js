@@ -24,11 +24,10 @@ test('connects management knowledge uploads to the real material lifecycle APIs'
   assert.doesNotMatch(page, /showUploadTodo|后续接 MinIO|将在生产版接入/)
 })
 
-test('scopes management knowledge answers to selected authorized documents', () => {
-  assert.match(page, /askPipelineKnowledge\(value, \{ documentIds:/)
-  assert.match(page, /handleSelectionChange/)
-  assert.match(page, /清除资料范围/)
-  assert.match(page, /aria-live="polite"/)
+test('uses the controlled download endpoint for authorized documents', () => {
+  assert.match(api, /downloadPipelineKnowledgeDocument/)
+  assert.match(page, /downloadPipelineKnowledgeDocument\(document\.id/)
+  assert.match(page, /row\.allowDownload === false/)
 })
 
 test('provides loading, error, empty, pagination and responsive states', () => {

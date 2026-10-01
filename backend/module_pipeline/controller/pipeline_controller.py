@@ -1,9 +1,12 @@
 from typing import Annotated
+from urllib.parse import quote
 
 from fastapi import BackgroundTasks, File, Form, Query, Request, Response, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.aspect.db_seesion import DBSessionDependency
+from common.aspect.interface_auth import UserInterfaceAuthDependency
 from common.aspect.pre_auth import CurrentUserDependency, PreAuthDependency
 from common.router import APIRouterPro
 from common.vo import DataResponseModel
@@ -13,18 +16,23 @@ from module_admin.service.common_service import CommonService
 from module_pipeline.entity.vo.pipeline_vo import (
     PipelineDashboardModel,
     PipelineDiagramUpdateModel,
-    PipelineKnowledgeAnswerModel,
-    PipelineKnowledgeAskModel,
     PipelineListModel,
+    PipelinePromptModel,
+    PipelinePromptSaveModel,
     PipelineReportExportModel,
     PipelineReportUpdateModel,
     PipelineResearchJobCreateModel,
+    PipelineSourceSaveModel,
     PipelineTaskModel,
+    PipelineTemplateModel,
+    PipelineTemplateSaveModel,
     PipelineWorkspaceItemMutationModel,
 )
 from module_pipeline.service.pipeline_domain_service import PipelineDomainService
-from module_pipeline.service.pipeline_service import PipelineService
+from module_pipeline.service.pipeline_prompt_service import PipelinePromptService
+from module_pipeline.service.pipeline_template_service import PipelineTemplateService
 from utils.response_util import ResponseUtil
+from utils.upload_util import UploadUtil
 
 pipeline_controller = APIRouterPro(
     prefix='/pipeline',
@@ -37,8 +45,11 @@ pipeline_controller = APIRouterPro(
 @pipeline_controller.get(
     '/dashboard', summary='获取管网情报工作台', response_model=DataResponseModel[PipelineDashboardModel]
 )
-async def get_pipeline_dashboard(request: Request) -> Response:
-    return ResponseUtil.success(data=PipelineService.get_dashboard_summary())
+async def get_pipeline_dashboard(
+    request: Request,
+    query_db: Annotated[AsyncSession, DBSessionDependency()],
+) -> Response:
+    return ResponseUtil.success(data=await PipelineDomainService.get_dashboard_summary(query_db))
 
 
 @pipeline_controller.get(
@@ -74,7 +85,12 @@ async def get_pipeline_intelligence_detail(
     return ResponseUtil.success(data=data)
 
 
-@pipeline_controller.get('/sources', summary='查询数据源列表', response_model=DataResponseModel[PipelineListModel])
+@pipeline_controller.get(
+    '/sources',
+    summary='查询数据源列表',
+    response_model=DataResponseModel[PipelineListModel],
+    dependencies=[UserInterfaceAuthDependency('pipeline:source:list')],
+)
 async def list_pipeline_sources(
     request: Request,
     query_db: Annotated[AsyncSession, DBSessionDependency()],
@@ -82,7 +98,260 @@ async def list_pipeline_sources(
     return ResponseUtil.success(data=await PipelineDomainService.list_sources(query_db))
 
 
-@pipeline_controller.get('/tasks', summary='查询采集任务列表', response_model=DataResponseModel[PipelineListModel])
+@pipeline_controller.post(
+    '/sources',
+    summary='新增数据源',
+    dependencies=[UserInterfaceAuthDependency('pipeline:source:save')],
+)
+async def create_pipeline_source(
+    request: Request,
+    payload: PipelineSourceSaveModel,
+    query_db: Annotated[AsyncSession, DBSessionDependency()],
+    current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
+) -> Response:
+    data = await PipelineDomainService.save_source(
+        query_db,
+        source_id=None,
+        source_code=payload.source_code,
+        name=payload.name,
+        source_type=payload.source_type,
+        endpoint=payload.endpoint,
+        adapter_key=payload.adapter_key,
+        schedule_cron=payload.schedule_cron,
+        enabled=payload.enabled,
+        config_json=payload.config_json,
+        handoff_mode=payload.handoff_mode,
+        processor_source_code=payload.processor_source_code,
+        owner_id=current_user.user.user_id,
+    )
+    return ResponseUtil.success(data=data, msg='数据源已创建')
+
+
+@pipeline_controller.put(
+    '/sources/{source_id}',
+    summary='更新数据源',
+    dependencies=[UserInterfaceAuthDependency('pipeline:source:save')],
+)
+async def update_pipeline_source(
+    request: Request,
+    source_id: str,
+    payload: PipelineSourceSaveModel,
+    query_db: Annotated[AsyncSession, DBSessionDependency()],
+    current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
+) -> Response:
+    data = await PipelineDomainService.save_source(
+        query_db,
+        source_id=source_id,
+        source_code=payload.source_code,
+        name=payload.name,
+        source_type=payload.source_type,
+        endpoint=payload.endpoint,
+        adapter_key=payload.adapter_key,
+        schedule_cron=payload.schedule_cron,
+        enabled=payload.enabled,
+        config_json=payload.config_json,
+        handoff_mode=payload.handoff_mode,
+        processor_source_code=payload.processor_source_code,
+        owner_id=current_user.user.user_id,
+    )
+    return ResponseUtil.success(data=data, msg='数据源已更新')
+
+
+@pipeline_controller.delete(
+    '/sources/{source_id}',
+    summary='停用数据源',
+    dependencies=[UserInterfaceAuthDependency('pipeline:source:save')],
+)
+async def disable_pipeline_source(
+    request: Request,
+    source_id: str,
+    query_db: Annotated[AsyncSession, DBSessionDependency()],
+) -> Response:
+    data = await PipelineDomainService.set_source_enabled(query_db, source_id, False)
+    return ResponseUtil.success(data=data, msg='数据源已停用')
+
+
+@pipeline_controller.get(
+    '/templates',
+    summary='查询模板版本',
+    response_model=DataResponseModel[PipelineListModel],
+    dependencies=[UserInterfaceAuthDependency('pipeline:template:list')],
+)
+async def list_pipeline_templates(
+    request: Request,
+    query_db: Annotated[AsyncSession, DBSessionDependency()],
+    category: Annotated[str | None, Query(description='模板分类')] = None,
+    published_only: Annotated[bool, Query(alias='publishedOnly')] = False,
+) -> Response:
+    return ResponseUtil.success(
+        data=await PipelineTemplateService.list_templates(query_db, category=category, published_only=published_only)
+    )
+
+
+@pipeline_controller.post(
+    '/templates',
+    summary='新增模板草稿',
+    response_model=DataResponseModel[PipelineTemplateModel],
+    dependencies=[UserInterfaceAuthDependency('pipeline:template:save')],
+)
+async def create_pipeline_template(
+    request: Request,
+    payload: PipelineTemplateSaveModel,
+    query_db: Annotated[AsyncSession, DBSessionDependency()],
+    current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
+) -> Response:
+    data = await PipelineTemplateService.save_draft(
+        query_db,
+        template_key=payload.template_key,
+        payload=payload.model_dump(by_alias=False),
+        operator_id=current_user.user.user_id,
+        operator_name=current_user.user.nick_name or current_user.user.user_name,
+    )
+    return ResponseUtil.success(data=data, msg='模板草稿已保存')
+
+
+@pipeline_controller.put(
+    '/templates/{template_key}',
+    summary='保存模板新版本',
+    response_model=DataResponseModel[PipelineTemplateModel],
+    dependencies=[UserInterfaceAuthDependency('pipeline:template:save')],
+)
+async def update_pipeline_template(
+    request: Request,
+    template_key: str,
+    payload: PipelineTemplateSaveModel,
+    query_db: Annotated[AsyncSession, DBSessionDependency()],
+    current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
+) -> Response:
+    data = await PipelineTemplateService.save_draft(
+        query_db,
+        template_key=template_key,
+        payload=payload.model_dump(by_alias=False),
+        operator_id=current_user.user.user_id,
+        operator_name=current_user.user.nick_name or current_user.user.user_name,
+    )
+    return ResponseUtil.success(data=data, msg='模板新版本已保存为草稿')
+
+
+@pipeline_controller.post(
+    '/templates/{template_key}/publish',
+    summary='发布模板版本',
+    response_model=DataResponseModel[PipelineTemplateModel],
+    dependencies=[UserInterfaceAuthDependency('pipeline:template:publish')],
+)
+async def publish_pipeline_template(
+    request: Request,
+    template_key: str,
+    query_db: Annotated[AsyncSession, DBSessionDependency()],
+    current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
+) -> Response:
+    data = await PipelineTemplateService.publish(
+        query_db,
+        template_key,
+        operator_id=current_user.user.user_id,
+        operator_name=current_user.user.nick_name or current_user.user.user_name,
+    )
+    return ResponseUtil.success(data=data, msg='模板已发布')
+
+
+@pipeline_controller.delete(
+    '/templates/{template_key}',
+    summary='停用模板',
+    response_model=DataResponseModel[PipelineTemplateModel],
+    dependencies=[UserInterfaceAuthDependency('pipeline:template:publish')],
+)
+async def retire_pipeline_template(
+    request: Request,
+    template_key: str,
+    query_db: Annotated[AsyncSession, DBSessionDependency()],
+) -> Response:
+    data = await PipelineTemplateService.retire(query_db, template_key)
+    return ResponseUtil.success(data=data, msg='模板已停用')
+
+
+@pipeline_controller.get(
+    '/prompts',
+    summary='查询提示词版本',
+    response_model=DataResponseModel[PipelineListModel],
+    dependencies=[UserInterfaceAuthDependency('pipeline:prompt:list')],
+)
+async def list_pipeline_prompts(
+    request: Request,
+    query_db: Annotated[AsyncSession, DBSessionDependency()],
+    scene: Annotated[str | None, Query(description='业务场景')] = None,
+) -> Response:
+    data = await PipelinePromptService.list_prompts(query_db, scene=scene)
+    return ResponseUtil.success(data=data)
+
+
+@pipeline_controller.post(
+    '/prompts',
+    summary='保存提示词草稿',
+    response_model=DataResponseModel[PipelinePromptModel],
+    dependencies=[UserInterfaceAuthDependency('pipeline:prompt:save')],
+)
+async def save_pipeline_prompt(
+    request: Request,
+    payload: PipelinePromptSaveModel,
+    query_db: Annotated[AsyncSession, DBSessionDependency()],
+    current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
+) -> Response:
+    data = await PipelinePromptService.save_draft(
+        query_db,
+        prompt_key=payload.prompt_key,
+        scene=payload.scene,
+        name=payload.name,
+        description=payload.description,
+        system_prompt=payload.system_prompt,
+        user_prompt=payload.user_prompt,
+        operator_id=current_user.user.user_id,
+        operator_name=current_user.user.nick_name or current_user.user.user_name,
+    )
+    return ResponseUtil.success(data=data, msg='提示词草稿已保存')
+
+
+@pipeline_controller.post(
+    '/prompts/{prompt_key}/test',
+    summary='离线测试提示词结构',
+    response_model=DataResponseModel[PipelinePromptModel],
+    dependencies=[UserInterfaceAuthDependency('pipeline:prompt:test')],
+)
+async def test_pipeline_prompt(
+    request: Request,
+    prompt_key: str,
+    query_db: Annotated[AsyncSession, DBSessionDependency()],
+) -> Response:
+    data = await PipelinePromptService.test_prompt(query_db, prompt_key)
+    return ResponseUtil.success(data=data, msg='提示词离线结构测试通过')
+
+
+@pipeline_controller.post(
+    '/prompts/{prompt_key}/publish',
+    summary='发布提示词版本',
+    response_model=DataResponseModel[PipelinePromptModel],
+    dependencies=[UserInterfaceAuthDependency('pipeline:prompt:publish')],
+)
+async def publish_pipeline_prompt(
+    request: Request,
+    prompt_key: str,
+    query_db: Annotated[AsyncSession, DBSessionDependency()],
+    current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
+) -> Response:
+    data = await PipelinePromptService.publish_prompt(
+        query_db,
+        prompt_key,
+        operator_id=current_user.user.user_id,
+        operator_name=current_user.user.nick_name or current_user.user.user_name,
+    )
+    return ResponseUtil.success(data=data, msg='提示词已发布，后续采集将使用该版本')
+
+
+@pipeline_controller.get(
+    '/tasks',
+    summary='查询采集任务列表',
+    response_model=DataResponseModel[PipelineListModel],
+    dependencies=[UserInterfaceAuthDependency('pipeline:task:list')],
+)
 async def list_pipeline_tasks(
     request: Request,
     query_db: Annotated[AsyncSession, DBSessionDependency()],
@@ -91,7 +360,10 @@ async def list_pipeline_tasks(
 
 
 @pipeline_controller.post(
-    '/tasks/{task_id}/run', summary='手动运行采集任务', response_model=DataResponseModel[PipelineTaskModel]
+    '/tasks/{task_id}/run',
+    summary='手动运行采集任务',
+    response_model=DataResponseModel[PipelineTaskModel],
+    dependencies=[UserInterfaceAuthDependency('pipeline:task:run')],
 )
 async def run_pipeline_task(
     request: Request,
@@ -101,7 +373,11 @@ async def run_pipeline_task(
     return ResponseUtil.success(data=await PipelineDomainService.queue_collection_run(query_db, task_id))
 
 
-@pipeline_controller.post('/tasks/runs/{run_id}/handoff', summary='提交采集结果到外部处理系统')
+@pipeline_controller.post(
+    '/tasks/runs/{run_id}/handoff',
+    summary='提交采集结果到外部处理系统',
+    dependencies=[UserInterfaceAuthDependency('pipeline:task:run')],
+)
 async def dispatch_pipeline_handoff(
     request: Request,
     run_id: str,
@@ -111,7 +387,11 @@ async def dispatch_pipeline_handoff(
     return ResponseUtil.success(data=data, msg='采集结果已提交处理')
 
 
-@pipeline_controller.post('/tasks/runs/{run_id}/handoff/sync', summary='同步外部处理结果')
+@pipeline_controller.post(
+    '/tasks/runs/{run_id}/handoff/sync',
+    summary='同步外部处理结果',
+    dependencies=[UserInterfaceAuthDependency('pipeline:task:run')],
+)
 async def sync_pipeline_handoff(
     request: Request,
     run_id: str,
@@ -214,6 +494,29 @@ async def get_pipeline_knowledge_document(
     return ResponseUtil.success(data=data)
 
 
+@pipeline_controller.get(
+    '/knowledge/documents/{material_id}/download',
+    summary='受控下载知识库资料',
+    response_class=StreamingResponse,
+)
+async def download_pipeline_knowledge_document(
+    request: Request,
+    material_id: str,
+    query_db: Annotated[AsyncSession, DBSessionDependency()],
+    current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
+) -> Response:
+    file_path, file_name, media_type = await PipelineDomainService.get_material_download(
+        query_db,
+        current_user.user.user_id,
+        material_id,
+    )
+    return ResponseUtil.streaming(
+        data=UploadUtil.generate_file(str(file_path)),
+        headers={'Content-Disposition': f"attachment; filename*=UTF-8''{quote(file_name)}"},
+        media_type=media_type or 'application/octet-stream',
+    )
+
+
 @pipeline_controller.post('/knowledge/documents/{material_id}/retry', summary='重新解析知识库资料')
 async def retry_pipeline_knowledge_document(
     request: Request,
@@ -242,27 +545,6 @@ async def delete_pipeline_knowledge_document(
         material_id,
     )
     return ResponseUtil.success(data=data, msg='资料已删除')
-
-
-@pipeline_controller.post(
-    '/knowledge/ask',
-    summary='知识库问答',
-    response_model=DataResponseModel[PipelineKnowledgeAnswerModel],
-)
-async def ask_pipeline_knowledge(
-    request: Request,
-    body: PipelineKnowledgeAskModel,
-    query_db: Annotated[AsyncSession, DBSessionDependency()],
-    current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
-) -> Response:
-    data = await PipelineDomainService.ask_knowledge(
-        query_db,
-        user_id=current_user.user.user_id,
-        question=body.question,
-        document_ids=body.document_ids,
-        document_types=body.document_types,
-    )
-    return ResponseUtil.success(data=data)
 
 
 @pipeline_controller.get('/workspace', summary='获取用户资料篮与收藏')

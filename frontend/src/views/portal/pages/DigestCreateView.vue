@@ -33,14 +33,15 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Refresh, Warning } from '@element-plus/icons-vue'
 import PortalPageHeader from '../components/PortalPageHeader.vue'
 import usePortalStore from '@/store/modules/portal'
-import { createPipelineResearchJob } from '@/api/pipeline/intelligence'
+import { createPipelineResearchJob, getPipelineResearchJob, listPipelineTemplates } from '@/api/pipeline/intelligence'
 
+const route = useRoute()
 const router = useRouter()
 const portalStore = usePortalStore()
 const refreshing = ref(false)
@@ -50,23 +51,30 @@ const reportTypeConfigs = {
   周报: { reportType: 'weekly', periodLabel: '报告周期', leadTitle: '本周要闻', hotTitle: '周度趋势研判', itemCount: 10 },
   月报: { reportType: 'monthly', periodLabel: '报告月份', leadTitle: '月度要闻', hotTitle: '月度趋势研判', itemCount: 15 }
 }
-const templateOptions = [
-  { type: '日报', label: '管网科技情报日报 V2.0', value: 'daily-v2', version: 'V2.0' },
-  { type: '周报', label: '检测技术周报 V1.5', value: 'weekly-v1', version: 'V1.5' },
-  { type: '月报', label: '管网科技情报月报 V1.0', value: 'monthly-v1', version: 'V1.0' },
-  { type: '月报', label: '管网技术专题月报 V1.0', value: 'monthly-topic-v1', version: 'V1.0' }
-]
+const templateOptions = ref([])
 const form = reactive({ type: '日报', date: new Date(), period: [], month: new Date(), directions: ['检测技术', '应力监测', '管网安全'], sources: ['新闻网站', '微信公众号'], keywords: ['完整性管理'], template: 'daily-v2', itemCount: 8, summaryLength: 'normal', hotAnalysis: true, duplicateMerge: true, schedule: false })
 const currentTypeConfig = computed(() => reportTypeConfigs[form.type])
 const periodFieldLabel = computed(() => currentTypeConfig.value.periodLabel)
-const availableTemplates = computed(() => templateOptions.filter(item => item.type === form.type))
+const availableTemplates = computed(() => templateOptions.value.filter(item => item.type === form.type))
 const sourceItems = computed(() => [...portalStore.newsItems, ...portalStore.paperItems])
+function isWithinSelectedPeriod(item) {
+  const { period } = buildReportPeriod()
+  if (!period.length) return false
+  if (item.sourceType === '论文数据库') return false
+  const timestamp = item.publishTime || item.time
+  const published = new Date(timestamp)
+  if (Number.isNaN(published.getTime())) return false
+  const start = new Date(`${period[0]}T00:00:00`)
+  const end = new Date(`${period[period.length - 1]}T00:00:00`)
+  end.setDate(end.getDate() + 1)
+  return published >= start && published < end
+}
 const candidateItems = computed(() => sourceItems.value.filter(item => {
   const searchText = [item.title, item.summary, item.category, ...(item.tags || [])].filter(Boolean).join(' ').toLocaleLowerCase('zh-CN')
   const sourceMatched = !form.sources.length || form.sources.includes(item.sourceType)
   const directionMatched = !form.directions.length || form.directions.some(direction => searchText.includes(direction.toLocaleLowerCase('zh-CN')))
   const keywordMatched = !form.keywords.length || form.keywords.some(keyword => searchText.includes(String(keyword).toLocaleLowerCase('zh-CN')))
-  return sourceMatched && directionMatched && keywordMatched
+  return sourceMatched && directionMatched && keywordMatched && isWithinSelectedPeriod(item)
 }))
 const sourceDistribution = computed(() => {
   const counts = new Map()
@@ -89,7 +97,7 @@ const dataGap = computed(() => {
 })
 const columnSuggestions = computed(() => [...new Set([currentTypeConfig.value.leadTitle, ...form.directions.map(item => `${item}动态`), ...(form.hotAnalysis ? [currentTypeConfig.value.hotTitle] : []), ...(form.type === '月报' ? ['风险与机会', '下月关注'] : [])])])
 watch(() => form.type, type => {
-  const options = templateOptions.filter(item => item.type === type)
+  const options = templateOptions.value.filter(item => item.type === type)
   form.template = options[0]?.value || ''
   form.itemCount = reportTypeConfigs[type].itemCount
 })
@@ -103,6 +111,34 @@ async function refreshPreview() {
     ElMessage.error('候选内容刷新失败，请检查后端服务')
   } finally {
     refreshing.value = false
+  }
+}
+async function loadSourceTask() {
+  if (!route.query.sourceTask) return
+  try {
+    const res = await getPipelineResearchJob(String(route.query.sourceTask))
+    const task = res.data || {}
+    const config = task.config || {}
+    const reportType = task.type || config.reportType || config.report_type
+    const typeMap = { daily: '日报', weekly: '周报', monthly: '月报' }
+    if (typeMap[reportType]) form.type = typeMap[reportType]
+    await Promise.resolve()
+    const options = config.options || {}
+    form.template = config.templateId || config.template_id || form.template
+    form.directions = String(config.direction || '').split('、').filter(Boolean)
+    form.keywords = Array.isArray(config.keywords) ? [...config.keywords] : []
+    form.itemCount = Number(options.itemCount || form.itemCount)
+    form.summaryLength = options.summaryLength || form.summaryLength
+    form.hotAnalysis = options.hotAnalysis !== false
+    form.duplicateMerge = options.duplicateMerge !== false
+    if (Array.isArray(config.period)) {
+      if (form.type === '日报') form.date = new Date(config.period[0])
+      else if (form.type === '周报') form.period = config.period.map(value => new Date(value))
+      else form.month = new Date(config.period[0])
+    }
+    ElMessage.success('已载入原简报任务配置，可在生成前继续调整')
+  } catch (error) {
+    ElMessage.warning('原简报任务配置暂时无法加载，已按新任务处理')
   }
 }
 function expandSourceScope() { form.sources = ['新闻网站', '微信公众号', '论文数据库']; form.keywords = []; ElMessage.success('已扩大来源范围并清空关键词限制') }
@@ -140,7 +176,7 @@ async function createDigest() {
     const reportType = currentTypeConfig.value.reportType
     const { period, label } = buildReportPeriod()
     if (!period.length || (reportType !== 'daily' && period.length !== 2)) return ElMessage.warning(`请选择完整的${periodFieldLabel.value}`)
-    const selectedTemplate = templateOptions.find(item => item.value === form.template)
+    const selectedTemplate = templateOptions.value.find(item => item.value === form.template)
     const res = await createPipelineResearchJob({
       title: `管网科技情报${form.type} ${label}`.trim(),
       reportType,
@@ -151,8 +187,9 @@ async function createDigest() {
       keywords: form.keywords,
       requirements: `报告周期：${label}；来源范围：${form.sources.join('、')}；每栏 ${form.itemCount} 条；摘要长度：${form.summaryLength}`,
       citationCheck: true,
+      outline: columnSuggestions.value.map((title, index) => ({ id: index + 1, title, words: form.summaryLength === 'long' ? 1800 : 1200 })),
       selectedItemIds: candidateItems.value.slice(0, Math.max(form.itemCount * Math.max(form.directions.length, 1), form.itemCount)).map(item => item.id),
-      options: { cadence: reportType, hotAnalysis: form.hotAnalysis, duplicateMerge: form.duplicateMerge, schedule: form.schedule }
+      options: { cadence: reportType, summaryLength: form.summaryLength, itemCount: form.itemCount, directions: form.directions, hotAnalysis: form.hotAnalysis, duplicateMerge: form.duplicateMerge, schedule: form.schedule }
     })
     await portalStore.hydrate(true)
     ElMessage.success(`${form.type}任务已进入后台生成队列`)
@@ -163,4 +200,16 @@ async function createDigest() {
     submitting.value = false
   }
 }
+onMounted(async () => {
+  try {
+    const res = await listPipelineTemplates({ category: 'digest', publishedOnly: true })
+    const typeMap = { daily: '日报', weekly: '周报', monthly: '月报' }
+    templateOptions.value = (res.data?.rows || []).map(item => ({ type: typeMap[item.reportType] || '日报', label: `${item.name} ${item.version}`, value: item.templateKey, version: item.version }))
+    if (!templateOptions.value.some(item => item.value === form.template)) form.template = templateOptions.value[0]?.value || form.template
+  } catch (error) {
+    ElMessage.warning('简报模板列表暂时无法加载')
+  }
+  await portalStore.hydrate()
+  await loadSourceTask()
+})
 </script>

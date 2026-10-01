@@ -38,12 +38,14 @@ function normalizeSourceType(value) {
   return ({ news: '新闻网站', wechat: '微信公众号', paper: '论文数据库' })[value] || value || '公开来源'
 }
 
-function normalizeIntelligence(item) {
+export function normalizePortalIntelligence(item) {
   const publishTime = item.publish_time || item.publishTime || item.time || ''
   return {
     ...item,
     time: publishTime,
     publishTime,
+    sourceUrl: item.source_url || item.sourceUrl || item.canonical_url || item.canonicalUrl || '',
+    reviewStatus: item.review_status || item.reviewStatus || 'pending',
     sourceType: normalizeSourceType(item.source_type || item.sourceType),
     importance: Number(item.relevance || 0) >= 90 ? '重点' : '一般',
     category: item.category === 'wechat' || item.category === 'news' ? (item.tags?.[0] || '管网安全') : item.category,
@@ -52,19 +54,20 @@ function normalizeIntelligence(item) {
   }
 }
 
-function normalizePaper(item) {
-  const row = normalizeIntelligence(item)
+export function normalizePortalPaper(item) {
+  const row = normalizePortalIntelligence(item)
   return {
     ...row,
     titleZh: item.title,
     title: item.title,
     authors: item.authors || ['作者信息待补充'],
     institutions: item.institutions || ['来源数据库'],
-    journal: item.source || '论文数据库',
+    journal: item.journal || item.source || '论文数据库',
     year: Number(String(row.publishTime || '').slice(0, 4)) || new Date().getFullYear(),
     doi: item.doi || '待补充',
-    access: item.access || '仅元数据',
-    citations: Number(item.citations || 0),
+    access: item.access || (item.open_access_status === 'open' ? '开放获取' : '仅元数据'),
+    citations: Number(item.citations ?? item.citation_count ?? 0),
+    fullTextUrl: item.full_text_url || item.fullTextUrl || '',
     abstract: item.summary || '',
     keywords: item.tags || []
   }
@@ -79,6 +82,8 @@ function normalizeDocument(item) {
     pages: Number(item.pages || 0),
     owner: item.owner || '平台知识库',
     permission: item.permission || '仅自己可见',
+    allowDownload: item.allow_download !== false && item.allowDownload !== false,
+    allowAiUse: item.allow_ai_use !== false && item.allowAiUse !== false,
     status: ({ indexed: '已解析', parsing: '解析中', queued: '待解析', planned: '待解析', failed: '解析失败' })[item.status] || item.status || '待解析',
     updatedAt: item.updated_at || item.updatedAt || '最近更新',
     summary: item.summary || item.scenario || '知识库资料',
@@ -101,6 +106,20 @@ function normalizeReport(item) {
     sources: Number(item.coverage || item.sources || 0),
     period: item.period || String(item.updated_at || '').slice(0, 10)
   }
+}
+
+async function loadAllPipelineIntelligence() {
+  const pageSize = 100
+  const first = await listPipelineIntelligence({ pageNum: 1, pageSize })
+  const firstData = first?.data || {}
+  const rows = Array.isArray(firstData.rows) ? firstData.rows : []
+  const total = Number(firstData.total || rows.length)
+  const pageCount = Math.ceil(total / pageSize)
+  if (pageCount <= 1) return rows
+  const rest = await Promise.all(
+    Array.from({ length: pageCount - 1 }, (_, index) => listPipelineIntelligence({ pageNum: index + 2, pageSize }))
+  )
+  return rows.concat(rest.flatMap(result => Array.isArray(result?.data?.rows) ? result.data.rows : []))
 }
 
 function normalizeDigestReport(item) {
@@ -132,8 +151,8 @@ const usePortalStore = defineStore('portal-workspace', {
     basketCount: state => state.basket.length,
     runningTaskCount: state => state.tasks.filter(item => ['queued', 'running', 'generating', 'retrieving'].includes(item.status)).length,
     isFavorite: state => id => state.favorites.includes(id),
-    newsItems: state => resolveRows(fallbackNews, state.liveIntelligence.filter(item => item.category !== 'paper').map(normalizeIntelligence)),
-    paperItems: state => resolveRows(fallbackPapers, state.liveIntelligence.filter(item => item.category === 'paper').map(normalizePaper)),
+    newsItems: state => resolveRows(fallbackNews, state.liveIntelligence.filter(item => item.category !== 'paper').map(normalizePortalIntelligence)),
+    paperItems: state => resolveRows(fallbackPapers, state.liveIntelligence.filter(item => item.category === 'paper').map(normalizePortalPaper)),
     knowledgeDocuments: state => resolveRows(fallbackDocuments, state.liveDocuments.map(normalizeDocument)),
     researchReports: state => resolveRows(fallbackReports, state.liveReports.filter(item => !['daily', 'weekly', 'monthly'].includes(item.type)).map(normalizeReport)),
     digestReports: state => resolveRows(fallbackDigests, state.liveReports.filter(item => ['daily', 'weekly', 'monthly'].includes(item.type)).map(normalizeDigestReport)),
@@ -153,7 +172,7 @@ const usePortalStore = defineStore('portal-workspace', {
       this.dataError = ''
       const results = await Promise.allSettled([
         getPipelineDashboard(),
-        listPipelineIntelligence({ pageNum: 1, pageSize: 100 }),
+        loadAllPipelineIntelligence(),
         listPipelineKnowledgeDocuments(),
         listPipelineReports(),
         getPipelineWorkspace(),
@@ -162,11 +181,14 @@ const usePortalStore = defineStore('portal-workspace', {
       ])
       const [dashboardResult, intelligenceResult, documentResult, reportResult, workspaceResult, jobResult, researchReportResult] = results
       if (dashboardResult.status === 'fulfilled') this.dashboard = dashboardResult.value?.data || null
-      if (intelligenceResult.status === 'fulfilled') this.liveIntelligence = intelligenceResult.value?.data?.rows || []
+      if (intelligenceResult.status === 'fulfilled') this.liveIntelligence = intelligenceResult.value || []
       if (documentResult.status === 'fulfilled') this.liveDocuments = documentResult.value?.data?.rows || []
       const reportRows = reportResult.status === 'fulfilled' ? reportResult.value?.data?.rows || [] : []
       const researchReportRows = researchReportResult.status === 'fulfilled' ? researchReportResult.value?.data?.rows || [] : []
-      if (reportResult.status === 'fulfilled' || researchReportResult.status === 'fulfilled') this.liveReports = [...reportRows, ...researchReportRows]
+      if (reportResult.status === 'fulfilled' || researchReportResult.status === 'fulfilled') {
+        const reportsById = new Map([...reportRows, ...researchReportRows].map(item => [item.id, item]))
+        this.liveReports = [...reportsById.values()]
+      }
       if (workspaceResult.status === 'fulfilled') {
         this.basket = workspaceResult.value?.data?.basket || []
         this.favorites = workspaceResult.value?.data?.favorites || []
@@ -193,6 +215,19 @@ const usePortalStore = defineStore('portal-workspace', {
       }
       this.dataLoaded = true
       this.dataLoading = false
+    },
+    reset() {
+      this.basket = []
+      this.favorites = []
+      this.tasks = demoDataEnabled ? recentTasks.map(item => ({ ...item })) : []
+      this.taskPanelVisible = false
+      this.dashboard = null
+      this.liveIntelligence = []
+      this.liveDocuments = []
+      this.liveReports = []
+      this.dataLoading = false
+      this.dataLoaded = false
+      this.dataError = ''
     },
     resolveSavedItemType(id) {
       if (this.knowledgeDocuments.some(item => item.id === id)) return 'material'

@@ -206,23 +206,3 @@ class PipelineService:
     @classmethod
     def list_knowledge_documents(cls) -> dict:
         return {'rows': cls._knowledge_documents, 'total': len(cls._knowledge_documents)}
-
-    @classmethod
-    def ask_knowledge_base(cls, question: str) -> dict:
-        question = (question or '').strip()
-        if not question:
-            return {'answer': '请输入与管网科技情报、科研需求或技术路线相关的问题。', 'references': []}
-        refs = [
-            doc
-            for doc in cls._knowledge_documents
-            if any(keyword in question or keyword.lower() in question.lower() for keyword in doc['keywords'])
-        ]
-        if not refs and ('应力' in question or '监测' in question):
-            refs = [doc for doc in cls._knowledge_documents if doc['id'] == 'doc-stress']
-        if not refs:
-            refs = cls._knowledge_documents[:2]
-        answer = (
-            '建议按“资料入库—结构化抽取—主题标签—人工复核—报告生成”的闭环推进。'
-            '针对管道应力监测，可优先采用磁各向异性相关资料建立技术路线，补充传感器选型、标定实验、现场验证和误差评估。'
-        )
-        return {'answer': answer, 'references': refs[:3]}

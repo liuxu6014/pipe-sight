@@ -76,9 +76,14 @@ const useUserStore = defineStore(
         return new Promise((resolve, reject) => {
           logout(this.token).then(() => {
             this.token = ''
+            this.id = ''
+            this.name = ''
+            this.nickName = ''
+            this.avatar = ''
             this.roles = []
             this.permissions = []
             removeToken()
+            import('./portal').then(({ default: usePortalStore }) => usePortalStore().reset()).catch(() => {})
             resolve()
           }).catch(error => {
             reject(error)

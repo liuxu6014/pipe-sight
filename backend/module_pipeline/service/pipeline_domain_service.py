@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import re
 import zipfile
-from datetime import datetime
+from collections import Counter
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 from uuid import uuid4
 from xml.etree import ElementTree as ET
 
 from pypdf import PdfReader
 from pypdf.errors import PyPdfError
+from sqlalchemy import func, select, update
 
 from config.database import AsyncSessionLocal
 from config.env import UploadConfig
@@ -33,6 +36,8 @@ from module_pipeline.entity.vo.pipeline_vo import (
     PipelineWorkspaceItemMutationModel,
 )
 from module_pipeline.integration.insighthub_adapter import InsightHubAdapter
+from module_pipeline.service.pipeline_collection_service import PipelineCollectionService
+from module_pipeline.service.pipeline_template_service import PipelineTemplateService
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -66,8 +71,83 @@ class PipelineDomainService:
     _external_parser_extensions = frozenset({'.pdf', '.doc'})
     _max_source_bytes = 16 * 1024 * 1024
     _max_extracted_chars = 2_000_000
-    _quote_limit = 220
     _minimum_section_sources = 2
+
+    @classmethod
+    async def get_dashboard_summary(cls, db: AsyncSession) -> dict[str, Any]:
+        """返回数据库实时汇总，不再使用静态演示指标。"""
+        article_count = int(
+            (await db.execute(select(func.count(PipelineArticle.article_id)).where(PipelineArticle.review_status != 'rejected'))).scalar_one()
+        )
+        paper_count = int(
+            (await db.execute(select(func.count(PipelinePaper.paper_id)).where(PipelinePaper.review_status != 'rejected'))).scalar_one()
+        )
+        pending_count = int(
+            (
+                await db.execute(
+                    select(func.count(PipelineArticle.article_id)).where(PipelineArticle.review_status == 'pending')
+                )
+            ).scalar_one()
+        )
+        pending_count += int(
+            (
+                await db.execute(select(func.count(PipelinePaper.paper_id)).where(PipelinePaper.review_status == 'pending'))
+            ).scalar_one()
+        )
+        indexed_material_count = int(
+            (
+                await db.execute(
+                    select(func.count(PipelineMaterial.file_id)).where(PipelineMaterial.parse_status == 'indexed')
+                )
+            ).scalar_one()
+        )
+
+        tasks = await cls.list_collection_tasks(db)
+        collect_status = [
+            {
+                'name': item['source'],
+                'status': {'queued': 'running', 'running': 'running', 'failed': 'warning'}.get(item['status'], item['status']),
+                'value': item['progress'],
+            }
+            for item in tasks['rows']
+        ]
+
+        articles = await PipelineDao.list_articles(db)
+        papers = await PipelineDao.list_papers(db)
+        topic_counts = Counter(
+            tag
+            for item in [*articles, *papers]
+            for tag in (item.tags or (item.keywords if isinstance(item, PipelinePaper) else []) or [])
+            if tag
+        )
+        hot_topics = [
+            {'name': name, 'heat': min(98, 55 + count * 9), 'count': count}
+            for name, count in topic_counts.most_common(6)
+        ]
+
+        pending_items = [
+            {
+                'title': item.title,
+                'type': '资讯审核',
+                'owner': item.source_name or '公开来源',
+                'coverage': 1,
+                'status': 'reviewing',
+                'updated_at': cls._datetime_text(item.update_time),
+            }
+            for item in [*articles, *papers]
+            if item.review_status == 'pending'
+        ][:10]
+        return {
+            'metrics': [
+                {'label': '有效资讯', 'value': article_count, 'unit': '条', 'trend': 'stable'},
+                {'label': '待审核', 'value': pending_count, 'unit': '条', 'trend': 'stable'},
+                {'label': '论文资料', 'value': paper_count, 'unit': '篇', 'trend': 'stable'},
+                {'label': '已解析资料', 'value': indexed_material_count, 'unit': '份', 'trend': 'stable'},
+            ],
+            'collect_status': collect_status,
+            'hot_topics': hot_topics,
+            'pending_reviews': pending_items,
+        }
 
     @classmethod
     def _now_text(cls) -> str:
@@ -89,7 +169,104 @@ class PipelineDomainService:
             'status': 'enabled' if item.enabled and item.status == 'active' else 'disabled',
             'last_run_time': cls._datetime_text(item.last_run_time),
             'success_rate': success_rate,
+            'source_code': getattr(item, 'source_code', ''),
+            'endpoint': getattr(item, 'endpoint', None) or '',
+            'adapter_key': getattr(item, 'adapter_key', ''),
+            'schedule_cron': getattr(item, 'schedule_cron', None) or '',
+            'enabled': bool(item.enabled and item.status == 'active'),
+            'config_json': getattr(item, 'config_json', None) or {},
+            'handoff_mode': getattr(item, 'handoff_mode', 'external'),
+            'processor_source_code': getattr(item, 'processor_source_code', None) or '',
         }
+
+    @classmethod
+    async def save_source(  # noqa: PLR0913
+        cls,
+        db: AsyncSession,
+        *,
+        source_id: str | None,
+        source_code: str,
+        name: str,
+        source_type: str,
+        endpoint: str,
+        adapter_key: str,
+        schedule_cron: str,
+        enabled: bool,
+        config_json: dict[str, Any],
+        handoff_mode: str,
+        processor_source_code: str,
+        owner_id: int | None,
+    ) -> dict[str, Any]:
+        if not re.fullmatch(r'[a-z0-9][a-z0-9_-]{1,99}', source_code):
+            raise ServiceException(message='数据源编码仅支持小写字母、数字、短横线和下划线')
+        if endpoint:
+            parsed = urlparse(endpoint)
+            if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
+                raise ServiceException(message='数据源入口地址必须是有效的 HTTP 或 HTTPS 地址')
+        if adapter_key not in {'pipechina_group_news', 'crossref_works'}:
+            raise ServiceException(message='当前版本暂不支持该采集适配器')
+        if adapter_key == 'pipechina_group_news' and source_type not in {'news', 'wechat'}:
+            raise ServiceException(message='国家管网资讯适配器只能用于新闻源或公众号')
+        if adapter_key == 'crossref_works' and source_type != 'paper':
+            raise ServiceException(message='Crossref 适配器只能用于论文库')
+
+        existing = await PipelineDao.get_source(db, source_id) if source_id else None
+        duplicate = await PipelineDao.get_source_by_code(db, source_code)
+        if duplicate and (not existing or duplicate.source_id != existing.source_id):
+            raise ServiceException(message='数据源编码已存在，请更换编码')
+        now = datetime.now()
+        if existing:
+            existing.source_code = source_code
+            existing.name = name
+            existing.source_type = source_type
+            existing.endpoint = endpoint or None
+            existing.adapter_key = adapter_key
+            existing.schedule_cron = schedule_cron or None
+            existing.enabled = enabled
+            existing.status = 'active' if enabled else 'inactive'
+            existing.config_json = config_json or {}
+            existing.handoff_mode = handoff_mode
+            existing.processor_source_code = processor_source_code or None
+            existing.owner_id = owner_id
+            existing.update_time = now
+            source = existing
+        else:
+            source = PipelineSource(
+                source_id=f'source-{uuid4().hex[:16]}',
+                source_code=source_code,
+                name=name,
+                source_type=source_type,
+                endpoint=endpoint or None,
+                adapter_key=adapter_key,
+                schedule_cron=schedule_cron or None,
+                status='active' if enabled else 'inactive',
+                enabled=enabled,
+                config_json=config_json or {},
+                handoff_mode=handoff_mode,
+                processor_source_code=processor_source_code or None,
+                owner_id=owner_id,
+                success_count=0,
+                failure_count=0,
+                consecutive_failures=0,
+                create_time=now,
+                update_time=now,
+            )
+            await PipelineDao.add_source(db, source)
+        await db.commit()
+        await db.refresh(source)
+        return cls._source_dict(source)
+
+    @classmethod
+    async def set_source_enabled(cls, db: AsyncSession, source_id: str, enabled: bool) -> dict[str, Any]:
+        source = await PipelineDao.get_source(db, source_id)
+        if not source:
+            raise ServiceException(message='数据源不存在')
+        source.enabled = enabled
+        source.status = 'active' if enabled else 'inactive'
+        source.update_time = datetime.now()
+        await db.commit()
+        await db.refresh(source)
+        return cls._source_dict(source)
 
     @classmethod
     async def list_sources(cls, db: AsyncSession) -> dict[str, Any]:
@@ -144,6 +321,20 @@ class PipelineDomainService:
             raise ServiceException(message='数据源不存在')
         if not source.enabled or source.status != 'active':
             raise ServiceException(message='数据源已停用，不能执行采集')
+        if getattr(source, 'adapter_key', None) in {'pipechina_group_news', 'crossref_works'}:
+            result = await PipelineCollectionService.collect_source(db, source)
+            return {
+                'id': source.source_id,
+                'name': f'{source.name}采集',
+                'source': source.name,
+                'status': result['status'],
+                'progress': 100 if result['status'] == 'success' else 0,
+                'latest_message': (
+                    f"本轮抓取 {result['fetched']} 条，新增 {result['inserted']} 条，"
+                    f"更新 {result['updated']} 条，重复 {result['duplicates']} 条"
+                ),
+                'next_run_time': source.schedule_cron or '手动触发',
+            }
         now = datetime.now()
         run = PipelineCrawlRun(
             run_id=f'run-{uuid4().hex[:16]}',
@@ -304,6 +495,8 @@ class PipelineDomainService:
             'status': item.review_status,
             'tags': list(item.tags or []),
             'summary': item.summary or '',
+            'source_url': item.canonical_url or '',
+            'sourceUrl': item.canonical_url or '',
             'processing_status': item.handoff_status,
             'processing_version': item.handoff_version or '',
         }
@@ -333,8 +526,13 @@ class PipelineDomainService:
             'status': item.review_status,
             'tags': list(item.tags or item.keywords or []),
             'summary': item.abstract_text or '',
+            'source_url': item.canonical_url or '',
+            'sourceUrl': item.canonical_url or '',
             'doi': item.doi or '',
             'authors': list(item.authors_json or []),
+            'journal': item.journal or '',
+            'citation_count': int(item.citation_count or 0),
+            'open_access_status': item.open_access_status or 'unknown',
             'processing_status': item.handoff_status,
             'processing_version': item.handoff_version or '',
         }
@@ -371,9 +569,14 @@ class PipelineDomainService:
             rows.extend(
                 cls._article_dict(item)
                 for item in await PipelineDao.list_articles(db, article_type=article_type, keyword=keyword)
+                if getattr(item, 'review_status', 'approved') == 'approved'
             )
         if include_papers:
-            rows.extend(cls._paper_dict(item) for item in await PipelineDao.list_papers(db, keyword=keyword))
+            rows.extend(
+                cls._paper_dict(item)
+                for item in await PipelineDao.list_papers(db, keyword=keyword)
+                if getattr(item, 'review_status', 'approved') == 'approved'
+            )
         rows.sort(key=lambda item: item['publish_time'], reverse=True)
         total = len(rows)
         start = (page_num - 1) * page_size
@@ -383,9 +586,13 @@ class PipelineDomainService:
     async def get_intelligence_detail(cls, db: AsyncSession, item_id: str) -> dict[str, Any]:
         article = await PipelineDao.get_article(db, item_id)
         if article:
+            if getattr(article, 'review_status', 'approved') != 'approved':
+                raise ServiceException(message='情报资料不存在或暂不可见')
             return cls._article_dict(article, detail=True)
         paper = await PipelineDao.get_paper(db, item_id)
         if paper:
+            if getattr(paper, 'review_status', 'approved') != 'approved':
+                raise ServiceException(message='情报资料不存在或暂不可见')
             return cls._paper_dict(paper, detail=True)
         raise ServiceException(message='情报资料不存在')
 
@@ -398,14 +605,15 @@ class PipelineDomainService:
             'type': item.category,
             'format': suffix or 'FILE',
             'fileName': item.file_name,
-            'filePath': item.file_path,
-            'fileUrl': item.file_url,
             'fileSize': item.file_size,
             'permissionScope': item.permission_scope,
             'permission': cls._permission_labels.get(item.permission_scope, item.permission_scope),
             'parseStatus': item.parse_status,
             'status': cls._parse_labels.get(item.parse_status, item.parse_status),
             'parseMessage': item.parse_message,
+            'allowDownload': bool(getattr(item, 'allow_download', True)),
+            'allowAiUse': bool(getattr(item, 'allow_ai_use', True)),
+            'contentLevel': '全文可用' if item.parse_status == 'indexed' and item.extracted_text else '摘要或元数据',
             'summary': item.summary or '等待补充资料摘要',
             'tags': list(item.tags or []),
             'keywords': list(item.tags or []),
@@ -448,6 +656,23 @@ class PipelineDomainService:
         if not material:
             raise ServiceException(message='资料不存在或无权访问')
         return cls._material_detail_dict(material, user_id)
+
+    @classmethod
+    async def get_material_download(
+        cls,
+        db: AsyncSession,
+        user_id: int,
+        material_id: str,
+    ) -> tuple[Path, str, str | None]:
+        material = await PipelineDao.get_accessible_material(db, material_id, user_id)
+        if not material:
+            raise ServiceException(message='资料不存在或无权访问')
+        if not getattr(material, 'allow_download', True):
+            raise ServiceException(message='当前资料禁止下载')
+        path = cls._material_local_path(material.file_path)
+        if not path or not path.is_file():
+            raise ServiceException(message='资料文件不存在或已失效')
+        return path, material.name, getattr(material, 'mime_type', None)
 
     @classmethod
     async def create_material(  # noqa: PLR0913
@@ -799,86 +1024,6 @@ class PipelineDomainService:
         return {'itemId': item_id, 'action': action, 'deleted': True}
 
     @classmethod
-    async def ask_knowledge(
-        cls,
-        db: AsyncSession,
-        *,
-        user_id: int,
-        question: str,
-        document_ids: list[str] | None = None,
-        document_types: list[str] | None = None,
-    ) -> dict[str, Any]:
-        rows = [
-            item
-            for item in await PipelineDao.list_accessible_materials(db, user_id)
-            if item.parse_status == 'indexed' and bool((item.extracted_text or item.summary or '').strip())
-        ]
-        if document_ids:
-            rows = [item for item in rows if item.file_id in document_ids]
-        if document_types:
-            rows = [item for item in rows if item.category in document_types]
-
-        scored = sorted(
-            ((cls._lexical_score(question, item), item) for item in rows),
-            key=lambda pair: pair[0],
-            reverse=True,
-        )
-        selected = [item for score, item in scored if score > 0][:4]
-        if not selected:
-            scope_label = '当前指定的授权资料' if document_ids or document_types else '当前账号可访问且已解析的资料'
-            return {
-                'answer': f'{scope_label}中没有检索到足以支撑回答的证据。请调整问题、扩大检索范围或先完成相关资料解析。',
-                'references': [],
-            }
-
-        references = []
-        evidence_sentences = []
-        for index, item in enumerate(selected, start=1):
-            quote = cls._best_quote(question, item.extracted_text or item.summary or '')
-            references.append(
-                {
-                    'id': item.file_id,
-                    'name': item.name,
-                    'type': item.category,
-                    'location': '基础文本提取' if item.extracted_text else '资料摘要',
-                    'quote': quote,
-                    'permission': cls._permission_labels.get(item.permission_scope, item.permission_scope),
-                }
-            )
-            evidence_sentences.append(f'[{index}]《{item.name}》显示：{quote}')
-        answer = (
-            '根据当前账号可访问资料，建议先形成“问题界定—证据检索—技术对比—现场验证—指标确认”的分析链路。'
-            + ''.join(evidence_sentences)
-            + '以上结论来自基础关键词检索，涉及工程指标时仍应打开原文复核。'
-        )
-        return {'answer': answer, 'references': references}
-
-    @classmethod
-    def _query_tokens(cls, question: str) -> set[str]:
-        normalized = re.sub(r'\s+', '', question or '').lower()
-        tokens = set(re.findall(r'[a-z0-9]{2,}|[\u4e00-\u9fff]{2,}', normalized))
-        chinese = ''.join(re.findall(r'[\u4e00-\u9fff]', normalized))
-        tokens.update(chinese[index : index + 2] for index in range(max(len(chinese) - 1, 0)))
-        return {token for token in tokens if token}
-
-    @classmethod
-    def _lexical_score(cls, question: str, item: PipelineMaterial) -> int:
-        haystack = ' '.join(
-            [item.name, item.category, item.summary or '', item.extracted_text or '', ' '.join(item.tags or [])]
-        ).lower()
-        return sum(3 if token in item.name.lower() else 1 for token in cls._query_tokens(question) if token in haystack)
-
-    @classmethod
-    def _best_quote(cls, question: str, text: str) -> str:
-        compact = re.sub(r'\s+', ' ', text or '').strip()
-        if not compact:
-            return '资料已入库，但尚未提取到可引用正文。'
-        sentences = [item.strip() for item in re.split(r'[。！？\n]', compact) if item.strip()]
-        tokens = cls._query_tokens(question)
-        best = max(sentences or [compact], key=lambda sentence: sum(token in sentence.lower() for token in tokens))
-        return best[: cls._quote_limit] + ('…' if len(best) > cls._quote_limit else '')
-
-    @classmethod
     def _queued_stage_rows(cls) -> list[dict[str, Any]]:
         return [{'key': key, 'label': label, 'status': 'waiting', 'progress': 0} for key, label in cls._stage_labels]
 
@@ -891,6 +1036,23 @@ class PipelineDomainService:
         owner_name: str,
         payload: PipelineResearchJobCreateModel,
     ) -> dict[str, Any]:
+        options = payload.options or {}
+        if options.get('language') not in {None, 'zh'}:
+            raise ServiceException(message='当前版本仅支持简体中文输出')
+        if options.get('length') not in {None, 'standard'}:
+            raise ServiceException(message='当前版本仅支持标准篇幅')
+        if options.get('publicSupplement') is True:
+            raise ServiceException(message='当前版本仅支持使用已选资料，公开资料补充尚未开放')
+        if payload.template_id:
+            template = await PipelineTemplateService.get_published(db, payload.template_id)
+            if not template:
+                raise ServiceException(message='所选模板不存在或尚未发布，请返回重新选择')
+            if template.report_type != payload.report_type:
+                raise ServiceException(message='模板与报告类型不匹配，请返回重新选择')
+            if not payload.template_version:
+                payload = payload.model_copy(update={'template_version': template.version_label})
+            if not payload.outline:
+                payload = payload.model_copy(update={'outline': list(template.sections or [])})
         now = datetime.now()
         job = PipelineResearchJob(
             task_id=f'job-{uuid4().hex[:16]}',
@@ -992,7 +1154,7 @@ class PipelineDomainService:
 
                 if not await cls._advance_research_job(db, job, 0, '正在校验资料权限和任务参数。'):
                     return
-                evidence = await cls._resolve_evidence(db, user_id, payload.selected_item_ids)
+                evidence = await cls._resolve_evidence(db, user_id, payload.selected_item_ids, payload=payload)
                 if payload.selected_item_ids and not evidence:
                     raise ServiceException(message='所选资料不存在、尚未解析或当前账号无权访问')
                 job.selected_items = evidence
@@ -1220,6 +1382,7 @@ class PipelineDomainService:
         db: AsyncSession,
         user_id: int,
         selected_ids: list[str],
+        payload: PipelineResearchJobCreateModel | None = None,
     ) -> list[dict[str, Any]]:
         if not selected_ids:
             return []
@@ -1234,13 +1397,35 @@ class PipelineDomainService:
                 'location': '基础文本提取' if item.extracted_text else '资料摘要',
             }
             for item in materials
+            if item.parse_status == 'indexed'
+            and getattr(item, 'allow_ai_use', True)
+            and (item.extracted_text or item.summary)
         }
         unresolved_ids = set(selected_ids) - persistent.keys()
-        if not unresolved_ids:
-            return [persistent[item_id] for item_id in selected_ids]
         intelligence_items: dict[str, dict[str, Any]] = {}
+        report_type = payload.report_type if payload else ''
+        period = list(payload.period or []) if payload else []
+
+        def in_digest_period(value: datetime | None) -> bool:
+            if report_type not in {'daily', 'weekly', 'monthly'} or not period:
+                return True
+            if value is None or len(period) not in {1, 2}:
+                return False
+            try:
+                start = datetime.fromisoformat(period[0]).replace(hour=0, minute=0, second=0, microsecond=0)
+                end = datetime.fromisoformat(period[-1]).replace(hour=0, minute=0, second=0, microsecond=0)
+            except ValueError:
+                return False
+            if len(period) == 1:
+                end = start
+            return start <= value.replace(tzinfo=None) < end + timedelta(days=1)
+
         for item in await PipelineDao.list_articles(db):
-            if item.article_id not in unresolved_ids:
+            if (
+                item.article_id not in unresolved_ids
+                or getattr(item, 'review_status', 'approved') != 'approved'
+                or not in_digest_period(item.published_time)
+            ):
                 continue
             intelligence_items[item.article_id] = {
                 'id': item.article_id,
@@ -1251,7 +1436,12 @@ class PipelineDomainService:
                 'location': cls._datetime_text(item.published_time),
             }
         for item in await PipelineDao.list_papers(db):
-            if item.paper_id not in unresolved_ids:
+            # 论文当前只保存发表年份，不能伪装成某个日报或周报的精确来源。
+            if (
+                item.paper_id not in unresolved_ids
+                or getattr(item, 'review_status', 'approved') != 'approved'
+                or report_type in {'daily', 'weekly', 'monthly'}
+            ):
                 continue
             intelligence_items[item.paper_id] = {
                 'id': item.paper_id,
@@ -1262,7 +1452,26 @@ class PipelineDomainService:
                 'location': str(item.publication_year or ''),
             }
         all_items = {**intelligence_items, **persistent}
-        return [all_items[item_id] for item_id in selected_ids if item_id in all_items]
+        result = [all_items[item_id] for item_id in selected_ids if item_id in all_items]
+        if payload and report_type in {'daily', 'weekly', 'monthly'} and payload.options.get('duplicateMerge'):
+            seen_titles: set[str] = set()
+            deduplicated = []
+            for item in result:
+                normalized = re.sub(r'[^\w\u4e00-\u9fff]', '', item.get('title', '')).lower()[:32]
+                if normalized and normalized in seen_titles:
+                    continue
+                seen_titles.add(normalized)
+                deduplicated.append(item)
+            result = deduplicated
+        if payload and report_type in {'daily', 'weekly', 'monthly'}:
+            try:
+                per_direction = max(1, int(payload.options.get('itemCount') or len(result) or 1))
+            except (TypeError, ValueError):
+                per_direction = max(1, len(result) or 1)
+            directions = payload.options.get('directions') or [payload.direction]
+            direction_count = max(1, len(directions) if isinstance(directions, list) else 1)
+            result = result[: per_direction * direction_count]
+        return result
 
     @classmethod
     def _default_outline(cls, report_type: str) -> list[dict[str, Any]]:
@@ -1346,8 +1555,12 @@ class PipelineDomainService:
         direction = payload.direction or '管网科技创新'
         scenario = payload.scenario or '工程应用'
         requirements = payload.requirements.strip() or '兼顾技术可行性、现场验证与成果转化。'
+        quote_length = {'short': 90, 'normal': 160, 'long': 260}.get(
+            str(payload.options.get('summaryLength') or 'normal'),
+            160,
+        )
         evidence_text = '；'.join(
-            f'{item["title"]}指出“{cls._summarize_text(item["quote"], 90)}”[{item["id"]}]' for item in citations
+            f'{item["title"]}指出“{cls._summarize_text(item["quote"], quote_length)}”[{item["id"]}]' for item in citations
         )
         if payload.report_type in {'daily', 'weekly', 'monthly'}:
             return (
@@ -1456,6 +1669,7 @@ class PipelineDomainService:
             'period': ' 至 '.join(metadata.get('period') or []),
             'updatedAt': cls._datetime_text(report.update_time),
             'updated_at': cls._datetime_text(report.update_time),
+            'revision': report.update_time.isoformat(timespec='microseconds') if report.update_time else '',
             'createdAt': cls._datetime_text(report.create_time),
         }
 
@@ -1636,6 +1850,70 @@ class PipelineDomainService:
         report = await PipelineDao.get_report(db, report_id, user_id)
         if not report:
             raise ServiceException(message='报告不存在或无权访问')
+        if payload.expected_version is not None and report.version_no != payload.expected_version:
+            raise ServiceException(message='报告版本已变化，请刷新后再保存')
+        expected_revision = None
+        if payload.expected_revision:
+            try:
+                expected_revision = datetime.fromisoformat(payload.expected_revision)
+            except ValueError as exc:
+                raise ServiceException(message='报告修订标记无效，请刷新后再保存') from exc
+            if report.update_time != expected_revision:
+                raise ServiceException(message='报告已被其他页面修改，请刷新后再保存')
+
+        if expected_revision:
+            now = datetime.now()
+            next_version = report.version_no + 1 if payload.save_version else report.version_no
+            values = {
+                'title': payload.title if payload.title is not None else report.title,
+                'content': payload.content if payload.content is not None else report.content,
+                'sections': payload.sections if payload.sections is not None else report.sections,
+                'citations': payload.citations if payload.citations is not None else report.citations,
+                'quality_issues': payload.quality_issues
+                if payload.quality_issues is not None
+                else report.quality_issues,
+                'status': payload.status if payload.status is not None else report.status,
+                'word_count': len(
+                    re.sub(
+                        r'\s+',
+                        '',
+                        payload.content if payload.content is not None else report.content,
+                    )
+                ),
+                'update_time': now,
+            }
+            if payload.save_version:
+                values['version_no'] = next_version
+            result = await db.execute(
+                update(PipelineReport)
+                .where(
+                    PipelineReport.report_id == report_id,
+                    PipelineReport.user_id == user_id,
+                    PipelineReport.update_time == expected_revision,
+                )
+                .values(**values)
+            )
+            if result.rowcount != 1:
+                await db.rollback()
+                raise ServiceException(message='报告已被其他页面修改，请刷新后再保存')
+            if payload.save_version:
+                await PipelineDao.add_report_version(
+                    db,
+                    PipelineReportVersion(
+                        report_id=report.report_id,
+                        version_no=next_version,
+                        title=values['title'],
+                        content=values['content'],
+                        sections=values['sections'],
+                        citations=values['citations'],
+                        source=payload.version_source,
+                        operator_id=user_id,
+                        operator_name=owner_name,
+                    ),
+                )
+            await db.commit()
+            await db.refresh(report)
+            return cls._report_dict(report)
         if payload.title is not None:
             report.title = payload.title
         if payload.content is not None:

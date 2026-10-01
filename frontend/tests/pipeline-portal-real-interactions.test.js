@@ -37,10 +37,11 @@ test('opens paper and news sources only when a valid URL is available', () => {
   assert.match(paperDetail, /论文不存在/)
 })
 
-test('honors material ownership and exposes the backend file URL for downloads', () => {
+test('honors material ownership and uses the controlled download endpoint', () => {
   assert.match(knowledge, /doc\.canManage !== false/)
   assert.match(knowledgeDetail, /const canManage = computed/)
-  assert.match(knowledgeDetail, /item\.downloadUrl \|\| item\.fileUrl/)
+  assert.match(knowledgeDetail, /downloadPipelineKnowledgeDocument\(document\.value\.id/)
+  assert.match(knowledgeDetail, /allowDownload !== false/)
   assert.match(knowledgeDetail, /可搜索 PDF 可直接提取文字/)
 })
 

@@ -3,8 +3,8 @@
     <section class="page-heading">
       <div>
         <p class="eyebrow">后台管理 · 知识库</p>
-        <h1>内部资料库与问答验证</h1>
-        <p class="summary">统一管理授权资料的上传、解析、权限范围和问答引用，所有操作直接使用当前知识库服务。</p>
+        <h1>内部资料库管理</h1>
+        <p class="summary">统一管理授权资料的上传、解析、权限范围和报告引用，所有操作直接使用当前知识库服务。</p>
       </div>
       <div class="heading-actions">
         <el-button :icon="Refresh" :loading="loading" @click="loadDocuments">刷新</el-button>
@@ -25,51 +25,7 @@
       </template>
     </el-alert>
 
-    <div class="knowledge-workspace">
-      <el-card shadow="never" class="panel-card knowledge-qa-card">
-        <template #header>
-          <div class="card-header">
-            <div>
-              <strong>授权资料问答验证</strong>
-              <small>{{ selectedRows.length ? `仅检索已选择的 ${selectedRows.length} 份资料` : '检索当前账号可访问且已解析的资料' }}</small>
-            </div>
-            <el-button v-if="selectedRows.length" text @click="clearSelection">清除资料范围</el-button>
-          </div>
-        </template>
-
-        <el-input
-          v-model="question"
-          :rows="4"
-          :maxlength="1000"
-          show-word-limit
-          type="textarea"
-          placeholder="输入需要核验的科研需求、技术路线或资料问题"
-          @keydown.ctrl.enter="handleAsk"
-        />
-        <div class="qa-actions">
-          <span>Ctrl + Enter 提交</span>
-          <div>
-            <el-button :icon="RefreshLeft" :disabled="asking" @click="clearQuestion">清空</el-button>
-            <el-button type="primary" :icon="Promotion" :loading="asking" @click="handleAsk">开始检索</el-button>
-          </div>
-        </div>
-
-        <div v-if="answer" class="answer-box" aria-live="polite">
-          <div class="answer-title">证据回答</div>
-          <p>{{ answer }}</p>
-          <div v-if="references.length" class="reference-list">
-            <article v-for="item in references" :key="item.id">
-              <div>
-                <strong>{{ item.name }}</strong>
-                <el-tag size="small" effect="plain">{{ item.type }}</el-tag>
-              </div>
-              <p>{{ item.quote || '该引用暂未返回可展示的摘录。' }}</p>
-              <small>{{ item.location }} · {{ item.permission }}</small>
-            </article>
-          </div>
-        </div>
-      </el-card>
-
+    <div class="knowledge-workspace knowledge-status-only">
       <el-card shadow="never" class="panel-card knowledge-status-card">
         <template #header>资料状态</template>
         <dl>
@@ -104,13 +60,10 @@
       </template>
 
       <el-table
-        ref="tableRef"
         :data="pagedDocuments"
         row-key="id"
         border
-        @selection-change="handleSelectionChange"
       >
-        <el-table-column type="selection" width="48" />
         <el-table-column label="文档名称" min-width="300">
           <template #default="{ row }">
             <div class="doc-name" :title="row.name">{{ row.name }}</div>
@@ -140,7 +93,7 @@
         <el-table-column prop="updatedAt" label="更新时间" width="170" />
         <el-table-column label="操作" width="210" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" :disabled="!row.fileUrl" :icon="Download" @click="downloadDocument(row)">下载</el-button>
+            <el-button link type="primary" :disabled="row.allowDownload === false" :icon="Download" @click="downloadDocument(row)">下载</el-button>
             <el-button
               v-if="row.canManage !== false && row.status !== '已解析'"
               link
@@ -227,10 +180,10 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Download, Promotion, Refresh, RefreshLeft, Search, UploadFilled } from '@element-plus/icons-vue'
+import { Delete, Download, Refresh, Search, UploadFilled } from '@element-plus/icons-vue'
 import {
-  askPipelineKnowledge,
   deletePipelineKnowledgeDocument,
+  downloadPipelineKnowledgeDocument,
   listPipelineKnowledgeDocuments,
   reparsePipelineKnowledgeDocument,
   uploadPipelineKnowledgeDocument
@@ -243,13 +196,7 @@ const ALLOWED_EXTENSIONS = new Set(['pdf', 'doc', 'docx', 'md', 'txt'])
 const categoryOptions = ['内部文献', '英文报告', '论文', '历史项目', '模板', '会议纪要', '其他']
 const loading = ref(false)
 const loadError = ref('')
-const asking = ref(false)
-const question = ref('')
-const answer = ref('')
-const references = ref([])
 const documents = ref([])
-const selectedRows = ref([])
-const tableRef = ref()
 const keyword = ref('')
 const statusFilter = ref('all')
 const pageNum = ref(1)
@@ -302,7 +249,6 @@ async function loadDocuments() {
   try {
     const res = await listPipelineKnowledgeDocuments()
     documents.value = Array.isArray(res.data?.rows) ? res.data.rows : []
-    selectedRows.value = []
     if ((pageNum.value - 1) * pageSize.value >= documents.value.length) pageNum.value = 1
   } catch (error) {
     loadError.value = '知识库资料加载失败，请检查后端服务、登录状态或当前账号权限。'
@@ -311,31 +257,6 @@ async function loadDocuments() {
   }
 }
 
-async function handleAsk() {
-  const value = question.value.trim()
-  if (!value) return ElMessage.warning('请先输入需要核验的问题')
-  if (asking.value) return
-  asking.value = true
-  answer.value = ''
-  references.value = []
-  try {
-    const res = await askPipelineKnowledge(value, { documentIds: selectedRows.value.map(item => item.id) })
-    answer.value = res.data?.answer || '知识服务没有返回可展示的回答。'
-    references.value = Array.isArray(res.data?.references) ? res.data.references : []
-  } catch (error) {
-    ElMessage.error('知识库问答失败，请确认资料已完成解析后重试')
-  } finally {
-    asking.value = false
-  }
-}
-
-function clearQuestion() {
-  question.value = ''
-  answer.value = ''
-  references.value = []
-}
-function handleSelectionChange(rows) { selectedRows.value = rows }
-function clearSelection() { tableRef.value?.clearSelection(); selectedRows.value = [] }
 function clearFilters() { keyword.value = ''; statusFilter.value = 'all' }
 function openUpload() { uploadVisible.value = true }
 function resetUpload() {
@@ -427,8 +348,8 @@ async function removeDocument(document) {
 }
 
 function downloadDocument(document) {
-  if (!document.fileUrl) return ElMessage.warning('该资料没有可用的下载地址')
-  window.open(document.fileUrl, '_blank', 'noopener,noreferrer')
+  if (!document.allowDownload) return ElMessage.warning('当前资料禁止下载')
+  downloadPipelineKnowledgeDocument(document.id, document.name).catch(() => {})
 }
 
 watch([keyword, statusFilter, pageSize], () => { pageNum.value = 1 })
@@ -438,7 +359,6 @@ onMounted(loadDocuments)
 <style scoped>
 .heading-actions,
 .card-header,
-.qa-actions,
 .knowledge-pagination {
   display: flex;
   align-items: center;
@@ -457,6 +377,10 @@ onMounted(loadDocuments)
   margin-bottom: 16px;
 }
 
+.knowledge-workspace.knowledge-status-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .card-header > div,
 .knowledge-table-head > div:first-child {
   min-width: 0;
@@ -469,65 +393,9 @@ onMounted(loadDocuments)
   font-size: 12px;
 }
 
-.qa-actions {
-  margin-top: 12px;
-  color: #8492a6;
-  font-size: 12px;
-}
-
-.qa-actions > div {
-  display: flex;
-  gap: 8px;
-}
-
-.answer-box {
-  margin-top: 16px;
-  padding: 18px;
-  border: 1px solid #cfe0ea;
-  border-radius: 8px;
-  color: #395467;
-  background: #f5f9fb;
-  line-height: 1.75;
-}
-
-.answer-box > p {
-  margin: 8px 0 0;
-  overflow-wrap: anywhere;
-}
-
-.answer-title,
 .doc-name {
   color: #163c55;
   font-weight: 700;
-}
-
-.reference-list {
-  display: grid;
-  gap: 10px;
-  margin-top: 14px;
-}
-
-.reference-list article {
-  padding: 12px 14px;
-  border: 1px solid #dce7ee;
-  border-radius: 6px;
-  background: #fff;
-}
-
-.reference-list article > div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.reference-list article p {
-  margin: 8px 0;
-  overflow-wrap: anywhere;
-}
-
-.reference-list article small {
-  color: #718096;
 }
 
 .knowledge-status-card dl {
@@ -667,14 +535,5 @@ onMounted(loadDocuments)
     grid-template-columns: 1fr 1fr;
   }
 
-  .qa-actions {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .qa-actions > div,
-  .qa-actions .el-button {
-    width: 100%;
-  }
 }
 </style>

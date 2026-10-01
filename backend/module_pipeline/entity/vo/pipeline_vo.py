@@ -71,6 +71,22 @@ class PipelineSourceModel(BaseModel):
     success_rate: int = Field(description='成功率')
 
 
+class PipelineSourceSaveModel(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    source_id: str | None = Field(default=None, max_length=64, description='数据源ID，新增时为空')
+    source_code: str = Field(min_length=2, max_length=100, description='稳定的数据源编码')
+    name: str = Field(min_length=1, max_length=255, description='数据源名称')
+    source_type: Literal['news', 'wechat', 'paper'] = Field(description='数据源类型')
+    endpoint: str = Field(default='', max_length=1000, description='数据源入口地址')
+    adapter_key: Literal['pipechina_group_news', 'crossref_works'] = Field(description='采集适配器')
+    schedule_cron: str = Field(default='', max_length=100, description='调度表达式')
+    enabled: bool = Field(default=True, description='是否启用')
+    config_json: dict = Field(default_factory=dict, description='采集配置')
+    handoff_mode: Literal['local', 'external'] = Field(default='external', description='处理模式')
+    processor_source_code: str = Field(default='', max_length=128, description='外部处理来源编码')
+
+
 class PipelineTaskModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel)
 
@@ -81,6 +97,74 @@ class PipelineTaskModel(BaseModel):
     progress: int = Field(description='进度')
     latest_message: str = Field(description='最新消息')
     next_run_time: str = Field(description='下次运行时间')
+
+
+class PipelinePromptSaveModel(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    prompt_key: str = Field(min_length=1, max_length=64, description='稳定提示词编码')
+    scene: Literal['research', 'digest', 'data-filter'] = Field(description='业务场景')
+    name: str = Field(min_length=1, max_length=255, description='提示词名称')
+    description: str = Field(default='', max_length=1000, description='用途说明')
+    system_prompt: str = Field(min_length=1, description='系统提示词')
+    user_prompt: str = Field(min_length=1, description='用户提示词模板')
+
+
+class PipelinePromptModel(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel)
+
+    id: str = Field(description='提示词版本ID')
+    prompt_key: str = Field(description='稳定提示词编码')
+    scene: str = Field(description='业务场景')
+    name: str = Field(description='提示词名称')
+    description: str = Field(description='用途说明')
+    system_prompt: str = Field(description='系统提示词')
+    user_prompt: str = Field(description='用户提示词模板')
+    version: str = Field(description='版本号')
+    version_no: int = Field(description='版本序号')
+    status: str = Field(description='版本状态')
+    test_status: str = Field(description='测试状态')
+    test_result: dict = Field(default_factory=dict, description='最近一次测试结果')
+    operator: str = Field(default='', description='操作人')
+    published_at: str | None = Field(default=None, description='发布时间')
+    updated_at: str | None = Field(default=None, description='更新时间')
+
+
+class PipelineTemplateSaveModel(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    template_key: str | None = Field(default=None, max_length=64, description='稳定模板编码')
+    code: str = Field(min_length=2, max_length=32, description='模板展示编码')
+    category: Literal['research', 'digest', 'project'] = Field(description='模板分类')
+    report_type: str = Field(min_length=1, max_length=64, description='报告类型')
+    name: str = Field(min_length=1, max_length=255, description='模板名称')
+    description: str = Field(default='', max_length=1000, description='模板说明')
+    color: str = Field(default='#2764e7', max_length=32, description='展示颜色')
+    version_label: str = Field(default='V1.0', max_length=32, description='展示版本号')
+    formats: list[str] = Field(default_factory=lambda: ['docx'], description='输出格式')
+    sections: list[dict] = Field(default_factory=list, description='章节结构')
+
+
+class PipelineTemplateModel(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel)
+
+    id: str = Field(description='模板版本ID')
+    template_key: str = Field(description='稳定模板编码')
+    code: str = Field(description='模板展示编码')
+    category: str = Field(description='模板分类')
+    report_type: str = Field(description='报告类型')
+    name: str = Field(description='模板名称')
+    description: str = Field(description='模板说明')
+    color: str = Field(description='展示颜色')
+    version: str = Field(description='展示版本号')
+    version_no: int = Field(description='版本序号')
+    status: str = Field(description='版本状态')
+    formats: list[str] = Field(default_factory=list, description='输出格式')
+    sections: list[dict] = Field(default_factory=list, description='章节结构')
+    usage: int = Field(default=0, description='使用次数')
+    operator: str = Field(default='', description='操作人')
+    published_at: str | None = Field(default=None, description='发布时间')
+    updated_at: str | None = Field(default=None, description='更新时间')
 
 
 class PipelineReportModel(BaseModel):
@@ -100,21 +184,6 @@ class PipelineReportExportModel(BaseModel):
 
     file_name: str = Field(description='导出文件名')
     content: str = Field(description='Markdown报告内容')
-
-
-class PipelineKnowledgeAskModel(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel)
-
-    question: str = Field(description='知识库问题')
-    document_ids: list[str] = Field(default_factory=list, description='指定资料ID')
-    document_types: list[str] = Field(default_factory=list, description='指定资料分类')
-
-
-class PipelineKnowledgeAnswerModel(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel)
-
-    answer: str = Field(description='问答结果')
-    references: list[dict] = Field(description='引用资料')
 
 
 class PipelineWorkspaceItemMutationModel(BaseModel):
@@ -158,6 +227,8 @@ class PipelineReportUpdateModel(BaseModel):
     citations: list[dict] | None = Field(default=None, description='引用证据')
     quality_issues: list[dict] | None = Field(default=None, description='质量问题')
     status: str | None = Field(default=None, description='报告状态')
+    expected_version: int | None = Field(default=None, ge=1, description='客户端最近一次读取的报告版本')
+    expected_revision: str | None = Field(default=None, description='客户端最近一次读取的报告修订标记')
     save_version: bool = Field(default=False, description='是否保存为新版本')
     version_source: str = Field(default='manual', description='版本来源')
 

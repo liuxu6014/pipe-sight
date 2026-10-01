@@ -31,6 +31,35 @@ CREATE TABLE IF NOT EXISTS data_sources (
   KEY idx_data_sources_owner (owner_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='数据来源配置表';
 
+CREATE TABLE IF NOT EXISTS pipeline_template_versions (
+  template_id VARCHAR(64) NOT NULL COMMENT '模板版本ID',
+  template_key VARCHAR(64) NOT NULL COMMENT '稳定模板编码',
+  code VARCHAR(32) NOT NULL COMMENT '模板展示编码',
+  category VARCHAR(32) NOT NULL COMMENT '模板分类',
+  report_type VARCHAR(64) NOT NULL COMMENT '报告类型',
+  name VARCHAR(255) NOT NULL COMMENT '模板名称',
+  description VARCHAR(1000) NOT NULL DEFAULT '' COMMENT '模板说明',
+  color VARCHAR(32) NOT NULL DEFAULT '#2764e7' COMMENT '展示颜色',
+  version_label VARCHAR(32) NOT NULL COMMENT '展示版本号',
+  version_no INT NOT NULL DEFAULT 1 COMMENT '版本序号',
+  status VARCHAR(32) NOT NULL DEFAULT 'draft' COMMENT '版本状态',
+  formats JSON NOT NULL COMMENT '支持的输出格式',
+  sections JSON NOT NULL COMMENT '章节结构',
+  usage_count INT NOT NULL DEFAULT 0 COMMENT '使用次数快照',
+  operator_id BIGINT NULL COMMENT '操作用户ID',
+  operator_name VARCHAR(64) NOT NULL DEFAULT '' COMMENT '操作用户名称快照',
+  published_at DATETIME NULL COMMENT '发布时间',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (template_id),
+  CONSTRAINT uk_pipeline_template_key_version UNIQUE (template_key, version_no),
+  CONSTRAINT ck_pipeline_template_status CHECK (status IN ('draft', 'published', 'retired')),
+  CONSTRAINT ck_pipeline_template_version_no CHECK (version_no >= 1),
+  CONSTRAINT fk_pipeline_template_user FOREIGN KEY (operator_id) REFERENCES sys_user(user_id) ON DELETE SET NULL,
+  KEY idx_pipeline_template_category_status (category, status),
+  KEY idx_pipeline_template_key_time (template_key, update_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='管网科研与情报模板版本表';
+
 CREATE TABLE IF NOT EXISTS collection_runs (
   run_id VARCHAR(64) NOT NULL COMMENT '运行ID',
   source_id VARCHAR(64) NOT NULL COMMENT '数据源ID',
@@ -169,3 +198,30 @@ CREATE TABLE IF NOT EXISTS papers (
   KEY idx_papers_source_time (source_id, create_time),
   KEY idx_papers_handoff_status_time (handoff_status, update_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='论文资料表';
+
+CREATE TABLE IF NOT EXISTS pipeline_prompt_versions (
+  prompt_id VARCHAR(64) NOT NULL COMMENT '提示词版本ID',
+  prompt_key VARCHAR(64) NOT NULL COMMENT '稳定提示词编码',
+  scene VARCHAR(64) NOT NULL COMMENT '业务场景',
+  name VARCHAR(255) NOT NULL COMMENT '提示词名称',
+  description VARCHAR(1000) NOT NULL DEFAULT '' COMMENT '用途说明',
+  system_prompt LONGTEXT NOT NULL COMMENT '系统提示词',
+  user_prompt LONGTEXT NOT NULL COMMENT '用户提示词模板',
+  version_no INT NOT NULL DEFAULT 1 COMMENT '版本号',
+  status VARCHAR(32) NOT NULL DEFAULT 'draft' COMMENT '版本状态',
+  test_status VARCHAR(32) NOT NULL DEFAULT 'untested' COMMENT '离线测试状态',
+  test_result JSON NOT NULL COMMENT '最近一次测试结果',
+  operator_id BIGINT NULL COMMENT '操作用户ID',
+  operator_name VARCHAR(64) NOT NULL DEFAULT '' COMMENT '操作用户名称快照',
+  published_at DATETIME NULL COMMENT '发布时间',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (prompt_id),
+  CONSTRAINT uk_pipeline_prompt_key_version UNIQUE (prompt_key, version_no),
+  CONSTRAINT ck_pipeline_prompt_status CHECK (status IN ('draft', 'published', 'retired')),
+  CONSTRAINT ck_pipeline_prompt_test_status CHECK (test_status IN ('untested', 'passed', 'failed')),
+  CONSTRAINT ck_pipeline_prompt_version_no CHECK (version_no >= 1),
+  CONSTRAINT fk_pipeline_prompt_operator FOREIGN KEY (operator_id) REFERENCES sys_user(user_id) ON DELETE SET NULL,
+  KEY idx_pipeline_prompt_scene_status (scene, status),
+  KEY idx_pipeline_prompt_key_time (prompt_key, update_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='管网模型提示词版本表';

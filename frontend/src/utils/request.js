@@ -203,4 +203,25 @@ export function download(url, params, filename, config) {
   })
 }
 
+// GET 流式下载方法，适用于需要携带当前登录会话并由后端逐次鉴权的文件。
+export function downloadGet(url, params, filename, config) {
+  downloadLoadingInstance = ElLoading.service({ text: "正在下载数据，请稍候", background: "rgba(0, 0, 0, 0.7)", })
+  return service.get(url, {
+    params,
+    responseType: 'blob',
+    ...(config || {})
+  }).then(async data => {
+    const isBlob = blobValidate(data)
+    if (isBlob) {
+      saveAs(new Blob([data]), filename)
+    } else {
+      const resText = await data.text()
+      const rspObj = JSON.parse(resText)
+      const errMsg = errorCode[rspObj.code] || rspObj.msg || errorCode.default
+      ElMessage.error(errMsg)
+      throw new Error(errMsg)
+    }
+  }).finally(() => downloadLoadingInstance?.close())
+}
+
 export default service

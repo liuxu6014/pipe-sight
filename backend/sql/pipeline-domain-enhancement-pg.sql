@@ -30,6 +30,34 @@ CREATE TABLE IF NOT EXISTS data_sources (
 CREATE INDEX IF NOT EXISTS idx_data_sources_type_status ON data_sources(source_type, status);
 CREATE INDEX IF NOT EXISTS idx_data_sources_owner ON data_sources(owner_id);
 
+CREATE TABLE IF NOT EXISTS pipeline_template_versions (
+  template_id VARCHAR(64) PRIMARY KEY,
+  template_key VARCHAR(64) NOT NULL,
+  code VARCHAR(32) NOT NULL,
+  category VARCHAR(32) NOT NULL,
+  report_type VARCHAR(64) NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  description VARCHAR(1000) NOT NULL DEFAULT '',
+  color VARCHAR(32) NOT NULL DEFAULT '#2764e7',
+  version_label VARCHAR(32) NOT NULL,
+  version_no INTEGER NOT NULL DEFAULT 1,
+  status VARCHAR(32) NOT NULL DEFAULT 'draft',
+  formats JSON NOT NULL,
+  sections JSON NOT NULL,
+  usage_count INTEGER NOT NULL DEFAULT 0,
+  operator_id BIGINT,
+  operator_name VARCHAR(64) NOT NULL DEFAULT '',
+  published_at TIMESTAMP,
+  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT uk_pipeline_template_key_version UNIQUE (template_key, version_no),
+  CONSTRAINT ck_pipeline_template_status CHECK (status IN ('draft', 'published', 'retired')),
+  CONSTRAINT ck_pipeline_template_version_no CHECK (version_no >= 1),
+  CONSTRAINT fk_pipeline_template_user FOREIGN KEY (operator_id) REFERENCES sys_user(user_id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pipeline_template_category_status ON pipeline_template_versions(category, status);
+CREATE INDEX IF NOT EXISTS idx_pipeline_template_key_time ON pipeline_template_versions(template_key, update_time);
+
 CREATE TABLE IF NOT EXISTS collection_runs (
   run_id VARCHAR(64) PRIMARY KEY,
   source_id VARCHAR(64) NOT NULL,
@@ -162,6 +190,32 @@ CREATE TABLE IF NOT EXISTS papers (
 CREATE INDEX IF NOT EXISTS idx_papers_year ON papers(publication_year);
 CREATE INDEX IF NOT EXISTS idx_papers_journal ON papers(journal);
 CREATE INDEX IF NOT EXISTS idx_papers_source_time ON papers(source_id, create_time);
+
+CREATE TABLE IF NOT EXISTS pipeline_prompt_versions (
+  prompt_id VARCHAR(64) PRIMARY KEY,
+  prompt_key VARCHAR(64) NOT NULL,
+  scene VARCHAR(64) NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  description VARCHAR(1000) NOT NULL DEFAULT '',
+  system_prompt TEXT NOT NULL,
+  user_prompt TEXT NOT NULL,
+  version_no INTEGER NOT NULL DEFAULT 1,
+  status VARCHAR(32) NOT NULL DEFAULT 'draft',
+  test_status VARCHAR(32) NOT NULL DEFAULT 'untested',
+  test_result JSON NOT NULL,
+  operator_id BIGINT,
+  operator_name VARCHAR(64) NOT NULL DEFAULT '',
+  published_at TIMESTAMP,
+  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT uk_pipeline_prompt_key_version UNIQUE (prompt_key, version_no),
+  CONSTRAINT ck_pipeline_prompt_status CHECK (status IN ('draft', 'published', 'retired')),
+  CONSTRAINT ck_pipeline_prompt_test_status CHECK (test_status IN ('untested', 'passed', 'failed')),
+  CONSTRAINT ck_pipeline_prompt_version_no CHECK (version_no >= 1),
+  CONSTRAINT fk_pipeline_prompt_operator FOREIGN KEY (operator_id) REFERENCES sys_user(user_id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pipeline_prompt_scene_status ON pipeline_prompt_versions(scene, status);
+CREATE INDEX IF NOT EXISTS idx_pipeline_prompt_key_time ON pipeline_prompt_versions(prompt_key, update_time);
 
 CREATE INDEX IF NOT EXISTS idx_collection_runs_handoff_status_time ON collection_runs(handoff_status, create_time);
 CREATE INDEX IF NOT EXISTS idx_news_articles_handoff_status_time ON news_articles(handoff_status, update_time);

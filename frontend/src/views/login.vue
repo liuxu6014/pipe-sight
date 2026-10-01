@@ -1,7 +1,7 @@
 <template>
   <div class="pipeline-user-login calm-login-page calm-homepage-auth" :class="{ 'is-login-open': loginVisible }">
-    <section class="calm-photo-hero" aria-label="平台登录封面">
-      <img class="calm-hero-photo" :src="CALM_MOUNTAIN_LAKE_URL" alt="雪山森林背景" />
+    <section class="calm-photo-hero pipechina-photo-hero" aria-label="平台登录封面">
+      <img class="calm-hero-photo" :src="CALM_MOUNTAIN_LAKE_URL" alt="国家管网输气站场背景" />
       <div class="calm-hero-shade" aria-hidden="true"></div>
       <div class="calm-hero-fade" aria-hidden="true"></div>
 
@@ -22,12 +22,6 @@
           </button>
         </div>
 
-        <div class="calm-nav-right">
-          <button class="calm-nav-link" type="button" @click="revealLogin">登录</button>
-          <button class="calm-nav-trial" type="button" @click="startTrial">
-            进入平台
-          </button>
-        </div>
       </nav>
     </section>
 
@@ -188,10 +182,11 @@ import usePermissionStore from '@/store/modules/permission'
 import { resolvePostLoginPath } from '@/utils/portal/auth'
 import { isHttp } from '@/utils/validate'
 import pipechinaEmblemUrl from '@/assets/logo/pipechina-emblem.png'
+import pipechinaLoginBackgroundUrl from '@/assets/images/pipechina-login-background.jpg'
 
 defineOptions({ name: 'UnifiedPlatformLogin' })
 
-const CALM_MOUNTAIN_LAKE_URL = 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=2400&q=85'
+const CALM_MOUNTAIN_LAKE_URL = pipechinaLoginBackgroundUrl
 const PIPECHINA_LOGO_SOURCE_URL = 'https://www.pipechina.com.cn/Uploads/Picture/2023/09/05/s64f6d50827d73.png'
 const PIPECHINA_LOGO_URL = pipechinaEmblemUrl
 const PLATFORM_NAME = import.meta.env.VITE_APP_TITLE || '国家管网科技情报与科研辅助平台'
@@ -413,7 +408,7 @@ onBeforeUnmount(() => {
 
 <style lang="scss" scoped>
 .pipeline-user-login.calm-login-page.calm-homepage-auth {
-  min-height: 100vh;
+  min-height: 100dvh;
   overflow-x: hidden;
   background: #f6f6f6;
   color: #172233;
@@ -421,8 +416,7 @@ onBeforeUnmount(() => {
 
 .calm-photo-hero {
   position: relative;
-  height: clamp(570px, 64vh, 690px);
-  min-height: 570px;
+  height: clamp(270px, 43vh, 430px);
   overflow: hidden;
 }
 
@@ -453,6 +447,11 @@ onBeforeUnmount(() => {
   background: linear-gradient(180deg, rgba(246, 246, 246, 0), #f6f6f6);
 }
 
+.pipechina-photo-hero .calm-hero-fade {
+  height: 72px;
+  background: linear-gradient(180deg, rgba(246, 246, 246, 0), rgba(246, 246, 246, 0.78) 82%, #f6f6f6);
+}
+
 .calm-login-nav {
   position: absolute;
   z-index: 5;
@@ -465,8 +464,7 @@ onBeforeUnmount(() => {
   gap: 22px;
 }
 
-.calm-nav-left,
-.calm-nav-right {
+.calm-nav-left {
   display: flex;
   align-items: center;
   gap: 14px;
@@ -474,7 +472,6 @@ onBeforeUnmount(() => {
 
 .calm-brand,
 .calm-nav-link,
-.calm-nav-trial,
 .calm-start-primary,
 .calm-start-secondary,
 .calm-code-img,
@@ -510,8 +507,7 @@ onBeforeUnmount(() => {
   }
 }
 
-.calm-nav-link,
-.calm-nav-trial {
+.calm-nav-link {
   min-height: 38px;
   border: 1px solid rgba(255, 255, 255, 0.36);
   border-radius: 999px;
@@ -528,7 +524,6 @@ onBeforeUnmount(() => {
   }
 }
 
-.calm-nav-trial,
 .calm-start-primary,
 .calm-submit {
   border-color: transparent;
@@ -538,8 +533,8 @@ onBeforeUnmount(() => {
 .calm-start-panel {
   position: relative;
   z-index: 4;
-  margin-top: -150px;
-  padding: 220px 24px 86px;
+  margin-top: -88px;
+  padding: 132px 24px 42px;
   background: linear-gradient(180deg, rgba(246, 246, 246, 0) 0, #f6f6f6 172px, #f6f6f6 100%);
 }
 
@@ -550,11 +545,11 @@ onBeforeUnmount(() => {
 }
 
 .calm-start-copy h1 {
-  max-width: 560px;
+  max-width: 620px;
   margin: 0 auto;
   color: #182c3d;
   font-family: "Noto Serif SC", "Songti SC", SimSun, serif;
-  font-size: clamp(34px, 4.2vw, 48px);
+  font-size: clamp(30px, 3.4vw, 42px);
   font-weight: 700;
   line-height: 1.18;
   overflow-wrap: anywhere;
@@ -562,9 +557,9 @@ onBeforeUnmount(() => {
 
 .calm-start-copy p {
   max-width: 460px;
-  margin: 16px auto 0;
+  margin: 10px auto 0;
   color: #667789;
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1.75;
   overflow-wrap: anywhere;
 }
@@ -573,7 +568,7 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: center;
   gap: 14px;
-  margin-top: 28px;
+  margin-top: 18px;
 }
 
 .calm-start-primary,
@@ -599,7 +594,7 @@ onBeforeUnmount(() => {
 }
 
 .calm-value-grid {
-  margin-top: 58px;
+  margin-top: 32px;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
@@ -607,8 +602,8 @@ onBeforeUnmount(() => {
 }
 
 .calm-value-grid button {
-  min-height: 142px;
-  padding: 22px;
+  min-height: 108px;
+  padding: 16px 18px;
   border: 1px solid rgba(202, 214, 226, 0.9);
   border-radius: 14px;
   display: flex;
@@ -637,8 +632,8 @@ onBeforeUnmount(() => {
 }
 
 .calm-value-grid button > strong {
-  margin-top: 24px;
-  font-size: 17px;
+  margin-top: 12px;
+  font-size: 16px;
 }
 
 .calm-value-grid button > small {
@@ -879,21 +874,23 @@ onBeforeUnmount(() => {
     display: none;
   }
 
-  .calm-nav-link,
-  .calm-nav-trial {
+  .calm-nav-link {
     min-height: 34px;
     padding: 0 13px;
     font-size: 13px;
   }
 
   .calm-photo-hero {
-    height: clamp(420px, 54vh, 520px);
-    min-height: 420px;
+    height: 180px;
+  }
+
+  .pipechina-photo-hero .calm-hero-fade {
+    height: 54px;
   }
 
   .calm-start-panel {
-    margin-top: -96px;
-    padding: 150px 16px 58px;
+    margin-top: -50px;
+    padding: 82px 16px 32px;
   }
 
   .calm-start-copy {
@@ -904,7 +901,7 @@ onBeforeUnmount(() => {
   .calm-start-copy h1 {
     max-width: 360px;
     margin: 0 auto;
-    font-size: clamp(27px, 6.8vw, 30px);
+    font-size: clamp(25px, 6.8vw, 29px);
   }
 
   .calm-start-copy p {
@@ -914,29 +911,36 @@ onBeforeUnmount(() => {
   }
 
   .calm-start-actions {
-    align-items: center;
-    flex-direction: column;
-    margin-top: 22px;
+    align-items: stretch;
+    gap: 10px;
+    margin-top: 16px;
   }
 
   .calm-value-grid {
-    margin-top: 34px;
+    margin-top: 24px;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .calm-value-grid button {
-    min-height: 124px;
-    padding: 16px;
+    min-height: 96px;
+    padding: 12px;
   }
 
   .calm-value-grid button > strong {
-    margin-top: 16px;
+    margin-top: 8px;
     font-size: 14px;
+  }
+
+  .calm-value-grid button > small {
+    font-size: 11px;
+    line-height: 1.45;
   }
 
   .calm-start-primary,
   .calm-start-secondary {
-    width: min(100%, 272px);
+    min-width: 0;
+    width: auto;
+    flex: 1;
   }
 
   .calm-login-modal {
@@ -970,7 +974,6 @@ onBeforeUnmount(() => {
 
 @media (prefers-reduced-motion: reduce) {
   .calm-nav-link,
-  .calm-nav-trial,
   .calm-start-primary,
   .calm-start-secondary,
   .calm-code-img,

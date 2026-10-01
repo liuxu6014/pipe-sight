@@ -8,10 +8,12 @@ from module_pipeline.entity.do.pipeline_do import (
     PipelineCrawlRun,
     PipelineMaterial,
     PipelinePaper,
+    PipelinePromptVersion,
     PipelineReport,
     PipelineReportVersion,
     PipelineResearchJob,
     PipelineSource,
+    PipelineTemplateVersion,
     PipelineWorkspaceItem,
 )
 
@@ -38,6 +40,136 @@ class PipelineDao:
             .scalars()
             .first()
         )
+
+    @classmethod
+    async def get_source_by_code(cls, db: AsyncSession, source_code: str) -> PipelineSource | None:
+        return (
+            (await db.execute(select(PipelineSource).where(PipelineSource.source_code == source_code)))
+            .scalars()
+            .first()
+        )
+
+    @classmethod
+    async def add_source(cls, db: AsyncSession, source: PipelineSource) -> PipelineSource:
+        db.add(source)
+        await db.flush()
+        return source
+
+    @classmethod
+    async def list_prompt_versions(
+        cls,
+        db: AsyncSession,
+        *,
+        prompt_key: str | None = None,
+        scene: str | None = None,
+    ) -> Sequence[PipelinePromptVersion]:
+        query = select(PipelinePromptVersion)
+        if prompt_key:
+            query = query.where(PipelinePromptVersion.prompt_key == prompt_key)
+        if scene:
+            query = query.where(PipelinePromptVersion.scene == scene)
+        return (
+            (await db.execute(query.order_by(PipelinePromptVersion.prompt_key.asc(), PipelinePromptVersion.version_no.desc())))
+            .scalars()
+            .all()
+        )
+
+    @classmethod
+    async def get_latest_prompt(cls, db: AsyncSession, prompt_key: str) -> PipelinePromptVersion | None:
+        return (
+            (
+                await db.execute(
+                    select(PipelinePromptVersion)
+                    .where(PipelinePromptVersion.prompt_key == prompt_key)
+                    .order_by(PipelinePromptVersion.version_no.desc())
+                    .limit(1)
+                )
+            )
+            .scalars()
+            .first()
+        )
+
+    @classmethod
+    async def get_published_prompt(cls, db: AsyncSession, prompt_key: str) -> PipelinePromptVersion | None:
+        return (
+            (
+                await db.execute(
+                    select(PipelinePromptVersion)
+                    .where(
+                        PipelinePromptVersion.prompt_key == prompt_key,
+                        PipelinePromptVersion.status == 'published',
+                    )
+                    .order_by(PipelinePromptVersion.version_no.desc())
+                    .limit(1)
+                )
+            )
+            .scalars()
+            .first()
+        )
+
+    @classmethod
+    async def add_prompt(cls, db: AsyncSession, prompt: PipelinePromptVersion) -> PipelinePromptVersion:
+        db.add(prompt)
+        await db.flush()
+        return prompt
+
+    @classmethod
+    async def list_template_versions(
+        cls,
+        db: AsyncSession,
+        *,
+        template_key: str | None = None,
+        category: str | None = None,
+    ) -> Sequence[PipelineTemplateVersion]:
+        query = select(PipelineTemplateVersion)
+        if template_key:
+            query = query.where(PipelineTemplateVersion.template_key == template_key)
+        if category:
+            query = query.where(PipelineTemplateVersion.category == category)
+        return (
+            (await db.execute(query.order_by(PipelineTemplateVersion.template_key.asc(), PipelineTemplateVersion.version_no.desc())))
+            .scalars()
+            .all()
+        )
+
+    @classmethod
+    async def get_latest_template(cls, db: AsyncSession, template_key: str) -> PipelineTemplateVersion | None:
+        return (
+            (
+                await db.execute(
+                    select(PipelineTemplateVersion)
+                    .where(PipelineTemplateVersion.template_key == template_key)
+                    .order_by(PipelineTemplateVersion.version_no.desc())
+                    .limit(1)
+                )
+            )
+            .scalars()
+            .first()
+        )
+
+    @classmethod
+    async def get_published_template(cls, db: AsyncSession, template_key: str) -> PipelineTemplateVersion | None:
+        return (
+            (
+                await db.execute(
+                    select(PipelineTemplateVersion)
+                    .where(
+                        PipelineTemplateVersion.template_key == template_key,
+                        PipelineTemplateVersion.status == 'published',
+                    )
+                    .order_by(PipelineTemplateVersion.version_no.desc())
+                    .limit(1)
+                )
+            )
+            .scalars()
+            .first()
+        )
+
+    @classmethod
+    async def add_template(cls, db: AsyncSession, template: PipelineTemplateVersion) -> PipelineTemplateVersion:
+        db.add(template)
+        await db.flush()
+        return template
 
     @classmethod
     async def list_collection_runs(cls, db: AsyncSession) -> Sequence[PipelineCrawlRun]:
@@ -113,7 +245,7 @@ class PipelineDao:
         article_type: str | None = None,
         keyword: str | None = None,
     ) -> Sequence[PipelineArticle]:
-        query = select(PipelineArticle)
+        query = select(PipelineArticle).where(PipelineArticle.review_status == 'approved')
         if article_type:
             query = query.where(PipelineArticle.article_type == article_type)
         if keyword:
@@ -133,7 +265,7 @@ class PipelineDao:
 
     @classmethod
     async def list_papers(cls, db: AsyncSession, *, keyword: str | None = None) -> Sequence[PipelinePaper]:
-        query = select(PipelinePaper)
+        query = select(PipelinePaper).where(PipelinePaper.review_status == 'approved')
         if keyword:
             pattern = f'%{keyword}%'
             query = query.where(
@@ -171,10 +303,8 @@ class PipelineDao:
         db: AsyncSession,
         user_id: int,
     ) -> Sequence[PipelineMaterial]:
-        # 产品只区分普通用户和管理员，不按部门切分数据；user_id=1 为管理员。
         scope_filter = or_(
             PipelineMaterial.owner_id == user_id,
-            user_id == 1,
             PipelineMaterial.permission_scope == 'public',
         )
         return (

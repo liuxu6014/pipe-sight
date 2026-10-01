@@ -83,7 +83,6 @@ export const constantRoutes = [
       { path: 'digests/:id', name: 'PortalDigestEditor', component: () => import('@/views/portal/pages/DigestEditorView.vue'), meta: { title: '简报编辑' } },
       { path: 'reports/:itemId?', redirect: to => to.params.itemId ? `/portal/digests/${to.params.itemId}` : '/portal/digests' },
       { path: 'knowledge', name: 'PortalKnowledge', component: () => import('@/views/portal/pages/KnowledgeView.vue'), meta: { title: '知识库' } },
-      { path: 'knowledge/ask', name: 'PortalKnowledgeAsk', component: () => import('@/views/portal/pages/KnowledgeAskView.vue'), meta: { title: '知识问答' } },
       { path: 'knowledge/:id', name: 'PortalKnowledgeDetail', component: () => import('@/views/portal/pages/KnowledgeDetailView.vue'), meta: { title: '资料详情' } },
       { path: 'me/tasks', name: 'PortalMyTasks', component: () => import('@/views/portal/pages/MyWorkspaceView.vue'), props: { mode: 'tasks' }, meta: { title: '我的任务' } },
       { path: 'me/reports', name: 'PortalMyReports', component: () => import('@/views/portal/pages/MyWorkspaceView.vue'), props: { mode: 'reports' }, meta: { title: '我的报告' } },

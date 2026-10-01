@@ -6,6 +6,7 @@ from fastapi import FastAPI
 
 from common.constant import LockConstant
 from common.router import auto_register_routers
+from config.database import AsyncSessionLocal
 from config.env import AppConfig
 from config.get_db import close_async_engine, init_create_table
 from config.get_redis import RedisUtil
@@ -13,6 +14,8 @@ from config.get_scheduler import SchedulerUtil
 from exceptions.handle import handle_exception
 from middlewares.handle import handle_middleware
 from module_admin.service.log_service import LogAggregatorService
+from module_pipeline.service.pipeline_prompt_service import PipelinePromptService
+from module_pipeline.service.pipeline_template_service import PipelineTemplateService
 from sub_applications.handle import handle_sub_applications
 from utils.common_util import worship
 from utils.log_util import logger
@@ -92,6 +95,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             worship()
         TransportKeyProvider.validate_runtime_configuration()
         await init_create_table()
+        async with AsyncSessionLocal() as db:
+            await PipelinePromptService.ensure_default_prompt(db)
+            await PipelineTemplateService.ensure_default_templates(db)
+            await db.commit()
         await RedisUtil.check_redis_connection(app.state.redis, log_enabled=startup_log_enabled)
         await RedisUtil.init_sys_dict(app.state.redis)
         await RedisUtil.init_sys_config(app.state.redis)

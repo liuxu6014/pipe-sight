@@ -33,17 +33,20 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Collection, DocumentCopy, EditPen, MagicStick, Star, TopRight } from '@element-plus/icons-vue'
 import usePortalStore from '@/store/modules/portal'
+import { getPipelineIntelligenceDetail } from '@/api/pipeline/intelligence'
+import { normalizePortalIntelligence } from '@/store/modules/portal'
 import PortalEmptyState from '../components/PortalEmptyState.vue'
 
 const route = useRoute()
 const router = useRouter()
 const portalStore = usePortalStore()
-const article = computed(() => portalStore.newsItems.find(item => item.id === route.params.itemId) || null)
+const liveArticle = ref(null)
+const article = computed(() => liveArticle.value || portalStore.newsItems.find(item => item.id === route.params.itemId) || null)
 const articleUrl = computed(() => {
   const value = article.value?.sourceUrl || article.value?.source_url || article.value?.originalUrl || article.value?.original_url || article.value?.url || article.value?.link
   if (!value) return ''
@@ -56,6 +59,16 @@ const articleUrl = computed(() => {
 })
 const relatedNews = computed(() => portalStore.newsItems.filter(item => item.id !== article.value?.id).slice(0, 3))
 const paperItems = computed(() => portalStore.paperItems)
+async function loadArticle() {
+  liveArticle.value = null
+  try {
+    const res = await getPipelineIntelligenceDetail(route.params.itemId)
+    const payload = res.data?.data || res.data
+    if (payload?.id && payload.category !== 'paper') liveArticle.value = normalizePortalIntelligence(payload)
+  } catch (error) {
+    // The list cache remains a usable fallback for an already loaded item.
+  }
+}
 function addToBasket() { ElMessage.success(portalStore.addToBasket(article.value) ? '已加入资料篮' : '资料已在资料篮中') }
 async function copySummary() {
   const text = `${article.value.title}\n\n${article.value.summary}\n\n来源：${article.value.source} ${article.value.time}`
@@ -86,4 +99,6 @@ async function copySummary() {
     ElMessage.error('复制失败，请手动选择摘要内容')
   }
 }
+onMounted(loadArticle)
+watch(() => route.params.itemId, loadArticle)
 </script>

@@ -62,6 +62,76 @@ class PipelineSource(Base):
     update_time = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now, comment='更新时间')
 
 
+class PipelinePromptVersion(Base):
+    """可审计的模型提示词版本，只有测试通过的版本才能发布。"""
+
+    __tablename__ = 'pipeline_prompt_versions'
+    __table_args__ = (
+        UniqueConstraint('prompt_key', 'version_no', name='uk_pipeline_prompt_key_version'),
+        CheckConstraint("status IN ('draft', 'published', 'retired')", name='ck_pipeline_prompt_status'),
+        CheckConstraint("test_status IN ('untested', 'passed', 'failed')", name='ck_pipeline_prompt_test_status'),
+        CheckConstraint('version_no >= 1', name='ck_pipeline_prompt_version_no'),
+        Index('idx_pipeline_prompt_scene_status', 'scene', 'status'),
+        Index('idx_pipeline_prompt_key_time', 'prompt_key', 'update_time'),
+        {'comment': '管网模型提示词版本表'},
+    )
+
+    prompt_id = Column(String(64), primary_key=True, nullable=False, comment='提示词版本ID')
+    prompt_key = Column(String(64), nullable=False, comment='稳定提示词编码')
+    scene = Column(String(64), nullable=False, comment='业务场景')
+    name = Column(String(255), nullable=False, comment='提示词名称')
+    description = Column(String(1000), nullable=False, default='', comment='用途说明')
+    system_prompt = Column(Text, nullable=False, comment='系统提示词')
+    user_prompt = Column(Text, nullable=False, comment='用户提示词模板')
+    version_no = Column(Integer, nullable=False, server_default='1', comment='版本号')
+    status = Column(String(32), nullable=False, server_default='draft', comment='版本状态')
+    test_status = Column(String(32), nullable=False, server_default='untested', comment='离线测试状态')
+    test_result = Column(JSON, nullable=False, default=dict, comment='最近一次测试结果')
+    operator_id = Column(
+        BigInteger, ForeignKey('sys_user.user_id', ondelete='SET NULL'), nullable=True, comment='操作用户ID'
+    )
+    operator_name = Column(String(64), nullable=False, default='', comment='操作用户名称快照')
+    published_at = Column(DateTime, nullable=True, comment='发布时间')
+    create_time = Column(DateTime, nullable=False, default=datetime.now, comment='创建时间')
+    update_time = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now, comment='更新时间')
+
+
+class PipelineTemplateVersion(Base):
+    """可发布的科研报告和情报简报模板版本。"""
+
+    __tablename__ = 'pipeline_template_versions'
+    __table_args__ = (
+        UniqueConstraint('template_key', 'version_no', name='uk_pipeline_template_key_version'),
+        CheckConstraint("status IN ('draft', 'published', 'retired')", name='ck_pipeline_template_status'),
+        CheckConstraint('version_no >= 1', name='ck_pipeline_template_version_no'),
+        Index('idx_pipeline_template_category_status', 'category', 'status'),
+        Index('idx_pipeline_template_key_time', 'template_key', 'update_time'),
+        {'comment': '管网科研与情报模板版本表'},
+    )
+
+    template_id = Column(String(64), primary_key=True, nullable=False, comment='模板版本ID')
+    template_key = Column(String(64), nullable=False, comment='稳定模板编码')
+    code = Column(String(32), nullable=False, comment='模板展示编码')
+    category = Column(String(32), nullable=False, comment='模板分类')
+    report_type = Column(String(64), nullable=False, comment='报告类型')
+    name = Column(String(255), nullable=False, comment='模板名称')
+    description = Column(String(1000), nullable=False, default='', comment='模板说明')
+    color = Column(String(32), nullable=False, default='#2764e7', comment='展示颜色')
+    version_label = Column(String(32), nullable=False, comment='展示版本号')
+    version_no = Column(Integer, nullable=False, server_default='1', comment='版本序号')
+    status = Column(String(32), nullable=False, server_default='draft', comment='版本状态')
+    formats = Column(JSON, nullable=False, default=list, comment='支持的输出格式')
+    sections = Column(JSON, nullable=False, default=list, comment='章节结构')
+    usage_count = Column(Integer, nullable=False, server_default='0', comment='使用次数快照')
+    operator_id = Column(
+        BigInteger, ForeignKey('sys_user.user_id', ondelete='SET NULL'), nullable=True, comment='操作用户ID'
+    )
+    operator_name = Column(String(64), nullable=False, default='', comment='操作用户名称快照')
+    published_at = Column(DateTime, nullable=True, comment='发布时间')
+    create_time = Column(DateTime, nullable=False, default=datetime.now, comment='创建时间')
+    update_time = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now, comment='更新时间')
+
+
 class PipelineCrawlRun(Base):
     """一次可追溯的采集执行。"""
 

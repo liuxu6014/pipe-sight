@@ -33,19 +33,22 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Collection, DocumentCopy, MagicStick, TopRight, Warning } from '@element-plus/icons-vue'
 import usePortalStore from '@/store/modules/portal'
+import { getPipelineIntelligenceDetail } from '@/api/pipeline/intelligence'
+import { normalizePortalPaper } from '@/store/modules/portal'
 import PortalEmptyState from '../components/PortalEmptyState.vue'
 
 const route = useRoute()
 const router = useRouter()
 const portalStore = usePortalStore()
 const activeTab = ref('摘要')
+const livePaper = ref(null)
 const tabs = ['摘要', 'AI解读', '引用信息', '关联资料']
-const paper = computed(() => portalStore.paperItems.find(item => item.id === route.params.itemId) || null)
+const paper = computed(() => livePaper.value || portalStore.paperItems.find(item => item.id === route.params.itemId) || null)
 const paperUrl = computed(() => {
   const directUrl = paper.value?.fullTextUrl || paper.value?.full_text_url || paper.value?.documentUrl || paper.value?.document_url || paper.value?.sourceUrl || paper.value?.source_url || paper.value?.url || paper.value?.link
   if (directUrl) return directUrl
@@ -104,4 +107,16 @@ function startResearch() {
   portalStore.addToBasket({ ...paper.value, title: paper.value.titleZh, type: '论文' })
   router.push({ path: '/portal/research/create', query: { source: paper.value.id } })
 }
+async function loadPaper() {
+  livePaper.value = null
+  try {
+    const res = await getPipelineIntelligenceDetail(route.params.itemId)
+    const payload = res.data?.data || res.data
+    if (payload?.id && payload.category === 'paper') livePaper.value = normalizePortalPaper(payload)
+  } catch (error) {
+    // The list cache remains a usable fallback for an already loaded item.
+  }
+}
+onMounted(loadPaper)
+watch(() => route.params.itemId, loadPaper)
 </script>

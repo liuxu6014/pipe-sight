@@ -34,6 +34,7 @@ from config.env import AppConfig, LogConfig, RedisConfig
 from module_admin.dao.job_dao import JobDao
 from module_admin.entity.vo.job_vo import JobLogModel, JobModel
 from module_admin.service.job_log_service import JobLogService
+from module_pipeline.integration.collection_scheduler import register_real_collection_schedules
 from module_pipeline.integration.handoff_scheduler import register_insighthub_handoff_polling
 from utils.log_util import logger
 from utils.server_util import StartupUtil, WorkerIdUtil
@@ -239,6 +240,7 @@ class SchedulerUtil:
         scheduler.start()
 
         register_insighthub_handoff_polling(scheduler)
+        await register_real_collection_schedules(scheduler)
 
         # 加载数据库中的定时任务
         async with cls._get_sync_async_session() as session:

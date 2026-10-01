@@ -2,7 +2,6 @@
   <div class="ps-page ps-knowledge-page">
     <PortalPageHeader title="知识库">
       <template #actions>
-        <el-button :icon="ChatDotRound" @click="router.push('/portal/knowledge/ask')">知识问答</el-button>
         <el-button type="primary" :icon="UploadFilled" @click="openUpload">上传资料</el-button>
       </template>
     </PortalPageHeader>
@@ -145,7 +144,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ChatDotRound, Close, MoreFilled, Search, UploadFilled, WarningFilled } from '@element-plus/icons-vue'
+import { Close, MoreFilled, Search, UploadFilled, WarningFilled } from '@element-plus/icons-vue'
 import PortalPageHeader from '../components/PortalPageHeader.vue'
 import PortalEmptyState from '../components/PortalEmptyState.vue'
 import usePortalStore from '@/store/modules/portal'

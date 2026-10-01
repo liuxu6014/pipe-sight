@@ -58,11 +58,8 @@ def test_report_export_contains_domain_sections():
     assert "磁各向异性" in content
 
 
-def test_knowledge_base_returns_documents_and_answer():
+def test_knowledge_base_returns_documents():
     docs = PipelineService.list_knowledge_documents()
-    answer = PipelineService.ask_knowledge_base("管道应力监测怎么做？")
 
     assert docs["total"] >= 3
     assert any("设计方案" in item["name"] for item in docs["rows"])
-    assert "磁各向异性" in answer["answer"]
-    assert answer["references"]

@@ -22,6 +22,16 @@ services:
       dockerfile: Dockerfile.my
     image: ruoyi-backend-my:latest
     container_name: ruoyi-backend-my
+    environment:
+      APP_ENV: dockermy
+      DB_HOST: ruoyi-mysql
+      DB_PORT: 3306
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      REDIS_HOST: ruoyi-redis
+      REDIS_PORT: 6379
+      REDIS_DATABASE: 2
+      TRANSPORT_CRYPTO_ENABLED: "false"
     ports:
       - "19099:9099"
     depends_on:

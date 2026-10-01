@@ -41,13 +41,12 @@
         </div>
         <div class="ps-page-actions">
           <el-button type="primary" @click="add"><Collection />加入资料篮</el-button>
-          <el-button :disabled="document.status !== '已解析'" @click="askDocument"><ChatDotRound />问此文档</el-button>
-          <el-dropdown v-if="canManage || document.downloadUrl" trigger="click">
+          <el-dropdown v-if="canManage || document.allowDownload !== false" trigger="click">
             <el-button aria-label="更多资料操作"><MoreFilled /></el-button>
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item v-if="canManage" :disabled="reparsing" @click="reparse">{{ reparsing ? '正在提交…' : '重新解析' }}</el-dropdown-item>
-                <el-dropdown-item v-if="document.downloadUrl" @click="downloadDocument">下载文件</el-dropdown-item>
+                <el-dropdown-item v-if="document.allowDownload !== false" @click="downloadDocument">下载文件</el-dropdown-item>
                 <el-dropdown-item v-if="canManage" divided class="ps-danger-menu-item" @click="removeDocument">删除资料</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -117,7 +116,7 @@
               <div v-for="(reference, index) in references" :key="reference.id || index" class="ps-reference-record">
                 <Operation /><span><strong>{{ reference.title || reference.name }}</strong><small>{{ reference.location || reference.summary || '引用位置待补充' }}</small></span>
               </div>
-              <div v-if="!references.length" class="ps-inspector-empty">该资料尚未被报告或问答引用</div>
+              <div v-if="!references.length" class="ps-inspector-empty">该资料尚未被报告或简报引用</div>
             </template>
           </div>
         </aside>
@@ -130,11 +129,12 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowRight, ChatDotRound, Clock, Collection, Document, Loading, MoreFilled, Operation, WarningFilled, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
+import { ArrowRight, Clock, Collection, Document, Loading, MoreFilled, Operation, WarningFilled, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
 import PortalEmptyState from '../components/PortalEmptyState.vue'
 import usePortalStore from '@/store/modules/portal'
 import {
   deletePipelineKnowledgeDocument,
+  downloadPipelineKnowledgeDocument,
   getPipelineKnowledgeDocument,
   reparsePipelineKnowledgeDocument
 } from '@/api/pipeline/intelligence'
@@ -175,7 +175,7 @@ const versions = computed(() => {
 })
 const parseStateDescription = computed(() => document.value?.status === '解析失败'
   ? (document.value?.parseError || '请检查文件是否损坏、加密或格式不受支持，然后重新提交解析。')
-  : '解析完成前暂不可发起文档问答。TXT、MD、DOCX 和可搜索 PDF 可直接提取文字；扫描版 PDF 需先完成 OCR，旧版 DOC 请转换为 DOCX。')
+  : '解析完成后可用于科研报告、情报简报和资料引用。TXT、MD、DOCX 和可搜索 PDF 可直接提取文字；扫描版 PDF 需先完成 OCR，旧版 DOC 请转换为 DOCX。')
 
 function normalizeParagraphs(value) {
   if (Array.isArray(value)) return value.map(String).filter(Boolean)
@@ -192,7 +192,7 @@ function normalizeDocument(item = {}) {
     owner: item.owner || item.department || '平台知识库',
     uploader: item.uploader || item.uploadedBy,
     permission: item.permission || item.permissionLabel || '仅自己可见',
-    downloadUrl: item.downloadUrl || item.fileUrl || '',
+    allowDownload: item.allowDownload !== false,
     status: ({ indexed: '已解析', parsing: '解析中', queued: '待解析', planned: '待解析', failed: '解析失败' })[item.status] || item.status || '待解析',
     updatedAt: item.updated_at || item.updatedAt || '最近更新',
     summary: item.summary || item.scenario || ''
@@ -200,8 +200,10 @@ function normalizeDocument(item = {}) {
 }
 function statusClass(status) { return { 'is-processing': ['解析中', '待解析'].includes(status), 'is-failed': status === '解析失败' } }
 function add() { ElMessage.success(portalStore.addToBasket({ ...document.value, title: document.value.name }) ? '已加入资料篮' : '资料已在资料篮中') }
-function askDocument() { router.push({ path: '/portal/knowledge/ask', query: { doc: document.value.id } }) }
-function downloadDocument() { window.open(document.value.downloadUrl, '_blank', 'noopener,noreferrer') }
+function downloadDocument() {
+  if (!document.value?.allowDownload) return ElMessage.warning('当前资料禁止下载')
+  downloadPipelineKnowledgeDocument(document.value.id, document.value.name).catch(() => {})
+}
 async function loadDocument() {
   loading.value = true
   loadError.value = ''
@@ -227,7 +229,7 @@ async function reparse() {
     const res = await reparsePipelineKnowledgeDocument(document.value.id)
     const reparsed = normalizeDocument(res.data?.data || res.data || {})
     if (reparsed.id) liveDocument.value = reparsed
-    if (reparsed.status === '已解析') ElMessage.success('重新解析完成，资料已可用于检索和问答')
+    if (reparsed.status === '已解析') ElMessage.success('重新解析完成，资料已可用于检索和报告生成')
     else if (reparsed.status === '解析失败') ElMessage.warning(reparsed.parseMessage || reparsed.summary || '重新解析未提取到有效正文')
     else ElMessage.success('已提交重新解析')
     await portalStore.hydrate(true)

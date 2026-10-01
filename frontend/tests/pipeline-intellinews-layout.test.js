@@ -21,7 +21,7 @@ const pageFiles = [
   'ResearchCreateView.vue', 'ResearchTaskView.vue', 'ReportEditorView.vue',
   'DiagramEditorView.vue', 'DigestListView.vue', 'DigestCreateView.vue',
   'DigestEditorView.vue', 'KnowledgeView.vue', 'KnowledgeDetailView.vue',
-  'KnowledgeAskView.vue', 'MyWorkspaceView.vue'
+  'MyWorkspaceView.vue'
 ]
 
 test('exposes the user portal as an authenticated routed application shell', () => {
@@ -57,7 +57,7 @@ test('ships every user-facing prototype page as an independent Vue page', () => 
   assert.match(routerConfig, /path: 'research\/tasks\/:id'/)
   assert.match(routerConfig, /path: 'research\/reports\/:id\/diagram'/)
   assert.match(routerConfig, /path: 'digests\/create'/)
-  assert.match(routerConfig, /path: 'knowledge\/ask'/)
+  assert.doesNotMatch(routerConfig, /path: 'knowledge\/ask'/)
   assert.match(routerConfig, /path: 'me\/favorites'/)
 })
 
@@ -67,7 +67,7 @@ test('implements a coherent home discovery and continue-work experience', () => 
   assert.match(home, /新建科研报告/)
   assert.match(home, /新建简报/)
   assert.match(home, /上传研究资料/)
-  assert.match(home, /知识问答/)
+  assert.doesNotMatch(home, /知识问答/)
   assert.doesNotMatch(home, /热点主题/)
   assert.doesNotMatch(home, /ps-search-suggestions/)
   assert.match(home, /最新科技资讯/)
@@ -105,8 +105,7 @@ test('hydrates portal pages from pipeline APIs and keeps demo data explicitly op
   const researchCreate = read('../src/views/portal/pages/ResearchCreateView.vue')
   const digestList = read('../src/views/portal/pages/DigestListView.vue')
   const knowledge = read('../src/views/portal/pages/KnowledgeView.vue')
-  const knowledgeAsk = read('../src/views/portal/pages/KnowledgeAskView.vue')
-  for (const apiName of ['getPipelineDashboard', 'listPipelineIntelligence', 'listPipelineKnowledgeDocuments', 'listPipelineReports', 'askPipelineKnowledge', 'getPipelineWorkspace', 'createPipelineResearchJob', 'updatePipelineResearchReport']) {
+  for (const apiName of ['getPipelineDashboard', 'listPipelineIntelligence', 'listPipelineKnowledgeDocuments', 'listPipelineReports', 'getPipelineWorkspace', 'createPipelineResearchJob', 'updatePipelineResearchReport']) {
     assert.match(pipelineApi, new RegExp(`export function ${apiName}`))
   }
   assert.match(portalStore, /Promise\.allSettled/)
@@ -123,8 +122,7 @@ test('hydrates portal pages from pipeline APIs and keeps demo data explicitly op
   assert.match(researchCreate, /portalStore\.knowledgeDocuments/)
   assert.match(digestList, /portalStore\.digestReports/)
   assert.match(knowledge, /portalStore\.knowledgeDocuments/)
-  assert.match(knowledgeAsk, /await askPipelineKnowledge\(content, \{/)
-  assert.match(knowledgeAsk, /实时知识服务暂不可用/)
+  assert.doesNotMatch(knowledge, /知识问答/)
 })
 
 test('implements the full research creation and editing workflow', () => {
@@ -156,10 +154,10 @@ test('implements the full research creation and editing workflow', () => {
   assert.match(create, /任务已进入后台生成队列/)
   assert.match(editor, /报告目录/)
   assert.match(editor, /引用来源/)
-  assert.match(editor, /生成建议/)
+  assert.doesNotMatch(editor, /askPipelineKnowledge/)
   assert.match(editor, /质量问题/)
   assert.match(editor, /版本记录/)
-  assert.match(editor, /askPipelineKnowledge/)
+  assert.doesNotMatch(editor, /askPipelineKnowledge/)
   assert.match(editor, /restorePipelineResearchReportVersion/)
   assert.match(diagram, /节点库/)
   assert.match(diagram, /局部重新生成/)
@@ -170,7 +168,6 @@ test('implements digest and evidence-grounded knowledge workflows', () => {
   const digestList = read('../src/views/portal/pages/DigestListView.vue')
   const digestEditor = read('../src/views/portal/pages/DigestEditorView.vue')
   const knowledge = read('../src/views/portal/pages/KnowledgeView.vue')
-  const ask = read('../src/views/portal/pages/KnowledgeAskView.vue')
   assert.match(digestCreate, /候选内容预览/)
   assert.match(digestCreate, /数据缺口/)
   assert.match(digestCreate, /const candidateItems = computed/)
@@ -182,7 +179,8 @@ test('implements digest and evidence-grounded knowledge workflows', () => {
   assert.match(digestCreate, /value="月报"/)
   assert.match(digestCreate, /type="month"/)
   assert.match(digestCreate, /reportType: 'monthly'/)
-  assert.match(digestCreate, /monthly-v1/)
+  assert.match(digestCreate, /listPipelineTemplates/)
+  assert.match(digestCreate, /publishedOnly: true/)
   assert.match(digestCreate, /new Date\(year, monthIndex \+ 1, 0\)/)
   assert.match(digestList, /'月报'/)
   assert.match(digestList, /'月报': 'monthly'/)
@@ -194,10 +192,21 @@ test('implements digest and evidence-grounded knowledge workflows', () => {
   assert.match(digestEditor, /saveVersion/)
   assert.match(digestEditor, /monthly: '科技情报月报'/)
   assert.match(knowledge, /上传资料/)
-  assert.match(knowledge, /知识问答/)
-  assert.match(ask, /回答仅基于当前账号可访问的资料/)
-  assert.match(ask, /answer\.citations|message\.citations/)
-  assert.match(ask, /当前授权资料不足|资料不足/)
+  assert.doesNotMatch(knowledge, /知识问答/)
+})
+
+test('connects template management and user creation to published template APIs', () => {
+  const templatePage = read('../src/views/pipeline/template/index.vue')
+  const researchCreate = read('../src/views/portal/pages/ResearchCreateView.vue')
+  const digestCreate = read('../src/views/portal/pages/DigestCreateView.vue')
+  for (const apiName of ['listPipelineTemplates', 'createPipelineTemplate', 'updatePipelineTemplate', 'publishPipelineTemplate', 'retirePipelineTemplate']) {
+    assert.match(templatePage, new RegExp(apiName))
+  }
+  assert.match(templatePage, /async function loadTemplates\(\)/)
+  assert.match(researchCreate, /listPipelineTemplates/)
+  assert.match(researchCreate, /publishedOnly: true/)
+  assert.match(digestCreate, /listPipelineTemplates/)
+  assert.match(digestCreate, /publishedOnly: true/)
 })
 
 test('keeps the digest creation page to one clear title context', () => {
@@ -226,7 +235,6 @@ test('makes global search filters and cross-type result routing functional', () 
 test('hardens the user knowledge workspace with real document lifecycle states', () => {
   const knowledge = read('../src/views/portal/pages/KnowledgeView.vue')
   const detail = read('../src/views/portal/pages/KnowledgeDetailView.vue')
-  const ask = read('../src/views/portal/pages/KnowledgeAskView.vue')
   for (const apiName of ['getPipelineKnowledgeDocument', 'reparsePipelineKnowledgeDocument', 'deletePipelineKnowledgeDocument']) {
     assert.match(pipelineApi, new RegExp(`export function ${apiName}`))
   }
@@ -243,9 +251,8 @@ test('hardens the user knowledge workspace with real document lifecycle states',
   assert.match(detail, /资料不存在或无权访问/)
   assert.doesNotMatch(detail, /portalStore\.knowledgeDocuments\[0\]/)
   assert.match(detail, /document\.status !== '已解析'/)
-  assert.match(ask, /navigator\.clipboard\.writeText/)
-  assert.match(ask, /本次问题没有生成演示答案，也不会伪造引用/)
-  assert.match(ask, /portalStore\.addToBasket/)
+  assert.match(detail, /downloadPipelineKnowledgeDocument/)
+  assert.match(detail, /allowDownload !== false/)
   assert.match(portalStyles, /\.ps-parse-overview/)
   assert.match(portalStyles, /@media \(max-width: 760px\)[\s\S]*?\.ps-knowledge-table > article \{[^}]*grid-template-columns: 40px minmax\(0,1fr\)/)
 })
@@ -417,6 +424,17 @@ test('keeps pipeline backend pages inside the management layout', () => {
     assert.match(page, /pipeline-page/)
     assert.doesNotMatch(page, /ps-portal/)
   }
+})
+
+test('connects data source management to persistent configuration and real trial runs', () => {
+  const sourcePage = read('../src/views/pipeline/source/index.vue')
+  const pipelineApi = read('../src/api/pipeline/intelligence.js')
+  for (const apiName of ['createPipelineSource', 'updatePipelineSource', 'disablePipelineSource', 'runPipelineTask']) {
+    assert.match(pipelineApi, new RegExp(`export function ${apiName}`))
+    assert.match(sourcePage, new RegExp(apiName))
+  }
+  assert.match(sourcePage, /source-form-grid/)
+  assert.doesNotMatch(sourcePage, /showSourceTodo|将在下一阶段接入/)
 })
 
 test('exposes the InsightHub handoff controls on the collection task page', () => {

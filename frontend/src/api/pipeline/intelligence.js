@@ -1,4 +1,4 @@
-import request from '@/utils/request'
+import request, { downloadGet } from '@/utils/request'
 
 export function getPipelineDashboard() {
   return request({
@@ -29,6 +29,67 @@ export function listPipelineSources() {
   })
 }
 
+export function createPipelineSource(data) {
+  return request({
+    url: '/pipeline/sources',
+    method: 'post',
+    data
+  })
+}
+
+export function updatePipelineSource(sourceId, data) {
+  return request({
+    url: `/pipeline/sources/${sourceId}`,
+    method: 'put',
+    data
+  })
+}
+
+export function disablePipelineSource(sourceId) {
+  return request({
+    url: `/pipeline/sources/${sourceId}`,
+    method: 'delete'
+  })
+}
+
+export function listPipelineTemplates(params) {
+  return request({
+    url: '/pipeline/templates',
+    method: 'get',
+    params
+  })
+}
+
+export function createPipelineTemplate(data) {
+  return request({
+    url: '/pipeline/templates',
+    method: 'post',
+    data
+  })
+}
+
+export function updatePipelineTemplate(templateKey, data) {
+  return request({
+    url: `/pipeline/templates/${templateKey}`,
+    method: 'put',
+    data
+  })
+}
+
+export function publishPipelineTemplate(templateKey) {
+  return request({
+    url: `/pipeline/templates/${templateKey}/publish`,
+    method: 'post'
+  })
+}
+
+export function retirePipelineTemplate(templateKey) {
+  return request({
+    url: `/pipeline/templates/${templateKey}`,
+    method: 'delete'
+  })
+}
+
 export function listPipelineTasks() {
   return request({
     url: '/pipeline/tasks',
@@ -53,6 +114,36 @@ export function dispatchPipelineHandoff(runId) {
 export function syncPipelineHandoff(runId) {
   return request({
     url: `/pipeline/tasks/runs/${runId}/handoff/sync`,
+    method: 'post'
+  })
+}
+
+export function listPipelinePrompts(scene) {
+  return request({
+    url: '/pipeline/prompts',
+    method: 'get',
+    params: scene ? { scene } : undefined
+  })
+}
+
+export function savePipelinePrompt(data) {
+  return request({
+    url: '/pipeline/prompts',
+    method: 'post',
+    data
+  })
+}
+
+export function testPipelinePrompt(promptKey) {
+  return request({
+    url: `/pipeline/prompts/${promptKey}/test`,
+    method: 'post'
+  })
+}
+
+export function publishPipelinePrompt(promptKey) {
+  return request({
+    url: `/pipeline/prompts/${promptKey}/publish`,
     method: 'post'
   })
 }
@@ -94,6 +185,10 @@ export function getPipelineKnowledgeDocument(documentId) {
   })
 }
 
+export function downloadPipelineKnowledgeDocument(documentId, filename) {
+  return downloadGet(`/pipeline/knowledge/documents/${documentId}/download`, {}, filename || '资料文件')
+}
+
 export function reparsePipelineKnowledgeDocument(documentId) {
   return request({
     url: `/pipeline/knowledge/documents/${documentId}/retry`,
@@ -105,18 +200,6 @@ export function deletePipelineKnowledgeDocument(documentId) {
   return request({
     url: `/pipeline/knowledge/documents/${documentId}`,
     method: 'delete'
-  })
-}
-
-export function askPipelineKnowledge(question, options = {}) {
-  return request({
-    url: '/pipeline/knowledge/ask',
-    method: 'post',
-    data: {
-      question,
-      documentIds: options.documentIds || [],
-      documentTypes: options.documentTypes || []
-    }
   })
 }
 

@@ -78,7 +78,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowRight, ChatDotRound, DocumentAdd, Plus, Search, UploadFilled } from '@element-plus/icons-vue'
+import { ArrowRight, DocumentAdd, Plus, Search, UploadFilled } from '@element-plus/icons-vue'
 import useUserStore from '@/store/modules/user'
 import usePortalStore from '@/store/modules/portal'
 import { getPortalTaskPath } from '../utils/routing'
@@ -109,8 +109,7 @@ const todayLabel = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'l
 const quickActions = [
   { title: '新建科研报告', description: '从资料篮开始结构化生成', path: '/portal/research/create', icon: DocumentAdd, color: '#2764e7' },
   { title: '新建简报', description: '按日、周或月生成周期情报简报', path: '/portal/digests/create', icon: Plus, color: '#0b8f87' },
-  { title: '上传研究资料', description: '解析并纳入授权知识库', path: '/portal/knowledge', icon: UploadFilled, color: '#7357c8' },
-  { title: '知识问答', description: '基于授权资料获取证据回答', path: '/portal/knowledge/ask', icon: ChatDotRound, color: '#c26a2e' }
+  { title: '上传研究资料', description: '解析并纳入授权知识库', path: '/portal/knowledge', icon: UploadFilled, color: '#7357c8' }
 ]
 
 function submitSearch() {

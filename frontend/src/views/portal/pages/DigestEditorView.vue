@@ -5,7 +5,7 @@
         <button type="button" aria-label="返回情报简报" @click="router.push('/portal/digests')"><ArrowLeft /></button>
         <span><strong>{{ digest.title }}</strong><small>{{ digestPeriod }} · {{ reportTypeLabel }}</small></span>
       </div>
-      <div class="ps-save-state"><span :class="{ 'is-saving': saving }"></span>{{ saving ? '正在保存…' : '已自动保存' }}<b>{{ digest.version || 'V1.0' }}</b></div>
+      <div class="ps-save-state"><span :class="{ 'is-saving': saving }"></span>{{ saveLabel }}<b>{{ digest.version || 'V1.0' }}</b></div>
       <div class="ps-editor-actions">
         <el-button :loading="versionSaving" @click="saveVersion"><CollectionTag />保存版本</el-button>
         <el-button @click="runQualityCheck"><CircleCheck />导出前检查</el-button>
@@ -63,7 +63,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, CircleCheck, CircleCheckFilled, CollectionTag, Delete, Download, MagicStick, Plus, Rank, Search } from '@element-plus/icons-vue'
 import usePortalStore from '@/store/modules/portal'
@@ -81,9 +81,13 @@ const activeTab = ref(route.query.panel === 'sources' ? '来源清单' : '候选
 const currentSectionId = ref(sections.value[0]?.id)
 const candidateKeyword = ref('')
 const saving = ref(false)
+const saveState = ref('saved')
 const versionSaving = ref(false)
 const tabs = ['候选资讯', '来源清单', '质量检查']
 let saveTimer
+let dirty = false
+let savePromise = Promise.resolve()
+const saveLabel = computed(() => ({ saved: '已保存', dirty: '有未保存修改', saving: '正在保存…', error: '保存失败，请重试' })[saveState.value] || '保存状态未知')
 
 const currentSection = computed(() => sections.value.find(item => item.id === currentSectionId.value) || sections.value[0])
 const currentSectionIndex = computed(() => Math.max(sections.value.findIndex(item => item.id === currentSectionId.value), 0))
@@ -100,20 +104,41 @@ const candidateNews = computed(() => portalStore.newsItems.filter(item => !candi
 
 function buildMarkdown() { return [`# ${digest.value.title}`, '', ...sections.value.flatMap((section, index) => [`## ${index + 1}. ${section.title}`, '', section.content || '', '']), '## 参考资料', '', ...citations.value.map(item => `[${item.id}] ${item.title}（${item.source || item.type}，${item.location || '来源条目'}）`)].join('\n') }
 function markSaving() {
+  dirty = true
+  saveState.value = 'dirty'
   saving.value = true
   clearTimeout(saveTimer)
-  saveTimer = setTimeout(async () => {
-    try {
-      const res = await updatePipelineResearchReport(digest.value.id, { title: digest.value.title, content: buildMarkdown(), sections: sections.value, citations: citations.value, qualityIssues: issues.value })
-      digest.value = { ...digest.value, ...res.data }
-    } catch (error) {
-      ElMessage.error('自动保存失败，请检查后端服务')
-    } finally {
-      saving.value = false
-    }
-  }, 700)
+  saveTimer = setTimeout(() => { savePromise = savePromise.then(saveCurrent) }, 700)
+}
+async function saveCurrent() {
+  if (!dirty) return
+  dirty = false
+  saving.value = true
+  saveState.value = 'saving'
+  try {
+    const res = await updatePipelineResearchReport(digest.value.id, { title: digest.value.title, content: buildMarkdown(), sections: sections.value, citations: citations.value, qualityIssues: issues.value, expectedVersion: digest.value.versionNo, expectedRevision: digest.value.revision })
+    digest.value = { ...digest.value, ...res.data }
+    saveState.value = dirty ? 'dirty' : 'saved'
+  } catch (error) {
+    dirty = true
+    saveState.value = 'error'
+    ElMessage.error('自动保存失败，当前修改尚未保存')
+  } finally {
+    saving.value = false
+  }
+}
+async function ensureSaved() {
+  clearTimeout(saveTimer)
+  if (dirty) savePromise = savePromise.then(saveCurrent)
+  await savePromise
+  if (dirty || saveState.value === 'error') throw new Error('digest has unsaved changes')
 }
 function updateSectionContent(event) { currentSection.value.content = event.currentTarget.innerText.trim(); currentSection.value.words = currentSection.value.content.length; currentSection.value.status = currentSection.value.content ? 'complete' : 'draft'; markSaving() }
+function handleBeforeUnload(event) {
+  if (!dirty) return
+  event.preventDefault()
+  event.returnValue = ''
+}
 function addSection() { const id = Date.now(); sections.value.push({ id, title: `新增栏目 ${sections.value.length + 1}`, content: '', words: 0, sources: 0, citations: 0, citationIds: [], status: 'draft' }); currentSectionId.value = id; markSaving() }
 function addCandidate(item) {
   if (!currentSection.value) return
@@ -150,16 +175,17 @@ function locateIssue(issue) { currentSectionId.value = issue.sectionId; activeTa
 async function saveVersion() {
   versionSaving.value = true
   try {
-    const res = await updatePipelineResearchReport(digest.value.id, { title: digest.value.title, content: buildMarkdown(), sections: sections.value, citations: citations.value, qualityIssues: issues.value, saveVersion: true, versionSource: 'manual' })
+    await ensureSaved()
+    const res = await updatePipelineResearchReport(digest.value.id, { title: digest.value.title, content: buildMarkdown(), sections: sections.value, citations: citations.value, qualityIssues: issues.value, expectedVersion: digest.value.versionNo, expectedRevision: digest.value.revision, saveVersion: true, versionSource: 'manual' })
     digest.value = { ...digest.value, ...res.data }
     ElMessage.success('已保存为新的可追溯版本')
   } catch (error) {
-    ElMessage.error('版本保存失败')
+    ElMessage.error(error.message === 'digest has unsaved changes' ? '当前修改未保存，无法创建版本' : '版本保存失败')
   } finally {
     versionSaving.value = false
   }
 }
-async function exportDigest() { try { const res = await exportPipelineResearchReport(digest.value.id); const blob = new Blob([res.data.content], { type: 'text/markdown;charset=utf-8' }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = res.data.fileName || `${digest.value.title}.md`; link.click(); URL.revokeObjectURL(url); ElMessage.success('情报简报已导出') } catch (error) { ElMessage.error('导出失败，请确认后端和数据库已启动') } }
+async function exportDigest() { try { await ensureSaved(); const res = await exportPipelineResearchReport(digest.value.id); const blob = new Blob([res.data.content], { type: 'text/markdown;charset=utf-8' }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = res.data.fileName || `${digest.value.title}.md`; link.click(); URL.revokeObjectURL(url); ElMessage.success('情报简报已导出') } catch (error) { ElMessage.error(error.message === 'digest has unsaved changes' ? '当前修改未保存，请先重试保存' : '导出失败，请确认后端和数据库已启动') } }
 async function loadDigest() {
   try {
     const res = await getPipelineResearchReport(String(route.params.id))
@@ -173,6 +199,22 @@ async function loadDigest() {
   }
 }
 
-onMounted(loadDigest)
-onBeforeUnmount(() => clearTimeout(saveTimer))
+onMounted(() => {
+  loadDigest()
+  window.addEventListener('beforeunload', handleBeforeUnload)
+})
+onBeforeRouteLeave(async () => {
+  if (!dirty) return true
+  try {
+    await ensureSaved()
+    return true
+  } catch (error) {
+    ElMessage.warning('当前修改尚未保存，已留在编辑页')
+    return false
+  }
+})
+onBeforeUnmount(() => {
+  clearTimeout(saveTimer)
+  window.removeEventListener('beforeunload', handleBeforeUnload)
+})
 </script>
