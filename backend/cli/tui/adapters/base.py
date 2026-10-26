@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from typing import Any
 
+from cli.output import SHELL_TEXT_FORMATTER
 from cli.tui.adapters.models import (
     TUI_ADAPTER_MODEL_RENDERER,
     BrowserRecordSnapshot,
@@ -8,7 +9,6 @@ from cli.tui.adapters.models import (
 )
 from cli.tui.copy import TUI_COPY
 from cli.tui.search import TUI_SEARCH_SERVICE, PageFilterOption, PageSearchContext
-from cli.utils import SHELL_TEXT_FORMATTER
 
 
 class BaseBrowserAdapter:

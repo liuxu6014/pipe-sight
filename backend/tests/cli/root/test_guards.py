@@ -34,10 +34,6 @@ def test_dangerous_command_rules_cover_expected_commands() -> None:
         'job pause',
         'job resume',
         'job sync',
-        'gen import-table',
-        'gen create-table',
-        'gen export',
-        'gen sync-db',
     }
 
 

@@ -77,15 +77,15 @@ def test_config_runtime_service_builds_cli_config_model_from_orm_record() -> Non
         模拟 ORM 配置记录。
         """
 
-        config_id = 2
-        config_name = '用户管理-账号初始密码'
-        config_key = 'sys.user.initPassword'
-        config_value = '123456'
-        config_type = 'Y'
-        create_by = 'admin'
-        create_time = None
-        update_by = ''
-        update_time = None
+        id = 2
+        name = '用户管理-账号初始密码'
+        key = 'sys.user.initPassword'
+        value = '123456'
+        type = 'Y'
+        created_by = 'admin'
+        created_at = None
+        updated_by = ''
+        updated_at = None
         remark = '初始化密码 123456'
 
     class FakeConfigModel:
@@ -96,14 +96,14 @@ def test_config_runtime_service_builds_cli_config_model_from_orm_record() -> Non
         def __init__(self, **kwargs: object) -> None:
             self.kwargs = kwargs
 
-    class FakeConfigVoModule:
+    class FakeConfigSchemaModule:
         """
-        模拟配置 VO 模块。
+        模拟配置 Schema 模块。
         """
 
         ConfigModel = FakeConfigModel
 
-    model = ConfigRuntimeService.build_cli_config_model(FakeConfigVoModule, FakeOrmConfigRecord())
+    model = ConfigRuntimeService.build_cli_config_model(FakeConfigSchemaModule, FakeOrmConfigRecord())
 
     assert isinstance(model, FakeConfigModel)
     assert model.kwargs == {
@@ -160,9 +160,9 @@ async def test_config_runtime_service_returns_missing_db_config_result() -> None
         def __init__(self, **kwargs: str) -> None:
             self.kwargs = kwargs
 
-    class FakeConfigVoModule:
+    class FakeConfigSchemaModule:
         """
-        模拟配置 VO 模块。
+        模拟配置 Schema 模块。
         """
 
         ConfigModel = FakeConfigModel
@@ -193,12 +193,12 @@ async def test_config_runtime_service_returns_missing_db_config_result() -> None
     def _fake_get_config_dao() -> FakeConfigDao:
         return FakeConfigDao()
 
-    def _fake_get_config_vo_module() -> FakeConfigVoModule:
-        return FakeConfigVoModule()
+    def _fake_get_config_schema_module() -> FakeConfigSchemaModule:
+        return FakeConfigSchemaModule()
 
     object.__setattr__(gateway, 'get_async_session_local', _fake_get_async_session_local)
     object.__setattr__(gateway, 'get_config_dao', _fake_get_config_dao)
-    object.__setattr__(gateway, 'get_config_vo_module', _fake_get_config_vo_module)
+    object.__setattr__(gateway, 'get_config_schema_module', _fake_get_config_schema_module)
 
     payload = await service.get_config(MISSING_CONFIG_KEY, source='db')
 

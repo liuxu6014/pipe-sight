@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from cli.output import SHELL_TEXT_FORMATTER
+from cli.runtime.nested_cli import NESTED_CLI_SUPPORT
 from cli.tui.actions.models import (
     ActionCommandBuilder,
     ActionExecutionMode,
@@ -11,7 +13,6 @@ from cli.tui.actions.models import (
     TuiActionSpec,
 )
 from cli.tui.copy import TUI_COPY
-from cli.utils import NESTED_CLI_SUPPORT, SHELL_TEXT_FORMATTER
 
 if TYPE_CHECKING:
     from cli.tui.adapters.models import BrowserRecordSnapshot

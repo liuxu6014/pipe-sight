@@ -44,11 +44,6 @@ def jobs_adapter() -> ModuleType:
 
 
 @pytest.fixture
-def gen_adapter() -> ModuleType:
-    return _load_adapter_module('cli.tui.adapters.gen')
-
-
-@pytest.fixture
 def configs_adapter() -> ModuleType:
     return _load_adapter_module('cli.tui.adapters.configs')
 

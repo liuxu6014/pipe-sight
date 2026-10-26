@@ -1,4 +1,5 @@
-import request from "@/utils/request";
+import request from "../pipeline/request";
+import { requireBusinessId } from "@/utils/portal/businessId";
 
 // 查询AI模型列表
 export function listModel(query) {
@@ -20,7 +21,7 @@ export function listModelAll() {
 // 查询AI模型详细
 export function getModel(modelId) {
   return request({
-    url: "/ai/model/" + modelId,
+    url: "/ai/model/" + requireBusinessId(modelId),
     method: "get",
   });
 }
@@ -46,7 +47,15 @@ export function updateModel(data) {
 // 删除AI模型
 export function delModel(modelId) {
   return request({
-    url: "/ai/model/" + modelId,
+    url: "/ai/model/" + requireBusinessId(modelId),
     method: "delete",
+  });
+}
+
+// 测试AI模型连通性
+export function testModel(modelId) {
+  return request({
+    url: "/ai/model/" + requireBusinessId(modelId) + "/test",
+    method: "post",
   });
 }

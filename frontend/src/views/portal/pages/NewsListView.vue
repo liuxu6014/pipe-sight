@@ -1,90 +1,145 @@
 <template>
   <div class="ps-page">
-    <PortalPageHeader title="资讯列表">
-      <template #actions><el-button :icon="Collection" @click="router.push('/portal/research/create')">资料篮 {{ portalStore.basketCount }}</el-button></template>
-    </PortalPageHeader>
     <div class="ps-toolbar">
-      <div class="ps-search-inline"><Search /><input v-model.trim="keyword" placeholder="搜索标题、来源、摘要或标签" /></div>
-      <el-select v-model="activeCategory" class="ps-news-category-select" aria-label="资讯分类" style="width: 150px"><el-option v-for="category in categories" :key="category" :label="category === '全部' ? '全部分类' : category" :value="category" /></el-select>
-      <el-select v-model="sourceType" style="width: 150px"><el-option label="全部来源" value="全部" /><el-option label="新闻网站" value="新闻网站" /><el-option label="微信公众号" value="微信公众号" /></el-select>
-      <el-select v-model="importance" style="width: 130px"><el-option label="全部等级" value="全部" /><el-option label="重点" value="重点" /><el-option label="一般" value="一般" /></el-select>
-      <div class="ps-view-switch"><button type="button" :class="{ 'is-active': viewMode === 'list' }" @click="viewMode = 'list'"><List /></button><button type="button" :class="{ 'is-active': viewMode === 'card' }" @click="viewMode = 'card'"><Grid /></button></div>
+      <div class="ps-search-inline"><Search /><input v-model.trim="keyword" aria-label="搜索科技资讯" placeholder="搜索标题、摘要或正文" @keydown.enter="reload" /><button v-if="keyword" type="button" aria-label="清空资讯关键词" @click="keyword = ''">清空</button></div>
+      <el-select v-model="sourceType" aria-label="资讯来源" style="width: 150px"><el-option label="全部来源" value="全部" /><el-option label="新闻网站" value="新闻网站" /><el-option label="微信公众号" value="微信公众号" /></el-select>
+      <el-select v-model="activeTags" multiple :multiple-limit="20" clearable filterable allow-create default-first-option collapse-tags collapse-tags-tooltip placeholder="全部标签" aria-label="资讯标签" style="width: 200px"><el-option v-for="tag in tags" :key="tag" :label="tag" :value="tag" /></el-select>
+      <el-button @click="resetFilters">重置筛选</el-button>
+      <div class="ps-view-switch"><button type="button" aria-label="列表视图" :aria-pressed="viewMode === 'list'" :class="{ 'is-active': viewMode === 'list' }" @click="viewMode = 'list'"><List /></button><button type="button" aria-label="卡片视图" :aria-pressed="viewMode === 'card'" :class="{ 'is-active': viewMode === 'card' }" @click="viewMode = 'card'"><Grid /></button></div>
     </div>
-    <div class="ps-content-with-aside">
-      <section :class="['ps-news-list', { 'is-card': viewMode === 'card' }]">
-        <article v-for="item in pagedNews" :key="item.id" class="ps-news-card">
-          <div class="ps-news-card-top"><span class="ps-source-badge">{{ item.sourceType }}</span><time>{{ item.time }}</time><span class="ps-importance" :class="{ 'is-key': item.importance === '重点' }">{{ item.importance }}</span></div>
-          <button type="button" class="ps-news-title" @click="router.push(`/portal/news/${item.id}`)">{{ item.title }}</button>
-          <p>{{ item.summary }}</p>
-          <div class="ps-tag-row"><button v-for="tag in item.tags" :key="tag" type="button" class="ps-tag" @click="keyword = tag">{{ tag }}</button></div>
-          <div class="ps-news-card-footer"><span>{{ item.source }} · {{ item.category }}</span><div><el-button text @click="toggleFavorite(item)"><StarFilled v-if="portalStore.isFavorite(item.id)" /><Star v-else />{{ portalStore.isFavorite(item.id) ? '已收藏' : '收藏' }}</el-button><el-button type="primary" plain @click="addToBasket(item)">加入资料篮</el-button></div></div>
+    <div class="ps-news-content">
+      <section v-loading="loading" :aria-busy="loading" :class="['ps-news-list', { 'is-card': viewMode === 'card' }]">
+        <article v-for="item in newsItems" :key="item.id" class="ps-news-card">
+          <div class="ps-news-card-top"><span class="ps-source-badge">{{ item.sourceType }}</span><time>{{ newsDate(item.time) }}</time></div>
+          <div class="ps-news-card-main">
+          <router-link v-if="item.cover_image || viewMode === 'card'" class="ps-news-cover" :aria-label="`阅读资讯：${item.title}`" :to="`/portal/news/${item.id}`">
+            <img v-if="item.cover_image" :src="item.cover_image" alt="文章配图" loading="lazy" />
+            <div v-else class="ps-news-theme-cover" role="img" :aria-label="`${item.tags?.[0] || '管网科技'}主题示意，非新闻原图`">
+              <svg viewBox="0 0 560 200" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                <path d="M0 40H560M0 80H560M0 120H560M0 160H560M40 0V200M80 0V200M120 0V200M160 0V200M200 0V200M240 0V200M280 0V200M320 0V200M360 0V200M400 0V200M440 0V200M480 0V200M520 0V200" stroke="#cbdfe9" fill="none" opacity=".5" />
+                <path d="M285 200V145Q285 125 305 125H380Q400 125 400 105V60Q400 40 420 40H560" stroke="#bdd5e2" stroke-width="20" fill="none" />
+                <path d="M285 200V145Q285 125 305 125H380Q400 125 400 105V60Q400 40 420 40H560" stroke="#236486" stroke-width="3" fill="none" />
+                <path d="M340 0V62Q340 82 360 82H465Q485 82 485 102V200" stroke="#87b8c2" stroke-width="12" fill="none" />
+                <path d="M340 0V62Q340 82 360 82H465Q485 82 485 102V200" stroke="#26747d" stroke-width="2" fill="none" />
+                <circle cx="400" cy="82" r="24" fill="#e6f0f5" stroke="#236486" stroke-width="2" /><circle cx="400" cy="82" r="8" fill="#236486" />
+                <circle cx="285" cy="160" r="7" fill="#e6f0f5" stroke="#236486" stroke-width="3" /><circle cx="485" cy="156" r="7" fill="#e6f0f5" stroke="#26747d" stroke-width="3" />
+              </svg>
+              <div class="ps-news-theme-copy"><small>管网科技资讯</small><strong>{{ item.tags?.[0] || '行业动态' }}</strong><span>主题示意 · 非新闻原图</span></div>
+            </div>
+          </router-link>
+          <div class="ps-news-card-copy">
+          <router-link class="ps-news-title" :to="`/portal/news/${item.id}`">{{ item.title }}</router-link>
+          <p>{{ cleanSummary(item.summary) }}</p>
+          <div class="ps-tag-row"><button v-for="tag in item.tags" :key="tag" type="button" class="ps-tag" :aria-pressed="activeTags.includes(tag)" @click="toggleTag(tag)">{{ tag }}</button></div>
+          </div></div>
+          <div class="ps-news-card-footer"><span>{{ item.source }} · {{ item.category }}</span><div><el-button type="primary" plain :loading="busy(item)" :disabled="busy(item)" @click="addToBasket(item)">{{ inBasket(item) ? '取消加入资料篮' : '加入资料篮' }}</el-button></div></div>
         </article>
-        <PortalEmptyState v-if="!filteredNews.length" title="没有匹配的资讯" description="请调整分类、来源或搜索关键词。" action-label="重置筛选" @action="resetFilters" />
-        <div v-else class="ps-pagination" aria-label="资讯列表分页">
+        <PortalEmptyState v-if="loadError && !loading" title="资讯加载失败" :description="loadError" action-label="重新加载" @action="reload" />
+        <PortalEmptyState v-else-if="!newsItems.length && !loading" title="没有匹配的资讯" description="请调整标签、来源或搜索关键词。" action-label="重置筛选" @action="resetFilters" />
+        <div v-if="total > 0 && !loading && !loadError" class="ps-pagination" aria-label="资讯列表分页">
           <el-pagination
             v-model:current-page="currentPage"
             v-model:page-size="pageSize"
-            :page-sizes="[5, 10, 20]"
-            :total="filteredNews.length"
-            layout="total, sizes, prev, pager, next, jumper"
+            :page-sizes="[10, 20, 50]"
+            :total="total"
+            :pager-count="5"
+            layout="total, sizes, ->, prev, pager, next, jumper"
             background
-            @size-change="handlePageSizeChange"
-            @current-change="handlePageChange"
           />
         </div>
       </section>
-      <aside class="ps-news-aside">
-        <section class="ps-panel"><h3>热门主题</h3><button v-for="topic in topics.slice(0, 5)" :key="topic.name" type="button" @click="keyword = topic.name"><span>{{ topic.name }}</span><b>{{ topic.heat }}</b></button></section>
-        <section class="ps-panel"><h3>重点来源</h3><div class="ps-source-stat" v-for="item in ['能源科技观察', '管道技术前沿', '国际管道研究中心']" :key="item"><span>{{ item }}</span><small>持续更新</small></div></section>
-        <section class="ps-panel ps-news-overview"><h3>资讯概览</h3><div v-for="item in overviewStats" :key="item.label" class="ps-overview-stat"><span>{{ item.label }}</span><strong>{{ item.value }}{{ item.unit }}</strong><small>{{ item.note }}</small></div></section>
-      </aside>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, toRefs, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Collection, Grid, List, Search, Star, StarFilled } from '@element-plus/icons-vue'
-import PortalPageHeader from '../components/PortalPageHeader.vue'
+import { Grid, List, Search } from '@element-plus/icons-vue'
 import PortalEmptyState from '../components/PortalEmptyState.vue'
 import usePortalStore from '@/store/modules/portal'
+import { deletePipelineWorkspaceItem, listPipelineIntelligence, savePipelineWorkspaceItem } from '@/api/pipeline/intelligence'
+import { normalizePortalIntelligence } from '@/store/modules/portal'
+import { useListQuery, useListRequest, useListWorkspace, validPage } from '@/utils/portal/listQuery'
+import { cleanSummary, newsDate } from '@/utils/portal/discovery'
 
-const router = useRouter()
 const portalStore = usePortalStore()
-const keyword = ref('')
-const sourceType = ref('全部')
-const importance = ref('全部')
-const activeCategory = ref('全部')
-const viewMode = ref('list')
-const currentPage = ref(1)
-const pageSize = ref(5)
-const newsItems = computed(() => portalStore.newsItems)
-const topics = computed(() => portalStore.hotTopics)
-const categories = ['全部', '管网安全', '检测技术', '腐蚀防护', '应力监测', '智能巡检', '数字孪生']
-const filteredNews = computed(() => newsItems.value.filter(item => (activeCategory.value === '全部' || item.category === activeCategory.value) && (sourceType.value === '全部' || item.sourceType === sourceType.value) && (importance.value === '全部' || item.importance === importance.value) && (!keyword.value || `${item.title}${item.summary}${item.source}${(item.tags || []).join('')}`.includes(keyword.value))))
-const pagedNews = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  return filteredNews.value.slice(start, start + pageSize.value)
-})
-const overviewStats = computed(() => [
-  { label: '当前结果', value: filteredNews.value.length, unit: ' 条', note: '按当前筛选条件' },
-  { label: '重点资讯', value: filteredNews.value.filter(item => item.importance === '重点').length, unit: ' 条', note: '建议优先阅读' },
-  { label: '关注主题', value: topics.value.length, unit: ' 个', note: '持续跟踪方向' },
-  { label: '资料篮', value: portalStore.basketCount, unit: ' 条', note: '可用于科研生成' }
-])
-watch([keyword, sourceType, importance, activeCategory], () => {
-  currentPage.value = 1
-})
-function addToBasket(item) { ElMessage.success(portalStore.addToBasket(item) ? '已加入资料篮' : '资料已在资料篮中') }
-function toggleFavorite(item) { portalStore.toggleFavorite(item.id) }
-function handlePageSizeChange(size) {
-  pageSize.value = size
-  currentPage.value = 1
+const query = useListQuery({ q: '', source: '全部', category: '全部', tag: [], view: 'list', page: 1, size: 10 })
+const { q: keyword, source: sourceType, tag: activeTags, view: viewMode, page: currentPage, size: pageSize } = toRefs(query)
+// Old category links referred to tags; migrate them into the single visible filter.
+watch(() => [query.category, query.tag], () => {
+  const legacy = query.category
+  const values = Array.isArray(query.tag) ? [...query.tag] : [query.tag]
+  if (legacy && !['全部', 'article', 'news', 'wechat'].includes(legacy)) values.unshift(legacy)
+  if (query.source === '全部' && ['news', 'wechat'].includes(legacy)) query.source = legacy === 'news' ? '新闻网站' : '微信公众号'
+  const normalized = [...new Set(values.map(value => String(value || '').trim()).filter(value => value && value !== '全部'))].slice(0, 20)
+  query.category = '全部'
+  if (JSON.stringify(query.tag) !== JSON.stringify(normalized)) query.tag = normalized
+}, { immediate: true, deep: true })
+const { inBasket, busy, toggleBasket } = useListWorkspace(portalStore, { save: savePipelineWorkspaceItem, remove: deletePipelineWorkspaceItem })
+const { data, loading, loadError, reload } = useListRequest(() => ({
+  category: 'article',
+  keyword: keyword.value || undefined,
+  tags: activeTags.value.length ? JSON.stringify(activeTags.value) : undefined,
+  source_type: ({ 新闻网站: 'news', 微信公众号: 'wechat' })[sourceType.value],
+  pageNum: currentPage.value,
+  pageSize: pageSize.value
+}), listPipelineIntelligence)
+const newsItems = computed(() => (data.value?.rows || []).map(item => ({
+  ...normalizePortalIntelligence(item),
+  category: ['article', 'news', 'wechat'].includes(item.category) ? (item.tags?.[0] || '分类未提供') : (item.category || '分类未提供')
+})))
+const total = computed(() => Number(data.value?.total || 0))
+watch(data, value => { if (value) currentPage.value = validPage(total.value, pageSize.value, currentPage.value) })
+const tags = computed(() => [...new Set([...newsItems.value.flatMap(item => item.tags || []), ...activeTags.value])])
+function toggleTag(tag) {
+  activeTags.value = activeTags.value.includes(tag) ? activeTags.value.filter(value => value !== tag) : [...activeTags.value, tag].slice(0, 20)
 }
-function handlePageChange(page) {
-  currentPage.value = page
+async function addToBasket(item) {
+  try {
+    const result = await toggleBasket(item, 'article')
+    if (result === 'saved') ElMessage.success('已加入资料篮')
+    else if (result === 'removed') ElMessage.success('已取消加入资料篮')
+  } catch (error) { ElMessage.error(error?.msg || '资料篮更新失败，请重试') }
 }
-function resetFilters() { keyword.value = ''; sourceType.value = '全部'; importance.value = '全部'; activeCategory.value = '全部' }
+function resetFilters() {
+  const unchanged = !keyword.value && sourceType.value === '全部' && !activeTags.value.length && currentPage.value === 1
+  keyword.value = ''; sourceType.value = '全部'; query.category = '全部'; activeTags.value = []; currentPage.value = 1
+  if (unchanged) reload()
+}
 </script>
+
+<style scoped>
+.ps-page { --ws-page-space: 14px; }
+.ps-toolbar { min-height: 0; padding: 6px 12px; row-gap: 6px; margin-bottom: 10px; }
+.ps-toolbar > .ps-search-inline { flex: 1 1 100%; }
+.ps-toolbar > .el-select { flex: 1 1 150px; }
+@media (min-width: 1051px) {
+  .ps-toolbar { flex-wrap: nowrap; }
+  .ps-toolbar > .ps-search-inline { flex: 1 1 280px; min-width: 180px; }
+  .ps-toolbar > .el-select { flex: 0 0 160px; width: 160px; }
+  .ps-toolbar > .el-button, .ps-toolbar > .ps-view-switch { flex-shrink: 0; }
+}
+.ps-news-title, .ps-news-cover { text-decoration: none; }
+.ps-news-card-main { display: flex; gap: 20px; align-items: flex-start; }
+.ps-news-card-copy { flex: 1; min-width: 0; }
+.ps-news-cover { flex: 0 0 180px; width: 180px; margin-top: 12px; padding: 0; border: 0; border-radius: 8px; overflow: hidden; background: transparent; }
+.ps-news-cover img { display: block; width: 100%; height: 122px; object-fit: cover; }
+.ps-news-list.is-card .ps-news-card-main { flex-direction: column; gap: 0; }
+.ps-news-list.is-card .ps-news-cover { flex: 0 0 auto; width: 100%; }
+.ps-news-list.is-card .ps-news-cover img { height: 200px; }
+.ps-news-theme-cover { position: relative; height: 200px; width: 100%; overflow: hidden; background: #e6f0f5; }
+.ps-news-theme-cover > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.ps-news-theme-copy { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; height: 100%; padding: 24px; color: #194c68; }
+.ps-news-theme-copy small { font-size: 13px; letter-spacing: .12em; }
+.ps-news-theme-copy strong { max-width: 55%; margin-top: 10px; font-size: 25px; line-height: 1.4; overflow-wrap: anywhere; }
+.ps-news-theme-copy span { margin-top: 22px; padding: 3px 7px; border: 1px solid #bfd5e1; border-radius: 4px; background: #eff6fa; font-size: 11px; color: #395c70; }
+@media (max-width: 600px) {
+  .ps-news-card-main { flex-direction: column; gap: 0; }
+  .ps-news-cover { flex: 0 0 auto; width: 100%; }
+  .ps-news-cover img { height: 180px; }
+  .ps-news-theme-cover { height: 180px; }
+  .ps-news-theme-copy { padding: 18px; }
+  .ps-news-theme-copy strong { font-size: 22px; }
+}
+</style>

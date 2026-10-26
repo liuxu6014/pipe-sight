@@ -1,5 +1,7 @@
 from typing import Any
 
+from cli.output import SHELL_TEXT_FORMATTER
+from cli.runtime.nested_cli import NESTED_CLI_SUPPORT
 from cli.tui.adapters.base import BaseBrowserAdapter
 from cli.tui.adapters.models import (
     TUI_ADAPTER_MODEL_RENDERER,
@@ -10,7 +12,6 @@ from cli.tui.adapters.models import (
 from cli.tui.copy import TUI_COPY
 from cli.tui.diagnostics import TUI_DIAGNOSTIC_SERVICE
 from cli.tui.search import CONFIG_FILTER_OPTIONS
-from cli.utils import NESTED_CLI_SUPPORT, SHELL_TEXT_FORMATTER
 
 CONFIG_RISK_PRIORITY = {
     'mismatch': 0,

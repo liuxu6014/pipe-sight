@@ -200,10 +200,6 @@ DEFAULT_DANGEROUS_COMMAND_RULES: dict[str, DangerousCommandRule] = {
     'job pause': DangerousCommandRule(command_name='job pause', risk_level='normal', supports_dry_run=False),
     'job resume': DangerousCommandRule(command_name='job resume', risk_level='normal', supports_dry_run=False),
     'job sync': DangerousCommandRule(command_name='job sync', risk_level='normal', supports_dry_run=False),
-    'gen import-table': DangerousCommandRule(command_name='gen import-table', risk_level='high', supports_dry_run=True),
-    'gen create-table': DangerousCommandRule(command_name='gen create-table', risk_level='high', supports_dry_run=True),
-    'gen export': DangerousCommandRule(command_name='gen export', risk_level='high', supports_dry_run=True),
-    'gen sync-db': DangerousCommandRule(command_name='gen sync-db', risk_level='normal', supports_dry_run=False),
 }
 
 DEFAULT_DANGEROUS_COMMAND_RULE_REGISTRY = DangerousCommandRuleRegistry(rules=DEFAULT_DANGEROUS_COMMAND_RULES)

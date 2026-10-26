@@ -7,10 +7,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test": "node --test tests/*.test.js",
     "build:prod": "vite build",
     "build:docker": "vite build --mode docker",
     "build:stage": "vite build --mode staging",
     "preview": "vite preview",
+    "preview:ui": "vite --config tests/ui-preview/vite.config.js",
     "check": "vite build"
   },
   "repository": {
@@ -20,7 +22,6 @@
   "dependencies": {
     "@ant-design/icons-vue": "^7.0.1",
     "@antv/g2plot": "^2.4.31",
-    "@antv/infographic": "^0.2.13",
     "@element-plus/icons-vue": "2.3.2",
     "@vueup/vue-quill": "1.2.0",
     "@vueuse/core": "14.1.0",
@@ -34,16 +35,9 @@
     "js-beautify": "1.15.4",
     "js-cookie": "3.0.5",
     "jsencrypt": "3.3.2",
-    "katex": ">=0.16.27",
-    "markstream-vue": ">=0.0.7-beta.6",
-    "mermaid": ">=11.12.2",
     "nprogress": "0.2.0",
     "pinia": "3.0.4",
-    "shiki": "^3.21.0",
     "splitpanes": "4.0.4",
-    "stream-markdown": ">=0.0.14",
-    "stream-monaco": ">=0.0.17",
-    "uuid": "13.0.0",
     "vue": "3.5.26",
     "vue-cropper": "1.1.1",
     "vue-router": "4.6.4",
@@ -57,7 +51,6 @@
     "unplugin-vue-setup-extend-plus": "1.0.1",
     "vite": "6.4.1",
     "vite-plugin-compression": "0.5.1",
-    "vite-plugin-monaco-editor-esm": "2.0.2",
     "vite-plugin-svg-icons": "2.0.1"
   },
   "overrides": {

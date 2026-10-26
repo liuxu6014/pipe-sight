@@ -1,8 +1,7 @@
 from typing import Any
 
 from cli.exit_codes import GUARD_REJECTED
-from cli.output import CommandResult
-from cli.utils import SHELL_TEXT_FORMATTER
+from cli.output import SHELL_TEXT_FORMATTER, CommandResult
 
 
 class WizardPreviewRenderer:

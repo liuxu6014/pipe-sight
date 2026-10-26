@@ -26,7 +26,7 @@ class ConfigInfrastructureGateway:
 
         :return: 公共常量定义模块
         """
-        return import_module('common.constant').CommonConstant
+        return import_module('common.constants').CommonConstant
 
     @staticmethod
     def get_redis_init_key_config() -> Any:
@@ -35,7 +35,7 @@ class ConfigInfrastructureGateway:
 
         :return: Redis 初始化键枚举
         """
-        return import_module('common.enums').RedisInitKeyConfig
+        return import_module('common.enums.cache').RedisInitKeyConfig
 
     @staticmethod
     def get_page_model() -> Any:
@@ -44,7 +44,7 @@ class ConfigInfrastructureGateway:
 
         :return: 分页模型类型
         """
-        return import_module('common.vo').PageModel
+        return import_module('common.http.schemas').PageModel
 
     @staticmethod
     def get_async_session_local() -> Any:
@@ -71,16 +71,16 @@ class ConfigInfrastructureGateway:
 
         :return: 参数配置 DAO
         """
-        return import_module('module_admin.dao.config_dao').ConfigDao
+        return import_module('app.system.repositories.configuration').ConfigDao
 
     @staticmethod
-    def get_config_vo_module() -> Any:
+    def get_config_schema_module() -> Any:
         """
-        获取参数配置 VO 模块。
+        获取参数配置 Schema 模块。
 
-        :return: 参数配置 VO 模块
+        :return: 参数配置 Schema 模块
         """
-        return import_module('module_admin.entity.vo.config_vo')
+        return import_module('app.system.schemas.config')
 
     @staticmethod
     def get_config_service() -> Any:
@@ -89,7 +89,7 @@ class ConfigInfrastructureGateway:
 
         :return: 参数配置服务类
         """
-        return import_module('module_admin.service.config_service').ConfigService
+        return import_module('app.system.services.configuration').ConfigService
 
     @staticmethod
     def get_log_sanitizer() -> Any:
@@ -98,4 +98,4 @@ class ConfigInfrastructureGateway:
 
         :return: 日志脱敏工具类
         """
-        return import_module('utils.log_util').LogSanitizer
+        return import_module('app.infrastructure.services.logging_support').LogSanitizer

@@ -1,6 +1,11 @@
+# 历史 MySQL 迁移参考，不是有效默认启动路径。
+# 必须显式使用 --profile legacy-migration 才会创建任何服务。
+name: pipesight-my
+
 services:
   # 前端服务
   ruoyi-frontend:
+    profiles: ["legacy-migration"]
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -12,11 +17,17 @@ services:
       - ./frontend/bin/nginx.dockermy.conf:/etc/nginx/conf.d/default.conf
     depends_on:
       - ruoyi-backend-my
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     networks:
       - ruoyi-network
 
   # 后端服务（MySQL版本）
   ruoyi-backend-my:
+    profiles: ["legacy-migration"]
     build:
       context: ./backend
       dockerfile: Dockerfile.my
@@ -32,6 +43,16 @@ services:
       REDIS_PORT: 6379
       REDIS_DATABASE: 2
       TRANSPORT_CRYPTO_ENABLED: "false"
+      INSIGHTHUB_ENABLED: "true"
+      INSIGHTHUB_DB_HOST: insighthub-postgres
+      INSIGHTHUB_DB_PORT: 5432
+      INSIGHTHUB_DB_NAME: pipeline_news
+      INSIGHTHUB_DB_SCHEMA: news
+      INSIGHTHUB_DB_USER: news_app
+      INSIGHTHUB_DB_PASSWORD: ${INSIGHTHUB_POSTGRES_PASSWORD:-insighthub_dev_only}
+      INSIGHTHUB_DB_SSLMODE: disable
+      FILE_SCAN_COMMAND: ${FILE_SCAN_COMMAND:-}
+      FILE_SCAN_TIMEOUT_SECONDS: ${FILE_SCAN_TIMEOUT_SECONDS:-30}
     ports:
       - "19099:9099"
     depends_on:
@@ -39,11 +60,14 @@ services:
         condition: service_healthy
       ruoyi-redis:
         condition: service_healthy
+      insighthub-postgres:
+        condition: service_healthy
     networks:
       - ruoyi-network
 
   # MySQL服务
   ruoyi-mysql:
+    profiles: ["legacy-migration"]
     image: mysql:8.0
     container_name: ruoyi-mysql
     environment:
@@ -66,6 +90,7 @@ services:
 
   # Redis服务
   ruoyi-redis:
+    profiles: ["legacy-migration"]
     image: redis:latest
     container_name: ruoyi-redis
     ports:
@@ -78,8 +103,113 @@ services:
       timeout: 10s
       retries: 30
 
+  # InsightHub PostgreSQL + pgvector：新闻事实、Prompt 血缘和向量的单一事实源。
+  insighthub-postgres:
+    profiles: ["legacy-migration"]
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: pipeline_news
+      POSTGRES_USER: news_app
+      POSTGRES_PASSWORD: ${INSIGHTHUB_POSTGRES_PASSWORD:-insighthub_dev_only}
+      TZ: Asia/Shanghai
+    ports:
+      - "15432:5432"
+    volumes:
+      - insighthub-postgres-data:/var/lib/postgresql/data
+      - ./backend/sql/insighthub-schema.pg.sql:/docker-entrypoint-initdb.d/01-insighthub-schema.sql:ro
+    networks:
+      - ruoyi-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U news_app -d pipeline_news"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # 仅迁移验证时显式启用：docker compose --profile legacy-migration --profile insighthub up -d
+  insighthub-worker:
+    profiles: ["legacy-migration", "insighthub"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.processing.pg
+    environment:
+      INPUT_MODE: postgres
+      POSTGRES_HOST: insighthub-postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: pipeline_news
+      POSTGRES_SCHEMA: news
+      POSTGRES_USER: news_app
+      POSTGRES_PASSWORD: ${INSIGHTHUB_POSTGRES_PASSWORD:-insighthub_dev_only}
+      REDIS_HOST: ruoyi-redis
+      REDIS_PORT: 6379
+      REDIS_DB: 15
+      ENABLE_DATABASE_DOMAINS: "true"
+      ENABLED_DOMAINS: ${INSIGHTHUB_ENABLED_DOMAINS:-tech}
+      BAIDU_TRANSLATE_APPID: ${INSIGHTHUB_BAIDU_TRANSLATE_APPID:-}
+      BAIDU_TRANSLATE_APPKEY: ${INSIGHTHUB_BAIDU_TRANSLATE_APPKEY:-}
+      TRANSLATION_SMALL_MODEL_URL: ${INSIGHTHUB_TRANSLATION_SMALL_MODEL_URL:-}
+      BAIDU_TRANSLATE_URL: ${INSIGHTHUB_BAIDU_TRANSLATE_URL:-https://fanyi-api.baidu.com/api/trans/vip/translate}
+      TRANSLATION_REQUEST_TIMEOUT_SECONDS: ${INSIGHTHUB_TRANSLATION_REQUEST_TIMEOUT_SECONDS:-30}
+      THREAT_ANALYSIS_URL: ${INSIGHTHUB_THREAT_ANALYSIS_URL:-}
+      THREAT_ANALYSIS_TIMEOUT_SECONDS: ${INSIGHTHUB_THREAT_ANALYSIS_TIMEOUT_SECONDS:-30}
+      LLM_MODEL: ${INSIGHTHUB_LLM_MODEL:-Qwen/Qwen2.5-72B-Instruct}
+      LLM_API_KEYS: ${INSIGHTHUB_LLM_API_KEYS:-}
+      LLM_BASE_URL: ${INSIGHTHUB_LLM_BASE_URL:-}
+      FILTER_MODEL: ${INSIGHTHUB_FILTER_MODEL:-}
+      FILTER_API_KEY: ${INSIGHTHUB_FILTER_API_KEY:-}
+      FILTER_BASE_URL: ${INSIGHTHUB_FILTER_BASE_URL:-}
+      EMBEDDING_MODEL: ${INSIGHTHUB_EMBEDDING_MODEL:-Pro/BAAI/bge-m3}
+      EMBEDDING_KEY: ${INSIGHTHUB_EMBEDDING_KEY:-}
+      EMBEDDING_URL: ${INSIGHTHUB_EMBEDDING_URL:-}
+      MINIO_ENDPOINT: insighthub-minio:9000
+      MINIO_ACCESS_KEY: ${INSIGHTHUB_MINIO_USER:-insighthub}
+      MINIO_SECRET_KEY: ${INSIGHTHUB_MINIO_PASSWORD:-insighthub_dev_only}
+      MINIO_SECURE: "false"
+      MINIO_BUCKET_NAME: news-images
+      MINIO_PUBLIC_BASE_URL: ${INSIGHTHUB_MINIO_PUBLIC_BASE_URL:-}
+      ALERT_ENABLED: "false"
+      ALERT_CONFIG_SYNC_ENABLED: "false"
+    ports:
+      - "18000:8000"
+    volumes:
+      - ./logs/insighthub:/app/logs
+    depends_on:
+      insighthub-postgres:
+        condition: service_healthy
+      ruoyi-redis:
+        condition: service_healthy
+    networks:
+      - ruoyi-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  insighthub-minio:
+    profiles: ["legacy-migration", "insighthub-storage"]
+    image: ${INSIGHTHUB_MINIO_IMAGE:-quay.io/minio/minio:latest}
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${INSIGHTHUB_MINIO_USER:-insighthub}
+      MINIO_ROOT_PASSWORD: ${INSIGHTHUB_MINIO_PASSWORD:-insighthub_dev_only}
+    ports:
+      - "19000:9000"
+      - "19001:9001"
+    volumes:
+      - insighthub-minio-data:/data
+    networks:
+      - ruoyi-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
 # 网络配置
 networks:
   ruoyi-network:
-    name: ruoyi-network
     driver: bridge
+
+volumes:
+  insighthub-postgres-data:
+  insighthub-minio-data:

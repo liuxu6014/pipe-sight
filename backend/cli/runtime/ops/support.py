@@ -171,7 +171,7 @@ class OperationsServerInfoSupport:
         :return: 与原服务输出结构兼容的服务器运行信息字典
         """
         psutil = self.infrastructure_gateway.get_psutil_module()
-        bytes2human = self.infrastructure_gateway.get_bytes2human()
+        format_bytes = self.infrastructure_gateway.get_format_bytes()
         cpu_num = psutil.cpu_count(logical=True)
         cpu_usage_percent = psutil.cpu_times_percent()
         memory_info = psutil.virtual_memory()
@@ -199,9 +199,9 @@ class OperationsServerInfoSupport:
                     'dirName': partition.device,
                     'sysTypeName': partition.fstype,
                     'typeName': f'本地固定磁盘（{mountpoint}）',
-                    'total': bytes2human(disk_usage.total),
-                    'used': bytes2human(disk_usage.used),
-                    'free': bytes2human(disk_usage.free),
+                    'total': format_bytes(disk_usage.total),
+                    'used': format_bytes(disk_usage.used),
+                    'free': format_bytes(disk_usage.free),
                     'usage': f'{disk_usage.percent}%',
                 }
             )
@@ -214,9 +214,9 @@ class OperationsServerInfoSupport:
                 'free': cpu_usage_percent.idle,
             },
             'mem': {
-                'total': bytes2human(memory_info.total),
-                'used': bytes2human(memory_info.used),
-                'free': bytes2human(memory_info.free),
+                'total': format_bytes(memory_info.total),
+                'used': format_bytes(memory_info.used),
+                'free': format_bytes(memory_info.free),
                 'usage': memory_info.percent,
             },
             'sys': {
@@ -232,9 +232,9 @@ class OperationsServerInfoSupport:
                 'startTime': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time_stamp)),
                 'runTime': f'{days}天{hours}小时{minutes}分钟',
                 'home': current_process.exe(),
-                'total': bytes2human(memory_info.available),
-                'used': bytes2human(process_memory_info.rss),
-                'free': bytes2human(memory_info.available - process_memory_info.rss),
+                'total': format_bytes(memory_info.available),
+                'used': format_bytes(process_memory_info.rss),
+                'free': format_bytes(memory_info.available - process_memory_info.rss),
                 'usage': round((process_memory_info.rss / memory_info.available) * 100, 2),
             },
             'sysFiles': sys_files,

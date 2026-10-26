@@ -101,8 +101,8 @@ class ConfigDomainSupport:
         :param page_size: 每页数量
         :return: 配置分页查询模型
         """
-        config_vo_module = self.infrastructure_gateway.get_config_vo_module()
-        return config_vo_module.ConfigPageQueryModel(
+        config_schema_module = self.infrastructure_gateway.get_config_schema_module()
+        return config_schema_module.ConfigPageQueryModel(
             configName=config_name or None,
             configKey=config_key or None,
             configType=config_type,
@@ -135,9 +135,9 @@ class ConfigDomainSupport:
         operator = self.operator_service.resolve_operator()
         current_time = datetime.now()
         common_constant = self.infrastructure_gateway.get_common_constant()
-        config_vo_module = self.infrastructure_gateway.get_config_vo_module()
+        config_schema_module = self.infrastructure_gateway.get_config_schema_module()
         default_config_type = existing_config.config_type if existing_config else common_constant.NO
-        target_config = config_vo_module.ConfigModel(
+        target_config = config_schema_module.ConfigModel(
             configId=existing_config.config_id if existing_config else None,
             configName=config_name
             if config_name is not None

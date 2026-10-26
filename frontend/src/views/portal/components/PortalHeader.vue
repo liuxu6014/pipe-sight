@@ -15,6 +15,7 @@
           :key="item.path"
           type="button"
           :class="{ 'is-active': item.match(route.path) }"
+          :aria-current="item.match(route.path) ? 'page' : undefined"
           @click="router.push(item.path)"
         >
           {{ item.label }}
@@ -32,51 +33,51 @@
           <span>数据同步异常</span>
         </button>
 
-        <button class="ps-icon-button ps-task-trigger" type="button" aria-label="查看任务" @click="store.openTaskPanel()">
-          <Bell />
-          <span v-if="store.runningTaskCount">{{ store.runningTaskCount }}</span>
-        </button>
-
-        <button class="ps-basket-button" type="button" @click="router.push('/portal/research/create')">
+        <button class="ps-basket-button" type="button" :aria-label="`资料篮，${store.basketCount} 条已选资料`" @click="router.push('/portal/basket')">
           <Collection />
           <span>资料篮</span>
           <b>{{ store.basketCount }}</b>
         </button>
 
-        <el-dropdown trigger="click" @command="handleCommand">
-          <button class="ps-user-button" type="button">
-            <span class="ps-user-avatar">{{ userInitial }}</span>
-            <span class="ps-user-name">{{ currentUserName }}</span>
-            <ArrowDown />
-          </button>
-          <template #dropdown>
-            <el-dropdown-menu class="ps-user-menu">
-              <el-dropdown-item command="tasks"><List />我的任务</el-dropdown-item>
-              <el-dropdown-item command="reports"><Document />我的报告</el-dropdown-item>
-              <el-dropdown-item command="favorites"><Star />我的收藏</el-dropdown-item>
-              <el-dropdown-item divided command="logout"><SwitchButton />退出登录</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <div class="ps-user-account-actions">
+          <el-dropdown trigger="click" @command="handleCommand">
+            <button class="ps-user-button" type="button" :aria-label="`${currentUserName}，账户菜单`">
+              <PortalUserAvatar />
+              <span class="ps-user-name">{{ currentUserName }}</span>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu class="ps-user-menu">
+                <el-dropdown-item command="profile"><User />个人资料</el-dropdown-item>
+                <el-dropdown-item v-if="isAdministrator" divided command="management"><Setting />管理控制台</el-dropdown-item>
+                <el-dropdown-item divided command="logout"><SwitchButton />退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
 
-        <button class="ps-mobile-menu" type="button" aria-label="打开导航" @click="mobileOpen = !mobileOpen"><Menu /></button>
+        <button class="ps-mobile-menu" type="button" :aria-label="mobileOpen ? '收起导航' : '打开导航'" :aria-expanded="mobileOpen" aria-controls="portal-mobile-nav" @click="mobileOpen = !mobileOpen"><Menu /></button>
       </div>
     </div>
 
-    <div v-if="mobileOpen" class="ps-mobile-nav">
-      <button v-for="item in portalNavigation" :key="item.path" type="button" :class="{ 'is-active': item.match(route.path) }" @click="goMobile(item.path)">{{ item.label }}</button>
+    <div v-if="mobileOpen" id="portal-mobile-nav" class="ps-mobile-nav" @keydown.esc="mobileOpen = false">
+      <form class="ps-mobile-search ps-search-inline" role="search" @submit.prevent="submitSearch">
+        <Search /><input v-model.trim="keyword" aria-label="搜索平台内容（移动端）" placeholder="搜索资讯、论文、资料" /><button type="submit">搜索</button>
+      </form>
+      <button v-for="item in portalNavigation" :key="item.path" type="button" :class="{ 'is-active': item.match(route.path) }" :aria-current="item.match(route.path) ? 'page' : undefined" @click="goMobile(item.path)">{{ item.label }}</button>
     </div>
   </header>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowDown, Bell, Collection, Document, List, Menu, Refresh, Search, Star, SwitchButton } from '@element-plus/icons-vue'
+import { Collection, Menu, Refresh, Search, Setting, SwitchButton, User } from '@element-plus/icons-vue'
 import { portalNavigation } from '../data'
 import usePortalStore from '@/store/modules/portal'
 import useUserStore from '@/store/modules/user'
 import logoUrl from '@/assets/logo/pipechina-emblem.png'
+import PortalUserAvatar from './PortalUserAvatar.vue'
+import { isManagementIdentity } from '@/utils/portal/auth'
 
 const route = useRoute()
 const router = useRouter()
@@ -84,8 +85,9 @@ const store = usePortalStore()
 const userStore = useUserStore()
 const keyword = ref('')
 const mobileOpen = ref(false)
+watch(() => route.fullPath, () => { mobileOpen.value = false })
 const currentUserName = computed(() => userStore.nickName || userStore.name || '管网用户')
-const userInitial = computed(() => currentUserName.value.slice(0, 1))
+const isAdministrator = computed(() => isManagementIdentity(userStore.roles, userStore.permissions))
 
 function submitSearch() {
   if (!keyword.value) return
@@ -93,11 +95,18 @@ function submitSearch() {
 }
 
 function handleCommand(command) {
+  if (command === 'profile') {
+    router.push('/portal/profile')
+    return
+  }
+  if (command === 'management' && isAdministrator.value) {
+    router.push('/pipeline/dashboard')
+    return
+  }
   if (command === 'logout') {
     userStore.logOut().finally(() => router.replace('/login'))
     return
   }
-  router.push(`/portal/me/${command}`)
 }
 
 function goMobile(path) {
@@ -107,3 +116,10 @@ function goMobile(path) {
 
 onMounted(() => store.hydrate())
 </script>
+
+<style scoped>
+@media (min-width: 1051px) {
+  .ps-main-nav, .ps-basket-button { display: none; }
+}
+.ps-user-account-actions { display: flex; align-items: center; }
+</style>

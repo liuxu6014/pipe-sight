@@ -1,0 +1,115 @@
+{
+  "batch": "homepage-real-content-20261014",
+  "purpose": "用户授权导入真实公开资料，用于当前首页展示核对；不是自动采集或模型处理结果",
+  "records": [
+    {
+      "kind": "paper",
+      "title": "油气管道内检测技术与数据分析方法发展现状及展望",
+      "url": "https://yqcy.pipechina.com.cn/cn/article/doi/10.6047/j.issn.1000-8241.2024.03.001",
+      "source": "油气储运",
+      "doi": "10.6047/j.issn.1000-8241.2024.03.001",
+      "authors": ["李睿"],
+      "journal": "油气储运",
+      "year": 2024,
+      "volume": "43",
+      "issue": "3",
+      "pages": "241-256",
+      "original_date": "2024-03",
+      "summary": "综述漏磁、超声、涡流及复合内检测技术，并梳理缺陷识别、分类和反演方法，讨论微小缺陷检测、应力检测及海量检测数据智能分析的研究方向。",
+      "tags": ["管道内检测", "数据分析", "完整性管理"]
+    },
+    {
+      "kind": "paper",
+      "title": "管道内检测技术与管理的发展现状及提升策略",
+      "url": "https://yqcy.pipechina.com.cn/cn/article/doi/10.6047/j.issn.1000-8241.2020.11.002",
+      "source": "油气储运",
+      "doi": "10.6047/j.issn.1000-8241.2020.11.002",
+      "authors": ["吴志平", "玄文博", "戴联双", "李妍", "常景龙", "王富祥"],
+      "journal": "油气储运",
+      "year": 2020,
+      "original_date": "2020-11",
+      "summary": "梳理国内外管道内检测技术与服务能力，讨论环焊缝、裂纹、针孔腐蚀和受力状态检测的局限，并从监管、管道企业和检测服务商三个层面提出改进思路。",
+      "tags": ["内检测技术", "缺陷识别", "管道管理"]
+    },
+    {
+      "kind": "paper",
+      "title": "Application Research of Ultrasonic-Guided Wave Technology in Pipeline Corrosion Defect Detection: A Review",
+      "url": "https://doi.org/10.3390/coatings14030358",
+      "verification_url": "https://api.crossref.org/works/10.3390/coatings14030358",
+      "source": "Coatings · MDPI",
+      "doi": "10.3390/coatings14030358",
+      "authors": ["Feng Lyu", "Xinyue Zhou", "Zheng Ding", "Xinglong Qiao", "Dan Song"],
+      "journal": "Coatings",
+      "publisher": "MDPI",
+      "year": 2024,
+      "volume": "14",
+      "issue": "3",
+      "pages": "358",
+      "original_date": "2024-03-18",
+      "license": "https://creativecommons.org/licenses/by/4.0/",
+      "full_text_url": "https://www.mdpi.com/2079-6412/14/3/358",
+      "summary": "综述超声导波在管道腐蚀缺陷检测中的应用，介绍导波理论及无损检测原理，并讨论兰姆波、水平剪切波等模式选择与检测方法。",
+      "tags": ["超声导波", "腐蚀检测", "无损检测"]
+    },
+    {
+      "kind": "news",
+      "title": "新华网：第八届中国国际管道会议在京举办",
+      "url": "https://www.pipechina.com.cn/front/news/3002671.html",
+      "source": "新华网（国家管网官网转载）",
+      "original_date": "2025-04-10",
+      "summary": "会议围绕绿色与智能管输交流技术进展，展示超大口径管道内检测装备和大型天然气管网仿真系统，涉及智慧运维、检测装备与低碳能源等方向。",
+      "tags": ["管道内检测", "智慧管网", "技术装备"]
+    },
+    {
+      "kind": "news",
+      "title": "工人日报：国家管网集团华南公司：新质生产力激活“最强大脑”",
+      "url": "https://www.pipechina.com.cn/front/news/3003989.html",
+      "source": "工人日报（国家管网官网转载）",
+      "original_date": "2025-12-04",
+      "summary": "报道华南公司将卫星遥感、无人机巡护和地面感知融合用于管道防护，并通过数字化建模与智能分析推进高后果区风险识别和分级管控。",
+      "tags": ["智能巡检", "高后果区", "数字化运维"]
+    },
+    {
+      "kind": "news",
+      "title": "国家管网集团两项成果入选国家能源局第四批能源领域首台（套）重大技术装备名单",
+      "url": "https://www.pipechina.com.cn/front/news/3002421.html",
+      "source": "国家管网",
+      "original_date": "2025-02-10",
+      "summary": "国家管网研发的超大规模长输天然气管网离线仿真软件与天然气气质分析装备入选重大技术装备名单，涉及自主仿真和气质分析设备国产化应用。",
+      "tags": ["管网仿真", "气质分析", "装备国产化"]
+    },
+    {
+      "kind": "wechat",
+      "title": "案例分享丨市政自来水管道走向及深度检测",
+      "url": "https://mp.weixin.qq.com/s/XPuD-urN8_sD1KEgcOejsw",
+      "verification_url": "https://www.hoptecchina.com/news_view.asp?class=2&id=81",
+      "source": "瑞科仪器（官网核验微信来源）",
+      "original_date": null,
+      "repost_date": "2022-03-25",
+      "summary": "介绍市政自来水管线定位与埋深探测案例，通过直连发射、信号识别和三维导航分析管线走向与分叉，为地下管线探测提供现场参考。",
+      "tags": ["地下管线探测", "管线定位", "埋深检测"]
+    },
+    {
+      "kind": "wechat",
+      "title": "瑞科仪器综合管道检测方案助力长江大保护项目",
+      "url": "https://mp.weixin.qq.com/s/gnVi7KR64h2pZVWUVG_grw",
+      "verification_url": "https://www.hoptecchina.com/news_view.asp?class=2&id=87",
+      "source": "瑞科仪器（官网核验微信来源）",
+      "original_date": null,
+      "repost_date": "2022-10-19",
+      "summary": "围绕长江大保护的雨污管网改造场景，介绍包含探地雷达等设备的综合管道检测方案，以及设备交付、培训和验收工作。",
+      "tags": ["管网检测", "探地雷达", "雨污管网"]
+    },
+    {
+      "kind": "wechat",
+      "title": "官宣！瑞科仪器成为德国iPEK品牌管道检测机器人中国区官方授权代理商",
+      "url": "https://mp.weixin.qq.com/s/OhaxDrNWz0iV9PBlpo4hNw",
+      "verification_url": "https://www.hoptecchina.com/news_view.asp?class=2&id=97",
+      "source": "瑞科仪器（官网核验微信来源）",
+      "original_date": null,
+      "repost_date": "2023-08-01",
+      "summary": "发布瑞科仪器与德国iPEK开展合作的信息，涉及管道检测机器人在中国的推广、销售和技术服务，可用于了解管道检测装备与应用生态。",
+      "tags": ["管道检测机器人", "检测装备", "行业动态"]
+    }
+  ]
+}

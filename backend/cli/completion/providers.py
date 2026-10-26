@@ -399,7 +399,7 @@ class StaticCompletionProvider:
         :return: 缓存名称列表
         """
         try:
-            redis_init_key_config = self.dynamic_service.load_runtime_module('common.enums').RedisInitKeyConfig
+            redis_init_key_config = self.dynamic_service.load_runtime_module('common.enums.cache').RedisInitKeyConfig
         except Exception:
             return []
         return [key_config.key for key_config in redis_init_key_config if getattr(key_config, 'key', '')]
@@ -587,7 +587,7 @@ class DomainDynamicCompletionProvider:
     """
     业务域动态 completion 提供器。
 
-    该对象负责配置、代码生成、缓存、任务等运行时驱动的只读补全。
+    该对象负责配置、缓存、任务等运行时驱动的只读补全。
 
     :param context_resolver: completion 上下文解析器
     :param dynamic_service: 动态补全执行服务
@@ -627,56 +627,6 @@ class DomainDynamicCompletionProvider:
             runtime_method_name='list_configs',
             runtime_kwargs={'config_key': incomplete, 'paged': True, 'page_num': 1, 'page_size': 20},
             field_name='configKey',
-        )
-
-    def complete_gen_table_names(
-        self,
-        ctx: click.Context | None,
-        args: list[str] | None,
-        incomplete: str,
-    ) -> list[str]:
-        """
-        为代码生成业务表名称提供动态只读补全结果。
-
-        :param ctx: Click 上下文
-        :param args: 当前命令参数列表
-        :param incomplete: 当前未完成输入片段
-        :return: 业务表名称列表
-        """
-        del args
-        return self.dynamic_service.complete_dynamic_items(
-            ctx,
-            incomplete,
-            runtime_module_name='cli.runtime.gen',
-            runtime_object_name='GEN_RUNTIME',
-            runtime_method_name='list_gen_tables',
-            runtime_kwargs={'table_name': incomplete, 'paged': True, 'page_num': 1, 'page_size': 20},
-            field_name='tableName',
-        )
-
-    def complete_gen_db_table_names(
-        self,
-        ctx: click.Context | None,
-        args: list[str] | None,
-        incomplete: str,
-    ) -> list[str]:
-        """
-        为数据库物理表名称提供动态只读补全结果。
-
-        :param ctx: Click 上下文
-        :param args: 当前命令参数列表
-        :param incomplete: 当前未完成输入片段
-        :return: 数据库物理表名称列表
-        """
-        del args
-        return self.dynamic_service.complete_dynamic_items(
-            ctx,
-            incomplete,
-            runtime_module_name='cli.runtime.gen',
-            runtime_object_name='GEN_RUNTIME',
-            runtime_method_name='list_gen_db_tables',
-            runtime_kwargs={'table_name': incomplete, 'paged': True, 'page_num': 1, 'page_size': 20},
-            field_name='tableName',
         )
 
     def complete_cache_keys(
@@ -936,38 +886,6 @@ class CompletionProviderGateway:
         :return: 参数键名列表
         """
         return self.provider_registry.domain_provider.complete_config_keys(ctx, args, incomplete)
-
-    def complete_gen_table_names(
-        self,
-        ctx: click.Context | None,
-        args: list[str] | None,
-        incomplete: str,
-    ) -> list[str]:
-        """
-        为代码生成业务表名称提供动态只读补全结果。
-
-        :param ctx: Click 上下文
-        :param args: 当前命令参数列表
-        :param incomplete: 当前未完成输入片段
-        :return: 业务表名称列表
-        """
-        return self.provider_registry.domain_provider.complete_gen_table_names(ctx, args, incomplete)
-
-    def complete_gen_db_table_names(
-        self,
-        ctx: click.Context | None,
-        args: list[str] | None,
-        incomplete: str,
-    ) -> list[str]:
-        """
-        为数据库物理表名称提供动态只读补全结果。
-
-        :param ctx: Click 上下文
-        :param args: 当前命令参数列表
-        :param incomplete: 当前未完成输入片段
-        :return: 数据库物理表名称列表
-        """
-        return self.provider_registry.domain_provider.complete_gen_db_table_names(ctx, args, incomplete)
 
     def complete_cache_keys(
         self,

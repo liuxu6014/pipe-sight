@@ -1,4 +1,4 @@
-from cli.utils import SHELL_TEXT_FORMATTER
+from cli.output import SHELL_TEXT_FORMATTER
 
 
 class OpsCommandPresenter:

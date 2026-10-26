@@ -59,9 +59,9 @@ class JobRuntimeService:
         :return: 定时任务列表结果
         """
         async_session_local = self.infrastructure_gateway.get_async_session_local()
-        job_vo_module = self.infrastructure_gateway.get_job_vo_module()
+        job_schema_module = self.infrastructure_gateway.get_job_schema_module()
         job_service = self.infrastructure_gateway.get_job_service()
-        query_model = job_vo_module.JobPageQueryModel(
+        query_model = job_schema_module.JobPageQueryModel(
             jobName=job_name or None,
             jobGroup=job_group or None,
             status=status,
@@ -136,8 +136,8 @@ class JobRuntimeService:
         """
         async_session_local = self.infrastructure_gateway.get_async_session_local()
         job_log_service = self.infrastructure_gateway.get_job_log_service()
-        job_vo_module = self.infrastructure_gateway.get_job_vo_module()
-        query_model = job_vo_module.JobLogPageQueryModel(
+        job_schema_module = self.infrastructure_gateway.get_job_schema_module()
+        query_model = job_schema_module.JobLogPageQueryModel(
             jobName=job_name or None,
             jobGroup=job_group or None,
             status=status,
@@ -184,7 +184,7 @@ class JobRuntimeService:
         async_session_local = self.infrastructure_gateway.get_async_session_local()
         redis_util = self.infrastructure_gateway.get_redis_util()
         scheduler_util = self.infrastructure_gateway.get_scheduler_util()
-        job_vo_module = self.infrastructure_gateway.get_job_vo_module()
+        job_schema_module = self.infrastructure_gateway.get_job_schema_module()
         job_service = self.infrastructure_gateway.get_job_service()
         try:
             async with async_session_local() as session:
@@ -192,11 +192,14 @@ class JobRuntimeService:
                 await scheduler_util.init_system_scheduler(redis)
 
                 if operation == 'run-once':
-                    result = await job_service.execute_job_once_services(session, job_vo_module.JobModel(jobId=job_id))
+                    result = await job_service.execute_job_once_services(
+                        session,
+                        job_schema_module.JobModel(jobId=job_id),
+                    )
                 elif operation in {'pause', 'resume'}:
                     result = await job_service.edit_job_services(
                         session,
-                        job_vo_module.EditJobModel(jobId=job_id, status=status, type='status'),
+                        job_schema_module.EditJobModel(jobId=job_id, status=status, type='status'),
                     )
                 else:
                     raise ValueError(f'不支持的任务操作：{operation}')

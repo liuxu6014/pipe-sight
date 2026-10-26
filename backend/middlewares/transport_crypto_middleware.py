@@ -2,19 +2,19 @@ import json
 from collections.abc import Awaitable, Callable
 from urllib.parse import parse_qs, urlencode
 
-from fastapi import FastAPI, Request
 from fastapi.datastructures import Headers, QueryParams
 from fastapi.responses import JSONResponse
+from redis import asyncio as aioredis
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from common.constant import HttpStatusConstant
-from config.env import AppConfig, TransportCryptoConfig
-from utils.transport_crypto_util import (
+from app.infrastructure.services.transport_crypto_core import (
     DecryptedTransportEnvelope,
     TransportCryptoMonitorUtil,
     TransportCryptoUtil,
     TransportSecurityUtil,
 )
+from common.http.status import HttpStatusConstant
+from config.env import AppConfig, TransportCryptoConfig
 
 
 class TransportCryptoMiddleware:
@@ -54,6 +54,7 @@ class TransportCryptoMiddleware:
             return
 
         current_app = scope.get('app')
+        redis = getattr(getattr(current_app, 'state', None), 'redis', None)
         path = self._normalize_path(str(scope.get('path', '')))
         if (
             self._is_excluded_path(path)
@@ -68,11 +69,11 @@ class TransportCryptoMiddleware:
         request_required = TransportCryptoConfig.transport_crypto_mode == 'required' or self._is_required_path(path)
 
         if request_required and not request_encrypted:
-            await TransportCryptoMonitorUtil.record_plain_request(current_app)
+            await TransportCryptoMonitorUtil.record_plain_request(redis)
             await TransportCryptoMonitorUtil.record_required_rejected(
-                current_app, str(scope.get('method', '')).upper(), path
+                redis, str(scope.get('method', '')).upper(), path
             )
-            await TransportCryptoMonitorUtil.record_plain_response(current_app)
+            await TransportCryptoMonitorUtil.record_plain_response(redis)
             await self._send_error_response(
                 scope,
                 receive,
@@ -87,9 +88,9 @@ class TransportCryptoMiddleware:
             return
 
         if not request_encrypted:
-            await TransportCryptoMonitorUtil.record_plain_request(current_app)
+            await TransportCryptoMonitorUtil.record_plain_request(redis)
             response_observer = self._build_passthrough_response_observer(
-                app=current_app,
+                redis=redis,
                 send=send,
                 request_mode='plain',
                 crypto_status='pass_through',
@@ -98,11 +99,16 @@ class TransportCryptoMiddleware:
             return
 
         body = await self._read_body(receive)
-        request = Request(scope, receive=self._build_receive(body))
         try:
-            decrypted_scope, decrypted_body, crypto_context = await self._decrypt_request(scope, request, headers, body)
-            await TransportCryptoMonitorUtil.record_encrypted_request(current_app, str(crypto_context['kid']))
-            await TransportCryptoMonitorUtil.record_decrypt_success(current_app, str(crypto_context['kid']))
+            decrypted_scope, decrypted_body, crypto_context = await self._decrypt_request(
+                scope,
+                headers,
+                body,
+                redis=redis,
+                replay_fail_closed=request_required,
+            )
+            await TransportCryptoMonitorUtil.record_encrypted_request(redis, str(crypto_context['kid']))
+            await TransportCryptoMonitorUtil.record_decrypt_success(redis, str(crypto_context['kid']))
         except Exception as exc:
             error_crypto_context = self._build_error_crypto_context(scope, headers, body)
             error_kid = (
@@ -110,19 +116,19 @@ class TransportCryptoMiddleware:
                 if error_crypto_context
                 else self._extract_request_kid(scope, headers, body)
             )
-            await TransportCryptoMonitorUtil.record_encrypted_request(current_app, error_kid)
+            await TransportCryptoMonitorUtil.record_encrypted_request(redis, error_kid)
             failure_reason = self._classify_failure_reason(str(exc))
             await TransportCryptoMonitorUtil.record_decrypt_failure(
-                current_app,
+                redis,
                 method=str(scope.get('method', '')).upper(),
                 path=path,
                 reason=failure_reason,
                 kid=error_kid,
             )
             if error_crypto_context:
-                await TransportCryptoMonitorUtil.record_encrypted_response(current_app, error_kid, is_error=True)
+                await TransportCryptoMonitorUtil.record_encrypted_response(redis, error_kid, is_error=True)
             else:
-                await TransportCryptoMonitorUtil.record_plain_response(current_app)
+                await TransportCryptoMonitorUtil.record_plain_response(redis)
             await self._send_error_response(
                 scope,
                 receive,
@@ -142,7 +148,7 @@ class TransportCryptoMiddleware:
             await response_encryptor(message)
 
         response_encryptor = self._build_response_encryptor(
-            app=current_app,
+            redis=redis,
             scope=decrypted_scope,
             send=send,
             crypto_context=crypto_context,
@@ -152,17 +158,20 @@ class TransportCryptoMiddleware:
     async def _decrypt_request(
         self,
         scope: Scope,
-        request: Request,
         headers: Headers,
         body: bytes,
+        *,
+        redis: aioredis.Redis | None,
+        replay_fail_closed: bool,
     ) -> tuple[Scope, bytes, dict[str, str | bytes | bool]]:
         """
         解密请求并回写解密后的headers、query和body
 
         :param scope: 当前ASGI请求作用域
-        :param request: FastAPI请求对象
         :param headers: 当前请求头对象
         :param body: 原始请求体字节串
+        :param redis: Redis客户端
+        :param replay_fail_closed: Redis不可用时是否拒绝请求
         :return: 解密后的scope、请求体与加密上下文
         """
         new_scope = dict(scope)
@@ -178,14 +187,18 @@ class TransportCryptoMiddleware:
 
         crypto_context: dict[str, str | bytes | bool] | None = None
         if query_envelope is not None:
-            decrypted_query = await self._decrypt_envelope(request, scope, query_envelope)
+            decrypted_query = await self._decrypt_envelope(
+                scope, query_envelope, redis=redis, replay_fail_closed=replay_fail_closed
+            )
             query_payload = self._loads_json_mapping(decrypted_query.plaintext.decode('utf-8'))
             new_scope['query_string'] = urlencode(query_payload, doseq=True).encode('utf-8')
             crypto_context = self._build_crypto_context(decrypted_query)
 
         decrypted_body = body
         if body_envelope is not None:
-            decrypted_body_payload = await self._decrypt_envelope(request, scope, body_envelope)
+            decrypted_body_payload = await self._decrypt_envelope(
+                scope, body_envelope, redis=redis, replay_fail_closed=replay_fail_closed
+            )
             if crypto_context and crypto_context['kid'] != decrypted_body_payload.kid:
                 raise ValueError('请求中存在不一致的密钥版本')
             if crypto_context and crypto_context['aes_key'] != decrypted_body_payload.aes_key:
@@ -210,16 +223,19 @@ class TransportCryptoMiddleware:
 
     async def _decrypt_envelope(
         self,
-        request: Request,
         scope: Scope,
         envelope: dict[str, str],
+        *,
+        redis: aioredis.Redis | None,
+        replay_fail_closed: bool,
     ) -> DecryptedTransportEnvelope:
         """
         解密单个请求信封并执行时间窗、防重放校验
 
-        :param request: 当前请求对象
         :param scope: 当前ASGI请求作用域
         :param envelope: 请求信封字典
+        :param redis: Redis客户端
+        :param replay_fail_closed: Redis不可用时是否拒绝请求
         :return: 解密后的请求信封对象
         """
         decrypted_payload = TransportCryptoUtil.decrypt_envelope(
@@ -228,7 +244,12 @@ class TransportCryptoMiddleware:
             expected_path=self._normalize_path(str(scope.get('path', ''))),
         )
         TransportSecurityUtil.validate_timestamp(decrypted_payload.timestamp)
-        await TransportSecurityUtil.validate_replay(request, decrypted_payload.kid, decrypted_payload.nonce)
+        await TransportSecurityUtil.validate_replay(
+            redis,
+            decrypted_payload.kid,
+            decrypted_payload.nonce,
+            fail_closed=replay_fail_closed,
+        )
         return decrypted_payload
 
     def _extract_query_envelope(self, scope: Scope) -> dict[str, str] | None:
@@ -280,7 +301,7 @@ class TransportCryptoMiddleware:
 
     def _build_response_encryptor(
         self,
-        app: FastAPI | None,
+        redis: aioredis.Redis | None,
         scope: Scope,
         send: Send,
         crypto_context: dict[str, str | bytes | bool],
@@ -306,7 +327,7 @@ class TransportCryptoMiddleware:
                 content_type = headers.get('content-type', '')
                 should_buffer_json = 'application/json' in content_type
                 if not should_buffer_json:
-                    await TransportCryptoMonitorUtil.record_plain_response(app)
+                    await TransportCryptoMonitorUtil.record_plain_response(redis)
                     await send(
                         {
                             **message,
@@ -370,7 +391,7 @@ class TransportCryptoMiddleware:
                     kid=str(crypto_context['kid']),
                 ),
             )
-            await TransportCryptoMonitorUtil.record_encrypted_response(app, str(crypto_context['kid']))
+            await TransportCryptoMonitorUtil.record_encrypted_response(redis, str(crypto_context['kid']))
             await send({**response_start_message, 'headers': response_headers})
             await send({'type': 'http.response.body', 'body': encrypted_body, 'more_body': False})
 
@@ -378,7 +399,7 @@ class TransportCryptoMiddleware:
 
     def _build_passthrough_response_observer(
         self,
-        app: FastAPI | None,
+        redis: aioredis.Redis | None,
         send: Send,
         request_mode: str,
         crypto_status: str,
@@ -400,7 +421,7 @@ class TransportCryptoMiddleware:
 
             if message['type'] == 'http.response.start':
                 if not has_recorded_response:
-                    await TransportCryptoMonitorUtil.record_plain_response(app)
+                    await TransportCryptoMonitorUtil.record_plain_response(redis)
                     has_recorded_response = True
                 await send(
                     {

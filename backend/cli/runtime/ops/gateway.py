@@ -44,7 +44,7 @@ class OperationsInfrastructureGateway:
 
         :return: 服务器监控服务类
         """
-        return import_module('module_admin.service.server_service').ServerService
+        return import_module('app.infrastructure.services.server').ServerService
 
     @staticmethod
     def get_psutil_module() -> Any:
@@ -56,10 +56,10 @@ class OperationsInfrastructureGateway:
         return import_module('psutil')
 
     @staticmethod
-    def get_bytes2human() -> Any:
+    def get_format_bytes() -> Any:
         """
         获取字节数转可读文本函数。
 
         :return: `bytes2human` 函数
         """
-        return import_module('utils.common_util').bytes2human
+        return import_module('app.infrastructure.services.formatting').format_bytes

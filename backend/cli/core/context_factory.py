@@ -30,7 +30,7 @@ class CliRuntimeState:
 
         :return: 日志对象
         """
-        return import_module('utils.log_util').logger
+        return import_module('app.infrastructure.services.logging_support').logger
 
     def suppress_logs(self) -> None:
         """

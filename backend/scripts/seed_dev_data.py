@@ -3,21 +3,22 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-import sys
 
 from sqlalchemy import select
 
 # Allow ``python scripts/seed_dev_data.py`` from backend/.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from config.database import AsyncSessionLocal
-from config.env import AppConfig
 # Register the small set of referenced RuoYi tables before SQLAlchemy flushes
 # the pipeline models (the app normally imports these through auto-registration).
-from module_admin.entity.do import job_do, menu_do, role_do, user_do  # noqa: F401
-from module_pipeline.entity.do.pipeline_do import (
+import app.infrastructure.models.jobs
+import app.system.models.menu
+import app.system.models.role
+import app.system.models.user  # noqa: F401
+from app.intelligence.models.pipeline_models import (
     PipelineArticle,
     PipelineCrawlRun,
     PipelineMaterial,
@@ -28,6 +29,10 @@ from module_pipeline.entity.do.pipeline_do import (
     PipelineSource,
     PipelineWorkspaceItem,
 )
+from config.database import AsyncSessionLocal
+from config.env import AppConfig
+
+DEMO_USER_ID = 2
 
 
 async def seed() -> None:
@@ -265,7 +270,7 @@ async def seed() -> None:
 
         task = PipelineResearchJob(
             task_id='task-demo-001',
-            user_id=2,
+            user_id=DEMO_USER_ID,
             owner_name='年糕',
             title='管道本体应力监测科研需求报告',
             report_type='research',
@@ -289,7 +294,7 @@ async def seed() -> None:
         report = PipelineReport(
             report_id='report-demo-001',
             source_task_id='task-demo-001',
-            user_id=2,
+            user_id=DEMO_USER_ID,
             owner_name='年糕',
             title='管道本体应力监测科研需求报告',
             report_type='research',
@@ -325,7 +330,7 @@ async def seed() -> None:
                     quality_issues=[],
                     model_snapshot={'provider': 'template', 'version': 'demo-v1'},
                     source='generated',
-                    operator_id=2,
+                    operator_id=DEMO_USER_ID,
                     operator_name='年糕',
                     create_time=report.create_time,
                 )
@@ -333,7 +338,7 @@ async def seed() -> None:
 
         if await db.scalar(
             select(PipelineWorkspaceItem).where(
-                PipelineWorkspaceItem.user_id == 2,
+                PipelineWorkspaceItem.user_id == DEMO_USER_ID,
                 PipelineWorkspaceItem.item_id == 'news-001',
                 PipelineWorkspaceItem.item_type == 'article',
                 PipelineWorkspaceItem.action == 'favorite',
@@ -341,7 +346,7 @@ async def seed() -> None:
         ) is None:
             db.add(
                 PipelineWorkspaceItem(
-                    user_id=2,
+                    user_id=DEMO_USER_ID,
                     item_id='news-001',
                     item_type='article',
                     action='favorite',

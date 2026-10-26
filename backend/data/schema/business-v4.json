@@ -1,0 +1,5813 @@
+{
+  "version": "20261025-business-v4",
+  "revision": "20261025_business_consistency",
+  "model_ddl": {
+    "ai_models": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": true,
+          "default": null,
+          "identity": "Identity(start=1, increment=1, minvalue=1, maxvalue=9223372036854775807, cycle=False, cache=1)",
+          "comment": "后台模型自增ID；文本与图片模型统一登记在本表"
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "管理员界面显示的模型名称；不是供应商请求中的模型代码"
+        },
+        {
+          "name": "provider",
+          "type": "VARCHAR(50)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "模型服务提供方名称；与实际调用适配器对应"
+        },
+        {
+          "name": "code",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "提供方实际模型标识；随请求发送给供应商，不使用展示名替代"
+        },
+        {
+          "name": "base_url",
+          "type": "TEXT",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "经后台校验的模型服务API基础地址；请求时遵守服务端访问限制"
+        },
+        {
+          "name": "credential_ref",
+          "type": "TEXT",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "密钥管理或本地加密凭证的安全引用；不得向普通接口或日志明文返回"
+        },
+        {
+          "name": "capabilities",
+          "type": "JSONB",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "模型能力JSON数组，如text_generate、image_generate、image_input；图片输入不等于图片生成"
+        },
+        {
+          "name": "parameters",
+          "type": "JSONB",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'{}'",
+          "identity": null,
+          "comment": "模型默认参数JSON对象；保存采样、输出限制和超时等，不保存明文凭证"
+        },
+        {
+          "name": "is_enabled",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'true'",
+          "identity": null,
+          "comment": "模型调用开关；true可调用、false停用，历史引用保留且禁止任意替换"
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "模型配置创建时间；带时区时间点"
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "模型能力、参数或开关最近修改时间；带时区时间点"
+        }
+      ],
+      "comment": "后台统一管理的文本和图片模型配置；能力明确登记，凭证只保存安全引用",
+      "checks": [
+        {
+          "name": "ck_ai_models_capabilities",
+          "expression": "jsonb_typeof(capabilities)='array'",
+          "ddl": "ALTER TABLE ai_models ADD CONSTRAINT ck_ai_models_capabilities CHECK (jsonb_typeof(capabilities)='array')"
+        },
+        {
+          "name": "ck_ai_models_parameters",
+          "expression": "jsonb_typeof(parameters)='object'",
+          "ddl": "ALTER TABLE ai_models ADD CONSTRAINT ck_ai_models_parameters CHECK (jsonb_typeof(parameters)='object')"
+        }
+      ],
+      "indexes": [],
+      "foreign_keys": [],
+      "unique": []
+    },
+    "basket_items": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": true,
+          "default": null,
+          "identity": "Identity(start=1, increment=1, minvalue=1, maxvalue=9223372036854775807, cycle=False, cache=1)",
+          "comment": "资料篮或收藏关系自增ID；迁移沿用原saved_item_id的值"
+        },
+        {
+          "name": "user_id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "关系所属用户ID，关联sys_user.id；仅允许操作本人的保存关系"
+        },
+        {
+          "name": "action",
+          "type": "VARCHAR(16)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "保存动作：basket加入资料篮、favorite收藏"
+        },
+        {
+          "name": "article_id",
+          "type": "BIGINT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "新闻来源ID，关联news_articles.id；与paper_id、file_id、report_id恰一非空；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "paper_id",
+          "type": "BIGINT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "论文来源ID，关联papers.id；与article_id、file_id、report_id恰一非空；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "file_id",
+          "type": "BIGINT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "上传资料来源ID，关联knowledge_files.id；仍须校验文件所有权，四种来源恰一非空；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "report_id",
+          "type": "BIGINT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "成果收藏来源ID，关联reports.id；仍须校验成果权限，四种来源恰一非空；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "加入资料篮或收藏时间；带时区时间点，取消仅删除关系不删除原文"
+        }
+      ],
+      "comment": "用户资料篮及收藏关系；每条只引用一项原资料，不复制正文作为权威内容",
+      "checks": [
+        {
+          "name": "ck_basket_items_action",
+          "expression": "action IN ('basket','favorite')",
+          "ddl": "ALTER TABLE basket_items ADD CONSTRAINT ck_basket_items_action CHECK (action IN ('basket','favorite'))"
+        },
+        {
+          "name": "ck_basket_items_target",
+          "expression": "(CASE WHEN article_id IS NULL THEN 0 ELSE 1 END + CASE WHEN paper_id IS NULL THEN 0 ELSE 1 END + CASE WHEN file_id IS NULL THEN 0 ELSE 1 END + CASE WHEN report_id IS NULL THEN 0 ELSE 1 END)=1",
+          "ddl": "ALTER TABLE basket_items ADD CONSTRAINT ck_basket_items_target CHECK ((CASE WHEN article_id IS NULL THEN 0 ELSE 1 END + CASE WHEN paper_id IS NULL THEN 0 ELSE 1 END + CASE WHEN file_id IS NULL THEN 0 ELSE 1 END + CASE WHEN report_id IS NULL THEN 0 ELSE 1 END)=1)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "uk_basket_items_article_id",
+          "ddl": "CREATE UNIQUE INDEX uk_basket_items_article_id ON basket_items (user_id, action, article_id) WHERE article_id IS NOT NULL"
+        },
+        {
+          "name": "uk_basket_items_file_id",
+          "ddl": "CREATE UNIQUE INDEX uk_basket_items_file_id ON basket_items (user_id, action, file_id) WHERE file_id IS NOT NULL"
+        },
+        {
+          "name": "uk_basket_items_paper_id",
+          "ddl": "CREATE UNIQUE INDEX uk_basket_items_paper_id ON basket_items (user_id, action, paper_id) WHERE paper_id IS NOT NULL"
+        },
+        {
+          "name": "uk_basket_items_report_id",
+          "ddl": "CREATE UNIQUE INDEX uk_basket_items_report_id ON basket_items (user_id, action, report_id) WHERE report_id IS NOT NULL"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": null,
+          "columns": [
+            "article_id"
+          ],
+          "target_schema": "public",
+          "target": "news_articles",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "CASCADE",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "name": null,
+          "columns": [
+            "file_id"
+          ],
+          "target_schema": "public",
+          "target": "knowledge_files",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "CASCADE",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "name": null,
+          "columns": [
+            "paper_id"
+          ],
+          "target_schema": "public",
+          "target": "papers",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "CASCADE",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "name": null,
+          "columns": [
+            "report_id"
+          ],
+          "target_schema": "public",
+          "target": "reports",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "CASCADE",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "name": null,
+          "columns": [
+            "user_id"
+          ],
+          "target_schema": "public",
+          "target": "sys_user",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "CASCADE",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": []
+    },
+    "categories": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": true,
+          "default": "nextval('business_id_seq')",
+          "identity": null,
+          "comment": "类别数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系"
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(100)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "管理员设置的唯一类别名称；必填且禁止空白文本"
+        },
+        {
+          "name": "prompt",
+          "type": "TEXT",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "管理员编写的过滤分类标准；保留原提示语及变量，修改仅影响后续处理"
+        },
+        {
+          "name": "model_id",
+          "type": "BIGINT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "分类文本模型ID，关联ai_models.id；暂未配置时为空，启用分类前必须配置"
+        },
+        {
+          "name": "applies_to",
+          "type": "VARCHAR(16)",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'all'",
+          "identity": null,
+          "comment": "适用内容类型：news新闻、paper论文、all两者；默认all"
+        },
+        {
+          "name": "is_enabled",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'true'",
+          "identity": null,
+          "comment": "是否参加后续分类；true启用、false停用，停用不清除历史关联"
+        },
+        {
+          "name": "sort_order",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'0'",
+          "identity": null,
+          "comment": "前台类别排序值；整数，默认0"
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "类别创建时间；带时区时间点"
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "类别名称、提示词或模型配置最近修改时间；带时区时间点"
+        }
+      ],
+      "comment": "管理员维护的单类别及过滤分类提示词；停用不清除历史文章归类",
+      "checks": [
+        {
+          "name": "ck_categories_applies_to",
+          "expression": "applies_to IN ('news','paper','all')",
+          "ddl": "ALTER TABLE categories ADD CONSTRAINT ck_categories_applies_to CHECK (applies_to IN ('news','paper','all'))"
+        },
+        {
+          "name": "ck_categories_enabled_model",
+          "expression": "NOT is_enabled OR model_id IS NOT NULL",
+          "ddl": "ALTER TABLE categories ADD CONSTRAINT ck_categories_enabled_model CHECK (NOT is_enabled OR model_id IS NOT NULL)"
+        },
+        {
+          "name": "ck_categories_name_prompt",
+          "expression": "length(trim(name)) > 0 AND length(trim(prompt)) > 0",
+          "ddl": "ALTER TABLE categories ADD CONSTRAINT ck_categories_name_prompt CHECK (length(trim(name)) > 0 AND length(trim(prompt)) > 0)"
+        }
+      ],
+      "indexes": [],
+      "foreign_keys": [
+        {
+          "name": null,
+          "columns": [
+            "model_id"
+          ],
+          "target_schema": "public",
+          "target": "ai_models",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": [
+        {
+          "name": "uk_categories_name",
+          "columns": [
+            "name"
+          ],
+          "deferrable": false,
+          "initially": "IMMEDIATE",
+          "nulls_not_distinct": false
+        }
+      ]
+    },
+    "collection_runs": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": true,
+          "default": "nextval('business_id_seq')",
+          "identity": null,
+          "comment": "单次采集运行数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系"
+        },
+        {
+          "name": "source_id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "来源ID，关联data_sources.id；历史运行引用时禁止直接删除来源；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "parent_id",
+          "type": "BIGINT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "失败父运行ID；与source_id复合自关联，仅retry填写，防止跨来源、自指和重复直接重试；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "trigger_type",
+          "type": "VARCHAR(16)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "触发类型：manual手动、schedule定时、retry失败重试；非retry的parent_id为空"
+        },
+        {
+          "name": "request_id",
+          "type": "VARCHAR(128)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "全局唯一运行幂等键，varchar(128)；普通请求键原样保留；系统定时schedule:来源ID:计划触发UTC时刻按实际source_id映射，重试retry:父运行ID按实际parent_id映射，其余字节不变；映射后仍须全局唯一"
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(16)",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'queued'",
+          "identity": null,
+          "comment": "采集状态：queued排队、running执行中、stopping正在停止、success成功、failed失败、cancelled取消"
+        },
+        {
+          "name": "available_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "允许认领运行的最早时间；带时区，失败重试的退避截止时间也写入此字段"
+        },
+        {
+          "name": "config_snapshot",
+          "type": "JSONB",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'{}'",
+          "identity": null,
+          "comment": "本次采集配置JSON对象快照；重试沿用父记录配置，不回写后来修改的来源参数；明确的平台来源、类别等引用按实体映射，外部采集参数、普通请求键及执行令牌原样保留"
+        },
+        {
+          "name": "checkpoint",
+          "type": "JSONB",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'{}'",
+          "identity": null,
+          "comment": "已提交采集边界及受限失败标识的JSON对象；不保存材料正文，不跨过未处理失败项"
+        },
+        {
+          "name": "fetched_count",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'0'",
+          "identity": null,
+          "comment": "本次已读取候选条目数；非负整数，不是请求次数或全库总量"
+        },
+        {
+          "name": "saved_count",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'0'",
+          "identity": null,
+          "comment": "本次成功提交的新建或更新条目数；非负，与failed_count之和不超过fetched_count"
+        },
+        {
+          "name": "failed_count",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'0'",
+          "identity": null,
+          "comment": "本次处理失败的候选条目数；非负，success状态必须为0，不重复累计父运行"
+        },
+        {
+          "name": "error",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "执行失败或异常的脱敏简短原因；failed必须非空，success为空，不保存Cookie、密钥或堆栈"
+        },
+        {
+          "name": "stop_requested_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "收到停止请求的带时区时间点；重复点击不重写，stopping或cancelled必须存在"
+        },
+        {
+          "name": "execution_token",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "执行认领令牌；保存、心跳和结束回写须匹配，终态清空以隔离旧执行器；varchar(64)执行令牌，非数值主键，保留原业务字符串"
+        },
+        {
+          "name": "lease_expires_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "当前执行租约截止时间；带时区，失联恢复前核对，终态清空"
+        },
+        {
+          "name": "started_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "实际开始采集的带时区时间点；排队即取消时可空"
+        },
+        {
+          "name": "finished_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "确认成功、失败或取消的带时区时间点；stopping不得提前填写"
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "运行记录创建时间；带时区，不晚于available_at"
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "运行状态、计数或已提交断点最近更新时间；带时区时间点"
+        }
+      ],
+      "comment": "单次来源采集的排队、执行、停止及失败重试记录；保存独立计数和配置快照",
+      "checks": [
+        {
+          "name": "ck_collection_runs_active",
+          "expression": "status NOT IN ('running','stopping') OR (started_at IS NOT NULL AND finished_at IS NULL)",
+          "ddl": "ALTER TABLE collection_runs ADD CONSTRAINT ck_collection_runs_active CHECK (status NOT IN ('running','stopping') OR (started_at IS NOT NULL AND finished_at IS NULL))"
+        },
+        {
+          "name": "ck_collection_runs_counts",
+          "expression": "fetched_count >= 0 AND saved_count >= 0 AND failed_count >= 0 AND saved_count + failed_count <= fetched_count",
+          "ddl": "ALTER TABLE collection_runs ADD CONSTRAINT ck_collection_runs_counts CHECK (fetched_count >= 0 AND saved_count >= 0 AND failed_count >= 0 AND saved_count + failed_count <= fetched_count)"
+        },
+        {
+          "name": "ck_collection_runs_error",
+          "expression": "status <> 'failed' OR (error IS NOT NULL AND length(trim(error)) > 0)",
+          "ddl": "ALTER TABLE collection_runs ADD CONSTRAINT ck_collection_runs_error CHECK (status <> 'failed' OR (error IS NOT NULL AND length(trim(error)) > 0))"
+        },
+        {
+          "name": "ck_collection_runs_json",
+          "expression": "jsonb_typeof(config_snapshot) = 'object' AND jsonb_typeof(checkpoint) = 'object'",
+          "ddl": "ALTER TABLE collection_runs ADD CONSTRAINT ck_collection_runs_json CHECK (jsonb_typeof(config_snapshot) = 'object' AND jsonb_typeof(checkpoint) = 'object')"
+        },
+        {
+          "name": "ck_collection_runs_lease_pair",
+          "expression": "(execution_token IS NULL) = (lease_expires_at IS NULL)",
+          "ddl": "ALTER TABLE collection_runs ADD CONSTRAINT ck_collection_runs_lease_pair CHECK ((execution_token IS NULL) = (lease_expires_at IS NULL))"
+        },
+        {
+          "name": "ck_collection_runs_parent_id",
+          "expression": "parent_id IS NULL OR parent_id <> id",
+          "ddl": "ALTER TABLE collection_runs ADD CONSTRAINT ck_collection_runs_parent_id CHECK (parent_id IS NULL OR parent_id <> id)"
+        },
+        {
+          "name": "ck_collection_runs_parent_trigger",
+          "expression": "(trigger_type = 'retry' AND parent_id IS NOT NULL) OR (trigger_type <> 'retry' AND parent_id IS NULL)",
+          "ddl": "ALTER TABLE collection_runs ADD CONSTRAINT ck_collection_runs_parent_trigger CHECK ((trigger_type = 'retry' AND parent_id IS NOT NULL) OR (trigger_type <> 'retry' AND parent_id IS NULL))"
+        },
+        {
+          "name": "ck_collection_runs_queued",
+          "expression": "status <> 'queued' OR (started_at IS NULL AND finished_at IS NULL AND execution_token IS NULL AND lease_expires_at IS NULL AND stop_requested_at IS NULL)",
+          "ddl": "ALTER TABLE collection_runs ADD CONSTRAINT ck_collection_runs_queued CHECK (status <> 'queued' OR (started_at IS NULL AND finished_at IS NULL AND execution_token IS NULL AND lease_expires_at IS NULL AND stop_requested_at IS NULL))"
+        },
+        {
+          "name": "ck_collection_runs_request_id",
+          "expression": "length(trim(request_id)) > 0",
+          "ddl": "ALTER TABLE collection_runs ADD CONSTRAINT ck_collection_runs_request_id CHECK (length(trim(request_id)) > 0)"
+        },
+        {
+          "name": "ck_collection_runs_running",
+          "expression": "status <> 'running' OR (execution_token IS NOT NULL AND lease_expires_at IS NOT NULL AND stop_requested_at IS NULL)",
+          "ddl": "ALTER TABLE collection_runs ADD CONSTRAINT ck_collection_runs_running CHECK (status <> 'running' OR (execution_token IS NOT NULL AND lease_expires_at IS NOT NULL AND stop_requested_at IS NULL))"
+        },
+        {
+          "name": "ck_collection_runs_status",
+          "expression": "status IN ('queued','running','stopping','success','failed','cancelled')",
+          "ddl": "ALTER TABLE collection_runs ADD CONSTRAINT ck_collection_runs_status CHECK (status IN ('queued','running','stopping','success','failed','cancelled'))"
+        },
+        {
+          "name": "ck_collection_runs_stop",
+          "expression": "status NOT IN ('stopping','cancelled') OR stop_requested_at IS NOT NULL",
+          "ddl": "ALTER TABLE collection_runs ADD CONSTRAINT ck_collection_runs_stop CHECK (status NOT IN ('stopping','cancelled') OR stop_requested_at IS NOT NULL)"
+        },
+        {
+          "name": "ck_collection_runs_success",
+          "expression": "status <> 'success' OR (failed_count = 0 AND error IS NULL)",
+          "ddl": "ALTER TABLE collection_runs ADD CONSTRAINT ck_collection_runs_success CHECK (status <> 'success' OR (failed_count = 0 AND error IS NULL))"
+        },
+        {
+          "name": "ck_collection_runs_terminal",
+          "expression": "status NOT IN ('success','failed','cancelled') OR (finished_at IS NOT NULL AND execution_token IS NULL AND lease_expires_at IS NULL)",
+          "ddl": "ALTER TABLE collection_runs ADD CONSTRAINT ck_collection_runs_terminal CHECK (status NOT IN ('success','failed','cancelled') OR (finished_at IS NOT NULL AND execution_token IS NULL AND lease_expires_at IS NULL))"
+        },
+        {
+          "name": "ck_collection_runs_times",
+          "expression": "created_at <= available_at AND (started_at IS NULL OR started_at >= created_at) AND (finished_at IS NULL OR (finished_at >= created_at AND (started_at IS NULL OR finished_at >= started_at))) AND (stop_requested_at IS NULL OR stop_requested_at >= created_at)",
+          "ddl": "ALTER TABLE collection_runs ADD CONSTRAINT ck_collection_runs_times CHECK (created_at <= available_at AND (started_at IS NULL OR started_at >= created_at) AND (finished_at IS NULL OR (finished_at >= created_at AND (started_at IS NULL OR finished_at >= started_at))) AND (stop_requested_at IS NULL OR stop_requested_at >= created_at))"
+        },
+        {
+          "name": "ck_collection_runs_trigger_type",
+          "expression": "trigger_type IN ('manual','schedule','retry')",
+          "ddl": "ALTER TABLE collection_runs ADD CONSTRAINT ck_collection_runs_trigger_type CHECK (trigger_type IN ('manual','schedule','retry'))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_collection_runs_lease",
+          "ddl": "CREATE INDEX idx_collection_runs_lease ON collection_runs (lease_expires_at) WHERE status IN ('running','stopping')"
+        },
+        {
+          "name": "idx_collection_runs_source_id",
+          "ddl": "CREATE INDEX idx_collection_runs_source_id ON collection_runs (source_id, created_at DESC, id)"
+        },
+        {
+          "name": "idx_collection_runs_status",
+          "ddl": "CREATE INDEX idx_collection_runs_status ON collection_runs (status, available_at)"
+        },
+        {
+          "name": "uk_collection_runs_active",
+          "ddl": "CREATE UNIQUE INDEX uk_collection_runs_active ON collection_runs (source_id) WHERE status IN ('queued','running','stopping')"
+        },
+        {
+          "name": "uk_collection_runs_parent_id",
+          "ddl": "CREATE UNIQUE INDEX uk_collection_runs_parent_id ON collection_runs (parent_id) WHERE parent_id IS NOT NULL"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": "fk_collection_runs_parent_id_source_id",
+          "columns": [
+            "parent_id",
+            "source_id"
+          ],
+          "target_schema": "public",
+          "target": "collection_runs",
+          "target_columns": [
+            "id",
+            "source_id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "name": null,
+          "columns": [
+            "source_id"
+          ],
+          "target_schema": "public",
+          "target": "data_sources",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": [
+        {
+          "name": "uk_collection_runs_id_source_id",
+          "columns": [
+            "id",
+            "source_id"
+          ],
+          "deferrable": false,
+          "initially": "IMMEDIATE",
+          "nulls_not_distinct": false
+        },
+        {
+          "name": "uk_collection_runs_request_id",
+          "columns": [
+            "request_id"
+          ],
+          "deferrable": false,
+          "initially": "IMMEDIATE",
+          "nulls_not_distinct": false
+        }
+      ]
+    },
+    "data_sources": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": true,
+          "default": "nextval('business_id_seq')",
+          "identity": null,
+          "comment": "采集来源数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系"
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(255)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "真实网站、公众号或论文库名称；必填，不虚构采集来源"
+        },
+        {
+          "name": "type",
+          "type": "VARCHAR(16)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "来源类型：website新闻网站、wechat公众号、paper论文库"
+        },
+        {
+          "name": "url",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "真实来源入口或历史文章来源地址；可空，不自动把推测主页当采集入口"
+        },
+        {
+          "name": "adapter",
+          "type": "VARCHAR(128)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "受控采集器注册标识；不是任意命令或可执行代码，启用前核对实现"
+        },
+        {
+          "name": "cron",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "来源定时采集表达式；为空仅允许手动触发，不在config重复保存周期"
+        },
+        {
+          "name": "timezone",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'Asia/Shanghai'",
+          "identity": null,
+          "comment": "采集计划IANA时区名；默认Asia/Shanghai，决定cron的当地时间语义"
+        },
+        {
+          "name": "next_run_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "下次采集调度时间点，带时区；仅is_enabled=true且cron非空时非空"
+        },
+        {
+          "name": "config",
+          "type": "JSONB",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'{}'",
+          "identity": null,
+          "comment": "采集参数JSON对象；保存分页、限速、超时、增量及重试策略，凭证仅存引用"
+        },
+        {
+          "name": "model_id",
+          "type": "BIGINT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "自动翻译模型ID，关联ai_models.id；为空不自动翻译，不静默换用其他模型"
+        },
+        {
+          "name": "is_enabled",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "primary_key": false,
+          "default": "true",
+          "identity": null,
+          "comment": "来源入队及启动开关；true启用、false停用，停用不等于当前运行已停止"
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "来源建档时间；带时区时间点"
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "来源名称、采集配置或开关最近修改时间；带时区时间点"
+        }
+      ],
+      "comment": "新闻网站、公众号与论文来源及采集配置；来源开关与单次采集状态分别维护",
+      "checks": [
+        {
+          "name": "ck_data_sources_config",
+          "expression": "jsonb_typeof(config) = 'object'",
+          "ddl": "ALTER TABLE data_sources ADD CONSTRAINT ck_data_sources_config CHECK (jsonb_typeof(config) = 'object')"
+        },
+        {
+          "name": "ck_data_sources_cron",
+          "expression": "cron IS NULL OR length(trim(cron)) > 0",
+          "ddl": "ALTER TABLE data_sources ADD CONSTRAINT ck_data_sources_cron CHECK (cron IS NULL OR length(trim(cron)) > 0)"
+        },
+        {
+          "name": "ck_data_sources_cursor",
+          "expression": "(is_enabled AND cron IS NOT NULL AND next_run_at IS NOT NULL) OR ((NOT is_enabled OR cron IS NULL) AND next_run_at IS NULL)",
+          "ddl": "ALTER TABLE data_sources ADD CONSTRAINT ck_data_sources_cursor CHECK ((is_enabled AND cron IS NOT NULL AND next_run_at IS NOT NULL) OR ((NOT is_enabled OR cron IS NULL) AND next_run_at IS NULL))"
+        },
+        {
+          "name": "ck_data_sources_names",
+          "expression": "length(trim(name)) > 0 AND length(trim(adapter)) > 0",
+          "ddl": "ALTER TABLE data_sources ADD CONSTRAINT ck_data_sources_names CHECK (length(trim(name)) > 0 AND length(trim(adapter)) > 0)"
+        },
+        {
+          "name": "ck_data_sources_type",
+          "expression": "type IN ('website','wechat','paper')",
+          "ddl": "ALTER TABLE data_sources ADD CONSTRAINT ck_data_sources_type CHECK (type IN ('website','wechat','paper'))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_data_sources_next_run_at",
+          "ddl": "CREATE INDEX idx_data_sources_next_run_at ON data_sources (next_run_at) WHERE is_enabled AND cron IS NOT NULL"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": null,
+          "columns": [
+            "model_id"
+          ],
+          "target_schema": "public",
+          "target": "ai_models",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": []
+    },
+    "digest_schedules": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": true,
+          "default": "nextval('business_id_seq')",
+          "identity": null,
+          "comment": "周期简报计划数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系"
+        },
+        {
+          "name": "user_id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "计划所有者ID，关联sys_user.id；周期生成的成果必须属于同一用户"
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(255)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "用户维护的周期计划名称；用于计划选择和管理"
+        },
+        {
+          "name": "template_id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "简报模板ID，关联templates.id；必填且模板purpose必须为digest；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "frequency",
+          "type": "VARCHAR(16)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "生成周期：daily每日、weekly每周、monthly每月"
+        },
+        {
+          "name": "weekday",
+          "type": "SMALLINT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "每周执行星期；0周一至6周日，仅weekly填写，其他周期为空"
+        },
+        {
+          "name": "month_day",
+          "type": "SMALLINT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "每月执行日；1至31，仅monthly填写，短月按当月末日执行"
+        },
+        {
+          "name": "run_time",
+          "type": "TIME WITHOUT TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "当地固定执行时分秒；与timezone共同解释，不是某天的绝对时间点"
+        },
+        {
+          "name": "timezone",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'Asia/Shanghai'",
+          "identity": null,
+          "comment": "计划采用的IANA时区名；默认Asia/Shanghai，用于当地时间转UTC调度"
+        },
+        {
+          "name": "selection_config",
+          "type": "JSONB",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "选材条件JSON对象；包含日期窗口、类别、来源、关键词、去重及最多50篇的自动选材策略；显式类别、来源及资料ID或ID数组按实体映射为十进制字符串，关键词和日期窗口原样保留"
+        },
+        {
+          "name": "generation_config",
+          "type": "JSONB",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'{}'",
+          "identity": null,
+          "comment": "生成设置JSON对象；保存摘要长度和配图等参数，不重复整段材料正文；显式平台业务引用按实体映射，供应商模型标识、提示词及普通参数原样保留"
+        },
+        {
+          "name": "is_enabled",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'true'",
+          "identity": null,
+          "comment": "计划开关；true启用、false停用，启用前校验真实文本模型及资料条件"
+        },
+        {
+          "name": "next_run_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "下次触发的带时区时间点；启用时必填，原子认领后推进调度游标"
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "周期计划创建时间；带时区时间点"
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "周期计划配置或调度游标最近更新时间；带时区时间点"
+        }
+      ],
+      "comment": "用户周期简报计划；支持每日、指定星期和每月日期，选材配置与生成配置分开",
+      "checks": [
+        {
+          "name": "ck_digest_schedules_frequency",
+          "expression": "(frequency='daily' AND weekday IS NULL AND month_day IS NULL) OR (frequency='weekly' AND weekday IS NOT NULL AND weekday BETWEEN 0 AND 6 AND month_day IS NULL) OR (frequency='monthly' AND month_day IS NOT NULL AND month_day BETWEEN 1 AND 31 AND weekday IS NULL)",
+          "ddl": "ALTER TABLE digest_schedules ADD CONSTRAINT ck_digest_schedules_frequency CHECK ((frequency='daily' AND weekday IS NULL AND month_day IS NULL) OR (frequency='weekly' AND weekday IS NOT NULL AND weekday BETWEEN 0 AND 6 AND month_day IS NULL) OR (frequency='monthly' AND month_day IS NOT NULL AND month_day BETWEEN 1 AND 31 AND weekday IS NULL))"
+        },
+        {
+          "name": "ck_digest_schedules_generation_config",
+          "expression": "jsonb_typeof(generation_config)='object'",
+          "ddl": "ALTER TABLE digest_schedules ADD CONSTRAINT ck_digest_schedules_generation_config CHECK (jsonb_typeof(generation_config)='object')"
+        },
+        {
+          "name": "ck_digest_schedules_next_run_at",
+          "expression": "NOT is_enabled OR next_run_at IS NOT NULL",
+          "ddl": "ALTER TABLE digest_schedules ADD CONSTRAINT ck_digest_schedules_next_run_at CHECK (NOT is_enabled OR next_run_at IS NOT NULL)"
+        },
+        {
+          "name": "ck_digest_schedules_selection_config",
+          "expression": "jsonb_typeof(selection_config)='object'",
+          "ddl": "ALTER TABLE digest_schedules ADD CONSTRAINT ck_digest_schedules_selection_config CHECK (jsonb_typeof(selection_config)='object')"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_digest_schedules_next_run_at",
+          "ddl": "CREATE INDEX idx_digest_schedules_next_run_at ON digest_schedules (next_run_at) WHERE is_enabled"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": null,
+          "columns": [
+            "template_id"
+          ],
+          "target_schema": "public",
+          "target": "templates",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "name": null,
+          "columns": [
+            "user_id"
+          ],
+          "target_schema": "public",
+          "target": "sys_user",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": []
+    },
+    "generation_tasks": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": true,
+          "default": "nextval('business_id_seq')",
+          "identity": null,
+          "comment": "单次生成任务数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系"
+        },
+        {
+          "name": "report_id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "成果ID，关联reports.id；所有者从成果取得，不重复保存user_id；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "schedule_id",
+          "type": "BIGINT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "周期计划ID，关联digest_schedules.id；手动任务为空，计划删除受限；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "request_id",
+          "type": "VARCHAR(128)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "全局唯一幂等键，varchar(128)；普通客户端键及manual:随机UUID原样保留；系统schedule:计划ID:触发UTC时刻仅按实际schedule_id映射内嵌计划ID，UTC后缀不变，映射后仍须全局唯一"
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(16)",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'queued'",
+          "identity": null,
+          "comment": "执行状态：queued排队、running执行中、completed完成、failed失败、cancelled取消"
+        },
+        {
+          "name": "progress",
+          "type": "SMALLINT",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'0'",
+          "identity": null,
+          "comment": "任务进度百分比；整数0至100，默认0"
+        },
+        {
+          "name": "config_snapshot",
+          "type": "JSONB",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'{}'",
+          "identity": null,
+          "comment": "任务配置JSON对象快照；保存模板、提示词、模型标识、参数及成果起始版本，不含密钥或重复材料正文；显式平台业务引用按实体映射为十进制字符串，普通参数和提示词不改写；request_fingerprint须由映射后的request及materials按应用规范重新计算核验"
+        },
+        {
+          "name": "materials",
+          "type": "JSONB",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'[]'",
+          "identity": null,
+          "comment": "最多50项的有序选材JSON数组快照；每项含type、id、title、content、source，论文仅用摘要及文献信息；依据type或明确实体上下文映射id为十进制字符串，保留顺序、标题、正文及来源文本；缺失或歧义引用在写入前拒绝"
+        },
+        {
+          "name": "result_content",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "本次任务生成的原始正文；与用户当前编辑的reports.content分别保存"
+        },
+        {
+          "name": "error",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "生成失败的脱敏简短原因；不保存调用凭证或完整供应商响应"
+        },
+        {
+          "name": "attempts",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'0'",
+          "identity": null,
+          "comment": "自动重试次数；整数且非负，默认0，重试沿用冻结选材快照"
+        },
+        {
+          "name": "lease_expires_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "当前执行租约截止时间；带时区，过期后才允许隔离旧执行器并恢复"
+        },
+        {
+          "name": "execution_token",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "本次执行尝试的唯一令牌；完成回写须匹配，阻止旧执行器覆盖新尝试；varchar(64)执行令牌，非数值主键，保留原业务字符串"
+        },
+        {
+          "name": "started_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "本次任务实际开始执行时间；带时区，尚未开始时为空"
+        },
+        {
+          "name": "finished_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "任务完成、失败或取消的时间；带时区，不早于非空started_at"
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "任务提交保存时间；带时区，与首次创建成果同事务保存"
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "任务状态、进度或执行信息最近更新时间；带时区时间点"
+        }
+      ],
+      "comment": "单次生成任务及冻结选材快照；支持幂等提交、租约执行、取消和失败重试",
+      "checks": [
+        {
+          "name": "ck_generation_tasks_attempts",
+          "expression": "attempts >= 0",
+          "ddl": "ALTER TABLE generation_tasks ADD CONSTRAINT ck_generation_tasks_attempts CHECK (attempts >= 0)"
+        },
+        {
+          "name": "ck_generation_tasks_config_snapshot",
+          "expression": "jsonb_typeof(config_snapshot)='object'",
+          "ddl": "ALTER TABLE generation_tasks ADD CONSTRAINT ck_generation_tasks_config_snapshot CHECK (jsonb_typeof(config_snapshot)='object')"
+        },
+        {
+          "name": "ck_generation_tasks_materials",
+          "expression": "CASE WHEN jsonb_typeof(materials) = 'array' THEN jsonb_array_length(materials) <= 50 ELSE false END",
+          "ddl": "ALTER TABLE generation_tasks ADD CONSTRAINT ck_generation_tasks_materials CHECK (CASE WHEN jsonb_typeof(materials) = 'array' THEN jsonb_array_length(materials) <= 50 ELSE false END)"
+        },
+        {
+          "name": "ck_generation_tasks_progress",
+          "expression": "progress BETWEEN 0 AND 100",
+          "ddl": "ALTER TABLE generation_tasks ADD CONSTRAINT ck_generation_tasks_progress CHECK (progress BETWEEN 0 AND 100)"
+        },
+        {
+          "name": "ck_generation_tasks_status",
+          "expression": "status IN ('queued','running','completed','failed','cancelled')",
+          "ddl": "ALTER TABLE generation_tasks ADD CONSTRAINT ck_generation_tasks_status CHECK (status IN ('queued','running','completed','failed','cancelled'))"
+        },
+        {
+          "name": "ck_generation_tasks_times",
+          "expression": "finished_at IS NULL OR started_at IS NULL OR finished_at >= started_at",
+          "ddl": "ALTER TABLE generation_tasks ADD CONSTRAINT ck_generation_tasks_times CHECK (finished_at IS NULL OR started_at IS NULL OR finished_at >= started_at)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_generation_tasks_lease",
+          "ddl": "CREATE INDEX idx_generation_tasks_lease ON generation_tasks (lease_expires_at) WHERE lease_expires_at IS NOT NULL"
+        },
+        {
+          "name": "idx_generation_tasks_report_id",
+          "ddl": "CREATE INDEX idx_generation_tasks_report_id ON generation_tasks (report_id)"
+        },
+        {
+          "name": "idx_generation_tasks_status",
+          "ddl": "CREATE INDEX idx_generation_tasks_status ON generation_tasks (status, created_at)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": null,
+          "columns": [
+            "report_id"
+          ],
+          "target_schema": "public",
+          "target": "reports",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "CASCADE",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "name": null,
+          "columns": [
+            "schedule_id"
+          ],
+          "target_schema": "public",
+          "target": "digest_schedules",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": [
+        {
+          "name": "uk_generation_tasks_id_report_id",
+          "columns": [
+            "id",
+            "report_id"
+          ],
+          "deferrable": false,
+          "initially": "IMMEDIATE",
+          "nulls_not_distinct": false
+        },
+        {
+          "name": "uk_generation_tasks_request_id",
+          "columns": [
+            "request_id"
+          ],
+          "deferrable": false,
+          "initially": "IMMEDIATE",
+          "nulls_not_distinct": false
+        }
+      ]
+    },
+    "knowledge_files": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": true,
+          "default": "nextval('business_id_seq')",
+          "identity": null,
+          "comment": "上传资料数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系"
+        },
+        {
+          "name": "user_id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "资料所有者ID，关联sys_user.id；默认私有，访问由服务端校验所有权"
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(255)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "用户可修改的资料展示名称；不改变原始上传文件名"
+        },
+        {
+          "name": "filename",
+          "type": "VARCHAR(255)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "上传时原始文件名；与可编辑资料名称name分开保存"
+        },
+        {
+          "name": "storage_key",
+          "type": "TEXT",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "原文件稳定存储键；用于受控读取，不能只保存临时过期URL"
+        },
+        {
+          "name": "mime_type",
+          "type": "VARCHAR(128)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "服务端检测出的文件MIME类型；不只信上传后缀"
+        },
+        {
+          "name": "size",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "原始文件大小，单位字节；整数且非负"
+        },
+        {
+          "name": "hash",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "原始文件SHA-256摘要；用于完整性核对及同用户重复上传提示"
+        },
+        {
+          "name": "extracted_text",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "系统提取的正文；解析重试仅更新提取结果，不覆盖用户编辑文本"
+        },
+        {
+          "name": "edited_text",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "用户编辑正文；NULL表示未编辑，空字符串也是有效编辑，不能按真值回退"
+        },
+        {
+          "name": "version",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'1'",
+          "identity": null,
+          "comment": "资料编辑并发控制版本；从1开始，每次编辑递增"
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(16)",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'queued'",
+          "identity": null,
+          "comment": "解析状态：queued排队、parsing解析中、ready就绪、failed失败；非人工审核状态"
+        },
+        {
+          "name": "error",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "解析失败的脱敏简短原因；不保存密钥或完整堆栈"
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "上传资料保存时间；带时区时间点，不表示解析已成功"
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "资料编辑或解析状态最近更新时间；带时区时间点"
+        }
+      ],
+      "comment": "用户私有上传资料；原文件存储键、系统提取文本与用户编辑文本分别保存",
+      "checks": [
+        {
+          "name": "ck_knowledge_files_size",
+          "expression": "size>=0",
+          "ddl": "ALTER TABLE knowledge_files ADD CONSTRAINT ck_knowledge_files_size CHECK (size>=0)"
+        },
+        {
+          "name": "ck_knowledge_files_status",
+          "expression": "status IN ('queued','parsing','ready','failed')",
+          "ddl": "ALTER TABLE knowledge_files ADD CONSTRAINT ck_knowledge_files_status CHECK (status IN ('queued','parsing','ready','failed'))"
+        },
+        {
+          "name": "ck_knowledge_files_version",
+          "expression": "version>=1",
+          "ddl": "ALTER TABLE knowledge_files ADD CONSTRAINT ck_knowledge_files_version CHECK (version>=1)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_knowledge_files_status_updated_at",
+          "ddl": "CREATE INDEX idx_knowledge_files_status_updated_at ON knowledge_files (status, updated_at)"
+        },
+        {
+          "name": "idx_knowledge_files_user_id",
+          "ddl": "CREATE INDEX idx_knowledge_files_user_id ON knowledge_files (user_id, updated_at DESC)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": null,
+          "columns": [
+            "user_id"
+          ],
+          "target_schema": "public",
+          "target": "sys_user",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": []
+    },
+    "model_calls": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": true,
+          "default": "nextval('business_id_seq')",
+          "identity": null,
+          "comment": "实际供应商调用记录数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系"
+        },
+        {
+          "name": "task_id",
+          "type": "BIGINT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "可空生成任务ID，关联generation_tasks.id；任务删除后置空，权限仍须服务端校验；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "model_id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "实际调用模型ID，关联ai_models.id；必填，被引用模型禁止直接删除"
+        },
+        {
+          "name": "capability",
+          "type": "VARCHAR(32)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "实际调用能力：text_generate正文生成、image_generate图片生成；不以图片输入能力替代"
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(16)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "供应商调用结果：success成功、failed失败；不是人工审核或整份成果状态"
+        },
+        {
+          "name": "duration_ms",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "实际供应商请求耗时，单位毫秒；整数且非负"
+        },
+        {
+          "name": "input_tokens",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "供应商返回的输入Token用量；可空且非负，未返回时不假记为0"
+        },
+        {
+          "name": "output_tokens",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "供应商返回的输出Token用量；可空且非负，未返回时不假记为0"
+        },
+        {
+          "name": "error",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "调用失败的脱敏简短原因；不保存供应商响应原文、密钥或用户正文"
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "模型调用记录保存时间；带时区时间点，应用以UTC写入"
+        }
+      ],
+      "comment": "实际供应商模型调用的用量和排障记录；不保存提示词、原始正文、凭证或响应原文",
+      "checks": [
+        {
+          "name": "ck_model_calls_capability",
+          "expression": "capability IN ('text_generate','image_generate')",
+          "ddl": "ALTER TABLE model_calls ADD CONSTRAINT ck_model_calls_capability CHECK (capability IN ('text_generate','image_generate'))"
+        },
+        {
+          "name": "ck_model_calls_duration_ms",
+          "expression": "duration_ms >= 0",
+          "ddl": "ALTER TABLE model_calls ADD CONSTRAINT ck_model_calls_duration_ms CHECK (duration_ms >= 0)"
+        },
+        {
+          "name": "ck_model_calls_input_tokens",
+          "expression": "input_tokens IS NULL OR input_tokens >= 0",
+          "ddl": "ALTER TABLE model_calls ADD CONSTRAINT ck_model_calls_input_tokens CHECK (input_tokens IS NULL OR input_tokens >= 0)"
+        },
+        {
+          "name": "ck_model_calls_output_tokens",
+          "expression": "output_tokens IS NULL OR output_tokens >= 0",
+          "ddl": "ALTER TABLE model_calls ADD CONSTRAINT ck_model_calls_output_tokens CHECK (output_tokens IS NULL OR output_tokens >= 0)"
+        },
+        {
+          "name": "ck_model_calls_status",
+          "expression": "status IN ('success','failed')",
+          "ddl": "ALTER TABLE model_calls ADD CONSTRAINT ck_model_calls_status CHECK (status IN ('success','failed'))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_model_calls_model_id_created_at",
+          "ddl": "CREATE INDEX idx_model_calls_model_id_created_at ON model_calls (model_id, created_at)"
+        },
+        {
+          "name": "idx_model_calls_task_id_created_at",
+          "ddl": "CREATE INDEX idx_model_calls_task_id_created_at ON model_calls (task_id, created_at)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": null,
+          "columns": [
+            "model_id"
+          ],
+          "target_schema": "public",
+          "target": "ai_models",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "name": null,
+          "columns": [
+            "task_id"
+          ],
+          "target_schema": "public",
+          "target": "generation_tasks",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "SET NULL",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": []
+    },
+    "news_articles": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": true,
+          "default": "nextval('business_id_seq')",
+          "identity": null,
+          "comment": "新闻数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系"
+        },
+        {
+          "name": "source_id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "必填来源ID，关联data_sources.id；仅允许website或wechat来源，删除受限；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "title",
+          "type": "VARCHAR(1000)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "原文新闻标题；必填且禁止空白文本"
+        },
+        {
+          "name": "url",
+          "type": "TEXT",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "规范化原文地址；用于新闻去重，不代表平台入库页面地址"
+        },
+        {
+          "name": "author",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "原作者名单文本；未知时为空，不以来源网站名称冒充作者"
+        },
+        {
+          "name": "published_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "原文发布时间，保留到秒；由旧published_time迁入，非平台审核或入库时间；带时区"
+        },
+        {
+          "name": "content",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "抓取的原文正文；未取得正文时允许为空，不以导读摘要冒充全文"
+        },
+        {
+          "name": "content_zh",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "中文正文或译文；为空时展示回退content，不重复复制中文原文"
+        },
+        {
+          "name": "category_id",
+          "type": "BIGINT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "唯一类别ID，关联categories.id；未分类或未命中为空，不以空值推断审核失败；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "is_pushed",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'false'",
+          "identity": null,
+          "comment": "推送成功标志；true仅表示收到真实渠道成功回执，默认false"
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "新闻平台入库时间；带时区时间点，不代替原文发表时间"
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "新闻正文或关联资料最近更新时间；带时区时间点"
+        }
+      ],
+      "comment": "网站与公众号新闻原文及中文译文；每篇最多关联一个类别，无人工审核流程",
+      "checks": [
+        {
+          "name": "ck_news_articles_title_url",
+          "expression": "length(trim(title)) > 0 AND length(trim(url)) > 0",
+          "ddl": "ALTER TABLE news_articles ADD CONSTRAINT ck_news_articles_title_url CHECK (length(trim(title)) > 0 AND length(trim(url)) > 0)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_news_articles_category_id",
+          "ddl": "CREATE INDEX idx_news_articles_category_id ON news_articles (category_id, published_at DESC, id)"
+        },
+        {
+          "name": "idx_news_articles_published_at",
+          "ddl": "CREATE INDEX idx_news_articles_published_at ON news_articles (published_at DESC, id)"
+        },
+        {
+          "name": "idx_news_articles_source_id",
+          "ddl": "CREATE INDEX idx_news_articles_source_id ON news_articles (source_id, published_at DESC, id)"
+        },
+        {
+          "name": "uk_news_articles_url",
+          "ddl": "CREATE UNIQUE INDEX uk_news_articles_url ON news_articles (md5(url))"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": null,
+          "columns": [
+            "category_id"
+          ],
+          "target_schema": "public",
+          "target": "categories",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "name": null,
+          "columns": [
+            "source_id"
+          ],
+          "target_schema": "public",
+          "target": "data_sources",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": []
+    },
+    "papers": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": true,
+          "default": "nextval('business_id_seq')",
+          "identity": null,
+          "comment": "论文数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系"
+        },
+        {
+          "name": "source_id",
+          "type": "BIGINT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "论文来源ID，关联data_sources.id；可空，来源删除后置空；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "title",
+          "type": "VARCHAR(1000)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "论文原始标题；必填且禁止空白文本"
+        },
+        {
+          "name": "title_zh",
+          "type": "VARCHAR(1000)",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "论文中文标题；与原题相同时无需重复展示"
+        },
+        {
+          "name": "url",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "论文来源页面地址；与DOI至少一个非空，不表示拥有论文全文"
+        },
+        {
+          "name": "doi",
+          "type": "VARCHAR(255)",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "规范化DOI，不带https://doi.org/前缀；非空时唯一"
+        },
+        {
+          "name": "authors",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "原始作者名单文本；不自动用机构或来源名称替代"
+        },
+        {
+          "name": "journal",
+          "type": "VARCHAR(255)",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "论文期刊或会议名称；保留原始文献信息"
+        },
+        {
+          "name": "published_date",
+          "type": "VARCHAR(10)",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "真实发表日期及精度：YYYY、YYYY-MM或YYYY-MM-DD；未知月日不补造，非入库或审核日期"
+        },
+        {
+          "name": "abstract",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "原文摘要或已明确标识的历史导读摘要；不存论文全文"
+        },
+        {
+          "name": "abstract_zh",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "中文摘要；与原文摘要分别保存，不作为论文全文存储"
+        },
+        {
+          "name": "category_id",
+          "type": "BIGINT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "唯一类别ID，关联categories.id；未分类或未命中为空，类别删除受限；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "is_pushed",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'false'",
+          "identity": null,
+          "comment": "论文推送成功标志；真实渠道成功后为true，默认false，不表示审核结果"
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "论文平台入库时间；带时区时间点，不能代替真实发表日期"
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "论文文献信息或摘要最近更新时间；带时区时间点"
+        }
+      ],
+      "comment": "论文文献信息及中英文摘要；保留真实发表日期精度，不保存论文全文",
+      "checks": [
+        {
+          "name": "ck_papers_published_date",
+          "expression": "published_date IS NULL OR CASE WHEN published_date ~ '^[0-9]{4}(-[0-9]{2}){0,2}$' THEN make_date(substring(published_date, 1, 4)::integer, coalesce(nullif(substring(published_date, 6, 2), '')::integer, 1), coalesce(nullif(substring(published_date, 9, 2), '')::integer, 1)) IS NOT NULL ELSE false END",
+          "ddl": "ALTER TABLE papers ADD CONSTRAINT ck_papers_published_date CHECK (published_date IS NULL OR CASE WHEN published_date ~ '^[0-9]{4}(-[0-9]{2}){0,2}$' THEN make_date(substring(published_date, 1, 4)::integer, coalesce(nullif(substring(published_date, 6, 2), '')::integer, 1), coalesce(nullif(substring(published_date, 9, 2), '')::integer, 1)) IS NOT NULL ELSE false END)"
+        },
+        {
+          "name": "ck_papers_source_link",
+          "expression": "nullif(trim(doi), '') IS NOT NULL OR nullif(trim(url), '') IS NOT NULL",
+          "ddl": "ALTER TABLE papers ADD CONSTRAINT ck_papers_source_link CHECK (nullif(trim(doi), '') IS NOT NULL OR nullif(trim(url), '') IS NOT NULL)"
+        },
+        {
+          "name": "ck_papers_title",
+          "expression": "length(trim(title)) > 0",
+          "ddl": "ALTER TABLE papers ADD CONSTRAINT ck_papers_title CHECK (length(trim(title)) > 0)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_papers_category_id",
+          "ddl": "CREATE INDEX idx_papers_category_id ON papers (category_id, rpad(published_date, 10, '-01') DESC, id)"
+        },
+        {
+          "name": "idx_papers_date",
+          "ddl": "CREATE INDEX idx_papers_date ON papers (rpad(published_date, 10, '-01') DESC, id)"
+        },
+        {
+          "name": "uk_papers_doi",
+          "ddl": "CREATE UNIQUE INDEX uk_papers_doi ON papers (doi) WHERE doi IS NOT NULL"
+        },
+        {
+          "name": "uk_papers_url",
+          "ddl": "CREATE UNIQUE INDEX uk_papers_url ON papers (md5(url)) WHERE doi IS NULL AND url IS NOT NULL"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": null,
+          "columns": [
+            "category_id"
+          ],
+          "target_schema": "public",
+          "target": "categories",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "name": null,
+          "columns": [
+            "source_id"
+          ],
+          "target_schema": "public",
+          "target": "data_sources",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "SET NULL",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": []
+    },
+    "report_assets": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": true,
+          "default": "nextval('business_id_seq')",
+          "identity": null,
+          "comment": "图片或导出资源数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系"
+        },
+        {
+          "name": "report_id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "所属成果ID，关联reports.id；独立导出无任务时仍必须关联成果；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "task_id",
+          "type": "BIGINT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "可空生成任务ID；与report_id复合引用generation_tasks.(id,report_id)，防止跨成果关联；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "type",
+          "type": "VARCHAR(16)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "资源类型：image生成图片、export导出文件"
+        },
+        {
+          "name": "storage_key",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "资源文件稳定存储键；queued时可空，completed时必须非空，不只保存临时URL"
+        },
+        {
+          "name": "mime_type",
+          "type": "VARCHAR(128)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "提交时选定的输出MIME类型；必填，完成后核对实际文件类型"
+        },
+        {
+          "name": "prompt",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "图片实际生成提示词；image需要非空，export为空"
+        },
+        {
+          "name": "model_id",
+          "type": "BIGINT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "实际图片模型ID，关联ai_models.id；image必须配置，export为空"
+        },
+        {
+          "name": "config_snapshot",
+          "type": "JSONB",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'{}'",
+          "identity": null,
+          "comment": "资源配置JSON对象快照；图片保存模型标识及配图参数，导出保存正文版本及快照，不含凭证；显式成果、任务、模板及资源引用随实体映射，供应商模型标识、正文及普通参数原样保留"
+        },
+        {
+          "name": "position",
+          "type": "VARCHAR(100)",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "图片所在章节或占位符标识；独立导出文件为空"
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(16)",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'queued'",
+          "identity": null,
+          "comment": "资源执行状态：queued排队、running执行中、completed完成、failed失败；失败可独立重试"
+        },
+        {
+          "name": "error",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "图片生成或文件导出失败的脱敏简短原因"
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "资源生成或导出请求保存时间；带时区时间点"
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "资源状态或文件存储结果最近更新时间；带时区时间点"
+        }
+      ],
+      "comment": "成果的生成图片及导出文件；每项资源独立保存存储键、执行状态和失败原因",
+      "checks": [
+        {
+          "name": "ck_report_assets_config_snapshot",
+          "expression": "jsonb_typeof(config_snapshot)='object'",
+          "ddl": "ALTER TABLE report_assets ADD CONSTRAINT ck_report_assets_config_snapshot CHECK (jsonb_typeof(config_snapshot)='object')"
+        },
+        {
+          "name": "ck_report_assets_kind",
+          "expression": "(type='image' AND model_id IS NOT NULL AND prompt IS NOT NULL AND length(trim(prompt))>0) OR (type='export' AND model_id IS NULL AND prompt IS NULL AND position IS NULL)",
+          "ddl": "ALTER TABLE report_assets ADD CONSTRAINT ck_report_assets_kind CHECK ((type='image' AND model_id IS NOT NULL AND prompt IS NOT NULL AND length(trim(prompt))>0) OR (type='export' AND model_id IS NULL AND prompt IS NULL AND position IS NULL))"
+        },
+        {
+          "name": "ck_report_assets_mime_type",
+          "expression": "length(trim(mime_type)) > 0",
+          "ddl": "ALTER TABLE report_assets ADD CONSTRAINT ck_report_assets_mime_type CHECK (length(trim(mime_type)) > 0)"
+        },
+        {
+          "name": "ck_report_assets_status",
+          "expression": "status IN ('queued','running','completed','failed')",
+          "ddl": "ALTER TABLE report_assets ADD CONSTRAINT ck_report_assets_status CHECK (status IN ('queued','running','completed','failed'))"
+        },
+        {
+          "name": "ck_report_assets_storage_key",
+          "expression": "status <> 'completed' OR (storage_key IS NOT NULL AND length(trim(storage_key))>0)",
+          "ddl": "ALTER TABLE report_assets ADD CONSTRAINT ck_report_assets_storage_key CHECK (status <> 'completed' OR (storage_key IS NOT NULL AND length(trim(storage_key))>0))"
+        },
+        {
+          "name": "ck_report_assets_type",
+          "expression": "type IN ('image','export')",
+          "ddl": "ALTER TABLE report_assets ADD CONSTRAINT ck_report_assets_type CHECK (type IN ('image','export'))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_report_assets_report_id",
+          "ddl": "CREATE INDEX idx_report_assets_report_id ON report_assets (report_id, created_at)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": null,
+          "columns": [
+            "model_id"
+          ],
+          "target_schema": "public",
+          "target": "ai_models",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "name": null,
+          "columns": [
+            "report_id"
+          ],
+          "target_schema": "public",
+          "target": "reports",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "CASCADE",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "name": "fk_report_assets_task_id_report_id",
+          "columns": [
+            "task_id",
+            "report_id"
+          ],
+          "target_schema": "public",
+          "target": "generation_tasks",
+          "target_columns": [
+            "id",
+            "report_id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": []
+    },
+    "report_versions": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": true,
+          "default": null,
+          "identity": "Identity(start=1, increment=1, minvalue=1, maxvalue=9223372036854775807, cycle=False, cache=1)",
+          "comment": "成果历史版本自增ID；不等于同一成果内的version序号"
+        },
+        {
+          "name": "report_id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "所属成果ID，关联reports.id；成果删除时级联删除对应历史；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "version",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "成果历史版本号；整数且至少1，与report_id组成唯一键"
+        },
+        {
+          "name": "title",
+          "type": "VARCHAR(1000)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "此历史版本的成果标题快照；不随当前成果标题修改"
+        },
+        {
+          "name": "content",
+          "type": "TEXT",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "此历史版本的正文快照；用于历史查看或明确恢复，不自动覆盖当前编辑稿"
+        },
+        {
+          "name": "sections",
+          "type": "JSONB",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "此历史版本结构化章节的JSON数组快照；默认空数组；显式平台引用按实体映射为十进制字符串，章节顺序、标题和正文原样保留"
+        },
+        {
+          "name": "citations",
+          "type": "JSONB",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "此历史版本引用资料的JSON数组快照；默认空数组；依据资料类型映射显式引用ID，保留引文文本与顺序；类型化引文source_id表示被引用资料而非采集来源，缺失或歧义引用在写入前拒绝"
+        },
+        {
+          "name": "quality_issues",
+          "type": "JSONB",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "此历史版本自动质量提示的JSON数组快照；不是人工审批事件"
+        },
+        {
+          "name": "model_snapshot",
+          "type": "JSONB",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "此历史版本模型标识与参数的JSON对象快照；不含调用凭证；模型标识维持原ai_models编号域，普通参数不改写，明确的平台业务引用须按所属实体映射"
+        },
+        {
+          "name": "source",
+          "type": "VARCHAR(32)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "版本来源标识，如manual手动编辑、生成或恢复；默认manual，保留实际来源值"
+        },
+        {
+          "name": "operator_id",
+          "type": "BIGINT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "可空操作者ID，关联sys_user.id；用户删除后置空"
+        },
+        {
+          "name": "operator_name",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "版本保存时的操作者名称快照；必填可为空字符串，不随用户改名更新"
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "成果历史版本保存时间；带时区时间点，应用以UTC写入"
+        }
+      ],
+      "comment": "成果编辑及恢复历史；同一成果与版本号唯一，历史正文不由并发版本字段替代",
+      "checks": [
+        {
+          "name": "ck_report_versions_citations",
+          "expression": "jsonb_typeof(citations)='array'",
+          "ddl": "ALTER TABLE report_versions ADD CONSTRAINT ck_report_versions_citations CHECK (jsonb_typeof(citations)='array')"
+        },
+        {
+          "name": "ck_report_versions_model_snapshot",
+          "expression": "jsonb_typeof(model_snapshot)='object'",
+          "ddl": "ALTER TABLE report_versions ADD CONSTRAINT ck_report_versions_model_snapshot CHECK (jsonb_typeof(model_snapshot)='object')"
+        },
+        {
+          "name": "ck_report_versions_quality_issues",
+          "expression": "jsonb_typeof(quality_issues)='array'",
+          "ddl": "ALTER TABLE report_versions ADD CONSTRAINT ck_report_versions_quality_issues CHECK (jsonb_typeof(quality_issues)='array')"
+        },
+        {
+          "name": "ck_report_versions_sections",
+          "expression": "jsonb_typeof(sections)='array'",
+          "ddl": "ALTER TABLE report_versions ADD CONSTRAINT ck_report_versions_sections CHECK (jsonb_typeof(sections)='array')"
+        },
+        {
+          "name": "ck_report_versions_version",
+          "expression": "version>=1",
+          "ddl": "ALTER TABLE report_versions ADD CONSTRAINT ck_report_versions_version CHECK (version>=1)"
+        }
+      ],
+      "indexes": [],
+      "foreign_keys": [
+        {
+          "name": null,
+          "columns": [
+            "operator_id"
+          ],
+          "target_schema": "public",
+          "target": "sys_user",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "SET NULL",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "name": null,
+          "columns": [
+            "report_id"
+          ],
+          "target_schema": "public",
+          "target": "reports",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "CASCADE",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": [
+        {
+          "name": "uk_report_versions_report_id_version",
+          "columns": [
+            "report_id",
+            "version"
+          ],
+          "deferrable": false,
+          "initially": "IMMEDIATE",
+          "nulls_not_distinct": false
+        }
+      ]
+    },
+    "reports": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": true,
+          "default": "nextval('business_id_seq')",
+          "identity": null,
+          "comment": "生成成果数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系"
+        },
+        {
+          "name": "user_id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "成果所有者ID，关联sys_user.id；任务和资源权限通过本成果判断"
+        },
+        {
+          "name": "title",
+          "type": "VARCHAR(1000)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "用户可编辑的成果标题；必填且禁止空白文本"
+        },
+        {
+          "name": "type",
+          "type": "VARCHAR(32)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "成果类型：article文章、research科研报告、daily日报、weekly周报、monthly月报"
+        },
+        {
+          "name": "template_id",
+          "type": "BIGINT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "当前成果关联模板ID，关联templates.id；可空，历史使用内容由任务快照保留；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "content",
+          "type": "TEXT",
+          "nullable": false,
+          "primary_key": false,
+          "default": "''",
+          "identity": null,
+          "comment": "用户当前可编辑的Markdown正文；默认空文本，生成结果不能直接覆盖后续人工修改"
+        },
+        {
+          "name": "version",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'1'",
+          "identity": null,
+          "comment": "成果乐观锁版本；至少1，每次修改递增，不代替历史正文版本表"
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "成果草稿创建时间；带时区时间点"
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "成果标题或正文最近保存时间；带时区时间点"
+        }
+      ],
+      "comment": "用户可编辑的生成文章、科研报告和周期简报正文；执行状态由生成任务维护",
+      "checks": [
+        {
+          "name": "ck_reports_title",
+          "expression": "length(trim(title))>0",
+          "ddl": "ALTER TABLE reports ADD CONSTRAINT ck_reports_title CHECK (length(trim(title))>0)"
+        },
+        {
+          "name": "ck_reports_type",
+          "expression": "type IN ('article','research','daily','weekly','monthly')",
+          "ddl": "ALTER TABLE reports ADD CONSTRAINT ck_reports_type CHECK (type IN ('article','research','daily','weekly','monthly'))"
+        },
+        {
+          "name": "ck_reports_version",
+          "expression": "version >= 1",
+          "ddl": "ALTER TABLE reports ADD CONSTRAINT ck_reports_version CHECK (version >= 1)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_reports_user_id",
+          "ddl": "CREATE INDEX idx_reports_user_id ON reports (user_id, updated_at DESC, id)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": null,
+          "columns": [
+            "template_id"
+          ],
+          "target_schema": "public",
+          "target": "templates",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "name": null,
+          "columns": [
+            "user_id"
+          ],
+          "target_schema": "public",
+          "target": "sys_user",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": []
+    },
+    "templates": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": true,
+          "default": "nextval('business_id_seq')",
+          "identity": null,
+          "comment": "生成模板数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系"
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(255)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "用户选择模板时显示的名称；必填且禁止空白文本"
+        },
+        {
+          "name": "purpose",
+          "type": "VARCHAR(16)",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "模板用途：article生成文章、research科研报告、digest周期简报"
+        },
+        {
+          "name": "description",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "模板用途及适用范围说明；可空，不冒充正文生成结果"
+        },
+        {
+          "name": "prompt",
+          "type": "TEXT",
+          "nullable": false,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "正文生成提示词；无独立旧提示词时明确保留原模板名称、说明及章节结构"
+        },
+        {
+          "name": "model_id",
+          "type": "BIGINT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "正文模型ID，关联ai_models.id；迁移后允许NULL，提交生成时必须配置真实文本模型"
+        },
+        {
+          "name": "image_model_id",
+          "type": "BIGINT",
+          "nullable": true,
+          "primary_key": false,
+          "default": null,
+          "identity": null,
+          "comment": "配图模型ID，关联ai_models.id；可空，请求配图时须具备image_generate能力"
+        },
+        {
+          "name": "sections",
+          "type": "JSONB",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'[]'",
+          "identity": null,
+          "comment": "章节顺序及必填要求的JSON数组；保留章节标题和结构约束；明确的平台业务引用按实体映射，章节正文与普通外部参数不改写"
+        },
+        {
+          "name": "image_config",
+          "type": "JSONB",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'{}'",
+          "identity": null,
+          "comment": "配图数量、位置、风格和提示词模板的JSON对象；不保存调用凭证；明确的平台业务引用按实体映射，供应商模型标识、提示词及普通外部参数原样保留"
+        },
+        {
+          "name": "is_enabled",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "primary_key": false,
+          "default": "'true'",
+          "identity": null,
+          "comment": "模板选择开关；true可用于新任务、false停用，历史任务快照不受修改影响"
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "模板创建时间；带时区时间点"
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP WITH TIME ZONE",
+          "nullable": false,
+          "primary_key": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": null,
+          "comment": "模板内容或模型配置最近修改时间；带时区时间点"
+        }
+      ],
+      "comment": "文章、科研报告与简报生成模板；正文及图片模型由管理员配置，可暂未配置",
+      "checks": [
+        {
+          "name": "ck_templates_image_config",
+          "expression": "jsonb_typeof(image_config)='object'",
+          "ddl": "ALTER TABLE templates ADD CONSTRAINT ck_templates_image_config CHECK (jsonb_typeof(image_config)='object')"
+        },
+        {
+          "name": "ck_templates_name_prompt",
+          "expression": "length(trim(name)) > 0 AND length(trim(prompt)) > 0",
+          "ddl": "ALTER TABLE templates ADD CONSTRAINT ck_templates_name_prompt CHECK (length(trim(name)) > 0 AND length(trim(prompt)) > 0)"
+        },
+        {
+          "name": "ck_templates_purpose",
+          "expression": "purpose IN ('article','research','digest')",
+          "ddl": "ALTER TABLE templates ADD CONSTRAINT ck_templates_purpose CHECK (purpose IN ('article','research','digest'))"
+        },
+        {
+          "name": "ck_templates_sections",
+          "expression": "jsonb_typeof(sections)='array'",
+          "ddl": "ALTER TABLE templates ADD CONSTRAINT ck_templates_sections CHECK (jsonb_typeof(sections)='array')"
+        }
+      ],
+      "indexes": [],
+      "foreign_keys": [
+        {
+          "name": null,
+          "columns": [
+            "image_model_id"
+          ],
+          "target_schema": "public",
+          "target": "ai_models",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "name": null,
+          "columns": [
+            "model_id"
+          ],
+          "target_schema": "public",
+          "target": "ai_models",
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": []
+    }
+  },
+  "catalog": {
+    "ai_models": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": null,
+          "identity": "d",
+          "comment": "后台模型自增ID；文本与图片模型统一登记在本表",
+          "identity_options": {
+            "always": false,
+            "start": 1,
+            "increment": 1,
+            "minvalue": 1,
+            "maxvalue": "9223372036854775807",
+            "cache": 1,
+            "cycle": false
+          }
+        },
+        {
+          "name": "name",
+          "type": "character varying(100)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "管理员界面显示的模型名称；不是供应商请求中的模型代码"
+        },
+        {
+          "name": "provider",
+          "type": "character varying(50)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "模型服务提供方名称；与实际调用适配器对应"
+        },
+        {
+          "name": "code",
+          "type": "character varying(100)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "提供方实际模型标识；随请求发送给供应商，不使用展示名替代"
+        },
+        {
+          "name": "base_url",
+          "type": "text",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "经后台校验的模型服务API基础地址；请求时遵守服务端访问限制"
+        },
+        {
+          "name": "credential_ref",
+          "type": "text",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "密钥管理或本地加密凭证的安全引用；不得向普通接口或日志明文返回"
+        },
+        {
+          "name": "capabilities",
+          "type": "jsonb",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "模型能力JSON数组，如text_generate、image_generate、image_input；图片输入不等于图片生成"
+        },
+        {
+          "name": "parameters",
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "comment": "模型默认参数JSON对象；保存采样、输出限制和超时等，不保存明文凭证"
+        },
+        {
+          "name": "is_enabled",
+          "type": "boolean",
+          "nullable": false,
+          "default": "true",
+          "identity": "",
+          "comment": "模型调用开关；true可调用、false停用，历史引用保留且禁止任意替换"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "模型配置创建时间；带时区时间点"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "模型能力、参数或开关最近修改时间；带时区时间点"
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_ai_models_capabilities",
+          "definition": "CHECK (jsonb_typeof(capabilities) = 'array'::text)",
+          "validated": true
+        },
+        {
+          "name": "ck_ai_models_parameters",
+          "definition": "CHECK (jsonb_typeof(parameters) = 'object'::text)",
+          "validated": true
+        }
+      ],
+      "indexes": [],
+      "foreign_keys": [],
+      "unique": [],
+      "comment": "后台统一管理的文本和图片模型配置；能力明确登记，凭证只保存安全引用",
+      "primary_key": [
+        "id"
+      ]
+    },
+    "basket_items": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": null,
+          "identity": "d",
+          "comment": "资料篮或收藏关系自增ID；迁移沿用原saved_item_id的值",
+          "identity_options": {
+            "always": false,
+            "start": 1,
+            "increment": 1,
+            "minvalue": 1,
+            "maxvalue": "9223372036854775807",
+            "cache": 1,
+            "cycle": false
+          }
+        },
+        {
+          "name": "user_id",
+          "type": "bigint",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "关系所属用户ID，关联sys_user.id；仅允许操作本人的保存关系"
+        },
+        {
+          "name": "action",
+          "type": "character varying(16)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "保存动作：basket加入资料篮、favorite收藏"
+        },
+        {
+          "name": "article_id",
+          "type": "bigint",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "新闻来源ID，关联news_articles.id；与paper_id、file_id、report_id恰一非空；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "paper_id",
+          "type": "bigint",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "论文来源ID，关联papers.id；与article_id、file_id、report_id恰一非空；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "file_id",
+          "type": "bigint",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "上传资料来源ID，关联knowledge_files.id；仍须校验文件所有权，四种来源恰一非空；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "report_id",
+          "type": "bigint",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "成果收藏来源ID，关联reports.id；仍须校验成果权限，四种来源恰一非空；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "加入资料篮或收藏时间；带时区时间点，取消仅删除关系不删除原文"
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_basket_items_action",
+          "definition": "CHECK (action::text = ANY (ARRAY['basket'::character varying, 'favorite'::character varying]::text[]))",
+          "validated": true
+        },
+        {
+          "name": "ck_basket_items_target",
+          "definition": "CHECK ((\nCASE\n    WHEN article_id IS NULL THEN 0\n    ELSE 1\nEND +\nCASE\n    WHEN paper_id IS NULL THEN 0\n    ELSE 1\nEND +\nCASE\n    WHEN file_id IS NULL THEN 0\n    ELSE 1\nEND +\nCASE\n    WHEN report_id IS NULL THEN 0\n    ELSE 1\nEND) = 1)",
+          "validated": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "uk_basket_items_article_id",
+          "definition": "CREATE UNIQUE INDEX uk_basket_items_article_id ON public.basket_items USING btree (user_id, action, article_id) WHERE (article_id IS NOT NULL)",
+          "unique": true,
+          "valid": true
+        },
+        {
+          "name": "uk_basket_items_file_id",
+          "definition": "CREATE UNIQUE INDEX uk_basket_items_file_id ON public.basket_items USING btree (user_id, action, file_id) WHERE (file_id IS NOT NULL)",
+          "unique": true,
+          "valid": true
+        },
+        {
+          "name": "uk_basket_items_paper_id",
+          "definition": "CREATE UNIQUE INDEX uk_basket_items_paper_id ON public.basket_items USING btree (user_id, action, paper_id) WHERE (paper_id IS NOT NULL)",
+          "unique": true,
+          "valid": true
+        },
+        {
+          "name": "uk_basket_items_report_id",
+          "definition": "CREATE UNIQUE INDEX uk_basket_items_report_id ON public.basket_items USING btree (user_id, action, report_id) WHERE (report_id IS NOT NULL)",
+          "unique": true,
+          "valid": true
+        }
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "article_id"
+          ],
+          "target": "news_articles",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "CASCADE",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "columns": [
+            "file_id"
+          ],
+          "target": "knowledge_files",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "CASCADE",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "columns": [
+            "paper_id"
+          ],
+          "target": "papers",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "CASCADE",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "columns": [
+            "report_id"
+          ],
+          "target": "reports",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "CASCADE",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "columns": [
+            "user_id"
+          ],
+          "target": "sys_user",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "CASCADE",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": [],
+      "comment": "用户资料篮及收藏关系；每条只引用一项原资料，不复制正文作为权威内容",
+      "primary_key": [
+        "id"
+      ]
+    },
+    "categories": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('business_id_seq'::regclass)",
+          "identity": "",
+          "comment": "类别数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系"
+        },
+        {
+          "name": "name",
+          "type": "character varying(100)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "管理员设置的唯一类别名称；必填且禁止空白文本"
+        },
+        {
+          "name": "prompt",
+          "type": "text",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "管理员编写的过滤分类标准；保留原提示语及变量，修改仅影响后续处理"
+        },
+        {
+          "name": "model_id",
+          "type": "bigint",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "分类文本模型ID，关联ai_models.id；暂未配置时为空，启用分类前必须配置"
+        },
+        {
+          "name": "applies_to",
+          "type": "character varying(16)",
+          "nullable": false,
+          "default": "'all'::character varying",
+          "identity": "",
+          "comment": "适用内容类型：news新闻、paper论文、all两者；默认all"
+        },
+        {
+          "name": "is_enabled",
+          "type": "boolean",
+          "nullable": false,
+          "default": "true",
+          "identity": "",
+          "comment": "是否参加后续分类；true启用、false停用，停用不清除历史关联"
+        },
+        {
+          "name": "sort_order",
+          "type": "integer",
+          "nullable": false,
+          "default": "0",
+          "identity": "",
+          "comment": "前台类别排序值；整数，默认0"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "类别创建时间；带时区时间点"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "类别名称、提示词或模型配置最近修改时间；带时区时间点"
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_categories_applies_to",
+          "definition": "CHECK (applies_to::text = ANY (ARRAY['news'::character varying, 'paper'::character varying, 'all'::character varying]::text[]))",
+          "validated": true
+        },
+        {
+          "name": "ck_categories_enabled_model",
+          "definition": "CHECK (NOT is_enabled OR model_id IS NOT NULL)",
+          "validated": true
+        },
+        {
+          "name": "ck_categories_name_prompt",
+          "definition": "CHECK (length(TRIM(BOTH FROM name)) > 0 AND length(TRIM(BOTH FROM prompt)) > 0)",
+          "validated": true
+        }
+      ],
+      "indexes": [],
+      "foreign_keys": [
+        {
+          "columns": [
+            "model_id"
+          ],
+          "target": "ai_models",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": [
+        [
+          "name"
+        ]
+      ],
+      "sequence": {
+        "type": "bigint",
+        "start_value": 1,
+        "min_value": 1,
+        "max_value": "9223372036854775807",
+        "increment_by": 1,
+        "cycle": false,
+        "cache_size": 1,
+        "owned_by": []
+      },
+      "comment": "管理员维护的单类别及过滤分类提示词；停用不清除历史文章归类",
+      "primary_key": [
+        "id"
+      ]
+    },
+    "collection_runs": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('business_id_seq'::regclass)",
+          "identity": "",
+          "comment": "单次采集运行数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系"
+        },
+        {
+          "name": "source_id",
+          "type": "bigint",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "来源ID，关联data_sources.id；历史运行引用时禁止直接删除来源；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "parent_id",
+          "type": "bigint",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "失败父运行ID；与source_id复合自关联，仅retry填写，防止跨来源、自指和重复直接重试；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "trigger_type",
+          "type": "character varying(16)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "触发类型：manual手动、schedule定时、retry失败重试；非retry的parent_id为空"
+        },
+        {
+          "name": "request_id",
+          "type": "character varying(128)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "全局唯一运行幂等键，varchar(128)；普通请求键原样保留；系统定时schedule:来源ID:计划触发UTC时刻按实际source_id映射，重试retry:父运行ID按实际parent_id映射，其余字节不变；映射后仍须全局唯一"
+        },
+        {
+          "name": "status",
+          "type": "character varying(16)",
+          "nullable": false,
+          "default": "'queued'::character varying",
+          "identity": "",
+          "comment": "采集状态：queued排队、running执行中、stopping正在停止、success成功、failed失败、cancelled取消"
+        },
+        {
+          "name": "available_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "允许认领运行的最早时间；带时区，失败重试的退避截止时间也写入此字段"
+        },
+        {
+          "name": "config_snapshot",
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "comment": "本次采集配置JSON对象快照；重试沿用父记录配置，不回写后来修改的来源参数；明确的平台来源、类别等引用按实体映射，外部采集参数、普通请求键及执行令牌原样保留"
+        },
+        {
+          "name": "checkpoint",
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "comment": "已提交采集边界及受限失败标识的JSON对象；不保存材料正文，不跨过未处理失败项"
+        },
+        {
+          "name": "fetched_count",
+          "type": "integer",
+          "nullable": false,
+          "default": "0",
+          "identity": "",
+          "comment": "本次已读取候选条目数；非负整数，不是请求次数或全库总量"
+        },
+        {
+          "name": "saved_count",
+          "type": "integer",
+          "nullable": false,
+          "default": "0",
+          "identity": "",
+          "comment": "本次成功提交的新建或更新条目数；非负，与failed_count之和不超过fetched_count"
+        },
+        {
+          "name": "failed_count",
+          "type": "integer",
+          "nullable": false,
+          "default": "0",
+          "identity": "",
+          "comment": "本次处理失败的候选条目数；非负，success状态必须为0，不重复累计父运行"
+        },
+        {
+          "name": "error",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "执行失败或异常的脱敏简短原因；failed必须非空，success为空，不保存Cookie、密钥或堆栈"
+        },
+        {
+          "name": "stop_requested_at",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "收到停止请求的带时区时间点；重复点击不重写，stopping或cancelled必须存在"
+        },
+        {
+          "name": "execution_token",
+          "type": "character varying(64)",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "执行认领令牌；保存、心跳和结束回写须匹配，终态清空以隔离旧执行器；varchar(64)执行令牌，非数值主键，保留原业务字符串"
+        },
+        {
+          "name": "lease_expires_at",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "当前执行租约截止时间；带时区，失联恢复前核对，终态清空"
+        },
+        {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "实际开始采集的带时区时间点；排队即取消时可空"
+        },
+        {
+          "name": "finished_at",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "确认成功、失败或取消的带时区时间点；stopping不得提前填写"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "运行记录创建时间；带时区，不晚于available_at"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "运行状态、计数或已提交断点最近更新时间；带时区时间点"
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_collection_runs_active",
+          "definition": "CHECK ((status::text <> ALL (ARRAY['running'::character varying, 'stopping'::character varying]::text[])) OR started_at IS NOT NULL AND finished_at IS NULL)",
+          "validated": true
+        },
+        {
+          "name": "ck_collection_runs_counts",
+          "definition": "CHECK (fetched_count >= 0 AND saved_count >= 0 AND failed_count >= 0 AND (saved_count + failed_count) <= fetched_count)",
+          "validated": true
+        },
+        {
+          "name": "ck_collection_runs_error",
+          "definition": "CHECK (status::text <> 'failed'::text OR error IS NOT NULL AND length(TRIM(BOTH FROM error)) > 0)",
+          "validated": true
+        },
+        {
+          "name": "ck_collection_runs_json",
+          "definition": "CHECK (jsonb_typeof(config_snapshot) = 'object'::text AND jsonb_typeof(checkpoint) = 'object'::text)",
+          "validated": true
+        },
+        {
+          "name": "ck_collection_runs_lease_pair",
+          "definition": "CHECK ((execution_token IS NULL) = (lease_expires_at IS NULL))",
+          "validated": true
+        },
+        {
+          "name": "ck_collection_runs_parent_id",
+          "definition": "CHECK (parent_id IS NULL OR parent_id <> id)",
+          "validated": true
+        },
+        {
+          "name": "ck_collection_runs_parent_trigger",
+          "definition": "CHECK (trigger_type::text = 'retry'::text AND parent_id IS NOT NULL OR trigger_type::text <> 'retry'::text AND parent_id IS NULL)",
+          "validated": true
+        },
+        {
+          "name": "ck_collection_runs_queued",
+          "definition": "CHECK (status::text <> 'queued'::text OR started_at IS NULL AND finished_at IS NULL AND execution_token IS NULL AND lease_expires_at IS NULL AND stop_requested_at IS NULL)",
+          "validated": true
+        },
+        {
+          "name": "ck_collection_runs_request_id",
+          "definition": "CHECK (length(TRIM(BOTH FROM request_id)) > 0)",
+          "validated": true
+        },
+        {
+          "name": "ck_collection_runs_running",
+          "definition": "CHECK (status::text <> 'running'::text OR execution_token IS NOT NULL AND lease_expires_at IS NOT NULL AND stop_requested_at IS NULL)",
+          "validated": true
+        },
+        {
+          "name": "ck_collection_runs_status",
+          "definition": "CHECK (status::text = ANY (ARRAY['queued'::character varying, 'running'::character varying, 'stopping'::character varying, 'success'::character varying, 'failed'::character varying, 'cancelled'::character varying]::text[]))",
+          "validated": true
+        },
+        {
+          "name": "ck_collection_runs_stop",
+          "definition": "CHECK ((status::text <> ALL (ARRAY['stopping'::character varying, 'cancelled'::character varying]::text[])) OR stop_requested_at IS NOT NULL)",
+          "validated": true
+        },
+        {
+          "name": "ck_collection_runs_success",
+          "definition": "CHECK (status::text <> 'success'::text OR failed_count = 0 AND error IS NULL)",
+          "validated": true
+        },
+        {
+          "name": "ck_collection_runs_terminal",
+          "definition": "CHECK ((status::text <> ALL (ARRAY['success'::character varying, 'failed'::character varying, 'cancelled'::character varying]::text[])) OR finished_at IS NOT NULL AND execution_token IS NULL AND lease_expires_at IS NULL)",
+          "validated": true
+        },
+        {
+          "name": "ck_collection_runs_times",
+          "definition": "CHECK (created_at <= available_at AND (started_at IS NULL OR started_at >= created_at) AND (finished_at IS NULL OR finished_at >= created_at AND (started_at IS NULL OR finished_at >= started_at)) AND (stop_requested_at IS NULL OR stop_requested_at >= created_at))",
+          "validated": true
+        },
+        {
+          "name": "ck_collection_runs_trigger_type",
+          "definition": "CHECK (trigger_type::text = ANY (ARRAY['manual'::character varying, 'schedule'::character varying, 'retry'::character varying]::text[]))",
+          "validated": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_collection_runs_lease",
+          "definition": "CREATE INDEX idx_collection_runs_lease ON public.collection_runs USING btree (lease_expires_at) WHERE ((status)::text = ANY ((ARRAY['running'::character varying, 'stopping'::character varying])::text[]))",
+          "unique": false,
+          "valid": true
+        },
+        {
+          "name": "idx_collection_runs_source_id",
+          "definition": "CREATE INDEX idx_collection_runs_source_id ON public.collection_runs USING btree (source_id, created_at DESC, id)",
+          "unique": false,
+          "valid": true
+        },
+        {
+          "name": "idx_collection_runs_status",
+          "definition": "CREATE INDEX idx_collection_runs_status ON public.collection_runs USING btree (status, available_at)",
+          "unique": false,
+          "valid": true
+        },
+        {
+          "name": "uk_collection_runs_active",
+          "definition": "CREATE UNIQUE INDEX uk_collection_runs_active ON public.collection_runs USING btree (source_id) WHERE ((status)::text = ANY ((ARRAY['queued'::character varying, 'running'::character varying, 'stopping'::character varying])::text[]))",
+          "unique": true,
+          "valid": true
+        },
+        {
+          "name": "uk_collection_runs_parent_id",
+          "definition": "CREATE UNIQUE INDEX uk_collection_runs_parent_id ON public.collection_runs USING btree (parent_id) WHERE (parent_id IS NOT NULL)",
+          "unique": true,
+          "valid": true
+        }
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "parent_id",
+            "source_id"
+          ],
+          "target": "collection_runs",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id",
+            "source_id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "columns": [
+            "source_id"
+          ],
+          "target": "data_sources",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": [
+        [
+          "id",
+          "source_id"
+        ],
+        [
+          "request_id"
+        ]
+      ],
+      "sequence": {
+        "type": "bigint",
+        "start_value": 1,
+        "min_value": 1,
+        "max_value": "9223372036854775807",
+        "increment_by": 1,
+        "cycle": false,
+        "cache_size": 1,
+        "owned_by": []
+      },
+      "comment": "单次来源采集的排队、执行、停止及失败重试记录；保存独立计数和配置快照",
+      "primary_key": [
+        "id"
+      ]
+    },
+    "data_sources": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('business_id_seq'::regclass)",
+          "identity": "",
+          "comment": "采集来源数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系"
+        },
+        {
+          "name": "name",
+          "type": "character varying(255)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "真实网站、公众号或论文库名称；必填，不虚构采集来源"
+        },
+        {
+          "name": "type",
+          "type": "character varying(16)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "来源类型：website新闻网站、wechat公众号、paper论文库"
+        },
+        {
+          "name": "url",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "真实来源入口或历史文章来源地址；可空，不自动把推测主页当采集入口"
+        },
+        {
+          "name": "adapter",
+          "type": "character varying(128)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "受控采集器注册标识；不是任意命令或可执行代码，启用前核对实现"
+        },
+        {
+          "name": "cron",
+          "type": "character varying(100)",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "来源定时采集表达式；为空仅允许手动触发，不在config重复保存周期"
+        },
+        {
+          "name": "timezone",
+          "type": "character varying(64)",
+          "nullable": false,
+          "default": "'Asia/Shanghai'::character varying",
+          "identity": "",
+          "comment": "采集计划IANA时区名；默认Asia/Shanghai，决定cron的当地时间语义"
+        },
+        {
+          "name": "next_run_at",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "下次采集调度时间点，带时区；仅is_enabled=true且cron非空时非空"
+        },
+        {
+          "name": "config",
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "comment": "采集参数JSON对象；保存分页、限速、超时、增量及重试策略，凭证仅存引用"
+        },
+        {
+          "name": "model_id",
+          "type": "bigint",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "自动翻译模型ID，关联ai_models.id；为空不自动翻译，不静默换用其他模型"
+        },
+        {
+          "name": "is_enabled",
+          "type": "boolean",
+          "nullable": false,
+          "default": "true",
+          "identity": "",
+          "comment": "来源入队及启动开关；true启用、false停用，停用不等于当前运行已停止"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "来源建档时间；带时区时间点"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "来源名称、采集配置或开关最近修改时间；带时区时间点"
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_data_sources_config",
+          "definition": "CHECK (jsonb_typeof(config) = 'object'::text)",
+          "validated": true
+        },
+        {
+          "name": "ck_data_sources_cron",
+          "definition": "CHECK (cron IS NULL OR length(TRIM(BOTH FROM cron)) > 0)",
+          "validated": true
+        },
+        {
+          "name": "ck_data_sources_cursor",
+          "definition": "CHECK (is_enabled AND cron IS NOT NULL AND next_run_at IS NOT NULL OR (NOT is_enabled OR cron IS NULL) AND next_run_at IS NULL)",
+          "validated": true
+        },
+        {
+          "name": "ck_data_sources_names",
+          "definition": "CHECK (length(TRIM(BOTH FROM name)) > 0 AND length(TRIM(BOTH FROM adapter)) > 0)",
+          "validated": true
+        },
+        {
+          "name": "ck_data_sources_type",
+          "definition": "CHECK (type::text = ANY (ARRAY['website'::character varying, 'wechat'::character varying, 'paper'::character varying]::text[]))",
+          "validated": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_data_sources_next_run_at",
+          "definition": "CREATE INDEX idx_data_sources_next_run_at ON public.data_sources USING btree (next_run_at) WHERE (is_enabled AND (cron IS NOT NULL))",
+          "unique": false,
+          "valid": true
+        }
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "model_id"
+          ],
+          "target": "ai_models",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": [],
+      "sequence": {
+        "type": "bigint",
+        "start_value": 1,
+        "min_value": 1,
+        "max_value": "9223372036854775807",
+        "increment_by": 1,
+        "cycle": false,
+        "cache_size": 1,
+        "owned_by": []
+      },
+      "comment": "新闻网站、公众号与论文来源及采集配置；来源开关与单次采集状态分别维护",
+      "primary_key": [
+        "id"
+      ]
+    },
+    "digest_schedules": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('business_id_seq'::regclass)",
+          "identity": "",
+          "comment": "周期简报计划数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系"
+        },
+        {
+          "name": "user_id",
+          "type": "bigint",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "计划所有者ID，关联sys_user.id；周期生成的成果必须属于同一用户"
+        },
+        {
+          "name": "name",
+          "type": "character varying(255)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "用户维护的周期计划名称；用于计划选择和管理"
+        },
+        {
+          "name": "template_id",
+          "type": "bigint",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "简报模板ID，关联templates.id；必填且模板purpose必须为digest；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "frequency",
+          "type": "character varying(16)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "生成周期：daily每日、weekly每周、monthly每月"
+        },
+        {
+          "name": "weekday",
+          "type": "smallint",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "每周执行星期；0周一至6周日，仅weekly填写，其他周期为空"
+        },
+        {
+          "name": "month_day",
+          "type": "smallint",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "每月执行日；1至31，仅monthly填写，短月按当月末日执行"
+        },
+        {
+          "name": "run_time",
+          "type": "time without time zone",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "当地固定执行时分秒；与timezone共同解释，不是某天的绝对时间点"
+        },
+        {
+          "name": "timezone",
+          "type": "character varying(64)",
+          "nullable": false,
+          "default": "'Asia/Shanghai'::character varying",
+          "identity": "",
+          "comment": "计划采用的IANA时区名；默认Asia/Shanghai，用于当地时间转UTC调度"
+        },
+        {
+          "name": "selection_config",
+          "type": "jsonb",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "选材条件JSON对象；包含日期窗口、类别、来源、关键词、去重及最多50篇的自动选材策略；显式类别、来源及资料ID或ID数组按实体映射为十进制字符串，关键词和日期窗口原样保留"
+        },
+        {
+          "name": "generation_config",
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "comment": "生成设置JSON对象；保存摘要长度和配图等参数，不重复整段材料正文；显式平台业务引用按实体映射，供应商模型标识、提示词及普通参数原样保留"
+        },
+        {
+          "name": "is_enabled",
+          "type": "boolean",
+          "nullable": false,
+          "default": "true",
+          "identity": "",
+          "comment": "计划开关；true启用、false停用，启用前校验真实文本模型及资料条件"
+        },
+        {
+          "name": "next_run_at",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "下次触发的带时区时间点；启用时必填，原子认领后推进调度游标"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "周期计划创建时间；带时区时间点"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "周期计划配置或调度游标最近更新时间；带时区时间点"
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_digest_schedules_frequency",
+          "definition": "CHECK (frequency::text = 'daily'::text AND weekday IS NULL AND month_day IS NULL OR frequency::text = 'weekly'::text AND weekday IS NOT NULL AND weekday >= 0 AND weekday <= 6 AND month_day IS NULL OR frequency::text = 'monthly'::text AND month_day IS NOT NULL AND month_day >= 1 AND month_day <= 31 AND weekday IS NULL)",
+          "validated": true
+        },
+        {
+          "name": "ck_digest_schedules_generation_config",
+          "definition": "CHECK (jsonb_typeof(generation_config) = 'object'::text)",
+          "validated": true
+        },
+        {
+          "name": "ck_digest_schedules_next_run_at",
+          "definition": "CHECK (NOT is_enabled OR next_run_at IS NOT NULL)",
+          "validated": true
+        },
+        {
+          "name": "ck_digest_schedules_selection_config",
+          "definition": "CHECK (jsonb_typeof(selection_config) = 'object'::text)",
+          "validated": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_digest_schedules_next_run_at",
+          "definition": "CREATE INDEX idx_digest_schedules_next_run_at ON public.digest_schedules USING btree (next_run_at) WHERE is_enabled",
+          "unique": false,
+          "valid": true
+        }
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "template_id"
+          ],
+          "target": "templates",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "columns": [
+            "user_id"
+          ],
+          "target": "sys_user",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": [],
+      "sequence": {
+        "type": "bigint",
+        "start_value": 1,
+        "min_value": 1,
+        "max_value": "9223372036854775807",
+        "increment_by": 1,
+        "cycle": false,
+        "cache_size": 1,
+        "owned_by": []
+      },
+      "comment": "用户周期简报计划；支持每日、指定星期和每月日期，选材配置与生成配置分开",
+      "primary_key": [
+        "id"
+      ]
+    },
+    "generation_tasks": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('business_id_seq'::regclass)",
+          "identity": "",
+          "comment": "单次生成任务数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系"
+        },
+        {
+          "name": "report_id",
+          "type": "bigint",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "成果ID，关联reports.id；所有者从成果取得，不重复保存user_id；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "schedule_id",
+          "type": "bigint",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "周期计划ID，关联digest_schedules.id；手动任务为空，计划删除受限；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "request_id",
+          "type": "character varying(128)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "全局唯一幂等键，varchar(128)；普通客户端键及manual:随机UUID原样保留；系统schedule:计划ID:触发UTC时刻仅按实际schedule_id映射内嵌计划ID，UTC后缀不变，映射后仍须全局唯一"
+        },
+        {
+          "name": "status",
+          "type": "character varying(16)",
+          "nullable": false,
+          "default": "'queued'::character varying",
+          "identity": "",
+          "comment": "执行状态：queued排队、running执行中、completed完成、failed失败、cancelled取消"
+        },
+        {
+          "name": "progress",
+          "type": "smallint",
+          "nullable": false,
+          "default": "'0'::smallint",
+          "identity": "",
+          "comment": "任务进度百分比；整数0至100，默认0"
+        },
+        {
+          "name": "config_snapshot",
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "comment": "任务配置JSON对象快照；保存模板、提示词、模型标识、参数及成果起始版本，不含密钥或重复材料正文；显式平台业务引用按实体映射为十进制字符串，普通参数和提示词不改写；request_fingerprint须由映射后的request及materials按应用规范重新计算核验"
+        },
+        {
+          "name": "materials",
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'[]'::jsonb",
+          "identity": "",
+          "comment": "最多50项的有序选材JSON数组快照；每项含type、id、title、content、source，论文仅用摘要及文献信息；依据type或明确实体上下文映射id为十进制字符串，保留顺序、标题、正文及来源文本；缺失或歧义引用在写入前拒绝"
+        },
+        {
+          "name": "result_content",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "本次任务生成的原始正文；与用户当前编辑的reports.content分别保存"
+        },
+        {
+          "name": "error",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "生成失败的脱敏简短原因；不保存调用凭证或完整供应商响应"
+        },
+        {
+          "name": "attempts",
+          "type": "integer",
+          "nullable": false,
+          "default": "0",
+          "identity": "",
+          "comment": "自动重试次数；整数且非负，默认0，重试沿用冻结选材快照"
+        },
+        {
+          "name": "lease_expires_at",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "当前执行租约截止时间；带时区，过期后才允许隔离旧执行器并恢复"
+        },
+        {
+          "name": "execution_token",
+          "type": "character varying(64)",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "本次执行尝试的唯一令牌；完成回写须匹配，阻止旧执行器覆盖新尝试；varchar(64)执行令牌，非数值主键，保留原业务字符串"
+        },
+        {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "本次任务实际开始执行时间；带时区，尚未开始时为空"
+        },
+        {
+          "name": "finished_at",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "任务完成、失败或取消的时间；带时区，不早于非空started_at"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "任务提交保存时间；带时区，与首次创建成果同事务保存"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "任务状态、进度或执行信息最近更新时间；带时区时间点"
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_generation_tasks_attempts",
+          "definition": "CHECK (attempts >= 0)",
+          "validated": true
+        },
+        {
+          "name": "ck_generation_tasks_config_snapshot",
+          "definition": "CHECK (jsonb_typeof(config_snapshot) = 'object'::text)",
+          "validated": true
+        },
+        {
+          "name": "ck_generation_tasks_materials",
+          "definition": "CHECK (\nCASE\n    WHEN jsonb_typeof(materials) = 'array'::text THEN jsonb_array_length(materials) <= 50\n    ELSE false\nEND)",
+          "validated": true
+        },
+        {
+          "name": "ck_generation_tasks_progress",
+          "definition": "CHECK (progress >= 0 AND progress <= 100)",
+          "validated": true
+        },
+        {
+          "name": "ck_generation_tasks_status",
+          "definition": "CHECK (status::text = ANY (ARRAY['queued'::character varying, 'running'::character varying, 'completed'::character varying, 'failed'::character varying, 'cancelled'::character varying]::text[]))",
+          "validated": true
+        },
+        {
+          "name": "ck_generation_tasks_times",
+          "definition": "CHECK (finished_at IS NULL OR started_at IS NULL OR finished_at >= started_at)",
+          "validated": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_generation_tasks_lease",
+          "definition": "CREATE INDEX idx_generation_tasks_lease ON public.generation_tasks USING btree (lease_expires_at) WHERE (lease_expires_at IS NOT NULL)",
+          "unique": false,
+          "valid": true
+        },
+        {
+          "name": "idx_generation_tasks_report_id",
+          "definition": "CREATE INDEX idx_generation_tasks_report_id ON public.generation_tasks USING btree (report_id)",
+          "unique": false,
+          "valid": true
+        },
+        {
+          "name": "idx_generation_tasks_status",
+          "definition": "CREATE INDEX idx_generation_tasks_status ON public.generation_tasks USING btree (status, created_at)",
+          "unique": false,
+          "valid": true
+        }
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "report_id"
+          ],
+          "target": "reports",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "CASCADE",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "columns": [
+            "schedule_id"
+          ],
+          "target": "digest_schedules",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": [
+        [
+          "id",
+          "report_id"
+        ],
+        [
+          "request_id"
+        ]
+      ],
+      "sequence": {
+        "type": "bigint",
+        "start_value": 1,
+        "min_value": 1,
+        "max_value": "9223372036854775807",
+        "increment_by": 1,
+        "cycle": false,
+        "cache_size": 1,
+        "owned_by": []
+      },
+      "comment": "单次生成任务及冻结选材快照；支持幂等提交、租约执行、取消和失败重试",
+      "primary_key": [
+        "id"
+      ]
+    },
+    "knowledge_files": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('business_id_seq'::regclass)",
+          "identity": "",
+          "comment": "上传资料数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系"
+        },
+        {
+          "name": "user_id",
+          "type": "bigint",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "资料所有者ID，关联sys_user.id；默认私有，访问由服务端校验所有权"
+        },
+        {
+          "name": "name",
+          "type": "character varying(255)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "用户可修改的资料展示名称；不改变原始上传文件名"
+        },
+        {
+          "name": "filename",
+          "type": "character varying(255)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "上传时原始文件名；与可编辑资料名称name分开保存"
+        },
+        {
+          "name": "storage_key",
+          "type": "text",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "原文件稳定存储键；用于受控读取，不能只保存临时过期URL"
+        },
+        {
+          "name": "mime_type",
+          "type": "character varying(128)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "服务端检测出的文件MIME类型；不只信上传后缀"
+        },
+        {
+          "name": "size",
+          "type": "bigint",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "原始文件大小，单位字节；整数且非负"
+        },
+        {
+          "name": "hash",
+          "type": "character varying(64)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "原始文件SHA-256摘要；用于完整性核对及同用户重复上传提示"
+        },
+        {
+          "name": "extracted_text",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "系统提取的正文；解析重试仅更新提取结果，不覆盖用户编辑文本"
+        },
+        {
+          "name": "edited_text",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "用户编辑正文；NULL表示未编辑，空字符串也是有效编辑，不能按真值回退"
+        },
+        {
+          "name": "version",
+          "type": "integer",
+          "nullable": false,
+          "default": "1",
+          "identity": "",
+          "comment": "资料编辑并发控制版本；从1开始，每次编辑递增"
+        },
+        {
+          "name": "status",
+          "type": "character varying(16)",
+          "nullable": false,
+          "default": "'queued'::character varying",
+          "identity": "",
+          "comment": "解析状态：queued排队、parsing解析中、ready就绪、failed失败；非人工审核状态"
+        },
+        {
+          "name": "error",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "解析失败的脱敏简短原因；不保存密钥或完整堆栈"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "上传资料保存时间；带时区时间点，不表示解析已成功"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "资料编辑或解析状态最近更新时间；带时区时间点"
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_knowledge_files_size",
+          "definition": "CHECK (size >= 0)",
+          "validated": true
+        },
+        {
+          "name": "ck_knowledge_files_status",
+          "definition": "CHECK (status::text = ANY (ARRAY['queued'::character varying, 'parsing'::character varying, 'ready'::character varying, 'failed'::character varying]::text[]))",
+          "validated": true
+        },
+        {
+          "name": "ck_knowledge_files_version",
+          "definition": "CHECK (version >= 1)",
+          "validated": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_knowledge_files_status_updated_at",
+          "definition": "CREATE INDEX idx_knowledge_files_status_updated_at ON public.knowledge_files USING btree (status, updated_at)",
+          "unique": false,
+          "valid": true
+        },
+        {
+          "name": "idx_knowledge_files_user_id",
+          "definition": "CREATE INDEX idx_knowledge_files_user_id ON public.knowledge_files USING btree (user_id, updated_at DESC)",
+          "unique": false,
+          "valid": true
+        }
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "user_id"
+          ],
+          "target": "sys_user",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": [],
+      "sequence": {
+        "type": "bigint",
+        "start_value": 1,
+        "min_value": 1,
+        "max_value": "9223372036854775807",
+        "increment_by": 1,
+        "cycle": false,
+        "cache_size": 1,
+        "owned_by": []
+      },
+      "comment": "用户私有上传资料；原文件存储键、系统提取文本与用户编辑文本分别保存",
+      "primary_key": [
+        "id"
+      ]
+    },
+    "model_calls": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('business_id_seq'::regclass)",
+          "identity": "",
+          "comment": "实际供应商调用记录数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系"
+        },
+        {
+          "name": "task_id",
+          "type": "bigint",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "可空生成任务ID，关联generation_tasks.id；任务删除后置空，权限仍须服务端校验；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "model_id",
+          "type": "bigint",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "实际调用模型ID，关联ai_models.id；必填，被引用模型禁止直接删除"
+        },
+        {
+          "name": "capability",
+          "type": "character varying(32)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "实际调用能力：text_generate正文生成、image_generate图片生成；不以图片输入能力替代"
+        },
+        {
+          "name": "status",
+          "type": "character varying(16)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "供应商调用结果：success成功、failed失败；不是人工审核或整份成果状态"
+        },
+        {
+          "name": "duration_ms",
+          "type": "integer",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "实际供应商请求耗时，单位毫秒；整数且非负"
+        },
+        {
+          "name": "input_tokens",
+          "type": "integer",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "供应商返回的输入Token用量；可空且非负，未返回时不假记为0"
+        },
+        {
+          "name": "output_tokens",
+          "type": "integer",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "供应商返回的输出Token用量；可空且非负，未返回时不假记为0"
+        },
+        {
+          "name": "error",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "调用失败的脱敏简短原因；不保存供应商响应原文、密钥或用户正文"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "模型调用记录保存时间；带时区时间点，应用以UTC写入"
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_model_calls_capability",
+          "definition": "CHECK (capability::text = ANY (ARRAY['text_generate'::character varying, 'image_generate'::character varying]::text[]))",
+          "validated": true
+        },
+        {
+          "name": "ck_model_calls_duration_ms",
+          "definition": "CHECK (duration_ms >= 0)",
+          "validated": true
+        },
+        {
+          "name": "ck_model_calls_input_tokens",
+          "definition": "CHECK (input_tokens IS NULL OR input_tokens >= 0)",
+          "validated": true
+        },
+        {
+          "name": "ck_model_calls_output_tokens",
+          "definition": "CHECK (output_tokens IS NULL OR output_tokens >= 0)",
+          "validated": true
+        },
+        {
+          "name": "ck_model_calls_status",
+          "definition": "CHECK (status::text = ANY (ARRAY['success'::character varying, 'failed'::character varying]::text[]))",
+          "validated": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_model_calls_model_id_created_at",
+          "definition": "CREATE INDEX idx_model_calls_model_id_created_at ON public.model_calls USING btree (model_id, created_at)",
+          "unique": false,
+          "valid": true
+        },
+        {
+          "name": "idx_model_calls_task_id_created_at",
+          "definition": "CREATE INDEX idx_model_calls_task_id_created_at ON public.model_calls USING btree (task_id, created_at)",
+          "unique": false,
+          "valid": true
+        }
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "model_id"
+          ],
+          "target": "ai_models",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "columns": [
+            "task_id"
+          ],
+          "target": "generation_tasks",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "SET NULL",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": [],
+      "sequence": {
+        "type": "bigint",
+        "start_value": 1,
+        "min_value": 1,
+        "max_value": "9223372036854775807",
+        "increment_by": 1,
+        "cycle": false,
+        "cache_size": 1,
+        "owned_by": []
+      },
+      "comment": "实际供应商模型调用的用量和排障记录；不保存提示词、原始正文、凭证或响应原文",
+      "primary_key": [
+        "id"
+      ]
+    },
+    "news_articles": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('business_id_seq'::regclass)",
+          "identity": "",
+          "comment": "新闻数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系"
+        },
+        {
+          "name": "source_id",
+          "type": "bigint",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "必填来源ID，关联data_sources.id；仅允许website或wechat来源，删除受限；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "title",
+          "type": "character varying(1000)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "原文新闻标题；必填且禁止空白文本"
+        },
+        {
+          "name": "url",
+          "type": "text",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "规范化原文地址；用于新闻去重，不代表平台入库页面地址"
+        },
+        {
+          "name": "author",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "原作者名单文本；未知时为空，不以来源网站名称冒充作者"
+        },
+        {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "原文发布时间，保留到秒；由旧published_time迁入，非平台审核或入库时间；带时区"
+        },
+        {
+          "name": "content",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "抓取的原文正文；未取得正文时允许为空，不以导读摘要冒充全文"
+        },
+        {
+          "name": "content_zh",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "中文正文或译文；为空时展示回退content，不重复复制中文原文"
+        },
+        {
+          "name": "category_id",
+          "type": "bigint",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "唯一类别ID，关联categories.id；未分类或未命中为空，不以空值推断审核失败；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "is_pushed",
+          "type": "boolean",
+          "nullable": false,
+          "default": "false",
+          "identity": "",
+          "comment": "推送成功标志；true仅表示收到真实渠道成功回执，默认false"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "新闻平台入库时间；带时区时间点，不代替原文发表时间"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "新闻正文或关联资料最近更新时间；带时区时间点"
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_news_articles_title_url",
+          "definition": "CHECK (length(TRIM(BOTH FROM title)) > 0 AND length(TRIM(BOTH FROM url)) > 0)",
+          "validated": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_news_articles_category_id",
+          "definition": "CREATE INDEX idx_news_articles_category_id ON public.news_articles USING btree (category_id, published_at DESC, id)",
+          "unique": false,
+          "valid": true
+        },
+        {
+          "name": "idx_news_articles_published_at",
+          "definition": "CREATE INDEX idx_news_articles_published_at ON public.news_articles USING btree (published_at DESC, id)",
+          "unique": false,
+          "valid": true
+        },
+        {
+          "name": "idx_news_articles_source_id",
+          "definition": "CREATE INDEX idx_news_articles_source_id ON public.news_articles USING btree (source_id, published_at DESC, id)",
+          "unique": false,
+          "valid": true
+        },
+        {
+          "name": "uk_news_articles_url",
+          "definition": "CREATE UNIQUE INDEX uk_news_articles_url ON public.news_articles USING btree (md5(url))",
+          "unique": true,
+          "valid": true
+        }
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "category_id"
+          ],
+          "target": "categories",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "columns": [
+            "source_id"
+          ],
+          "target": "data_sources",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": [],
+      "sequence": {
+        "type": "bigint",
+        "start_value": 1,
+        "min_value": 1,
+        "max_value": "9223372036854775807",
+        "increment_by": 1,
+        "cycle": false,
+        "cache_size": 1,
+        "owned_by": []
+      },
+      "comment": "网站与公众号新闻原文及中文译文；每篇最多关联一个类别，无人工审核流程",
+      "primary_key": [
+        "id"
+      ]
+    },
+    "papers": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('business_id_seq'::regclass)",
+          "identity": "",
+          "comment": "论文数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系"
+        },
+        {
+          "name": "source_id",
+          "type": "bigint",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "论文来源ID，关联data_sources.id；可空，来源删除后置空；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "title",
+          "type": "character varying(1000)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "论文原始标题；必填且禁止空白文本"
+        },
+        {
+          "name": "title_zh",
+          "type": "character varying(1000)",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "论文中文标题；与原题相同时无需重复展示"
+        },
+        {
+          "name": "url",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "论文来源页面地址；与DOI至少一个非空，不表示拥有论文全文"
+        },
+        {
+          "name": "doi",
+          "type": "character varying(255)",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "规范化DOI，不带https://doi.org/前缀；非空时唯一"
+        },
+        {
+          "name": "authors",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "原始作者名单文本；不自动用机构或来源名称替代"
+        },
+        {
+          "name": "journal",
+          "type": "character varying(255)",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "论文期刊或会议名称；保留原始文献信息"
+        },
+        {
+          "name": "published_date",
+          "type": "character varying(10)",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "真实发表日期及精度：YYYY、YYYY-MM或YYYY-MM-DD；未知月日不补造，非入库或审核日期"
+        },
+        {
+          "name": "abstract",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "原文摘要或已明确标识的历史导读摘要；不存论文全文"
+        },
+        {
+          "name": "abstract_zh",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "中文摘要；与原文摘要分别保存，不作为论文全文存储"
+        },
+        {
+          "name": "category_id",
+          "type": "bigint",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "唯一类别ID，关联categories.id；未分类或未命中为空，类别删除受限；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "is_pushed",
+          "type": "boolean",
+          "nullable": false,
+          "default": "false",
+          "identity": "",
+          "comment": "论文推送成功标志；真实渠道成功后为true，默认false，不表示审核结果"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "论文平台入库时间；带时区时间点，不能代替真实发表日期"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "论文文献信息或摘要最近更新时间；带时区时间点"
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_papers_published_date",
+          "definition": "CHECK (published_date IS NULL OR\nCASE\n    WHEN published_date::text ~ '^[0-9]{4}(-[0-9]{2}){0,2}$'::text THEN make_date(\"substring\"(published_date::text, 1, 4)::integer, COALESCE(NULLIF(\"substring\"(published_date::text, 6, 2), ''::text)::integer, 1), COALESCE(NULLIF(\"substring\"(published_date::text, 9, 2), ''::text)::integer, 1)) IS NOT NULL\n    ELSE false\nEND)",
+          "validated": true
+        },
+        {
+          "name": "ck_papers_source_link",
+          "definition": "CHECK (NULLIF(TRIM(BOTH FROM doi), ''::text) IS NOT NULL OR NULLIF(TRIM(BOTH FROM url), ''::text) IS NOT NULL)",
+          "validated": true
+        },
+        {
+          "name": "ck_papers_title",
+          "definition": "CHECK (length(TRIM(BOTH FROM title)) > 0)",
+          "validated": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_papers_category_id",
+          "definition": "CREATE INDEX idx_papers_category_id ON public.papers USING btree (category_id, rpad((published_date)::text, 10, '-01'::text) DESC, id)",
+          "unique": false,
+          "valid": true
+        },
+        {
+          "name": "idx_papers_date",
+          "definition": "CREATE INDEX idx_papers_date ON public.papers USING btree (rpad((published_date)::text, 10, '-01'::text) DESC, id)",
+          "unique": false,
+          "valid": true
+        },
+        {
+          "name": "uk_papers_doi",
+          "definition": "CREATE UNIQUE INDEX uk_papers_doi ON public.papers USING btree (doi) WHERE (doi IS NOT NULL)",
+          "unique": true,
+          "valid": true
+        },
+        {
+          "name": "uk_papers_url",
+          "definition": "CREATE UNIQUE INDEX uk_papers_url ON public.papers USING btree (md5(url)) WHERE ((doi IS NULL) AND (url IS NOT NULL))",
+          "unique": true,
+          "valid": true
+        }
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "category_id"
+          ],
+          "target": "categories",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "columns": [
+            "source_id"
+          ],
+          "target": "data_sources",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "SET NULL",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": [],
+      "sequence": {
+        "type": "bigint",
+        "start_value": 1,
+        "min_value": 1,
+        "max_value": "9223372036854775807",
+        "increment_by": 1,
+        "cycle": false,
+        "cache_size": 1,
+        "owned_by": []
+      },
+      "comment": "论文文献信息及中英文摘要；保留真实发表日期精度，不保存论文全文",
+      "primary_key": [
+        "id"
+      ]
+    },
+    "report_assets": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('business_id_seq'::regclass)",
+          "identity": "",
+          "comment": "图片或导出资源数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系"
+        },
+        {
+          "name": "report_id",
+          "type": "bigint",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "所属成果ID，关联reports.id；独立导出无任务时仍必须关联成果；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "task_id",
+          "type": "bigint",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "可空生成任务ID；与report_id复合引用generation_tasks.(id,report_id)，防止跨成果关联；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "type",
+          "type": "character varying(16)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "资源类型：image生成图片、export导出文件"
+        },
+        {
+          "name": "storage_key",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "资源文件稳定存储键；queued时可空，completed时必须非空，不只保存临时URL"
+        },
+        {
+          "name": "mime_type",
+          "type": "character varying(128)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "提交时选定的输出MIME类型；必填，完成后核对实际文件类型"
+        },
+        {
+          "name": "prompt",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "图片实际生成提示词；image需要非空，export为空"
+        },
+        {
+          "name": "model_id",
+          "type": "bigint",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "实际图片模型ID，关联ai_models.id；image必须配置，export为空"
+        },
+        {
+          "name": "config_snapshot",
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "comment": "资源配置JSON对象快照；图片保存模型标识及配图参数，导出保存正文版本及快照，不含凭证；显式成果、任务、模板及资源引用随实体映射，供应商模型标识、正文及普通参数原样保留"
+        },
+        {
+          "name": "position",
+          "type": "character varying(100)",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "图片所在章节或占位符标识；独立导出文件为空"
+        },
+        {
+          "name": "status",
+          "type": "character varying(16)",
+          "nullable": false,
+          "default": "'queued'::character varying",
+          "identity": "",
+          "comment": "资源执行状态：queued排队、running执行中、completed完成、failed失败；失败可独立重试"
+        },
+        {
+          "name": "error",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "图片生成或文件导出失败的脱敏简短原因"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "资源生成或导出请求保存时间；带时区时间点"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "资源状态或文件存储结果最近更新时间；带时区时间点"
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_report_assets_config_snapshot",
+          "definition": "CHECK (jsonb_typeof(config_snapshot) = 'object'::text)",
+          "validated": true
+        },
+        {
+          "name": "ck_report_assets_kind",
+          "definition": "CHECK (type::text = 'image'::text AND model_id IS NOT NULL AND prompt IS NOT NULL AND length(TRIM(BOTH FROM prompt)) > 0 OR type::text = 'export'::text AND model_id IS NULL AND prompt IS NULL AND \"position\" IS NULL)",
+          "validated": true
+        },
+        {
+          "name": "ck_report_assets_mime_type",
+          "definition": "CHECK (length(TRIM(BOTH FROM mime_type)) > 0)",
+          "validated": true
+        },
+        {
+          "name": "ck_report_assets_status",
+          "definition": "CHECK (status::text = ANY (ARRAY['queued'::character varying, 'running'::character varying, 'completed'::character varying, 'failed'::character varying]::text[]))",
+          "validated": true
+        },
+        {
+          "name": "ck_report_assets_storage_key",
+          "definition": "CHECK (status::text <> 'completed'::text OR storage_key IS NOT NULL AND length(TRIM(BOTH FROM storage_key)) > 0)",
+          "validated": true
+        },
+        {
+          "name": "ck_report_assets_type",
+          "definition": "CHECK (type::text = ANY (ARRAY['image'::character varying, 'export'::character varying]::text[]))",
+          "validated": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_report_assets_report_id",
+          "definition": "CREATE INDEX idx_report_assets_report_id ON public.report_assets USING btree (report_id, created_at)",
+          "unique": false,
+          "valid": true
+        }
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "model_id"
+          ],
+          "target": "ai_models",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "columns": [
+            "report_id"
+          ],
+          "target": "reports",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "CASCADE",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "columns": [
+            "task_id",
+            "report_id"
+          ],
+          "target": "generation_tasks",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id",
+            "report_id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": [],
+      "sequence": {
+        "type": "bigint",
+        "start_value": 1,
+        "min_value": 1,
+        "max_value": "9223372036854775807",
+        "increment_by": 1,
+        "cycle": false,
+        "cache_size": 1,
+        "owned_by": []
+      },
+      "comment": "成果的生成图片及导出文件；每项资源独立保存存储键、执行状态和失败原因",
+      "primary_key": [
+        "id"
+      ]
+    },
+    "report_versions": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": null,
+          "identity": "d",
+          "comment": "成果历史版本自增ID；不等于同一成果内的version序号",
+          "identity_options": {
+            "always": false,
+            "start": 1,
+            "increment": 1,
+            "minvalue": 1,
+            "maxvalue": "9223372036854775807",
+            "cache": 1,
+            "cycle": false
+          }
+        },
+        {
+          "name": "report_id",
+          "type": "bigint",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "所属成果ID，关联reports.id；成果删除时级联删除对应历史；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "version",
+          "type": "integer",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "成果历史版本号；整数且至少1，与report_id组成唯一键"
+        },
+        {
+          "name": "title",
+          "type": "character varying(1000)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "此历史版本的成果标题快照；不随当前成果标题修改"
+        },
+        {
+          "name": "content",
+          "type": "text",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "此历史版本的正文快照；用于历史查看或明确恢复，不自动覆盖当前编辑稿"
+        },
+        {
+          "name": "sections",
+          "type": "jsonb",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "此历史版本结构化章节的JSON数组快照；默认空数组；显式平台引用按实体映射为十进制字符串，章节顺序、标题和正文原样保留"
+        },
+        {
+          "name": "citations",
+          "type": "jsonb",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "此历史版本引用资料的JSON数组快照；默认空数组；依据资料类型映射显式引用ID，保留引文文本与顺序；类型化引文source_id表示被引用资料而非采集来源，缺失或歧义引用在写入前拒绝"
+        },
+        {
+          "name": "quality_issues",
+          "type": "jsonb",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "此历史版本自动质量提示的JSON数组快照；不是人工审批事件"
+        },
+        {
+          "name": "model_snapshot",
+          "type": "jsonb",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "此历史版本模型标识与参数的JSON对象快照；不含调用凭证；模型标识维持原ai_models编号域，普通参数不改写，明确的平台业务引用须按所属实体映射"
+        },
+        {
+          "name": "source",
+          "type": "character varying(32)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "版本来源标识，如manual手动编辑、生成或恢复；默认manual，保留实际来源值"
+        },
+        {
+          "name": "operator_id",
+          "type": "bigint",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "可空操作者ID，关联sys_user.id；用户删除后置空"
+        },
+        {
+          "name": "operator_name",
+          "type": "character varying(64)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "版本保存时的操作者名称快照；必填可为空字符串，不随用户改名更新"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "成果历史版本保存时间；带时区时间点，应用以UTC写入"
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_report_versions_citations",
+          "definition": "CHECK (jsonb_typeof(citations) = 'array'::text)",
+          "validated": true
+        },
+        {
+          "name": "ck_report_versions_model_snapshot",
+          "definition": "CHECK (jsonb_typeof(model_snapshot) = 'object'::text)",
+          "validated": true
+        },
+        {
+          "name": "ck_report_versions_quality_issues",
+          "definition": "CHECK (jsonb_typeof(quality_issues) = 'array'::text)",
+          "validated": true
+        },
+        {
+          "name": "ck_report_versions_sections",
+          "definition": "CHECK (jsonb_typeof(sections) = 'array'::text)",
+          "validated": true
+        },
+        {
+          "name": "ck_report_versions_version",
+          "definition": "CHECK (version >= 1)",
+          "validated": true
+        }
+      ],
+      "indexes": [],
+      "foreign_keys": [
+        {
+          "columns": [
+            "operator_id"
+          ],
+          "target": "sys_user",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "SET NULL",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "columns": [
+            "report_id"
+          ],
+          "target": "reports",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "CASCADE",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": [
+        [
+          "report_id",
+          "version"
+        ]
+      ],
+      "comment": "成果编辑及恢复历史；同一成果与版本号唯一，历史正文不由并发版本字段替代",
+      "primary_key": [
+        "id"
+      ]
+    },
+    "reports": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('business_id_seq'::regclass)",
+          "identity": "",
+          "comment": "生成成果数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系"
+        },
+        {
+          "name": "user_id",
+          "type": "bigint",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "成果所有者ID，关联sys_user.id；任务和资源权限通过本成果判断"
+        },
+        {
+          "name": "title",
+          "type": "character varying(1000)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "用户可编辑的成果标题；必填且禁止空白文本"
+        },
+        {
+          "name": "type",
+          "type": "character varying(32)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "成果类型：article文章、research科研报告、daily日报、weekly周报、monthly月报"
+        },
+        {
+          "name": "template_id",
+          "type": "bigint",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "当前成果关联模板ID，关联templates.id；可空，历史使用内容由任务快照保留；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串"
+        },
+        {
+          "name": "content",
+          "type": "text",
+          "nullable": false,
+          "default": "''::text",
+          "identity": "",
+          "comment": "用户当前可编辑的Markdown正文；默认空文本，生成结果不能直接覆盖后续人工修改"
+        },
+        {
+          "name": "version",
+          "type": "integer",
+          "nullable": false,
+          "default": "1",
+          "identity": "",
+          "comment": "成果乐观锁版本；至少1，每次修改递增，不代替历史正文版本表"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "成果草稿创建时间；带时区时间点"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "成果标题或正文最近保存时间；带时区时间点"
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_reports_title",
+          "definition": "CHECK (length(TRIM(BOTH FROM title)) > 0)",
+          "validated": true
+        },
+        {
+          "name": "ck_reports_type",
+          "definition": "CHECK (type::text = ANY (ARRAY['article'::character varying, 'research'::character varying, 'daily'::character varying, 'weekly'::character varying, 'monthly'::character varying]::text[]))",
+          "validated": true
+        },
+        {
+          "name": "ck_reports_version",
+          "definition": "CHECK (version >= 1)",
+          "validated": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_reports_user_id",
+          "definition": "CREATE INDEX idx_reports_user_id ON public.reports USING btree (user_id, updated_at DESC, id)",
+          "unique": false,
+          "valid": true
+        }
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "template_id"
+          ],
+          "target": "templates",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "columns": [
+            "user_id"
+          ],
+          "target": "sys_user",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": [],
+      "sequence": {
+        "type": "bigint",
+        "start_value": 1,
+        "min_value": 1,
+        "max_value": "9223372036854775807",
+        "increment_by": 1,
+        "cycle": false,
+        "cache_size": 1,
+        "owned_by": []
+      },
+      "comment": "用户可编辑的生成文章、科研报告和周期简报正文；执行状态由生成任务维护",
+      "primary_key": [
+        "id"
+      ]
+    },
+    "templates": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('business_id_seq'::regclass)",
+          "identity": "",
+          "comment": "生成模板数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系"
+        },
+        {
+          "name": "name",
+          "type": "character varying(255)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "用户选择模板时显示的名称；必填且禁止空白文本"
+        },
+        {
+          "name": "purpose",
+          "type": "character varying(16)",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "模板用途：article生成文章、research科研报告、digest周期简报"
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "模板用途及适用范围说明；可空，不冒充正文生成结果"
+        },
+        {
+          "name": "prompt",
+          "type": "text",
+          "nullable": false,
+          "default": null,
+          "identity": "",
+          "comment": "正文生成提示词；无独立旧提示词时明确保留原模板名称、说明及章节结构"
+        },
+        {
+          "name": "model_id",
+          "type": "bigint",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "正文模型ID，关联ai_models.id；迁移后允许NULL，提交生成时必须配置真实文本模型"
+        },
+        {
+          "name": "image_model_id",
+          "type": "bigint",
+          "nullable": true,
+          "default": null,
+          "identity": "",
+          "comment": "配图模型ID，关联ai_models.id；可空，请求配图时须具备image_generate能力"
+        },
+        {
+          "name": "sections",
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'[]'::jsonb",
+          "identity": "",
+          "comment": "章节顺序及必填要求的JSON数组；保留章节标题和结构约束；明确的平台业务引用按实体映射，章节正文与普通外部参数不改写"
+        },
+        {
+          "name": "image_config",
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "comment": "配图数量、位置、风格和提示词模板的JSON对象；不保存调用凭证；明确的平台业务引用按实体映射，供应商模型标识、提示词及普通外部参数原样保留"
+        },
+        {
+          "name": "is_enabled",
+          "type": "boolean",
+          "nullable": false,
+          "default": "true",
+          "identity": "",
+          "comment": "模板选择开关；true可用于新任务、false停用，历史任务快照不受修改影响"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "模板创建时间；带时区时间点"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "identity": "",
+          "comment": "模板内容或模型配置最近修改时间；带时区时间点"
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_templates_image_config",
+          "definition": "CHECK (jsonb_typeof(image_config) = 'object'::text)",
+          "validated": true
+        },
+        {
+          "name": "ck_templates_name_prompt",
+          "definition": "CHECK (length(TRIM(BOTH FROM name)) > 0 AND length(TRIM(BOTH FROM prompt)) > 0)",
+          "validated": true
+        },
+        {
+          "name": "ck_templates_purpose",
+          "definition": "CHECK (purpose::text = ANY (ARRAY['article'::character varying, 'research'::character varying, 'digest'::character varying]::text[]))",
+          "validated": true
+        },
+        {
+          "name": "ck_templates_sections",
+          "definition": "CHECK (jsonb_typeof(sections) = 'array'::text)",
+          "validated": true
+        }
+      ],
+      "indexes": [],
+      "foreign_keys": [
+        {
+          "columns": [
+            "image_model_id"
+          ],
+          "target": "ai_models",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        },
+        {
+          "columns": [
+            "model_id"
+          ],
+          "target": "ai_models",
+          "target_schema": "public",
+          "validated": true,
+          "target_columns": [
+            "id"
+          ],
+          "ondelete": "RESTRICT",
+          "onupdate": "NO ACTION",
+          "match": "SIMPLE",
+          "deferrable": false,
+          "initially": "IMMEDIATE"
+        }
+      ],
+      "unique": [],
+      "sequence": {
+        "type": "bigint",
+        "start_value": 1,
+        "min_value": 1,
+        "max_value": "9223372036854775807",
+        "increment_by": 1,
+        "cycle": false,
+        "cache_size": 1,
+        "owned_by": []
+      },
+      "comment": "文章、科研报告与简报生成模板；正文及图片模型由管理员配置，可暂未配置",
+      "primary_key": [
+        "id"
+      ]
+    }
+  }
+}

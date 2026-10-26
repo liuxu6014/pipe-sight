@@ -28,9 +28,8 @@
 </template>
 
 <script setup>
-import { isExternal } from '@/utils/validate'
 import AppLink from './Link'
-import { getNormalPath } from '@/utils/ruoyi'
+import { resolveNavigationPath } from '@/utils/management-navigation'
 
 const props = defineProps({
   // route object
@@ -77,17 +76,12 @@ function hasOneShowingChild(children = [], parent) {
 };
 
 function resolvePath(routePath, routeQuery) {
-  if (isExternal(routePath)) {
-    return routePath
-  }
-  if (isExternal(props.basePath)) {
-    return props.basePath
-  }
+  const path = resolveNavigationPath(props.basePath, routePath)
   if (routeQuery) {
-    let query = JSON.parse(routeQuery);
-    return { path: getNormalPath(props.basePath + '/' + routePath), query: query }
+    const query = typeof routeQuery === 'string' ? JSON.parse(routeQuery) : routeQuery
+    return { path, query }
   }
-  return getNormalPath(props.basePath + '/' + routePath)
+  return path
 }
 
 function hasTitle(title){

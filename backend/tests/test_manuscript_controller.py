@@ -1,4 +1,4 @@
-from module_manuscript.controller.manuscript_controller import manuscript_controller
+from app.research.api.manuscript_controller import manuscript_controller
 
 
 def test_manuscript_controller_exposes_generation_routes() -> None:

@@ -45,4 +45,4 @@ function Stop-RecordedProcess {
 
 Stop-RecordedProcess -PidFile (Join-Path $RuntimeRoot 'frontend.pid') -Kind Frontend
 Stop-RecordedProcess -PidFile (Join-Path $RuntimeRoot 'backend.pid') -Kind Backend
-Write-Host 'MySQL and Redis were left running intentionally.'
+Write-Host 'PostgreSQL and Redis were left running intentionally.'

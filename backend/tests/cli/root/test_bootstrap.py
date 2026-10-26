@@ -22,8 +22,7 @@ for module_name in [
     'config.database',
     'config.get_redis',
     'config.get_scheduler',
-    'module_admin.service.server_service',
-    'utils.transport_crypto_util',
+    'app.infrastructure.services.transport_crypto_core',
 ]:
     sys.modules.pop(module_name, None)
 
@@ -33,8 +32,7 @@ print(json.dumps({
     'config.database': 'config.database' in sys.modules,
     'config.get_redis': 'config.get_redis' in sys.modules,
     'config.get_scheduler': 'config.get_scheduler' in sys.modules,
-    'module_admin.service.server_service': 'module_admin.service.server_service' in sys.modules,
-    'utils.transport_crypto_util': 'utils.transport_crypto_util' in sys.modules,
+    'app.infrastructure.services.transport_crypto_core': 'app.infrastructure.services.transport_crypto_core' in sys.modules,
 }, ensure_ascii=False))
 """
     completed = subprocess.run(
@@ -52,8 +50,7 @@ print(json.dumps({
         'config.database': False,
         'config.get_redis': False,
         'config.get_scheduler': False,
-        'module_admin.service.server_service': False,
-        'utils.transport_crypto_util': False,
+        'app.infrastructure.services.transport_crypto_core': False,
     }
 
 
@@ -75,12 +72,8 @@ for module_name in [
     'config.get_redis',
     'config.get_scheduler',
     'cli.tui.app',
-    'module_admin.service.server_service',
-    'module_admin.service.job_service',
-    'module_admin.service.config_service',
-    'module_generator.service.gen_service',
     'textual',
-    'utils.transport_crypto_util',
+    'app.infrastructure.services.transport_crypto_core',
 ]:
     sys.modules.pop(module_name, None)
 
@@ -94,12 +87,8 @@ print(json.dumps({
     'config.get_redis': 'config.get_redis' in sys.modules,
     'config.get_scheduler': 'config.get_scheduler' in sys.modules,
     'cli.tui.app': 'cli.tui.app' in sys.modules,
-    'module_admin.service.server_service': 'module_admin.service.server_service' in sys.modules,
-    'module_admin.service.job_service': 'module_admin.service.job_service' in sys.modules,
-    'module_admin.service.config_service': 'module_admin.service.config_service' in sys.modules,
-    'module_generator.service.gen_service': 'module_generator.service.gen_service' in sys.modules,
     'textual': 'textual' in sys.modules,
-    'utils.transport_crypto_util': 'utils.transport_crypto_util' in sys.modules,
+    'app.infrastructure.services.transport_crypto_core': 'app.infrastructure.services.transport_crypto_core' in sys.modules,
 }, ensure_ascii=False))
 """
     completed = subprocess.run(
@@ -119,12 +108,8 @@ print(json.dumps({
         'config.get_redis': False,
         'config.get_scheduler': False,
         'cli.tui.app': False,
-        'module_admin.service.server_service': False,
-        'module_admin.service.job_service': False,
-        'module_admin.service.config_service': False,
-        'module_generator.service.gen_service': False,
         'textual': False,
-        'utils.transport_crypto_util': False,
+        'app.infrastructure.services.transport_crypto_core': False,
     }
 
 
@@ -144,8 +129,6 @@ for module_name in [
     'cli.wizard.flows.app_run',
     'cli.wizard.flows.db_upgrade',
     'cli.wizard.flows.cache_clear',
-    'cli.wizard.flows.gen_export',
-    'cli.wizard.flows.gen_import',
     'cli.wizard.flows.prod_check',
 ]:
     sys.modules.pop(module_name, None)
@@ -158,8 +141,6 @@ print(json.dumps({
     'cli.wizard.flows.app_run': 'cli.wizard.flows.app_run' in sys.modules,
     'cli.wizard.flows.db_upgrade': 'cli.wizard.flows.db_upgrade' in sys.modules,
     'cli.wizard.flows.cache_clear': 'cli.wizard.flows.cache_clear' in sys.modules,
-    'cli.wizard.flows.gen_export': 'cli.wizard.flows.gen_export' in sys.modules,
-    'cli.wizard.flows.gen_import': 'cli.wizard.flows.gen_import' in sys.modules,
     'cli.wizard.flows.prod_check': 'cli.wizard.flows.prod_check' in sys.modules,
 }, ensure_ascii=False))
 """
@@ -178,7 +159,5 @@ print(json.dumps({
         'cli.wizard.flows.app_run': False,
         'cli.wizard.flows.db_upgrade': False,
         'cli.wizard.flows.cache_clear': False,
-        'cli.wizard.flows.gen_export': False,
-        'cli.wizard.flows.gen_import': False,
         'cli.wizard.flows.prod_check': False,
     }

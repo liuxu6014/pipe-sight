@@ -21,8 +21,12 @@ build/
 .runtime/
 .codegraph/
 logs/
+vf_admin/
+backend/vf_admin/
 tmp/
 test-results/
+.playwright-mcp/
+output/
 npm-cache/
 node_modules/
 dist/

@@ -2,8 +2,8 @@
   <div class="pipeline-page pipeline-knowledge-page">
     <section class="page-heading">
       <div>
-        <p class="eyebrow">后台管理 · 知识库</p>
-        <h1>内部资料库管理</h1>
+        <p class="eyebrow">管理员</p>
+        <h1>资料库管理</h1>
         <p class="summary">统一管理授权资料的上传、解析、权限范围和报告引用，所有操作直接使用当前知识库服务。</p>
       </div>
       <div class="heading-actions">
@@ -34,8 +34,7 @@
           <div><dt>处理中</dt><dd>{{ processingCount }}</dd></div>
           <div><dt>解析失败</dt><dd class="is-danger">{{ statusCount('解析失败') }}</dd></div>
         </dl>
-        <p>TXT、MD、DOCX 可在当前服务完成基础文本提取；PDF 与旧版 DOC 会进入外部解析队列。</p>
-        <el-button type="primary" plain :icon="UploadFilled" @click="openUpload">添加授权资料</el-button>
+        <p>以每份文件的安全检查与解析结果为准。可搜索 PDF、DOCX、MD、TXT 按现有解析流程处理；扫描材料及旧版 DOC 不视为已支持。</p>
       </el-card>
     </div>
 
@@ -54,6 +53,9 @@
               <el-option label="解析中" value="解析中" />
               <el-option label="待解析" value="待解析" />
               <el-option label="解析失败" value="解析失败" />
+              <el-option label="待安全扫描" value="待安全扫描" />
+              <el-option label="已隔离" value="已隔离" />
+              <el-option label="扫描失败" value="扫描失败" />
             </el-select>
           </div>
         </div>
@@ -105,8 +107,7 @@
         </el-table-column>
         <template #empty>
           <el-empty :description="hasFilters ? '当前筛选条件下没有资料' : '知识库中还没有可访问资料'">
-            <el-button v-if="!hasFilters" type="primary" @click="openUpload">上传第一份资料</el-button>
-            <el-button v-else @click="clearFilters">清除筛选</el-button>
+            <el-button v-if="hasFilters" @click="clearFilters">清除筛选</el-button>
           </el-empty>
         </template>
       </el-table>
@@ -211,7 +212,7 @@ const completedUploads = ref(0)
 const reparsingIds = ref(new Set())
 
 const hasFilters = computed(() => Boolean(keyword.value || statusFilter.value !== 'all'))
-const processingCount = computed(() => documents.value.filter(item => ['解析中', '待解析'].includes(item.status)).length)
+const processingCount = computed(() => documents.value.filter(item => ['解析中', '待解析', '待安全扫描'].includes(item.status)).length)
 const filteredDocuments = computed(() => {
   const query = keyword.value.trim().toLocaleLowerCase('zh-CN')
   return documents.value.filter(item => {
@@ -226,7 +227,7 @@ const pagedDocuments = computed(() => {
 
 function safeTags(document) { return Array.isArray(document?.tags) ? document.tags : [] }
 function statusCount(status) { return documents.value.filter(item => item.status === status).length }
-function statusTag(status) { return ({ 已解析: 'success', 解析中: 'warning', 待解析: 'info', 解析失败: 'danger' })[status] || 'info' }
+function statusTag(status) { return ({ 已解析: 'success', 解析中: 'warning', 待解析: 'info', 待安全扫描: 'warning', 解析失败: 'danger', 已隔离: 'danger', 扫描失败: 'danger' })[status] || 'info' }
 function isReparsing(id) { return reparsingIds.value.has(id) }
 function extensionOf(name = '') { return name.includes('.') ? name.split('.').pop().toLowerCase() : '' }
 function formatFileSize(bytes) {
@@ -390,7 +391,7 @@ onMounted(loadDocuments)
 
 .card-header small {
   color: #718096;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .doc-name {
@@ -416,7 +417,7 @@ onMounted(loadDocuments)
 
 .knowledge-status-card dt {
   color: #718096;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .knowledge-status-card dd {
@@ -433,7 +434,7 @@ onMounted(loadDocuments)
 .knowledge-status-card p {
   margin: 16px 0;
   color: #667085;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.7;
 }
 
@@ -461,7 +462,7 @@ onMounted(loadDocuments)
 
 .doc-meta span {
   color: #718096;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .permission-cell {
@@ -484,7 +485,7 @@ onMounted(loadDocuments)
 .knowledge-pagination {
   margin-top: 16px;
   color: #718096;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .upload-config-grid {

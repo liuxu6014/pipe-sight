@@ -1,3 +1,5 @@
+from cli.output import SHELL_TEXT_FORMATTER
+from cli.runtime.nested_cli import NESTED_CLI_SUPPORT
 from cli.tui.copy.fragments import (
     ACTION_CONSEQUENCE_TEXTS,
     ACTION_FEEDBACK_COPY,
@@ -14,7 +16,6 @@ from cli.tui.copy.fragments import (
     COMMAND_HINT_TITLES,
     GENERAL_COPY,
 )
-from cli.utils import NESTED_CLI_SUPPORT, SHELL_TEXT_FORMATTER
 
 
 class TuiActionCopyMixin:

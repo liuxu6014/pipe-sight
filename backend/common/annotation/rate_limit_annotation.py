@@ -12,15 +12,16 @@ from fastapi import Request
 from redis import asyncio as aioredis
 from typing_extensions import ParamSpec
 
-from common.context import RequestContext
-from common.enums import HttpMethod, RedisInitKeyConfig
+from app.infrastructure.services.logging_support import logger
+from app.system.schemas.user import CurrentUserModel
+from common.enums.cache import RedisInitKeyConfig
+from common.enums.http import HttpMethod
+from common.http.client_ip import ClientIpResolver
+from common.http.context import RequestContext
+from common.http.request_support import RequestSupport
+from common.http.response_headers import ResponseHeaderStore
+from common.http.responses import ResponseUtil
 from exceptions.exception import LoginException
-from module_admin.entity.vo.user_vo import CurrentUserModel
-from utils.api_annotation_util import ApiAnnotationUtil
-from utils.api_response_header_util import ApiResponseHeaderUtil
-from utils.client_ip_util import ClientIPUtil
-from utils.log_util import logger
-from utils.response_util import ResponseUtil
 
 P = ParamSpec('P')
 R = TypeVar('R')
@@ -186,7 +187,7 @@ class ApiRateLimit:
     `local_fallback` 仅作为Redis异常场景下的进程内应急保护，能提供单进程内的
     基础限流能力，但不保证多 worker / 多实例部署下的全局一致性。
 
-    `ip` 维度限流通过 `ClientIPUtil` 提取客户端地址，仅当请求来源命中
+    `ip` 维度限流通过 `ClientIpResolver` 提取客户端地址，仅当请求来源命中
     `APP_TRUSTED_PROXY_IPS` 且 `APP_TRUSTED_PROXY_HOPS` 大于0时，才会解析
     `X-Forwarded-For` / `X-Real-IP` 请求头；否则回退到直接连接来源地址。
     """
@@ -309,7 +310,7 @@ class ApiRateLimit:
         self.algorithm = resolved_algorithm
         self.fail_strategy = resolved_fail_strategy
         self.bypass_roles = self._normalize_bypass_roles(bypass.roles if bypass else None)
-        self.methods = ApiAnnotationUtil.normalize_http_methods(resolved_methods)
+        self.methods = RequestSupport.normalize_http_methods(resolved_methods)
         self.message = resolved_message
 
     def __call__(self, func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
@@ -322,7 +323,7 @@ class ApiRateLimit:
 
         @wraps(func)
         async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-            request = ApiAnnotationUtil.get_request(func, *args, **kwargs)
+            request = RequestSupport.get_request(func, *args, **kwargs)
             if request is None:
                 return await func(*args, **kwargs)
             if not self._is_request_method_allowed(request):
@@ -357,7 +358,7 @@ class ApiRateLimit:
                 self._log_rate_limit_hit(request, rate_limit_result)
                 return ResponseUtil.too_many_requests(msg=self.message, headers=headers)  # type: ignore[return-value]
 
-            ApiResponseHeaderUtil.merge_headers(request, headers)
+            ResponseHeaderStore.merge_headers(request, headers)
             result = await func(*args, **kwargs)
             return result
 
@@ -629,7 +630,7 @@ class ApiRateLimit:
         :param request: 当前请求对象
         :return: 客户端IP地址
         """
-        return ClientIPUtil.get_client_ip(request)
+        return ClientIpResolver.get_client_ip(request)
 
     def _build_rate_limit_headers(self, rate_limit_result: dict[str, int | bool]) -> dict[str, str]:
         """

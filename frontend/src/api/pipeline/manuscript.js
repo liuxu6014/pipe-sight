@@ -1,4 +1,5 @@
-import request from '@/utils/request'
+import request from './request'
+import { requireBusinessId } from '@/utils/portal/businessId'
 
 export function generateManuscript(data) {
   return request({
@@ -18,14 +19,14 @@ export function listManuscriptJobs(query) {
 
 export function getManuscriptJob(jobId) {
   return request({
-    url: `/manuscript/jobs/${jobId}`,
+    url: `/manuscript/jobs/${requireBusinessId(jobId)}`,
     method: 'get'
   })
 }
 
 export function exportManuscript(jobId) {
   return request({
-    url: `/manuscript/jobs/${jobId}/export`,
+    url: `/manuscript/jobs/${requireBusinessId(jobId)}/export`,
     method: 'get'
   })
 }

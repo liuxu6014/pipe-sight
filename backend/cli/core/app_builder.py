@@ -42,10 +42,12 @@ class ProjectRuntimeLocator:
             raise typer.Exit(code=2)
 
         project_dir_str = str(project_dir)
-        if sys.path and sys.path[0] == project_dir_str:
-            return project_dir
-
+        source_dir_str = str(project_dir / 'src')
+        for path in (project_dir_str, source_dir_str):
+            if path in sys.path:
+                sys.path.remove(path)
         sys.path.insert(0, project_dir_str)
+        sys.path.insert(0, source_dir_str)
         return project_dir
 
     def extract_import_argv(self, argv: list[str] | None = None) -> list[str]:
@@ -349,7 +351,6 @@ DEFAULT_COMMAND_GROUP_REGISTRY = CliCommandGroupRegistry(
         'job': 'cli.groups.job',
         'config': 'cli.groups.config',
         'crypto': 'cli.groups.crypto',
-        'gen': 'cli.groups.gen',
         'dev': 'cli.groups.dev',
     }
 )

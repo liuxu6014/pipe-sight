@@ -4,6 +4,12 @@ import { readFile } from 'node:fs/promises'
 
 const startScriptPath = new URL('../../start-dev.ps1', import.meta.url)
 
+test('does not reimport legacy business tables into an upgraded database', async () => {
+  const script = await readFile(startScriptPath, 'utf8')
+  assert.match(script, /if not has_base_tables:\s*print\("Applying PipeSight baseline tables before Alembic migrations\.\.\."\)\s*await execute_sql\(connection, sys\.argv\[2\]\)\s*await execute_sql\(connection, sys\.argv\[3\]\)/)
+  assert.match(script, /& \$BackendPython -m alembic upgrade head/)
+})
+
 test('reuses healthy frontend and backend services without creating port races', async () => {
   const script = await readFile(startScriptPath, 'utf8')
 

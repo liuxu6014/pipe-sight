@@ -1,10 +1,9 @@
 export const portalNavigation = [
   { label: '首页', path: '/portal', match: path => path === '/portal' },
-  { label: '科技资讯', path: '/portal/news', match: path => path.startsWith('/portal/news') },
-  { label: '论文资料', path: '/portal/papers', match: path => path.startsWith('/portal/papers') },
-  { label: '科研工作台', path: '/portal/research', match: path => path.startsWith('/portal/research') },
-  { label: '情报简报', path: '/portal/digests', match: path => path.startsWith('/portal/digests') },
-  { label: '知识库', path: '/portal/knowledge', match: path => path.startsWith('/portal/knowledge') }
+  { label: '新闻资讯', path: '/portal/news', match: path => path.startsWith('/portal/news') },
+  { label: '科研论文', path: '/portal/papers', match: path => path.startsWith('/portal/papers') },
+  { label: '科研报告', path: '/portal/research', match: path => path.startsWith('/portal/research') || path.startsWith('/portal/knowledge') },
+  { label: '情报简报', path: '/portal/digests', match: path => path.startsWith('/portal/digests') }
 ]
 
 export const topics = [
@@ -183,11 +182,8 @@ export const digestReports = [
   { id: 'digest-004', title: '智能阴保情报自动简报', type: '自动任务', period: '每周一 09:00', sources: 16, status: '运行中', version: '计划', updatedAt: '07-29 09:00' }
 ]
 
-export const reportTemplates = [
-  { id: 'template-01', name: '科技项目需求填报表', description: '结构化封面、需求背景、技术指标与经费预算', color: '#2764e7' },
-  { id: 'template-02', name: '科研需求报告', description: '问题分析、研究目标、研究内容、考核指标', color: '#0b8f87' },
-  { id: 'template-03', name: '技术路线报告', description: '现状评估、技术路线、试验验证与实施计划', color: '#7357c8' }
-]
+// Generation templates are always loaded from the API.
+export const reportTemplates = []
 
 export const taskStages = ['资料校验', '文件解析', '证据检索', '大纲规划', '章节生成', '引用校验', '质量检查', '图形生成', '导出准备']
 

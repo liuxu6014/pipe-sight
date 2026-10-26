@@ -44,7 +44,7 @@ class CryptoInfrastructureGateway:
 
         :return: 传输加密工具类
         """
-        return import_module('utils.transport_crypto_util').TransportCryptoUtil
+        return import_module('app.infrastructure.services.transport_crypto_core').TransportCryptoUtil
 
     @staticmethod
     def get_transport_key_provider() -> Any:
@@ -53,4 +53,4 @@ class CryptoInfrastructureGateway:
 
         :return: 传输加密密钥提供者
         """
-        return import_module('utils.transport_crypto_util').TransportKeyProvider
+        return import_module('app.infrastructure.services.transport_crypto_core').TransportKeyProvider

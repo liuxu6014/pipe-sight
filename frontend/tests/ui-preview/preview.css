@@ -1,0 +1,9 @@
+body { padding-bottom: 56px; }
+.ui-preview-management.has-preview-sidebar { padding-left: 220px; }
+.ui-preview-sidebar { position: fixed; top: 0; bottom: 44px; left: 0; width: 220px; padding: 24px 16px; display: flex; flex-direction: column; gap: 20px; background: #fff; border-right: 1px solid #d9e2e9; }
+.ui-preview-management:not(.has-preview-sidebar) .ui-preview-sidebar { display: none; }
+.ui-preview-shell-toolbar { padding: 12px 24px; border-bottom: 1px solid #d9e2e9; background: #fff; }
+.ui-preview-shell-toolbar button { min-height: 40px; border: 1px solid #d9e2e9; border-radius: 6px; padding: 8px 12px; background: #fff; color: #005487; cursor: pointer; }
+@media (max-width: 760px) { .ui-preview-management.has-preview-sidebar { padding-left: 0; } .ui-preview-sidebar { display: none; } .ui-preview-shell-toolbar { display: none; } }
+.ui-preview-banner { position: fixed; z-index: 5000; bottom: 0; left: 0; right: 0; min-height: 44px; padding: 8px 16px; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 20px; background: #fff3cc; color: #583b00; border-top: 1px solid #d6b267; font-size: 13px; }
+.ui-preview-banner a { text-decoration: underline; padding: 4px; }

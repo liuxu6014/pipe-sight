@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS data_sources (
   success_count INT NOT NULL DEFAULT 0 COMMENT '累计成功次数',
   failure_count INT NOT NULL DEFAULT 0 COMMENT '累计失败次数',
   consecutive_failures INT NOT NULL DEFAULT 0 COMMENT '连续失败次数',
+  collection_lease_owner VARCHAR(128) NULL COMMENT '采集执行器租约持有者',
+  collection_lease_until DATETIME NULL COMMENT '采集执行器租约到期时间',
   owner_id BIGINT NULL COMMENT '负责人ID',
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
@@ -28,7 +30,8 @@ CREATE TABLE IF NOT EXISTS data_sources (
   CONSTRAINT ck_data_sources_counters CHECK (success_count >= 0 AND failure_count >= 0 AND consecutive_failures >= 0),
   CONSTRAINT fk_data_sources_user FOREIGN KEY (owner_id) REFERENCES sys_user(user_id) ON DELETE SET NULL,
   KEY idx_data_sources_type_status (source_type, status),
-  KEY idx_data_sources_owner (owner_id)
+  KEY idx_data_sources_owner (owner_id),
+  KEY idx_data_sources_collection_lease (enabled, status, collection_lease_until, update_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='数据来源配置表';
 
 CREATE TABLE IF NOT EXISTS pipeline_template_versions (
@@ -78,9 +81,12 @@ CREATE TABLE IF NOT EXISTS collection_runs (
   handoff_batch_id VARCHAR(64) NULL COMMENT '外部处理批次ID',
   handoff_count INT NOT NULL DEFAULT 0 COMMENT '提交外部处理条数',
   handoff_processed_count INT NOT NULL DEFAULT 0 COMMENT '外部处理完成条数',
+  handoff_rejected_count INT NOT NULL DEFAULT 0 COMMENT '外部处理业务拒绝条数',
   handoff_failed_count INT NOT NULL DEFAULT 0 COMMENT '外部处理失败条数',
   handoff_time DATETIME NULL COMMENT '最近外部处理回执时间',
   handoff_error TEXT NULL COMMENT '外部处理错误摘要',
+  handoff_lease_owner VARCHAR(128) NULL COMMENT '交接执行器租约持有者',
+  handoff_lease_until DATETIME NULL COMMENT '交接执行器租约到期时间',
   error_message TEXT NULL COMMENT '错误信息',
   checkpoint_json JSON NOT NULL COMMENT '断点信息',
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -88,13 +94,14 @@ CREATE TABLE IF NOT EXISTS collection_runs (
   PRIMARY KEY (run_id),
   CONSTRAINT ck_collection_runs_trigger_type CHECK (trigger_type IN ('schedule', 'manual', 'retry')),
   CONSTRAINT ck_collection_runs_status CHECK (status IN ('queued', 'running', 'success', 'failed', 'cancelled')),
-  CONSTRAINT ck_collection_runs_counters CHECK (fetched_count >= 0 AND inserted_count >= 0 AND updated_count >= 0 AND duplicate_count >= 0 AND failed_count >= 0 AND handoff_count >= 0 AND handoff_processed_count >= 0 AND handoff_failed_count >= 0),
+  CONSTRAINT ck_collection_runs_counters CHECK (fetched_count >= 0 AND inserted_count >= 0 AND updated_count >= 0 AND duplicate_count >= 0 AND failed_count >= 0 AND handoff_count >= 0 AND handoff_processed_count >= 0 AND handoff_rejected_count >= 0 AND handoff_failed_count >= 0),
   CONSTRAINT ck_collection_runs_handoff_status CHECK (handoff_status IN ('pending', 'dispatched', 'processing', 'completed', 'partial', 'failed')),
   CONSTRAINT fk_collection_runs_sources FOREIGN KEY (source_id) REFERENCES data_sources(source_id) ON DELETE RESTRICT,
   CONSTRAINT fk_collection_runs_jobs FOREIGN KEY (scheduler_job_id) REFERENCES sys_job(job_id) ON DELETE SET NULL,
   KEY idx_collection_runs_source_time (source_id, create_time),
   KEY idx_collection_runs_status_time (status, create_time),
-  KEY idx_collection_runs_handoff_status_time (handoff_status, create_time)
+  KEY idx_collection_runs_handoff_status_time (handoff_status, create_time),
+  KEY idx_collection_runs_handoff_lease (handoff_status, handoff_lease_until, update_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='采集运行记录表';
 
 CREATE TABLE IF NOT EXISTS news_articles (
@@ -115,6 +122,10 @@ CREATE TABLE IF NOT EXISTS news_articles (
   article_hash VARCHAR(128) NULL COMMENT '正文指纹',
   relevance_score INT NOT NULL DEFAULT 0 COMMENT '相关性评分',
   review_status VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT '审核状态',
+  reviewed_by BIGINT NULL COMMENT '审核人ID',
+  reviewed_at DATETIME NULL COMMENT '审核时间',
+  review_reason TEXT NULL COMMENT '审核意见',
+  published_at DATETIME NULL COMMENT '发布时间',
   permission_scope VARCHAR(32) NOT NULL DEFAULT 'public' COMMENT '可见范围',
   tags JSON NOT NULL COMMENT '标签',
   metadata_json JSON NOT NULL COMMENT '扩展元数据',
@@ -143,6 +154,7 @@ CREATE TABLE IF NOT EXISTS news_articles (
   KEY idx_news_articles_type_time (article_type, published_time),
   KEY idx_news_articles_source_time (source_id, published_time),
   KEY idx_news_articles_review_time (review_status, published_time),
+  KEY idx_news_articles_review_queue (review_status, handoff_status, update_time),
   KEY idx_news_articles_handoff_status_time (handoff_status, update_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='科技资讯文章表';
 
@@ -171,6 +183,10 @@ CREATE TABLE IF NOT EXISTS papers (
   open_access_status VARCHAR(32) NOT NULL DEFAULT 'unknown' COMMENT '开放获取状态',
   full_text_status VARCHAR(32) NOT NULL DEFAULT 'unknown' COMMENT '全文状态',
   review_status VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT '审核状态',
+  reviewed_by BIGINT NULL COMMENT '审核人ID',
+  reviewed_at DATETIME NULL COMMENT '审核时间',
+  review_reason TEXT NULL COMMENT '审核意见',
+  published_at DATETIME NULL COMMENT '发布时间',
   permission_scope VARCHAR(32) NOT NULL DEFAULT 'public' COMMENT '可见范围',
   tags JSON NOT NULL COMMENT '标签',
   metadata_json JSON NOT NULL COMMENT '扩展元数据',
@@ -196,6 +212,8 @@ CREATE TABLE IF NOT EXISTS papers (
   KEY idx_papers_year (publication_year),
   KEY idx_papers_journal (journal),
   KEY idx_papers_source_time (source_id, create_time),
+  KEY idx_papers_review_queue (review_status, handoff_status, update_time),
+  KEY idx_papers_review_published (review_status, published_at),
   KEY idx_papers_handoff_status_time (handoff_status, update_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='论文资料表';
 
@@ -225,3 +243,208 @@ CREATE TABLE IF NOT EXISTS pipeline_prompt_versions (
   KEY idx_pipeline_prompt_scene_status (scene, status),
   KEY idx_pipeline_prompt_key_time (prompt_key, update_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='管网模型提示词版本表';
+
+CREATE TABLE IF NOT EXISTS pipeline_content_review_events (
+  event_id VARCHAR(64) NOT NULL,
+  content_type VARCHAR(16) NOT NULL,
+  content_id VARCHAR(64) NOT NULL,
+  from_status VARCHAR(32) NULL,
+  to_status VARCHAR(32) NOT NULL,
+  action VARCHAR(32) NOT NULL,
+  reason TEXT NULL,
+  operator_id BIGINT NULL,
+  operator_name VARCHAR(64) NOT NULL DEFAULT '',
+  snapshot_json JSON NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (event_id),
+  CONSTRAINT ck_pipeline_review_event_content_type CHECK (content_type IN ('article', 'paper')),
+  CONSTRAINT ck_pipeline_review_event_action CHECK (action IN ('approve', 'reject', 'withdraw', 'reprocess')),
+  CONSTRAINT fk_pipeline_review_event_operator FOREIGN KEY (operator_id) REFERENCES sys_user(user_id) ON DELETE SET NULL,
+  KEY idx_pipeline_review_event_content_time (content_type, content_id, create_time),
+  KEY idx_pipeline_review_event_operator_time (operator_id, create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='管网内容审核事件表';
+
+CREATE TABLE IF NOT EXISTS pipeline_quality_issues (
+  issue_id VARCHAR(64) NOT NULL,
+  content_type VARCHAR(16) NOT NULL,
+  content_id VARCHAR(64) NOT NULL,
+  issue_code VARCHAR(32) NOT NULL,
+  severity VARCHAR(16) NOT NULL DEFAULT 'warning',
+  evidence JSON NOT NULL,
+  description TEXT NOT NULL,
+  suggestion TEXT NOT NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'open',
+  resolution TEXT NULL,
+  operator_id BIGINT NULL,
+  operator_name VARCHAR(64) NOT NULL DEFAULT '',
+  first_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  resolved_at DATETIME NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (issue_id),
+  CONSTRAINT uk_pipeline_quality_issue_content_code UNIQUE (content_type, content_id, issue_code),
+  CONSTRAINT ck_pipeline_quality_issue_content_type CHECK (content_type IN ('article', 'paper')),
+  CONSTRAINT ck_pipeline_quality_issue_code CHECK (issue_code IN ('duplicate', 'missing', 'tag', 'parse', 'review')),
+  CONSTRAINT ck_pipeline_quality_issue_severity CHECK (severity IN ('error', 'warning', 'info')),
+  CONSTRAINT ck_pipeline_quality_issue_status CHECK (status IN ('open', 'resolved', 'ignored')),
+  CONSTRAINT fk_pipeline_quality_issue_operator FOREIGN KEY (operator_id) REFERENCES sys_user(user_id) ON DELETE SET NULL,
+  KEY idx_pipeline_quality_issue_status_time (status, update_time),
+  KEY idx_pipeline_quality_issue_content (content_type, content_id, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='管网情报质量问题登记表';
+
+CREATE TABLE IF NOT EXISTS pipeline_quality_issue_events (
+  event_id VARCHAR(64) NOT NULL,
+  issue_id VARCHAR(64) NOT NULL,
+  from_status VARCHAR(16) NULL,
+  to_status VARCHAR(16) NOT NULL,
+  action VARCHAR(16) NOT NULL,
+  reason TEXT NOT NULL,
+  operator_id BIGINT NULL,
+  operator_name VARCHAR(64) NOT NULL DEFAULT '',
+  snapshot_json JSON NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (event_id),
+  CONSTRAINT ck_pipeline_quality_issue_event_action CHECK (action IN ('resolve', 'ignore', 'reopen')),
+  CONSTRAINT ck_pipeline_quality_issue_event_to_status CHECK (to_status IN ('open', 'resolved', 'ignored')),
+  CONSTRAINT fk_pipeline_quality_issue_event_issue FOREIGN KEY (issue_id) REFERENCES pipeline_quality_issues(issue_id) ON DELETE CASCADE,
+  CONSTRAINT fk_pipeline_quality_issue_event_operator FOREIGN KEY (operator_id) REFERENCES sys_user(user_id) ON DELETE SET NULL,
+  KEY idx_pipeline_quality_issue_event_issue_time (issue_id, create_time),
+  KEY idx_pipeline_quality_issue_event_operator_time (operator_id, create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='管网情报质量问题治理事件表';
+
+CREATE TABLE IF NOT EXISTS pipeline_duplicate_groups (
+  group_id VARCHAR(64) NOT NULL,
+  content_type VARCHAR(16) NOT NULL,
+  group_key VARCHAR(255) NOT NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'candidate',
+  master_content_id VARCHAR(64) NULL,
+  similarity DOUBLE NULL,
+  decision_reason TEXT NULL,
+  operator_id BIGINT NULL,
+  operator_name VARCHAR(64) NOT NULL DEFAULT '',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (group_id),
+  CONSTRAINT uk_pipeline_duplicate_group_key UNIQUE (content_type, group_key),
+  CONSTRAINT ck_pipeline_duplicate_group_content_type CHECK (content_type IN ('article', 'paper')),
+  CONSTRAINT ck_pipeline_duplicate_group_status CHECK (status IN ('candidate', 'merged', 'split', 'dismissed')),
+  CONSTRAINT ck_pipeline_duplicate_group_similarity CHECK (similarity IS NULL OR similarity BETWEEN 0 AND 1),
+  CONSTRAINT fk_pipeline_duplicate_group_operator FOREIGN KEY (operator_id) REFERENCES sys_user(user_id) ON DELETE SET NULL,
+  KEY idx_pipeline_duplicate_group_status_time (status, update_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='管网情报疑似重复组';
+
+CREATE TABLE IF NOT EXISTS pipeline_duplicate_members (
+  member_id BIGINT NOT NULL AUTO_INCREMENT,
+  group_id VARCHAR(64) NOT NULL,
+  content_type VARCHAR(16) NOT NULL,
+  content_id VARCHAR(64) NOT NULL,
+  relation_type VARCHAR(16) NOT NULL DEFAULT 'candidate',
+  similarity DOUBLE NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (member_id),
+  CONSTRAINT uk_pipeline_duplicate_member_content UNIQUE (group_id, content_type, content_id),
+  CONSTRAINT ck_pipeline_duplicate_member_content_type CHECK (content_type IN ('article', 'paper')),
+  CONSTRAINT ck_pipeline_duplicate_member_relation_type CHECK (relation_type IN ('candidate', 'master', 'duplicate')),
+  CONSTRAINT ck_pipeline_duplicate_member_similarity CHECK (similarity IS NULL OR similarity BETWEEN 0 AND 1),
+  CONSTRAINT fk_pipeline_duplicate_member_group FOREIGN KEY (group_id) REFERENCES pipeline_duplicate_groups(group_id) ON DELETE CASCADE,
+  KEY idx_pipeline_duplicate_member_content (content_type, content_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='管网情报重复组成员关系';
+
+CREATE TABLE IF NOT EXISTS pipeline_duplicate_group_events (
+  event_id VARCHAR(64) NOT NULL,
+  group_id VARCHAR(64) NOT NULL,
+  from_status VARCHAR(16) NULL,
+  to_status VARCHAR(16) NOT NULL,
+  action VARCHAR(16) NOT NULL,
+  master_content_id VARCHAR(64) NULL,
+  reason TEXT NOT NULL,
+  operator_id BIGINT NULL,
+  operator_name VARCHAR(64) NOT NULL DEFAULT '',
+  snapshot_json JSON NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (event_id),
+  CONSTRAINT ck_pipeline_duplicate_event_action CHECK (action IN ('merge', 'split', 'dismiss', 'reopen')),
+  CONSTRAINT ck_pipeline_duplicate_event_to_status CHECK (to_status IN ('candidate', 'merged', 'split', 'dismissed')),
+  CONSTRAINT fk_pipeline_duplicate_event_group FOREIGN KEY (group_id) REFERENCES pipeline_duplicate_groups(group_id) ON DELETE CASCADE,
+  CONSTRAINT fk_pipeline_duplicate_event_operator FOREIGN KEY (operator_id) REFERENCES sys_user(user_id) ON DELETE SET NULL,
+  KEY idx_pipeline_duplicate_event_group_time (group_id, create_time),
+  KEY idx_pipeline_duplicate_event_operator_time (operator_id, create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='管网情报重复组治理事件表';
+
+CREATE TABLE IF NOT EXISTS pipeline_model_routes (
+  route_id VARCHAR(64) NOT NULL,
+  scene VARCHAR(32) NOT NULL,
+  primary_model_id BIGINT NULL,
+  fallback_model_id BIGINT NULL,
+  timeout_seconds INT NOT NULL DEFAULT 30,
+  max_tokens INT NOT NULL DEFAULT 2048,
+  temperature DOUBLE NOT NULL DEFAULT 0.2,
+  daily_limit INT NOT NULL DEFAULT 0,
+  enabled TINYINT(1) NOT NULL DEFAULT 0,
+  version_no INT NOT NULL DEFAULT 1,
+  operator_id BIGINT NULL,
+  operator_name VARCHAR(64) NOT NULL DEFAULT '',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (route_id),
+  CONSTRAINT uk_pipeline_model_routes_scene UNIQUE (scene),
+  CONSTRAINT ck_pipeline_model_routes_scene CHECK (scene IN ('research', 'digest', 'data-filter')),
+  CONSTRAINT ck_pipeline_model_routes_timeout CHECK (timeout_seconds BETWEEN 1 AND 120),
+  CONSTRAINT ck_pipeline_model_routes_max_tokens CHECK (max_tokens BETWEEN 1 AND 32768),
+  CONSTRAINT ck_pipeline_model_routes_temperature CHECK (temperature BETWEEN 0 AND 2),
+  CONSTRAINT ck_pipeline_model_routes_daily_limit CHECK (daily_limit >= 0),
+  CONSTRAINT ck_pipeline_model_routes_version CHECK (version_no >= 1),
+  CONSTRAINT fk_pipeline_route_primary_model FOREIGN KEY (primary_model_id) REFERENCES ai_models(model_id) ON DELETE RESTRICT,
+  CONSTRAINT fk_pipeline_route_fallback_model FOREIGN KEY (fallback_model_id) REFERENCES ai_models(model_id) ON DELETE RESTRICT,
+  CONSTRAINT fk_pipeline_route_operator FOREIGN KEY (operator_id) REFERENCES sys_user(user_id) ON DELETE SET NULL,
+  KEY idx_pipeline_model_routes_enabled (enabled, scene)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='管网业务场景模型路由配置表';
+
+CREATE TABLE IF NOT EXISTS pipeline_model_route_usage (
+  route_id VARCHAR(64) NOT NULL,
+  usage_date DATETIME NOT NULL,
+  call_count INT NOT NULL DEFAULT 0,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (route_id, usage_date),
+  CONSTRAINT ck_pipeline_model_route_usage_count CHECK (call_count >= 0),
+  CONSTRAINT fk_pipeline_model_route_usage_route FOREIGN KEY (route_id)
+    REFERENCES pipeline_model_routes(route_id) ON DELETE CASCADE,
+  KEY idx_pipeline_model_route_usage_date (usage_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='管网场景模型路由每日调用计数表';
+
+CREATE TABLE IF NOT EXISTS pipeline_model_call_audits (
+  call_id VARCHAR(64) NOT NULL,
+  task_id VARCHAR(64) NULL,
+  user_id BIGINT NULL,
+  scene VARCHAR(32) NOT NULL,
+  route_id VARCHAR(64) NULL,
+  route_version_no INT NULL,
+  prompt_version_id VARCHAR(64) NULL,
+  template_version_id VARCHAR(64) NULL,
+  model_id BIGINT NULL,
+  model_code VARCHAR(100) NULL,
+  provider VARCHAR(50) NULL,
+  attempt_no INT NOT NULL DEFAULT 0,
+  fallback_used BOOLEAN NOT NULL DEFAULT FALSE,
+  status VARCHAR(20) NOT NULL,
+  latency_ms INT NULL,
+  input_char_count INT NOT NULL DEFAULT 0,
+  output_char_count INT NOT NULL DEFAULT 0,
+  input_tokens INT NULL,
+  output_tokens INT NULL,
+  error_code VARCHAR(64) NULL,
+  error_message VARCHAR(1000) NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (call_id),
+  CONSTRAINT ck_pipeline_model_call_audit_status CHECK (status IN ('success', 'failed', 'limit_exceeded')),
+  CONSTRAINT ck_pipeline_model_call_audit_attempt CHECK (attempt_no >= 0),
+  CONSTRAINT ck_pipeline_model_call_audit_latency CHECK (latency_ms IS NULL OR latency_ms >= 0),
+  CONSTRAINT fk_pipeline_model_call_audit_user FOREIGN KEY (user_id) REFERENCES sys_user(user_id) ON DELETE SET NULL,
+  CONSTRAINT fk_pipeline_model_call_audit_route FOREIGN KEY (route_id) REFERENCES pipeline_model_routes(route_id) ON DELETE SET NULL,
+  CONSTRAINT fk_pipeline_model_call_audit_model FOREIGN KEY (model_id) REFERENCES ai_models(model_id) ON DELETE SET NULL,
+  KEY idx_pipeline_model_call_audit_scene_time (scene, create_time),
+  KEY idx_pipeline_model_call_audit_status_time (status, create_time),
+  KEY idx_pipeline_model_call_audit_task_time (task_id, create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='管网模型单次调用审计表';

@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shlex
 import sys
 from dataclasses import dataclass
 from typing import Any
@@ -8,6 +9,34 @@ from typing import Any
 import typer
 
 from cli.context import CliContext
+
+
+class ShellTextFormatter:
+    """CLI 文本和 Shell 命令格式化器。"""
+
+    _SNAKE_CASE_BOUNDARY_PATTERN = re.compile(r'(?<!^)(?=[A-Z])')
+
+    @staticmethod
+    def format_shell_command(arguments: list[str]) -> str:
+        """将命令参数列表格式化为 shell 可读文本。"""
+        return shlex.join(arguments)
+
+    @staticmethod
+    def truncate_text(value: object, max_length: int) -> str:
+        """将文本截断到指定长度。"""
+        text = '' if value is None else str(value).strip()
+        if len(text) <= max_length:
+            return text
+        return f'{text[: max_length - 3]}...'
+
+    @classmethod
+    def to_snake_case(cls, value: object) -> str:
+        """将字段名标准化为 ``snake_case``。"""
+        text = '' if value is None else str(value).strip()
+        if not text:
+            return ''
+        normalized_text = text.replace('-', '_').replace(' ', '_')
+        return cls._SNAKE_CASE_BOUNDARY_PATTERN.sub('_', normalized_text).lower()
 
 
 @dataclass
@@ -871,3 +900,6 @@ class OutputRenderer:
         :return: None
         """
         self.emitter.complete_command(result, ctx)
+
+
+SHELL_TEXT_FORMATTER = ShellTextFormatter()

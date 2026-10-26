@@ -31,6 +31,7 @@ import variables from '@/assets/styles/variables.module.scss'
 import useAppStore from '@/store/modules/app'
 import useSettingsStore from '@/store/modules/settings'
 import usePermissionStore from '@/store/modules/permission'
+import { resolveActiveNavigation } from '@/utils/management-navigation'
 
 const route = useRoute();
 const appStore = useAppStore()
@@ -59,13 +60,7 @@ const getMenuTextColor = computed(() => {
   return sideTheme.value === 'theme-dark' ? variables.menuText : variables.menuLightText;
 });
 
-const activeMenu = computed(() => {
-  const { meta, path } = route;
-  if (meta.activeMenu) {
-    return meta.activeMenu;
-  }
-  return path;
-});
+const activeMenu = computed(() => resolveActiveNavigation(route, sidebarRouters.value));
 </script>
 
 <style lang="scss" scoped>

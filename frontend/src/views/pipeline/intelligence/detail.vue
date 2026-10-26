@@ -18,7 +18,7 @@
               <el-tag :type="categoryType(detail.category)" effect="light">{{ categoryText(detail.category) }}</el-tag>
             </div>
           </template>
-          <p class="content-text">{{ detail.content }}</p>
+          <p class="content-text">{{ detail.category === 'paper' ? (detail.abstractZh || detail.abstract_zh || detail.abstract || detail.summary || '摘要未提供') : (detail.contentZh || detail.content || '正文未提供') }}</p>
           <div class="tag-line">
             <el-tag v-for="tag in detail.tags" :key="tag" effect="plain">{{ tag }}</el-tag>
           </div>
@@ -39,9 +39,9 @@
           <template #header>结构化信息</template>
           <el-descriptions :column="1" border>
             <el-descriptions-item label="来源">{{ detail.source }}</el-descriptions-item>
-            <el-descriptions-item label="发布时间">{{ detail.publish_time }}</el-descriptions-item>
+            <el-descriptions-item label="发布时间">{{ formatBusinessTime(detail.publish_time) }}</el-descriptions-item>
             <el-descriptions-item label="相关性">{{ detail.relevance }}%</el-descriptions-item>
-            <el-descriptions-item label="状态">{{ statusText(detail.status) }}</el-descriptions-item>
+            <el-descriptions-item label="类别">{{ detail.categoryName || '未分类' }}</el-descriptions-item>
           </el-descriptions>
         </el-card>
 
@@ -65,6 +65,7 @@
 </template>
 
 <script setup>
+import { formatBusinessTime } from '@/utils/portal/businessTime'
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Back } from '@element-plus/icons-vue'
@@ -98,7 +99,8 @@ function statusText(status) {
 async function loadDetail() {
   loading.value = true
   try {
-    const res = await getPipelineIntelligenceDetail(route.query.id || 'paper-001')
+    if (!route.query.id) throw new Error('缺少情报编号')
+    const res = await getPipelineIntelligenceDetail(route.query.id)
     detail.value = res.data
   } catch (error) {
     ElMessage.warning('暂时无法获取情报详情')

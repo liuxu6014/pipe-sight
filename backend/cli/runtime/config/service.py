@@ -34,7 +34,7 @@ class ConfigRuntimeService:
         self.domain_support = domain_support or ConfigDomainSupport(self.infrastructure_gateway)
 
     @staticmethod
-    def build_cli_config_model(config_vo_module: Any, config_record: Any) -> Any | None:
+    def build_cli_config_model(config_schema_module: Any, config_record: Any) -> Any | None:
         """
         将 ORM 配置记录显式转换为 CLI 可用的配置模型。
 
@@ -42,22 +42,22 @@ class ConfigRuntimeService:
         ORM 蛇形字段对象时，需要主动映射为驼峰 alias 输入，避免详情查询结果
         被静默序列化为空。
 
-        :param config_vo_module: 配置 VO 模块
+        :param config_schema_module: 配置 Schema 模块
         :param config_record: ORM 配置记录
         :return: CLI 可用配置模型
         """
         if config_record is None:
             return None
-        return config_vo_module.ConfigModel(
-            configId=getattr(config_record, 'config_id', None),
-            configName=getattr(config_record, 'config_name', None),
-            configKey=getattr(config_record, 'config_key', None),
-            configValue=getattr(config_record, 'config_value', None),
-            configType=getattr(config_record, 'config_type', None),
-            createBy=getattr(config_record, 'create_by', None),
-            createTime=getattr(config_record, 'create_time', None),
-            updateBy=getattr(config_record, 'update_by', None),
-            updateTime=getattr(config_record, 'update_time', None),
+        return config_schema_module.ConfigModel(
+            configId=getattr(config_record, 'id', None),
+            configName=getattr(config_record, 'name', None),
+            configKey=getattr(config_record, 'key', None),
+            configValue=getattr(config_record, 'value', None),
+            configType=getattr(config_record, 'type', None),
+            createBy=getattr(config_record, 'created_by', None),
+            createTime=getattr(config_record, 'created_at', None),
+            updateBy=getattr(config_record, 'updated_by', None),
+            updateTime=getattr(config_record, 'updated_at', None),
             remark=getattr(config_record, 'remark', None),
         )
 
@@ -73,17 +73,17 @@ class ConfigRuntimeService:
         """
         async_session_local = self.infrastructure_gateway.get_async_session_local()
         config_dao = self.infrastructure_gateway.get_config_dao()
-        config_vo_module = self.infrastructure_gateway.get_config_vo_module()
+        config_schema_module = self.infrastructure_gateway.get_config_schema_module()
         try:
             async with async_session_local() as session:
                 config_record = await config_dao.get_config_detail_by_info(
                     session,
-                    config_vo_module.ConfigModel(configKey=config_key),
+                    config_schema_module.ConfigModel(configKey=config_key),
                 )
         except Exception as exc:
             return {'ok': False, 'message': '读取参数配置失败', 'error': str(exc), 'exit_code': DATABASE_ERROR}
 
-        database_model = self.build_cli_config_model(config_vo_module, config_record)
+        database_model = self.build_cli_config_model(config_schema_module, config_record)
         return database_model, self.domain_support.serialize_config_model(database_model)
 
     async def load_config_from_cache(
@@ -244,7 +244,7 @@ class ConfigRuntimeService:
         """
         async_session_local = self.infrastructure_gateway.get_async_session_local()
         config_dao = self.infrastructure_gateway.get_config_dao()
-        config_vo_module = self.infrastructure_gateway.get_config_vo_module()
+        config_schema_module = self.infrastructure_gateway.get_config_schema_module()
         redis_util = self.infrastructure_gateway.get_redis_util()
         redis_init_key_config = self.infrastructure_gateway.get_redis_init_key_config()
         redis_error = self.infrastructure_gateway.get_redis_error_class()
@@ -254,9 +254,9 @@ class ConfigRuntimeService:
             async with async_session_local() as session:
                 config_record = await config_dao.get_config_detail_by_info(
                     session,
-                    config_vo_module.ConfigModel(configKey=config_key),
+                    config_schema_module.ConfigModel(configKey=config_key),
                 )
-                existing_config = self.build_cli_config_model(config_vo_module, config_record)
+                existing_config = self.build_cli_config_model(config_schema_module, config_record)
                 if existing_config is None and not config_name:
                     return {
                         'ok': False,
@@ -322,14 +322,14 @@ class ConfigRuntimeService:
         redis = None
         async_session_local = self.infrastructure_gateway.get_async_session_local()
         config_service = self.infrastructure_gateway.get_config_service()
-        config_vo_module = self.infrastructure_gateway.get_config_vo_module()
+        config_schema_module = self.infrastructure_gateway.get_config_schema_module()
         redis_util = self.infrastructure_gateway.get_redis_util()
         redis_error = self.infrastructure_gateway.get_redis_error_class()
         try:
             async with async_session_local() as session:
                 config_list = await config_service.get_config_list_services(
                     session,
-                    config_vo_module.ConfigPageQueryModel(),
+                    config_schema_module.ConfigPageQueryModel(),
                     is_page=False,
                 )
                 redis = await redis_util.create_redis_pool(log_enabled=False)
@@ -354,7 +354,7 @@ class ConfigRuntimeService:
         redis = None
         async_session_local = self.infrastructure_gateway.get_async_session_local()
         config_service = self.infrastructure_gateway.get_config_service()
-        config_vo_module = self.infrastructure_gateway.get_config_vo_module()
+        config_schema_module = self.infrastructure_gateway.get_config_schema_module()
         redis_util = self.infrastructure_gateway.get_redis_util()
         redis_init_key_config = self.infrastructure_gateway.get_redis_init_key_config()
         redis_error = self.infrastructure_gateway.get_redis_error_class()
@@ -362,7 +362,7 @@ class ConfigRuntimeService:
             async with async_session_local() as session:
                 config_list = await config_service.get_config_list_services(
                     session,
-                    config_vo_module.ConfigPageQueryModel(),
+                    config_schema_module.ConfigPageQueryModel(),
                     is_page=False,
                 )
             redis = await redis_util.create_redis_pool(log_enabled=False)

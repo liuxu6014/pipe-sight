@@ -2,15 +2,15 @@ import re
 from typing import Literal, TypedDict
 
 from fastapi import Depends, Request, params
-from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.context import RequestContext
+from app.system.schemas.user import CurrentUserModel
+from app.system.services.authentication import LoginService
+from common.http.context import RequestContext
+from common.http.security import oauth2_scheme
 from config.env import AppConfig
 from config.get_db import get_db
 from exceptions.exception import AuthException
-from module_admin.entity.vo.user_vo import CurrentUserModel
-from module_admin.service.login_service import LoginService
 
 
 # 定义排除路由的字典结构
@@ -26,10 +26,6 @@ class ExcludeRoute(TypedDict, total=False):
     path: str
     methods: list[Literal['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']]
     ignore_paths: list[str]
-
-
-# 创建OAuth2PasswordBearer对象
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl='/login')
 
 
 class PreAuth:
@@ -121,7 +117,8 @@ class PreAuth:
         token = request.headers.get('Authorization')
         if not token:
             raise AuthException(data='', message='用户未登录，请先完成登录')
-        current_user = await LoginService.get_current_user(request, token, db)
+        current_user = await LoginService.get_current_user(request.app.state.redis, token, db)
+        RequestContext.set_current_user(current_user)
         return current_user
 
 
@@ -143,4 +140,13 @@ def CurrentUserDependency() -> params.Depends:  # noqa: N802
 
     :return: 当前登录用户信息依赖
     """
-    return Depends(LoginService.get_current_user)
+    async def resolve_current_user(
+        request: Request,
+        token: str = Depends(oauth2_scheme),
+        db: AsyncSession = Depends(get_db),
+    ) -> CurrentUserModel:
+        current_user = await LoginService.get_current_user(request.app.state.redis, token, db)
+        RequestContext.set_current_user(current_user)
+        return current_user
+
+    return Depends(resolve_current_user)

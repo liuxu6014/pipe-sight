@@ -117,7 +117,7 @@ const appStore = useAppStore()
 const settingsStore = useSettingsStore()
 const permissionStore = usePermissionStore()
 const showSettings = ref(false);
-const navType = ref(settingsStore.navType)
+const navType = computed(() => Number(settingsStore.navType))
 const theme = ref(settingsStore.theme);
 const sideTheme = ref(settingsStore.sideTheme);
 const storeSettings = computed(() => settingsStore);
@@ -140,26 +140,25 @@ function handleTheme(val) {
 
 function handleNavType(val) {
   settingsStore.navType = val
-  navType.value = val
 }
 
 /** 菜单导航设置 */
-watch(() => navType, val => {
-  if (val.value == 1) {
+watch(navType, val => {
+  if (val === 1) {
     appStore.sidebar.opened = true
     appStore.toggleSideBarHide(false)
   }
-  if (val.value == 2) {
+  if (val === 2) {
     appStore.sidebar.opened = true
   }
-  if (val.value == 3) {
+  if (val === 3) {
     appStore.sidebar.opened = false
     appStore.toggleSideBarHide(true)
   }
-  if ([1, 3].includes(val.value)) {
-      permissionStore.setSidebarRouters(permissionStore.defaultRoutes)
+  if ([1, 3].includes(val)) {
+    permissionStore.restoreSidebarRouters()
   }
-  }, { immediate: true, deep: true }
+  }, { immediate: true }
 )
 
 function saveSetting() {

@@ -21,8 +21,19 @@ from redis import asyncio as aioredis
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-import module_task  # noqa: F401
-from common.constant import LockConstant
+from app.infrastructure.models.jobs import SysJob
+from app.infrastructure.repositories.jobs import JobDao
+from app.infrastructure.schemas.jobs import JobLogModel, JobModel
+from app.infrastructure.services.job_logs import JobLogService
+from app.infrastructure.services.logging_support import logger
+from app.infrastructure.services.runtime import StartupUtil, WorkerIdUtil
+from app.infrastructure.services.serialization import CamelCaseUtil
+from app.intelligence.tasks.collection_scheduler import register_real_collection_schedules
+from app.research.tasks.research_job_scheduler import (
+    register_report_export_recovery,
+    register_research_job_recovery,
+)
+from common.constants import LockConstant
 from config.database import (
     SYNC_SQLALCHEMY_DATABASE_URL,
     create_async_db_engine,
@@ -31,13 +42,7 @@ from config.database import (
     create_sync_session_local,
 )
 from config.env import AppConfig, LogConfig, RedisConfig
-from module_admin.dao.job_dao import JobDao
-from module_admin.entity.vo.job_vo import JobLogModel, JobModel
-from module_admin.service.job_log_service import JobLogService
-from module_pipeline.integration.collection_scheduler import register_real_collection_schedules
-from module_pipeline.integration.handoff_scheduler import register_insighthub_handoff_polling
-from utils.log_util import logger
-from utils.server_util import StartupUtil, WorkerIdUtil
+from config.schema_documentation import annotate_scheduler_table
 
 
 # 重写Cron定时
@@ -140,6 +145,18 @@ class SchedulerUtil:
     _session_local: Any | None = None
     _scheduler_configured: bool = False
 
+    @staticmethod
+    def _job_to_dto(job_info: SysJob | JobModel) -> JobModel:
+        """Map canonical sys_job fields to the existing job DTO contract.
+
+        SysJob.__api_field_map__ maps id/name/group_key/executor/args/kwargs
+        and created_at/updated_at to job_id/job_name/.../create_time/update_time.
+        ORM rows never need legacy attributes or SQLAlchemy synonyms.
+        """
+        if isinstance(job_info, JobModel):
+            return job_info
+        return JobModel(**CamelCaseUtil.transform_result(job_info))
+
     @classmethod
     def _get_jobstore_engine(cls) -> Engine:
         """
@@ -182,9 +199,11 @@ class SchedulerUtil:
         """
         if cls._scheduler_configured:
             return
+        sqlalchemy_store = SQLAlchemyJobStore(url=SYNC_SQLALCHEMY_DATABASE_URL, engine=cls._get_jobstore_engine())
+        annotate_scheduler_table(sqlalchemy_store.jobs_t)
         job_stores = {
             'default': MemoryJobStore(),
-            'sqlalchemy': SQLAlchemyJobStore(url=SYNC_SQLALCHEMY_DATABASE_URL, engine=cls._get_jobstore_engine()),
+            'sqlalchemy': sqlalchemy_store,
             'redis': RedisJobStore(**redis_config),
         }
         executors = {'default': AsyncIOExecutor(), 'processpool': ProcessPoolExecutor(5)}
@@ -239,8 +258,14 @@ class SchedulerUtil:
         cls._configure_scheduler()
         scheduler.start()
 
-        register_insighthub_handoff_polling(scheduler)
-        await register_real_collection_schedules(scheduler)
+        if AppConfig.pipeline_task_scheduler_enabled:
+            await register_real_collection_schedules(scheduler)
+            register_research_job_recovery(scheduler)
+            register_report_export_recovery(scheduler)
+        else:
+            logger.info(
+                'PIPELINE_TASK_SCHEDULER_ENABLED=false，API 进程跳过采集和持久任务恢复；由独立 Task Worker 接管。'
+            )
 
         # 加载数据库中的定时任务
         async with cls._get_sync_async_session() as session:
@@ -319,7 +344,7 @@ class SchedulerUtil:
         try:
             async with cls._get_sync_async_session() as session:
                 db_jobs_all = await JobDao.get_all_job_list_for_scheduler(session)
-                db_jobs_enabled = [job for job in db_jobs_all if job.status == '0']
+                db_jobs_enabled = [cls._job_to_dto(job) for job in db_jobs_all if job.status == '0']
                 db_enabled_ids = {str(job.job_id) for job in db_jobs_enabled}
                 db_job_map = {str(job.job_id): job for job in db_jobs_enabled}
                 db_job_update_time_map = {
@@ -354,7 +379,7 @@ class SchedulerUtil:
             logger.error(f'❌ 任务同步异常: {e}')
 
     @classmethod
-    def _is_job_config_in_sync(cls, scheduler_job: Job, job_info: JobModel) -> bool:
+    def _is_job_config_in_sync(cls, scheduler_job: Job, job_info: SysJob | JobModel) -> bool:
         """
         判断任务配置是否一致
 
@@ -362,6 +387,7 @@ class SchedulerUtil:
         :param job_info: 数据库任务对象
         :return: 是否一致
         """
+        job_info = cls._job_to_dto(job_info)
         job_state = scheduler_job.__getstate__()
         job_kwargs = json.loads(job_info.job_kwargs) if job_info.job_kwargs else None
         job_args = job_info.job_args.split(',') if job_info.job_args else None
@@ -396,7 +422,11 @@ class SchedulerUtil:
 
     @classmethod
     def _sync_update_job(
-        cls, job_id: str, job_info: JobModel | None, scheduler_job: Job | None, job_update_time: datetime | None
+        cls,
+        job_id: str,
+        job_info: SysJob | JobModel | None,
+        scheduler_job: Job | None,
+        job_update_time: datetime | None,
     ) -> None:
         """
         同步更新任务配置
@@ -409,6 +439,7 @@ class SchedulerUtil:
         """
         if not job_info or not scheduler_job:
             return
+        job_info = cls._job_to_dto(job_info)
         if cls._should_skip_job_update(job_id, job_update_time):
             return
         if not cls._is_job_config_in_sync(scheduler_job, job_info):
@@ -623,7 +654,7 @@ class SchedulerUtil:
 
     @classmethod
     async def _execute_async_job_with_log(
-        cls, job_func: Callable[..., Any], job_info: JobModel, args: list, kwargs: dict
+        cls, job_func: Callable[..., Any], job_info: SysJob | JobModel, args: list, kwargs: dict
     ) -> None:
         """
         执行异步任务并记录日志
@@ -634,6 +665,7 @@ class SchedulerUtil:
         :param kwargs: 关键字参数
         :return: None
         """
+        job_info = cls._job_to_dto(job_info)
         status = '0'
         exception_info = ''
         job_executor = job_info.job_executor
@@ -649,7 +681,9 @@ class SchedulerUtil:
             cls._record_job_execution_log(job_info, job_executor, status, exception_info)
 
     @classmethod
-    def _record_job_execution_log(cls, job_info: JobModel, job_executor: str, status: str, exception_info: str) -> None:
+    def _record_job_execution_log(
+        cls, job_info: SysJob | JobModel, job_executor: str, status: str, exception_info: str
+    ) -> None:
         """
         记录任务执行日志（用于非 Leader Worker 直接执行任务时）
 
@@ -660,6 +694,7 @@ class SchedulerUtil:
         :return: None
         """
         try:
+            job_info = cls._job_to_dto(job_info)
             job_args = job_info.job_args if job_info.job_args else ''
             job_kwargs = job_info.job_kwargs if job_info.job_kwargs else '{}'
             job_trigger = str(MyCronTrigger.from_crontab(job_info.cron_expression)) if job_info.cron_expression else ''
@@ -668,6 +703,7 @@ class SchedulerUtil:
                 f'任务名称: {job_info.job_name}, 执行于{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'
             )
             job_log = JobLogModel(
+                jobId=job_info.job_id,
                 jobName=job_info.job_name,
                 jobGroup=job_info.job_group,
                 jobExecutor=job_executor,
@@ -689,13 +725,14 @@ class SchedulerUtil:
             logger.error(f'❌ 记录任务执行日志失败: {e}')
 
     @classmethod
-    def _prepare_scheduler_job_add(cls, job_info: JobModel) -> dict[str, Any]:
+    def _prepare_scheduler_job_add(cls, job_info: SysJob | JobModel) -> dict[str, Any]:
         """
         构建调度器任务参数
 
         :param job_info: 任务对象信息
         :return: 调度器任务参数
         """
+        job_info = cls._job_to_dto(job_info)
         job_func = cls._import_function(job_info.invoke_target)
         job_executor = job_info.job_executor
         if iscoroutinefunction(job_func):
@@ -715,12 +752,13 @@ class SchedulerUtil:
         }
 
     @classmethod
-    def _add_job_to_scheduler(cls, job_info: JobModel) -> None:
+    def _add_job_to_scheduler(cls, job_info: SysJob | JobModel) -> None:
         """
         内部方法：将任务添加到调度器（不检查应用锁状态，仅供内部使用）
 
         :param job_info: 任务对象信息
         """
+        job_info = cls._job_to_dto(job_info)
         try:
             # 先移除已存在的同ID任务
             existing_job = scheduler.get_job(job_id=str(job_info.job_id))
@@ -783,7 +821,7 @@ class SchedulerUtil:
         """
         动态导入函数
 
-        :param func_path: 函数字符串，如module_task.scheduler_test.job
+        :param func_path: 函数字符串，例如 ``app.intelligence.tasks.some_task.run``
         :return: 导入的函数对象
         """
         module_path, func_name = func_path.rsplit('.', 1)
@@ -803,7 +841,7 @@ class SchedulerUtil:
         return query_job
 
     @classmethod
-    def add_scheduler_job(cls, job_info: JobModel) -> None:
+    def add_scheduler_job(cls, job_info: SysJob | JobModel) -> None:
         """
         根据输入的任务对象信息添加任务
 
@@ -816,13 +854,14 @@ class SchedulerUtil:
         scheduler.add_job(**cls._prepare_scheduler_job_add(job_info))
 
     @classmethod
-    def execute_scheduler_job_once(cls, job_info: JobModel) -> None:
+    def execute_scheduler_job_once(cls, job_info: SysJob | JobModel) -> None:
         """
         根据输入的任务对象执行一次任务
 
         :param job_info: 任务对象信息
         :return:
         """
+        job_info = cls._job_to_dto(job_info)
         job_func = cls._import_function(job_info.invoke_target)
         job_executor = job_info.job_executor
         if iscoroutinefunction(job_func):

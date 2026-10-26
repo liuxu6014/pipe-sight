@@ -1,5 +1,5 @@
 <template>
-  <section class="app-main">
+  <section class="app-main ps-workspace-surface">
     <router-view v-slot="{ Component, route }">
       <transition name="fade-transform" mode="out-in">
         <keep-alive :include="tagsViewStore.cachedViews">
@@ -121,4 +121,3 @@ function addIframe() {
   border-radius: 3px;
 }
 </style>
-

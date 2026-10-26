@@ -13,11 +13,13 @@ class AppInfrastructureGateway:
     @staticmethod
     def get_server_module() -> ModuleType:
         """
-        获取应用 server 模块。
+        获取应用组装模块。
 
-        :return: server 模块
+        方法名为兼容旧 CLI 协议保留；实际应用工厂位于 ``app.bootstrap``。
+
+        :return: 应用组装模块
         """
-        return import_module('server')
+        return import_module('app.bootstrap')
 
     @staticmethod
     def get_env_module() -> ModuleType:

@@ -1,0 +1,3306 @@
+{
+  "version": "20261025-compact-v5",
+  "runtime_version": "v5",
+  "business_schema_snapshot": "business-v5.json",
+  "source": "output/管网平台精简数据库设计_20261025.md",
+  "tables": [
+    {
+      "name": "news_articles",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null,
+          "server_default": "nextval('business_id_seq'::regclass)"
+        },
+        {
+          "name": "source_id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "title",
+          "type": "varchar(1000)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "url",
+          "type": "text",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "author",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "published_at",
+          "type": "时间",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "content",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "content_zh",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "category_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "is_pushed",
+          "type": "boolean",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "papers",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null,
+          "server_default": "nextval('business_id_seq'::regclass)"
+        },
+        {
+          "name": "source_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "title",
+          "type": "varchar(1000)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "title_zh",
+          "type": "varchar(1000)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "url",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "doi",
+          "type": "varchar(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "authors",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "journal",
+          "type": "varchar(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "published_date",
+          "type": "varchar(10)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "abstract",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "abstract_zh",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "category_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "is_pushed",
+          "type": "boolean",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "categories",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null,
+          "server_default": "nextval('business_id_seq'::regclass)"
+        },
+        {
+          "name": "name",
+          "type": "varchar(100)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "prompt",
+          "type": "text",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "model_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "applies_to",
+          "type": "varchar(16)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "is_enabled",
+          "type": "boolean",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "sort_order",
+          "type": "integer",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "data_sources",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null,
+          "server_default": "nextval('business_id_seq'::regclass)"
+        },
+        {
+          "name": "name",
+          "type": "varchar(255)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "type",
+          "type": "varchar(16)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "url",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "adapter",
+          "type": "varchar(128)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "cron",
+          "type": "varchar(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "timezone",
+          "type": "varchar(64)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "next_run_at",
+          "type": "时间",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "config",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "model_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "is_enabled",
+          "type": "boolean",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "knowledge_files",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null,
+          "server_default": "nextval('business_id_seq'::regclass)"
+        },
+        {
+          "name": "user_id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "name",
+          "type": "varchar(255)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "filename",
+          "type": "varchar(255)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "storage_key",
+          "type": "text",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "mime_type",
+          "type": "varchar(128)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "size",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "hash",
+          "type": "varchar(64)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "extracted_text",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "edited_text",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "version",
+          "type": "integer",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "status",
+          "type": "varchar(16)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "error",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "templates",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null,
+          "server_default": "nextval('business_id_seq'::regclass)"
+        },
+        {
+          "name": "name",
+          "type": "varchar(255)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "purpose",
+          "type": "varchar(16)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "prompt",
+          "type": "text",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "model_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "image_model_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "sections",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "image_config",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "is_enabled",
+          "type": "boolean",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "ai_models",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null
+        },
+        {
+          "name": "name",
+          "type": "varchar(100)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "provider",
+          "type": "varchar(50)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "code",
+          "type": "varchar(100)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "base_url",
+          "type": "text",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "credential_ref",
+          "type": "text",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "capabilities",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "parameters",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "is_enabled",
+          "type": "boolean",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "reports",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null,
+          "server_default": "nextval('business_id_seq'::regclass)"
+        },
+        {
+          "name": "user_id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "title",
+          "type": "varchar(1000)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "type",
+          "type": "varchar(32)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "template_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "content",
+          "type": "text",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "version",
+          "type": "integer",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "generation_tasks",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null,
+          "server_default": "nextval('business_id_seq'::regclass)"
+        },
+        {
+          "name": "report_id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "schedule_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "request_id",
+          "type": "varchar(128)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "status",
+          "type": "varchar(16)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "progress",
+          "type": "smallint",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "config_snapshot",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "materials",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "result_content",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "error",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "attempts",
+          "type": "integer",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "lease_expires_at",
+          "type": "时间",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "execution_token",
+          "type": "varchar(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "started_at",
+          "type": "时间",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "finished_at",
+          "type": "时间",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "report_assets",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null,
+          "server_default": "nextval('business_id_seq'::regclass)"
+        },
+        {
+          "name": "report_id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "task_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "type",
+          "type": "varchar(16)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "storage_key",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "mime_type",
+          "type": "varchar(128)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "prompt",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "model_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "config_snapshot",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "position",
+          "type": "varchar(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "status",
+          "type": "varchar(16)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "error",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "digest_schedules",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null,
+          "server_default": "nextval('business_id_seq'::regclass)"
+        },
+        {
+          "name": "user_id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "name",
+          "type": "varchar(255)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "template_id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "frequency",
+          "type": "varchar(16)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "weekday",
+          "type": "smallint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "month_day",
+          "type": "smallint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "run_time",
+          "type": "time",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "timezone",
+          "type": "varchar(64)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "selection_config",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "generation_config",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "is_enabled",
+          "type": "boolean",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "next_run_at",
+          "type": "时间",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "basket_items",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null
+        },
+        {
+          "name": "user_id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "action",
+          "type": "varchar(16)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "article_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "paper_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "file_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "report_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "collection_runs",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null,
+          "server_default": "nextval('business_id_seq'::regclass)"
+        },
+        {
+          "name": "source_id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "parent_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "trigger_type",
+          "type": "varchar(16)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "request_id",
+          "type": "varchar(128)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "status",
+          "type": "varchar(16)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "available_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "config_snapshot",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "checkpoint",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "fetched_count",
+          "type": "integer",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "saved_count",
+          "type": "integer",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "failed_count",
+          "type": "integer",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "error",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "stop_requested_at",
+          "type": "时间",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "execution_token",
+          "type": "varchar(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "lease_expires_at",
+          "type": "时间",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "started_at",
+          "type": "时间",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "finished_at",
+          "type": "时间",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "sys_user",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "user_id"
+        },
+        {
+          "name": "username",
+          "type": "character varying(30)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": "user_name"
+        },
+        {
+          "name": "nickname",
+          "type": "character varying(30)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": "nick_name"
+        },
+        {
+          "name": "user_type",
+          "type": "character varying(2)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "user_type"
+        },
+        {
+          "name": "email",
+          "type": "character varying(50)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "email"
+        },
+        {
+          "name": "phone",
+          "type": "character varying(11)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "phonenumber"
+        },
+        {
+          "name": "sex",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "sex"
+        },
+        {
+          "name": "avatar",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "avatar"
+        },
+        {
+          "name": "password_hash",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "password"
+        },
+        {
+          "name": "status",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "status"
+        },
+        {
+          "name": "del_flag",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "del_flag"
+        },
+        {
+          "name": "login_ip",
+          "type": "character varying(128)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "login_ip"
+        },
+        {
+          "name": "last_login_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "login_date"
+        },
+        {
+          "name": "password_updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "pwd_update_date"
+        },
+        {
+          "name": "created_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_by"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_time"
+        },
+        {
+          "name": "updated_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_by"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_time"
+        },
+        {
+          "name": "remark",
+          "type": "character varying(500)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "remark"
+        }
+      ]
+    },
+    {
+      "name": "sys_role",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "role_id"
+        },
+        {
+          "name": "name",
+          "type": "character varying(30)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": "role_name"
+        },
+        {
+          "name": "code",
+          "type": "character varying(100)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": "role_key"
+        },
+        {
+          "name": "sort_order",
+          "type": "integer",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": "role_sort"
+        },
+        {
+          "name": "data_scope",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "data_scope"
+        },
+        {
+          "name": "menu_check_strictly",
+          "type": "smallint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "menu_check_strictly"
+        },
+        {
+          "name": "status",
+          "type": "character(1)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": "status"
+        },
+        {
+          "name": "del_flag",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "del_flag"
+        },
+        {
+          "name": "created_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_by"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_time"
+        },
+        {
+          "name": "updated_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_by"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_time"
+        },
+        {
+          "name": "remark",
+          "type": "character varying(500)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "remark"
+        }
+      ]
+    },
+    {
+      "name": "sys_menu",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "menu_id"
+        },
+        {
+          "name": "name",
+          "type": "character varying(50)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": "menu_name"
+        },
+        {
+          "name": "parent_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "parent_id"
+        },
+        {
+          "name": "sort_order",
+          "type": "integer",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "order_num"
+        },
+        {
+          "name": "path",
+          "type": "character varying(200)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "path"
+        },
+        {
+          "name": "component",
+          "type": "character varying(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "component"
+        },
+        {
+          "name": "query",
+          "type": "character varying(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "query"
+        },
+        {
+          "name": "route_name",
+          "type": "character varying(50)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "route_name"
+        },
+        {
+          "name": "is_frame",
+          "type": "integer",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "is_frame"
+        },
+        {
+          "name": "is_cache",
+          "type": "integer",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "is_cache"
+        },
+        {
+          "name": "type",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "menu_type"
+        },
+        {
+          "name": "visible",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "visible"
+        },
+        {
+          "name": "status",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "status"
+        },
+        {
+          "name": "permissions",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "perms"
+        },
+        {
+          "name": "icon",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "icon"
+        },
+        {
+          "name": "created_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_by"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_time"
+        },
+        {
+          "name": "updated_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_by"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_time"
+        },
+        {
+          "name": "remark",
+          "type": "character varying(500)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "remark"
+        }
+      ]
+    },
+    {
+      "name": "sys_user_role",
+      "columns": [
+        {
+          "name": "user_id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "user_id"
+        },
+        {
+          "name": "role_id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "role_id"
+        }
+      ]
+    },
+    {
+      "name": "sys_role_menu",
+      "columns": [
+        {
+          "name": "role_id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "role_id"
+        },
+        {
+          "name": "menu_id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "menu_id"
+        }
+      ]
+    },
+    {
+      "name": "sys_config",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "config_id"
+        },
+        {
+          "name": "name",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "config_name"
+        },
+        {
+          "name": "key",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "config_key"
+        },
+        {
+          "name": "value",
+          "type": "character varying(500)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "config_value"
+        },
+        {
+          "name": "type",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "config_type"
+        },
+        {
+          "name": "created_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_by"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_time"
+        },
+        {
+          "name": "updated_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_by"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_time"
+        },
+        {
+          "name": "remark",
+          "type": "character varying(500)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "remark"
+        }
+      ]
+    },
+    {
+      "name": "sys_dict_type",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "dict_id"
+        },
+        {
+          "name": "name",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "dict_name"
+        },
+        {
+          "name": "code",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "dict_type"
+        },
+        {
+          "name": "status",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "status"
+        },
+        {
+          "name": "created_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_by"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_time"
+        },
+        {
+          "name": "updated_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_by"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_time"
+        },
+        {
+          "name": "remark",
+          "type": "character varying(500)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "remark"
+        }
+      ]
+    },
+    {
+      "name": "sys_dict_data",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "dict_code"
+        },
+        {
+          "name": "sort_order",
+          "type": "integer",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "dict_sort"
+        },
+        {
+          "name": "label",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "dict_label"
+        },
+        {
+          "name": "value",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "dict_value"
+        },
+        {
+          "name": "type_code",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "dict_type"
+        },
+        {
+          "name": "css_class",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "css_class"
+        },
+        {
+          "name": "list_class",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "list_class"
+        },
+        {
+          "name": "is_default",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "is_default"
+        },
+        {
+          "name": "status",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "status"
+        },
+        {
+          "name": "created_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_by"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_time"
+        },
+        {
+          "name": "updated_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_by"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_time"
+        },
+        {
+          "name": "remark",
+          "type": "character varying(500)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "remark"
+        }
+      ]
+    },
+    {
+      "name": "sys_logininfor",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "info_id"
+        },
+        {
+          "name": "username",
+          "type": "character varying(50)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "user_name"
+        },
+        {
+          "name": "ip",
+          "type": "character varying(128)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "ipaddr"
+        },
+        {
+          "name": "location",
+          "type": "character varying(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "login_location"
+        },
+        {
+          "name": "browser",
+          "type": "character varying(50)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "browser"
+        },
+        {
+          "name": "os",
+          "type": "character varying(50)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "os"
+        },
+        {
+          "name": "status",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "status"
+        },
+        {
+          "name": "message",
+          "type": "character varying(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "msg"
+        },
+        {
+          "name": "logged_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "login_time"
+        }
+      ]
+    },
+    {
+      "name": "sys_oper_log",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "oper_id"
+        },
+        {
+          "name": "title",
+          "type": "character varying(50)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "title"
+        },
+        {
+          "name": "business_type",
+          "type": "integer",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "business_type"
+        },
+        {
+          "name": "method",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "method"
+        },
+        {
+          "name": "request_method",
+          "type": "character varying(10)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "request_method"
+        },
+        {
+          "name": "operator_type",
+          "type": "integer",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "operator_type"
+        },
+        {
+          "name": "username",
+          "type": "character varying(50)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "oper_name"
+        },
+        {
+          "name": "url",
+          "type": "character varying(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "oper_url"
+        },
+        {
+          "name": "ip",
+          "type": "character varying(128)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "oper_ip"
+        },
+        {
+          "name": "location",
+          "type": "character varying(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "oper_location"
+        },
+        {
+          "name": "request_data",
+          "type": "character varying(2000)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "oper_param"
+        },
+        {
+          "name": "response_data",
+          "type": "character varying(2000)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "json_result"
+        },
+        {
+          "name": "status",
+          "type": "integer",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "status"
+        },
+        {
+          "name": "error",
+          "type": "character varying(2000)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "error_msg"
+        },
+        {
+          "name": "operated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "oper_time"
+        },
+        {
+          "name": "duration_ms",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "cost_time"
+        }
+      ]
+    },
+    {
+      "name": "sys_job",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "job_id"
+        },
+        {
+          "name": "name",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "job_name"
+        },
+        {
+          "name": "group_key",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "job_group"
+        },
+        {
+          "name": "executor",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "job_executor"
+        },
+        {
+          "name": "invoke_target",
+          "type": "character varying(500)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": "invoke_target"
+        },
+        {
+          "name": "args",
+          "type": "character varying(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "job_args"
+        },
+        {
+          "name": "kwargs",
+          "type": "character varying(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "job_kwargs"
+        },
+        {
+          "name": "cron_expression",
+          "type": "character varying(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "cron_expression"
+        },
+        {
+          "name": "misfire_policy",
+          "type": "character varying(20)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "misfire_policy"
+        },
+        {
+          "name": "concurrent",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "concurrent"
+        },
+        {
+          "name": "status",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "status"
+        },
+        {
+          "name": "created_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_by"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_time"
+        },
+        {
+          "name": "updated_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_by"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_time"
+        },
+        {
+          "name": "remark",
+          "type": "character varying(500)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "remark"
+        }
+      ]
+    },
+    {
+      "name": "sys_job_log",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "job_log_id"
+        },
+        {
+          "name": "job_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "job_id"
+        },
+        {
+          "name": "name",
+          "type": "character varying(64)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": "job_name"
+        },
+        {
+          "name": "group_key",
+          "type": "character varying(64)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": "job_group"
+        },
+        {
+          "name": "executor",
+          "type": "character varying(64)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": "job_executor"
+        },
+        {
+          "name": "invoke_target",
+          "type": "character varying(500)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": "invoke_target"
+        },
+        {
+          "name": "args",
+          "type": "character varying(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "job_args"
+        },
+        {
+          "name": "kwargs",
+          "type": "character varying(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "job_kwargs"
+        },
+        {
+          "name": "trigger",
+          "type": "character varying(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "job_trigger"
+        },
+        {
+          "name": "message",
+          "type": "character varying(500)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "job_message"
+        },
+        {
+          "name": "status",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "status"
+        },
+        {
+          "name": "error",
+          "type": "character varying(2000)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "exception_info"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_time"
+        }
+      ]
+    },
+    {
+      "name": "apscheduler_jobs",
+      "columns": [
+        {
+          "name": "id",
+          "type": "character varying(191)",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null
+        },
+        {
+          "name": "next_run_time",
+          "type": "double precision",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "job_state",
+          "type": "bytea",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "alembic_version",
+      "columns": [
+        {
+          "name": "version_num",
+          "type": "character varying(64)",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null
+        }
+      ]
+    }
+  ],
+  "foreign_keys": [
+    {
+      "table": "news_articles",
+      "columns": [
+        "source_id"
+      ],
+      "target": "data_sources",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "news_articles",
+      "columns": [
+        "category_id"
+      ],
+      "target": "categories",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "papers",
+      "columns": [
+        "source_id"
+      ],
+      "target": "data_sources",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "papers",
+      "columns": [
+        "category_id"
+      ],
+      "target": "categories",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "categories",
+      "columns": [
+        "model_id"
+      ],
+      "target": "ai_models",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "data_sources",
+      "columns": [
+        "model_id"
+      ],
+      "target": "ai_models",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "knowledge_files",
+      "columns": [
+        "user_id"
+      ],
+      "target": "sys_user",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "templates",
+      "columns": [
+        "model_id"
+      ],
+      "target": "ai_models",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "templates",
+      "columns": [
+        "image_model_id"
+      ],
+      "target": "ai_models",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "reports",
+      "columns": [
+        "user_id"
+      ],
+      "target": "sys_user",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "reports",
+      "columns": [
+        "template_id"
+      ],
+      "target": "templates",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "generation_tasks",
+      "columns": [
+        "report_id"
+      ],
+      "target": "reports",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "generation_tasks",
+      "columns": [
+        "schedule_id"
+      ],
+      "target": "digest_schedules",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "report_assets",
+      "columns": [
+        "report_id"
+      ],
+      "target": "reports",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "report_assets",
+      "columns": [
+        "model_id"
+      ],
+      "target": "ai_models",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "digest_schedules",
+      "columns": [
+        "user_id"
+      ],
+      "target": "sys_user",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "digest_schedules",
+      "columns": [
+        "template_id"
+      ],
+      "target": "templates",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "basket_items",
+      "columns": [
+        "user_id"
+      ],
+      "target": "sys_user",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "basket_items",
+      "columns": [
+        "article_id"
+      ],
+      "target": "news_articles",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "basket_items",
+      "columns": [
+        "paper_id"
+      ],
+      "target": "papers",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "basket_items",
+      "columns": [
+        "file_id"
+      ],
+      "target": "knowledge_files",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "basket_items",
+      "columns": [
+        "report_id"
+      ],
+      "target": "reports",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "collection_runs",
+      "columns": [
+        "source_id"
+      ],
+      "target": "data_sources",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "sys_user_role",
+      "columns": [
+        "user_id"
+      ],
+      "target": "sys_user",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "sys_user_role",
+      "columns": [
+        "role_id"
+      ],
+      "target": "sys_role",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "sys_role_menu",
+      "columns": [
+        "role_id"
+      ],
+      "target": "sys_role",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "sys_role_menu",
+      "columns": [
+        "menu_id"
+      ],
+      "target": "sys_menu",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "sys_dict_data",
+      "columns": [
+        "type_code"
+      ],
+      "target": "sys_dict_type",
+      "target_columns": [
+        "code"
+      ]
+    },
+    {
+      "table": "sys_job_log",
+      "columns": [
+        "job_id"
+      ],
+      "target": "sys_job",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "report_assets",
+      "columns": [
+        "task_id",
+        "report_id"
+      ],
+      "target": "generation_tasks",
+      "target_columns": [
+        "id",
+        "report_id"
+      ]
+    },
+    {
+      "table": "collection_runs",
+      "columns": [
+        "parent_id",
+        "source_id"
+      ],
+      "target": "collection_runs",
+      "target_columns": [
+        "id",
+        "source_id"
+      ]
+    }
+  ],
+  "optional_tables": [
+    "model_calls",
+    "report_versions"
+  ],
+  "optional_table_definitions": [
+    {
+      "name": "model_calls",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null,
+          "server_default": "nextval('business_id_seq'::regclass)"
+        },
+        {
+          "name": "task_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "model_id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "capability",
+          "type": "varchar(32)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "status",
+          "type": "varchar(16)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "duration_ms",
+          "type": "integer",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "input_tokens",
+          "type": "integer",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "output_tokens",
+          "type": "integer",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "error",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "report_versions",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null
+        },
+        {
+          "name": "report_id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "version",
+          "type": "integer",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "title",
+          "type": "varchar(1000)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "content",
+          "type": "text",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "sections",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "citations",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "quality_issues",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "model_snapshot",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "source",
+          "type": "varchar(32)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "operator_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "operator_name",
+          "type": "varchar(64)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    }
+  ],
+  "optional_foreign_keys": [
+    {
+      "table": "model_calls",
+      "columns": [
+        "task_id"
+      ],
+      "target": "generation_tasks",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "model_calls",
+      "columns": [
+        "model_id"
+      ],
+      "target": "ai_models",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "report_versions",
+      "columns": [
+        "report_id"
+      ],
+      "target": "reports",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "report_versions",
+      "columns": [
+        "operator_id"
+      ],
+      "target": "sys_user",
+      "target_columns": [
+        "id"
+      ]
+    }
+  ],
+  "business_id_policy": {
+    "tables": [
+      "categories",
+      "collection_runs",
+      "data_sources",
+      "digest_schedules",
+      "generation_tasks",
+      "knowledge_files",
+      "model_calls",
+      "news_articles",
+      "papers",
+      "report_assets",
+      "reports",
+      "templates"
+    ],
+    "sql_type": "bigint",
+    "sequence": "public.business_id_seq",
+    "server_default": "nextval('business_id_seq'::regclass)",
+    "wire_format": "decimal-string",
+    "minimum": 1,
+    "maximum": "9223372036854775807",
+    "json_payloads": "semantic-reference-map-opaque-values-preserved",
+    "opaque_values": {
+      "ordinary_request_id": "preserve-exact",
+      "execution_token": "preserve-exact",
+      "free_text": "preserve-exact",
+      "external_provider_identifiers": "preserve-exact",
+      "model_identifiers": "preserve-existing-ai-model-id-domain",
+      "rule": "Do not replace arbitrary matching strings, substrings, free text, storage keys, URLs, provider parameters or tokens."
+    },
+    "system_request_keys": [
+      {
+        "table": "generation_tasks",
+        "kind": "schedule",
+        "column": "request_id",
+        "pattern": "schedule:{schedule_id}:{utc_trigger}",
+        "reference_column": "schedule_id",
+        "entity": "digest_schedules",
+        "match": "exact-old-reference-prefix-with-nonnull-schedule_id",
+        "rewrite": "mapped-reference-only-preserve-other-bytes"
+      },
+      {
+        "table": "collection_runs",
+        "kind": "schedule",
+        "column": "request_id",
+        "pattern": "schedule:{source_id}:{utc_trigger}",
+        "reference_column": "source_id",
+        "entity": "data_sources",
+        "match": "trigger_type=schedule-and-exact-old-reference-prefix",
+        "rewrite": "mapped-reference-only-preserve-other-bytes"
+      },
+      {
+        "table": "collection_runs",
+        "kind": "retry",
+        "column": "request_id",
+        "pattern": "retry:{parent_id}",
+        "reference_column": "parent_id",
+        "entity": "collection_runs",
+        "match": "trigger_type=retry-and-exact-old-parent-reference",
+        "rewrite": "mapped-reference-only-preserve-other-bytes"
+      }
+    ],
+    "json_references": {
+      "scope": {
+        "collection_runs": [
+          "config_snapshot"
+        ],
+        "generation_tasks": [
+          "materials",
+          "config_snapshot"
+        ],
+        "report_assets": [
+          "config_snapshot"
+        ],
+        "report_versions": [
+          "sections",
+          "citations",
+          "model_snapshot"
+        ],
+        "digest_schedules": [
+          "selection_config",
+          "generation_config"
+        ],
+        "templates": [
+          "sections",
+          "image_config"
+        ]
+      },
+      "wire_format": "decimal-string",
+      "scalar_keys": {
+        "article_id": "news_articles",
+        "articleId": "news_articles",
+        "paper_id": "papers",
+        "paperId": "papers",
+        "file_id": "knowledge_files",
+        "fileId": "knowledge_files",
+        "material_id": "knowledge_files",
+        "materialId": "knowledge_files",
+        "source_id": "data_sources",
+        "sourceId": "data_sources",
+        "category_id": "categories",
+        "categoryId": "categories",
+        "template_id": "templates",
+        "templateId": "templates",
+        "template_key": "templates",
+        "templateKey": "templates",
+        "report_id": "reports",
+        "reportId": "reports",
+        "task_id": "generation_tasks",
+        "taskId": "generation_tasks",
+        "job_id": "generation_tasks",
+        "jobId": "generation_tasks",
+        "schedule_id": "digest_schedules",
+        "scheduleId": "digest_schedules",
+        "asset_id": "report_assets",
+        "assetId": "report_assets",
+        "export_id": "report_assets",
+        "exportId": "report_assets"
+      },
+      "list_keys": {
+        "article_ids": "news_articles",
+        "articleIds": "news_articles",
+        "paper_ids": "papers",
+        "paperIds": "papers",
+        "file_ids": "knowledge_files",
+        "fileIds": "knowledge_files",
+        "category_ids": "categories",
+        "categoryIds": "categories",
+        "source_ids": "data_sources",
+        "sourceIds": "data_sources",
+        "report_ids": "reports",
+        "reportIds": "reports"
+      },
+      "typed_item_id": {
+        "requires_entity_context": true,
+        "keys": [
+          "id",
+          "itemId",
+          "item_id",
+          "sourceItemId",
+          "source_item_id"
+        ],
+        "selection_list_keys": [
+          "selected_item_ids",
+          "selectedItemIds",
+          "itemIds",
+          "item_ids"
+        ],
+        "context": "Resolve type/kind/sourceType or declared enclosing entity. Untyped selections require exactly one mapped entity; never guess from a colliding old ID.",
+        "citation_source_id": "Within typed content citations, source_id/sourceId names the cited content entity, not the crawler data_sources entity."
+      },
+      "opaque_precedence": "declared-free-text-and-external-values-before-key-matching",
+      "unmapped_or_ambiguous": "reject-before-write",
+      "null_or_empty_reference": "preserve-exact",
+      "unknown_keys": "preserve-unless-containing-declared-structural-references",
+      "external_parameter_exception": "Provider-defined external IDs in custom parameters are not platform references solely because their key ends in _id.",
+      "integrity": "Preserve object keys, array order, nonreference values and material bodies; map only declared platform references."
+    },
+    "semantic_fingerprints": {
+      "generation_tasks.config_snapshot.request_fingerprint": {
+        "action": "recompute-from-mapped-request-and-materials",
+        "algorithm": "app.business_ids.generation_request_fingerprint",
+        "requires": "recognized-system-request-fingerprint-and-available-request-and-materials",
+        "canonical_identifiers": "decimal-string",
+        "verification": "Recompute with the application canonicalizer and compare before commit; do not preserve a stale digest for changed references.",
+        "missing_semantic_input": "reject-before-write",
+        "opaque_external_digests": "preserve-exact"
+      }
+    },
+    "verification": {
+      "retain_mapping_and_rewrite_audit": true,
+      "compare_all_nonreference_values": "exact",
+      "validate_all_scalar_and_json_references": true,
+      "reject_ambiguous_or_missing_references": true,
+      "check_global_request_id_uniqueness_after_mapping": true,
+      "compare_target_rows_to_full_semantic_projection": true,
+      "require_backup_and_explicit_authorization": true
+    }
+  },
+  "sequences": [
+    {
+      "name": "business_id_seq",
+      "schema": "public",
+      "type": "bigint",
+      "increment": 1,
+      "min_value": 1,
+      "cycle": false,
+      "owned_by": null,
+      "shared_by": [
+        "categories",
+        "collection_runs",
+        "data_sources",
+        "digest_schedules",
+        "generation_tasks",
+        "knowledge_files",
+        "model_calls",
+        "news_articles",
+        "papers",
+        "report_assets",
+        "reports",
+        "templates"
+      ]
+    }
+  ],
+  "business_ddl_policy": {
+    "status": "separate-artifact-required",
+    "snapshot_sections": [
+      "model_ddl",
+      "catalog"
+    ],
+    "physical_core": "compact-v4-except-27-business-audit-timestamps",
+    "scope": "Runtime v5 changes only the 27 declared business audit timestamps to Beijing local timestamp(0) without time zone. Names, nullability, PK/FK, shared sequence and all other types remain compact-v4. Full business DDL is frozen separately in business-v5.json by main.",
+    "absent_column_default": "unspecified-not-no-default",
+    "startup_guard_owner": "main",
+    "startup_compare": [
+      "table_inventory",
+      "column_inventory",
+      "types",
+      "nullable",
+      "primary_keys",
+      "foreign_keys",
+      "server_defaults",
+      "identity",
+      "sequences",
+      "indices",
+      "checks"
+    ],
+    "backend_type_rules": {
+      "postgresql": "exact-physical-types-including-BIGINT-not-varchar-for-business-PK-and-FK",
+      "sqlite": "declared-SQLite-dialect-variants-including-INTEGER-business-PK"
+    },
+    "sql_comparison": "Use dialect-aware canonical SQL/structured catalog values; do not lowercase quoted literals or compare SQL by destructive whitespace replacement.",
+    "identity": "Compare generation mode, sequence options and presence explicitly in the separately frozen business DDL artifact.",
+    "indices": "Compare uniqueness, ordered keys/expressions, predicates and dialect options, not names alone.",
+    "checks": "Compare canonical SQL expression semantics from the frozen business DDL artifact.",
+    "startup_drift": "reject-before-serving-requests; startup validation is read-only and must not create, alter or repair tables",
+    "foundation_boundary": "RuoYi sys_* models and their DDL are unchanged and not regenerated from business metadata.",
+    "duplicate_business_ddl_in_this_contract": false
+  },
+  "audit_timestamp_policy": {
+    "tables": [
+      "ai_models",
+      "basket_items",
+      "categories",
+      "collection_runs",
+      "data_sources",
+      "digest_schedules",
+      "generation_tasks",
+      "knowledge_files",
+      "model_calls",
+      "news_articles",
+      "papers",
+      "report_assets",
+      "report_versions",
+      "reports",
+      "templates"
+    ],
+    "fields": [
+      [
+        "news_articles",
+        "created_at"
+      ],
+      [
+        "news_articles",
+        "updated_at"
+      ],
+      [
+        "papers",
+        "created_at"
+      ],
+      [
+        "papers",
+        "updated_at"
+      ],
+      [
+        "categories",
+        "created_at"
+      ],
+      [
+        "categories",
+        "updated_at"
+      ],
+      [
+        "data_sources",
+        "created_at"
+      ],
+      [
+        "data_sources",
+        "updated_at"
+      ],
+      [
+        "knowledge_files",
+        "created_at"
+      ],
+      [
+        "knowledge_files",
+        "updated_at"
+      ],
+      [
+        "templates",
+        "created_at"
+      ],
+      [
+        "templates",
+        "updated_at"
+      ],
+      [
+        "ai_models",
+        "created_at"
+      ],
+      [
+        "ai_models",
+        "updated_at"
+      ],
+      [
+        "reports",
+        "created_at"
+      ],
+      [
+        "reports",
+        "updated_at"
+      ],
+      [
+        "generation_tasks",
+        "created_at"
+      ],
+      [
+        "generation_tasks",
+        "updated_at"
+      ],
+      [
+        "report_assets",
+        "created_at"
+      ],
+      [
+        "report_assets",
+        "updated_at"
+      ],
+      [
+        "digest_schedules",
+        "created_at"
+      ],
+      [
+        "digest_schedules",
+        "updated_at"
+      ],
+      [
+        "basket_items",
+        "created_at"
+      ],
+      [
+        "collection_runs",
+        "created_at"
+      ],
+      [
+        "collection_runs",
+        "updated_at"
+      ],
+      [
+        "model_calls",
+        "created_at"
+      ],
+      [
+        "report_versions",
+        "created_at"
+      ]
+    ],
+    "field_count": 27,
+    "column_names": [
+      "created_at",
+      "updated_at"
+    ],
+    "sql_type": "timestamp(0) without time zone",
+    "precision": 0,
+    "with_timezone": false,
+    "timezone": "Asia/Shanghai",
+    "storage_semantics": "Beijing-local-wall-clock",
+    "api_format": "YYYY-MM-DD HH:mm:ss",
+    "page_format": "YYYY-MM-DD HH:mm:ss",
+    "source_conversion": "source-instant-AT-TIME-ZONE-Asia/Shanghai-before-precision-reduction",
+    "session_timezone_independent": true,
+    "null_policy": "preserve-source-nullability-and-null-values",
+    "operational_timestamps": "unchanged-timestamptz",
+    "foundation_timestamps": "unchanged",
+    "operational_examples": [
+      "published_at",
+      "available_at",
+      "next_run_at",
+      "lease_expires_at",
+      "started_at",
+      "finished_at",
+      "stop_requested_at"
+    ],
+    "historical_business_migration_snapshot": "business-v4.json",
+    "full_ddl_owner": "main; defaults, conversion SQL and physical catalog frozen in business-v5.json",
+    "verification": "Only the declared 27 fields may change. Compare full row projections after explicit Beijing conversion at second precision; protect all non-audit fields, ownership, ACLs, foundation/framework objects and sequence state."
+  }
+}

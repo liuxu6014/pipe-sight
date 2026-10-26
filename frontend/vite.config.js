@@ -12,12 +12,14 @@ export default defineConfig(({ mode, command }) => {
     // 默认情况下，vite 会假设你的应用是被部署在一个域名的根路径上
     // 例如 https://www.ruoyi.vip/。如果应用被部署在一个子路径上，你就需要用这个选项指定这个子路径。例如，如果你的应用被部署在 https://www.ruoyi.vip/admin/，则设置 baseUrl 为 /admin/。
     base: VITE_APP_ENV === 'production' ? '/' : '/',
+    define: {
+      // 缺少本地 .env 时仍使用真实 API 代理，避免 /captchaImage 等落到 SPA 的 HTML 回退。
+      'import.meta.env.VITE_APP_BASE_API': JSON.stringify(process.env.VITE_APP_BASE_API || env.VITE_APP_BASE_API || '/dev-api')
+    },
     plugins: createVitePlugins(env, command === 'build'),
     resolve: {
       // https://cn.vitejs.dev/config/#resolve-alias
       alias: {
-        // 用户门户与后台 AI 聊天均使用轻量代码块，不加载 Monaco 及其语言 Worker。
-        'stream-monaco': path.resolve(__dirname, './src/shims/stream-monaco.js'),
         // 设置路径
         '~': path.resolve(__dirname, './'),
         // 设置别名

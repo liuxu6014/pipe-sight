@@ -2,11 +2,10 @@
   <div class="pipeline-page">
     <section class="page-heading">
       <div>
-        <p class="eyebrow">后台管理 · 数据采集</p>
         <h1>数据源管理</h1>
-        <p class="summary">维护新闻源、公众号、论文库等采集入口，为后续清洗、去重和标签生成提供来源配置。</p>
+        <p class="summary">维护新闻源、公众号、论文库等采集入口，来源启停控制后续采集，停止正在运行的采集请到采集任务页操作。</p>
       </div>
-      <el-button type="primary" :icon="Plus" @click="openSourceDialog()">新增数据源</el-button>
+      <el-button v-if="canSourceSave" type="primary" :icon="Plus" @click="openSourceDialog()">新增数据源</el-button>
     </section>
 
     <el-row :gutter="16" class="source-stats">
@@ -18,8 +17,8 @@
       </el-col>
       <el-col :xs="24" :sm="8">
         <el-card shadow="never" class="stat-card">
-          <span>平均成功率</span>
-          <strong>{{ averageSuccessRate }}%</strong>
+          <span>数据源总数</span>
+          <strong>{{ rows.length }}</strong>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="8">
@@ -30,144 +29,125 @@
       </el-col>
     </el-row>
 
-    <el-card shadow="never" class="table-card">
-      <el-table v-loading="loading" :data="rows" border>
-        <el-table-column prop="name" label="数据源" min-width="180" />
-        <el-table-column prop="type" label="类型" width="120">
-          <template #default="{ row }">
-            <el-tag :type="typeTag(row.type)" effect="light">{{ typeText(row.type) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="frequency" label="频率" width="120" />
-        <el-table-column prop="last_run_time" label="最后采集" width="180" />
-        <el-table-column prop="success_rate" label="成功率" min-width="160">
-          <template #default="{ row }">
-            <el-progress :percentage="row.success_rate" />
-          </template>
-        </el-table-column>
-        <el-table-column prop="status" label="状态" width="110">
-          <template #default="{ row }">
-            <el-tag :type="row.status === 'enabled' ? 'success' : 'info'">
-              {{ row.status === 'enabled' ? '启用' : '停用' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
-          <template #default>
-            <el-button link type="primary" :icon="Edit" @click="openSourceDialog(row)">配置</el-button>
-            <el-button link type="primary" :icon="VideoPlay" @click="runSource(row)">试运行</el-button>
-            <el-button link :type="row.enabled ? 'danger' : 'success'" @click="toggleSource(row)">{{ row.enabled ? '停用' : '启用' }}</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+    <el-alert v-if="sourceError" type="warning" show-icon :closable="false" class="source-load-error">
+      <template #title>{{ sourceError }}</template>
+      <template #default><button type="button" class="source-retry" @click="loadSources">重新加载</button></template>
+    </el-alert>
+    <el-card v-else shadow="never" class="source-list-card">
+      <div v-loading="loading" :aria-busy="loading" class="source-list-region">
+        <ul class="source-list" aria-label="数据源列表">
+          <li v-for="row in rows" :key="row.id" class="source-list-item">
+            <div class="source-list-copy">
+              <div class="source-list-heading"><h2>{{ row.name }}</h2><el-tag :type="typeTag(row.type)" effect="light">{{ typeText(row.type) }}</el-tag><el-tag :type="sourceEnabled(row) ? 'success' : 'info'">{{ sourceEnabled(row) ? '启用' : '停用' }}</el-tag></div>
+              <div class="source-list-meta"><span>采集周期：{{ row.cron || '手动采集' }}</span><span>最后采集：{{ formatBusinessTime(row.lastRunAt) || '—' }}</span></div>
+            </div>
+            <div class="source-list-actions" role="group" :aria-label="`${row.name}操作`">
+              <el-button v-if="canSourceSave" link type="primary" :icon="Edit" @click="openSourceDialog(row)">配置</el-button>
+              <el-button v-if="canTaskRun" link type="primary" :icon="VideoPlay" :disabled="!sourceEnabled(row) || Boolean(runningSourceId)" :loading="runningSourceId === row.id" @click="runSource(row)">立即采集</el-button>
+              <el-button v-if="canSourceSave" link :type="sourceEnabled(row) ? 'danger' : 'success'" @click="toggleSource(row)">{{ sourceEnabled(row) ? '停用' : '启用' }}</el-button>
+            </div>
+          </li>
+        </ul>
+        <el-empty v-if="!loading && !rows.length" description="暂无数据源" :image-size="64" />
+        <p v-if="loading && !rows.length" class="source-list-loading" role="status">正在加载数据源…</p>
+      </div>
     </el-card>
 
     <el-dialog v-model="dialogVisible" :title="editingSource ? '配置数据源' : '新增数据源'" width="620px" destroy-on-close>
       <el-form label-position="top" :model="sourceForm">
         <div class="source-form-grid">
           <el-form-item label="数据源名称"><el-input v-model="sourceForm.name" placeholder="例如：国家管网集团要闻" /></el-form-item>
-          <el-form-item label="数据源编码"><el-input v-model="sourceForm.sourceCode" placeholder="小写字母、数字、短横线或下划线" :disabled="Boolean(editingSource)" /></el-form-item>
-          <el-form-item label="来源类型"><el-select v-model="sourceForm.sourceType"><el-option label="新闻源" value="news" /><el-option label="公众号" value="wechat" /><el-option label="论文库" value="paper" /></el-select></el-form-item>
+
+          <el-form-item label="来源类型"><el-select v-model="sourceForm.sourceType"><el-option label="新闻源" value="website" /><el-option label="公众号" value="wechat" /><el-option label="论文库" value="paper" /></el-select></el-form-item>
           <el-form-item label="采集适配器"><el-select v-model="sourceForm.adapterKey"><el-option label="国家管网资讯" value="pipechina_group_news" /><el-option label="Crossref 论文" value="crossref_works" /></el-select></el-form-item>
           <el-form-item label="入口地址" class="is-full"><el-input v-model="sourceForm.endpoint" placeholder="https://..." /></el-form-item>
           <el-form-item label="调度表达式"><el-input v-model="sourceForm.scheduleCron" placeholder="留空表示仅手动运行" /></el-form-item>
-          <el-form-item label="外部处理模式"><el-select v-model="sourceForm.handoffMode"><el-option label="本地入库" value="local" /><el-option label="提交 InsightHub" value="external" /></el-select></el-form-item>
-          <el-form-item label="外部来源编码"><el-input v-model="sourceForm.processorSourceCode" placeholder="可选，用于外部处理系统匹配" /></el-form-item>
+
+          <el-form-item label="时区"><el-input v-model="sourceForm.timezone" /></el-form-item>
+          <el-form-item label="翻译模型（可选）"><el-select v-model="sourceForm.modelId" clearable placeholder="不自动翻译"><el-option v-for="model in textModels" :key="model.modelId" :label="model.modelName || model.modelCode" :value="model.modelId" /></el-select></el-form-item>
           <el-form-item label="单次抓取上限"><el-input-number v-model="sourceForm.limit" :min="1" :max="30" /></el-form-item>
           <el-form-item v-if="sourceForm.adapterKey === 'crossref_works'" label="论文检索词" class="is-full"><el-input v-model="sourceForm.query" placeholder="例如：oil gas pipeline integrity monitoring" /></el-form-item>
         </div>
-        <el-alert title="试运行会真实访问入口并写入采集运行记录；外部处理模式需要先配置 InsightHub 连接。" type="info" :closable="false" />
+        <el-alert title="启用来源不会立即采集。停用会取消排队任务；已开始的采集请到任务页单独请求停止。" type="info" :closable="false" />
       </el-form>
-      <template #footer><el-button @click="dialogVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveSource">保存配置</el-button></template>
+      <template #footer><el-button @click="dialogVisible = false">取消</el-button><el-button v-if="canSourceSave" type="primary" :loading="saving" @click="saveSource">保存配置</el-button></template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
+import { formatBusinessTime } from '@/utils/portal/businessTime'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Edit, Plus, VideoPlay } from '@element-plus/icons-vue'
 import { createPipelineSource, disablePipelineSource, listPipelineSources, runPipelineTask, updatePipelineSource } from '@/api/pipeline/intelligence'
+import { listModelAll } from '@/api/ai/model'
+import { sourceEnabled, modelsFor } from '@/utils/pipeline/compactContract'
+import { checkPermi } from '@/utils/permission'
 
 defineOptions({ name: 'PipelineSource' })
 
 const loading = ref(false)
+const sourceError = ref('')
 const rows = ref([])
 const dialogVisible = ref(false)
 const saving = ref(false)
 const editingSource = ref(null)
-const sourceForm = reactive({
-  sourceCode: '', name: '', sourceType: 'news', adapterKey: 'pipechina_group_news', endpoint: '',
-  scheduleCron: '', handoffMode: 'external', processorSourceCode: '', limit: 12, query: ''
-})
-
-const enabledCount = computed(() => rows.value.filter(item => item.status === 'enabled').length)
+const canSourceList = computed(() => checkPermi(['pipeline:source:list']))
+const canSourceSave = computed(() => checkPermi(['pipeline:source:save']))
+const canTaskRun = computed(() => checkPermi(['pipeline:task:run']))
+const runningSourceId = ref('')
+const models = ref([])
+const textModels = computed(() => modelsFor(models.value, 'text_generate'))
+const sourceForm = reactive({ name: '', sourceType: 'website', adapterKey: 'pipechina_group_news', endpoint: '', scheduleCron: '', timezone: 'Asia/Shanghai', modelId: null, limit: 12, query: '', isEnabled: true })
+const enabledCount = computed(() => rows.value.filter(sourceEnabled).length)
 const typeCount = computed(() => new Set(rows.value.map(item => item.type)).size)
-const averageSuccessRate = computed(() => {
-  if (!rows.value.length) return 0
-  const total = rows.value.reduce((sum, item) => sum + item.success_rate, 0)
-  return Math.round(total / rows.value.length)
-})
-
 function typeText(type) {
-  return { news: '新闻源', wechat: '公众号', paper: '论文库' }[type] || type
+  return { website: '新闻源', news: '新闻源', wechat: '公众号', paper: '论文库' }[type] || type
 }
 
 function typeTag(type) {
-  return { news: 'primary', wechat: 'success', paper: 'warning' }[type] || 'info'
+  return { website: 'primary', news: 'primary', wechat: 'success', paper: 'warning' }[type] || 'info'
 }
 
 async function loadSources() {
+  if (!canSourceList.value) return
   loading.value = true
+  sourceError.value = ''
   try {
     const res = await listPipelineSources()
     rows.value = res.data.rows
   } catch (error) {
-    ElMessage.warning('暂时无法获取数据源列表')
+    rows.value = []
+    sourceError.value = error?.msg || error?.message || '数据源列表暂时无法加载，请检查服务后重试'
+    ElMessage.warning(sourceError.value)
   } finally {
     loading.value = false
   }
 }
 
 function resetForm(source = null) {
-  editingSource.value = source
-  Object.assign(sourceForm, {
-    sourceCode: source?.source_code || '',
-    name: source?.name || '',
-    sourceType: source?.type || 'news',
-    adapterKey: source?.adapter_key || 'pipechina_group_news',
-    endpoint: source?.endpoint || '',
-    scheduleCron: source?.schedule_cron || '',
-    handoffMode: source?.handoff_mode || 'external',
-    processorSourceCode: source?.processor_source_code || '',
-    limit: Number(source?.config_json?.limit || 12),
-    query: source?.config_json?.query || ''
-  })
+ editingSource.value = source
+ Object.assign(sourceForm, { name: source?.name || '', sourceType: source?.type === 'news' ? 'website' : source?.type || 'website',
+  adapterKey: source?.adapter || source?.adapter_key || 'pipechina_group_news', endpoint: source?.url ?? source?.endpoint ?? '',
+  scheduleCron: source?.cron ?? source?.schedule_cron ?? '', timezone: source?.timezone || 'Asia/Shanghai',
+  modelId: source?.modelId ?? source?.model_id ?? null, limit: Number(source?.config?.limit || 12), query: source?.config?.query || '',
+  isEnabled: source ? sourceEnabled(source) : true })
 }
-
 function openSourceDialog(source = null) {
-  resetForm(source)
-  dialogVisible.value = true
+ if (!canSourceSave.value) return
+ resetForm(source); dialogVisible.value = true
 }
-
-function sourcePayload(source = sourceForm) {
-  return {
-    sourceCode: source.sourceCode || source.source_code,
-    name: source.name,
-    sourceType: source.sourceType || source.type,
-    endpoint: source.endpoint || '',
-    adapterKey: source.adapterKey || source.adapter_key,
-    scheduleCron: source.scheduleCron || source.schedule_cron || '',
-    enabled: source.enabled !== false,
-    configJson: { ...(source.config_json || {}), limit: Number(source.limit || source.config_json?.limit || 12), ...(source.query || source.config_json?.query ? { query: source.query || source.config_json.query } : {}) },
-    handoffMode: source.handoffMode || source.handoff_mode || 'external',
-    processorSourceCode: source.processorSourceCode || source.processor_source_code || ''
-  }
+function sourcePayload() {
+ return { name: sourceForm.name.trim(), type: sourceForm.sourceType, url: sourceForm.endpoint.trim() || null,
+ adapter: sourceForm.adapterKey, cron: sourceForm.scheduleCron.trim() || null, timezone: sourceForm.timezone,
+ modelId: sourceForm.modelId || null, isEnabled: sourceForm.isEnabled,
+ config: { ...(editingSource.value?.config || {}), limit: sourceForm.limit, ...(sourceForm.adapterKey === 'crossref_works' ? { query: sourceForm.query } : {}) } }
 }
-
 async function saveSource() {
+  if (!canSourceSave.value) return
   if (saving.value) return
-  if (!sourceForm.name || !sourceForm.sourceCode || !sourceForm.endpoint) return ElMessage.warning('请填写名称、编码和入口地址')
+  if (!sourceForm.name.trim() || !sourceForm.adapterKey) return ElMessage.warning('请填写名称并选择采集适配器')
   saving.value = true
   try {
     const payload = sourcePayload()
@@ -177,42 +157,63 @@ async function saveSource() {
     ElMessage.success(editingSource.value ? '数据源配置已更新' : '数据源已创建')
     await loadSources()
   } catch (error) {
-    ElMessage.error(error?.msg || '数据源保存失败')
+    ElMessage.error(error?.msg || error?.message || '数据源保存失败')
   } finally {
     saving.value = false
   }
 }
 
 async function toggleSource(source) {
-  const enabled = source.enabled
+  if (!canSourceSave.value) return
+  const enabled = sourceEnabled(source)
   try {
-    if (enabled) await updatePipelineSource(source.id, sourcePayload(source))
-    else await disablePipelineSource(source.id)
-    ElMessage.success(enabled ? '数据源已启用' : '数据源已停用')
+    if (enabled) await disablePipelineSource(source.id)
+    else await updatePipelineSource(source.id, { name: source.name, type: source.type === 'news' ? 'website' : source.type, url: source.url ?? source.endpoint ?? null, adapter: source.adapter || source.adapter_key, cron: source.cron ?? source.schedule_cron ?? null, timezone: source.timezone || 'Asia/Shanghai', config: source.config || {}, modelId: source.modelId ?? source.model_id ?? null, isEnabled: true })
+    ElMessage.success(enabled ? '来源已停用，排队任务取消；运行中的采集需单独停止' : '来源已启用，后续可定时或手动采集')
     await loadSources()
   } catch (error) {
-    source.enabled = !enabled
-    ElMessage.error(error?.msg || '数据源状态更新失败')
+    ElMessage.error(error?.msg || error?.message || '数据源状态更新失败')
   }
 }
 
 async function runSource(source) {
+  if (!canTaskRun.value || !sourceEnabled(source) || runningSourceId.value) return
+  runningSourceId.value = source.id
   try {
     const result = await runPipelineTask(source.id)
-    ElMessage.success(result.msg || `${source.name}已开始试运行`)
+    ElMessage.success(result.msg || '采集请求已提交，请到任务页查看运行状态')
     await loadSources()
   } catch (error) {
-    ElMessage.error(error?.msg || '数据源试运行失败')
-  }
+    ElMessage.error(error?.msg || error?.message || '采集请求失败')
+  } finally { runningSourceId.value = '' }
 }
 
-onMounted(loadSources)
+onMounted(async () => { await loadSources(); if (checkPermi(['ai:model:query'])) { try { const res = await listModelAll(); models.value = res.data?.rows || res.data || [] } catch { ElMessage.warning('翻译模型列表暂时无法加载，可稍后配置') } } })
 </script>
 
 <style scoped>
+.source-list-card :deep(.el-card__body) { padding: 0; }
+.source-list-region { min-height: 96px; }
+.source-list { list-style: none; margin: 0; padding: 0; }
+.source-list-item { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 18px 20px; border-bottom: 1px solid #e5ebf1; }
+.source-list-item:last-child { border-bottom: 0; }
+.source-list-copy { min-width: 0; flex: 1; }
+.source-list-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.source-list-heading h2 { margin: 0 4px 0 0; font-size: 15px; line-height: 1.6; font-weight: 600; color: #173d56; overflow-wrap: anywhere; }
+.source-list-meta { display: flex; flex-wrap: wrap; gap: 6px 24px; margin-top: 8px; font-size: 13px; line-height: 1.6; color: #526277; overflow-wrap: anywhere; }
+.source-list-actions { display: flex; align-items: center; flex-shrink: 0; gap: 16px; }
+.source-list-actions :deep(.el-button) { margin-left: 0; min-height: 44px; }
+.source-list-loading { padding: 24px; margin: 0; color: #526277; }
+@media (max-width: 760px) {
+  .source-list-item { align-items: stretch; flex-direction: column; gap: 8px; padding: 16px; }
+  .source-list-actions { justify-content: flex-end; flex-wrap: wrap; gap: 12px; }
+}
 .source-stats {
   margin-bottom: 2px;
 }
+
+.source-load-error { margin-bottom: 18px; }
+.source-retry { padding: 0; border: 0; background: transparent; color: #2764e7; cursor: pointer; font-size: 13px; }
 
 .source-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
 .source-form-grid .is-full { grid-column: 1 / -1; }

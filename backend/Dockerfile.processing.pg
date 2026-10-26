@@ -1,0 +1,29 @@
+FROM python:3.10
+
+WORKDIR /app
+
+# InsightHub 处理包与 API/Task Worker 共用同一套后端运行时依赖。
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+    gcc \
+    build-essential \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# 先安装依赖，保证仅修改处理代码时可以复用依赖层。
+COPY requirements-pg.txt pyproject.toml ./
+RUN pip install --no-cache-dir -r requirements-pg.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+# 使用统一 app 包安装处理 Worker，运行入口不再依赖仓库外的独立处理包。
+COPY . .
+RUN pip install --no-cache-dir --no-build-isolation . --no-deps
+
+RUN mkdir -p /app/logs
+
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+EXPOSE 8000
+
+CMD ["python", "-m", "app.intelligence.processing.main"]

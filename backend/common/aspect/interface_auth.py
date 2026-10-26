@@ -1,8 +1,8 @@
 from fastapi import Depends, Request, params
 
-from common.context import RequestContext
+from common.http.context import RequestContext
+from common.http.dependencies import RouteDependencyGuard
 from exceptions.exception import PermissionException
-from utils.dependency_util import DependencyUtil
 
 
 class CheckUserInterfaceAuth:
@@ -21,7 +21,7 @@ class CheckUserInterfaceAuth:
         self.is_strict = is_strict
 
     def __call__(self, request: Request) -> bool:
-        DependencyUtil.check_exclude_routes(
+        RouteDependencyGuard.check_exclude_routes(
             request, err_msg='当前路由不在认证规则内，不可使用CheckUserInterfaceAuth依赖项'
         )
         current_user = RequestContext.get_current_user()
@@ -55,7 +55,7 @@ class CheckRoleInterfaceAuth:
         self.is_strict = is_strict
 
     def __call__(self, request: Request) -> bool:
-        DependencyUtil.check_exclude_routes(
+        RouteDependencyGuard.check_exclude_routes(
             request, err_msg='当前路由不在认证规则内，不可使用CheckRoleInterfaceAuth依赖项'
         )
         current_user = RequestContext.get_current_user()

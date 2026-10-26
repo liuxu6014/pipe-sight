@@ -26,7 +26,7 @@ class AppBootstrapService:
 
         :return: 应用启动入口绝对路径
         """
-        return os.path.join(self.runtime_environment.get_backend_dir(), 'app.py')
+        return os.path.join(self.runtime_environment.get_backend_dir(), 'src', 'app', 'entrypoints', 'api.py')
 
     def build_app_run_command(self, env: str) -> list[str]:
         """
@@ -35,12 +35,7 @@ class AppBootstrapService:
         :param env: 运行环境
         :return: 应用启动命令参数列表
         """
-        return [
-            self.runtime_environment.get_python_executable(),
-            self.get_app_entry_path(),
-            '--env',
-            env,
-        ]
+        return [self.runtime_environment.get_python_executable(), '-m', 'app.entrypoints.api', '--env', env]
 
     def exec_app_run_command(self, env: str) -> None:
         """
@@ -50,6 +45,10 @@ class AppBootstrapService:
         :return: None
         """
         command = self.build_app_run_command(env)
+        backend_dir = self.runtime_environment.get_backend_dir()
+        source_dir = os.path.join(backend_dir, 'src')
+        python_path = os.pathsep.join(filter(None, (source_dir, backend_dir, os.environ.get('PYTHONPATH', ''))))
+        os.environ['PYTHONPATH'] = python_path
         os.execvp(command[0], command)
 
 

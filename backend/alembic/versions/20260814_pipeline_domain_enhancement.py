@@ -68,15 +68,17 @@ def _execute_schema_file(filename: str) -> None:
     for raw_statement in sql.split(';'):
         statement = raw_statement.strip()
         if statement:
-            # MySQL has no CREATE INDEX IF NOT EXISTS. Keep the seed SQL
-            # idempotent by checking the catalog before issuing the DDL.
+            # Shared bootstrap SQL describes the latest schema. Older PG tables
+            # receive queue/review columns later in this migration chain, so
+            # defer simple indexes until their columns exist. MySQL additionally
+            # needs IF NOT EXISTS removed after checking the catalog.
             if (
                 not context.is_offline_mode()
-                and op.get_bind().dialect.name == 'mysql'
-                and statement.upper().startswith('CREATE INDEX IF NOT EXISTS')
+                and op.get_bind().dialect.name in {'mysql', 'postgresql'}
+                and re.match(r'CREATE(?: UNIQUE)? INDEX IF NOT EXISTS', statement, re.IGNORECASE)
             ):
                 match = re.match(
-                    r'CREATE INDEX IF NOT EXISTS\s+(\w+)\s+ON\s+(\w+)\s*\(([^)]*)\)',
+                    r'CREATE(?: UNIQUE)? INDEX IF NOT EXISTS\s+(\w+)\s+ON\s+(\w+)\s*\(([^)]*)\)',
                     statement,
                     re.IGNORECASE,
                 )
@@ -87,11 +89,14 @@ def _execute_schema_file(filename: str) -> None:
                     if index_name in existing:
                         continue
                     table_columns = {item['name'] for item in inspector.get_columns(table_name)}
-                    if any(column.strip().strip('`"') not in table_columns for column in columns_sql.split(',')):
-                        # Older installations receive these columns from the
-                        # dedicated handoff migration later in the chain.
+                    parts = [column.strip() for column in columns_sql.split(',')]
+                    if (
+                        all(re.fullmatch(r'[`"]?\w+[`"]?(?:\s+(?:ASC|DESC))?', part, re.IGNORECASE) for part in parts)
+                        and any(part.split()[0].strip('`"') not in table_columns for part in parts)
+                    ):
                         continue
-                    statement = re.sub(r'IF NOT EXISTS\s+', '', statement, count=1, flags=re.IGNORECASE)
+                    if op.get_bind().dialect.name == 'mysql':
+                        statement = re.sub(r'IF NOT EXISTS\s+', '', statement, count=1, flags=re.IGNORECASE)
             op.execute(statement)
 
 

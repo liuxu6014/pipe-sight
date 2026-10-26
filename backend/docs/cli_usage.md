@@ -78,7 +78,7 @@ ruoyi app run --env=dev
 这个命令的目标是等价替代：
 
 ```bash
-python app.py --env=dev
+python -m app.entrypoints.api --env=dev
 ```
 
 ## 3. 使用规则
@@ -188,7 +188,6 @@ ruoyi --icon=none ops server-info --env=dev
 ```bash
 ruoyi cache clear --env=dev --all --yes
 ruoyi db upgrade --env=prod --revision=head --allow-prod --yes
-ruoyi gen export sys_user --env=dev --mode=local --dry-run
 ```
 
 ## 4. 常用工作流
@@ -248,8 +247,6 @@ ruoyi completion install --shell=bash --activate
 ruoyi wizard app-run
 ruoyi wizard db-upgrade
 ruoyi wizard cache-clear
-ruoyi wizard gen-export
-ruoyi wizard gen-import
 ruoyi wizard prod-check
 ruoyi tui --env=dev
 ```
@@ -384,34 +381,7 @@ ruoyi crypto rotate --env=dev --output=json --next-kid=v2 --key-size=2048 --yes
 - `crypto rotate` 当前只生成轮换辅助结果，不会直接改写 `.env.*` 文件
 - 涉及私钥的输出只建议在安全终端中使用
 
-### 5.8 `gen`
-
-用于代码生成业务表查询、导入、建表、预览和导出。
-
-```bash
-ruoyi gen list --env=dev --output=json
-ruoyi gen db-list --env=dev --output=json
-ruoyi gen detail 1 --env=dev --output=json
-ruoyi gen import-table sys_user sys_role --env=dev --yes
-ruoyi gen import-table sys_user sys_role --env=dev --dry-run
-ruoyi gen create-table --env=dev --sql="create table demo_test (id bigint primary key)" --yes
-ruoyi gen create-table --env=dev --sql-file=./sql/demo.sql --dry-run
-ruoyi gen preview 1 --env=dev
-ruoyi gen preview 1 --env=dev --output=json
-ruoyi gen export sys_user --env=dev --yes
-ruoyi gen export sys_user sys_role --env=dev --mode=zip --output-file=./build/gen.zip --yes
-ruoyi gen export sys_user --env=dev --mode=local --dry-run
-ruoyi gen sync-db sys_user --env=dev --yes
-```
-
-说明：
-
-- `import-table` 与 `create-table` 支持 `--dry-run`
-- `create-table` 必须且只能传入 `--sql` 或 `--sql-file` 其中一种
-- `gen preview --output=text` 会按模板分块展示预览代码内容
-- `export --mode=local` 会复用现有生成逻辑，并遵守 `GenConfig.allow_overwrite`
-
-### 5.9 `dev`
+### 5.8 `dev`
 
 用于开发态代码检查与测试执行。
 
@@ -433,7 +403,7 @@ ruoyi dev test tests --output=json
 - `--fix` 会执行 `ruff check --fix`
 - `dev test` 通过当前环境的 `python -m pytest` 执行测试
 
-### 5.10 `completion`
+### 5.9 `completion`
 
 用于生成、安装和诊断 shell completion。
 
@@ -459,9 +429,9 @@ ruoyi completion install --shell=powershell --activate
 - PowerShell 如需自动加载，建议配合 `--activate`
 - Bash 脚本已对旧版本 Bash 做兼容处理，若之前已安装过脚本，请重新执行一次 `ruoyi completion install --activate`
 - `completion doctor` 会给出推荐安装命令和 source 建议
-- 当前已补充的上下文补全包括 `--env`、`cache_name`、`cache_key`、`config_key`、`db --revision`、`gen` 业务表名、`gen` 数据库表名、`gen --sql-file`、`gen --output-file`、`job_name`、`job_id`
+- 当前已补充的上下文补全包括 `--env`、`cache_name`、`cache_key`、`config_key`、`db --revision`、`job_name`、`job_id`
 
-### 5.11 `wizard`
+### 5.10 `wizard`
 
 用于通过交互方式组装危险命令或复杂命令，并在真正执行前输出预览。
 
@@ -469,20 +439,18 @@ ruoyi completion install --shell=powershell --activate
 ruoyi wizard app-run
 ruoyi wizard db-upgrade --default-env=dev --default-revision=head
 ruoyi wizard cache-clear --default-env=dev --default-mode=cache-name
-ruoyi wizard gen-export --default-env=dev --default-mode=zip
-ruoyi wizard gen-import --default-env=dev --default-table-names=sys_notice
 ruoyi wizard prod-check --default-env=prod
 ```
 
 说明：
 
 - 所有向导都会先采集输入，再输出预览摘要与最终将执行的 CLI 命令
-- `db-upgrade`、`cache-clear`、`gen-export`、`gen-import` 默认都支持先走 `dry-run`
+- `db-upgrade`、`cache-clear` 默认都支持先走 `dry-run`
 - 向导本质上仍然是对底层 CLI 的封装，最终返回值、退出码和危险命令保护规则与底层命令保持一致
 
-### 5.12 `tui`
+### 5.11 `tui`
 
-用于进入只读巡检工作台，以页面方式浏览应用、运维、数据库、缓存、任务、代码生成、参数配置和加密状态。
+用于进入只读巡检工作台，以页面方式浏览应用、运维、数据库、缓存、任务、参数配置和加密状态。
 
 ```bash
 ruoyi tui --env=dev
@@ -492,7 +460,7 @@ ruoyi tui --env=prod
 说明：
 
 - 当前 TUI 是只读巡检工作台，页面内的写操作入口会通过确认弹窗或向导二次确认
-- 页面切换快捷键为 `D/A/O/B/C/T/G/P/E`，分别对应总览、应用、运维、数据库、缓存、任务、代码生成、参数配置、加密
+- 页面切换快捷键为 `D/A/O/B/C/T/P/E`，分别对应总览、应用、运维、数据库、缓存、任务、参数配置、加密
 - 通用快捷键包括 `R` 刷新、`Q` 退出、`S` 聚焦侧栏、`←/→` 切换焦点或区域、`J/K` 滚动、`PgUp/PgDn` 翻页、`Home/End` 首尾跳转
 - 若当前 Python 环境缺少 TUI 依赖，`ruoyi tui` 会返回失败结果并提示重新执行 `pip install -r requirements.txt` 或 `pip install -r requirements-pg.txt`
 
@@ -513,10 +481,6 @@ ruoyi tui --env=prod
 - `job pause`
 - `job resume`
 - `job sync`
-- `gen import-table`
-- `gen create-table`
-- `gen export`
-- `gen sync-db`
 
 说明：
 
@@ -659,87 +623,6 @@ ruoyi db upgrade --env=dev --revision=head --dry-run --yes --output=json
     "head"
   ],
   "cwd": "/path/to/ruoyi-fastapi-backend"
-}
-```
-
-代码生成 `dry-run` 文本样例：
-
-命令：
-
-```bash
-ruoyi --color=never --icon=none gen export demo_table --env=dev --dry-run --yes --output=text
-```
-
-输出：
-
-```text
-OK SUCCESS
-env: dev
-mode: zip
-dry_run: true
-message: 代码导出演练完成，未执行实际导出
-table_names:
-  - demo_table
-output_file: /path/to/ruoyi-fastapi-backend/gen_code_demo_table.zip
-```
-
-代码生成 `dry-run` JSON 样例：
-
-命令：
-
-```bash
-ruoyi gen create-table --env=dev --dry-run --yes --sql='CREATE TABLE demo_cli_test (id bigint);' --output=json
-```
-
-输出：
-
-```json
-{
-  "ok": true,
-  "message": "建表语句演练完成，未执行实际建表",
-  "dryRun": true,
-  "statementCount": 1,
-  "tableNames": [
-    "demo_cli_test"
-  ],
-  "sql": "CREATE TABLE demo_cli_test (id bigint);",
-  "env": "dev"
-}
-```
-
-参数错误样例：
-
-命令：
-
-```bash
-ruoyi --color=never --icon=none gen create-table --env=dev --dry-run --yes --sql='DROP TABLE demo_cli_test;' --output=text
-```
-
-输出：
-
-```text
-FAIL FAILED
-message: 创建表结构失败
-error: 建表语句不合法，仅允许 CREATE TABLE 语句
-env: dev
-```
-
-参数错误 JSON 样例：
-
-命令：
-
-```bash
-ruoyi gen create-table --env=dev --dry-run --yes --sql='DROP TABLE demo_cli_test;' --output=json
-```
-
-输出：
-
-```json
-{
-  "ok": false,
-  "message": "创建表结构失败",
-  "error": "建表语句不合法，仅允许 CREATE TABLE 语句",
-  "env": "dev"
 }
 ```
 

@@ -1,743 +1,436 @@
-from datetime import datetime
-from pathlib import Path
-from types import SimpleNamespace
+"""直接领域服务回归：提取、安全、私有权限、任务、编辑和历史恢复。"""
+
+import importlib
+from types import SimpleNamespace as NS
 from unittest.mock import AsyncMock
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
+from sqlalchemy import select
+from test_research_simplified_20261025 import db as refactor_db
+from test_research_simplified_20261025 import env as refactor_env
+from test_research_simplified_20261025 import no_external_network as refactor_network
+from test_research_simplified_20261025 import payload, queue, raises, seed
 
-from exceptions.exception import ServiceException
-from module_pipeline.dao.pipeline_dao import PipelineDao
-from module_pipeline.entity.vo.pipeline_vo import (
-    PipelineDiagramUpdateModel,
-    PipelineReportUpdateModel,
-    PipelineResearchJobCreateModel,
-)
-from module_pipeline.service.pipeline_domain_service import PipelineDomainService
-from module_pipeline.service.pipeline_template_service import PipelineTemplateService
-from utils.upload_util import UploadUtil
+env = refactor_env
+db = refactor_db
+no_external_network = refactor_network
 
 
-def _material(**overrides):
-    values = {
-        'file_id': 'doc-1',
-        'name': '应力监测资料.md',
-        'category': '内部文献',
-        'file_name': '应力监测资料.md',
-        'file_path': '/profile/upload/2026/08/09/应力监测资料.md',
-        'file_url': 'http://localhost/profile/upload/2026/08/09/应力监测资料.md',
-        'file_size': 128,
-        'permission_scope': 'private',
-        'parse_status': 'indexed',
-        'parse_message': '文本已完成基础提取，可用于关键词检索。',
-        'summary': '磁各向异性信号需要温度补偿。',
-        'extracted_text': '磁各向异性信号需要温度补偿。',
-        'tags': ['应力监测'],
-        'metadata_json': {'parser': 'plain-text', 'parseAttempts': 1},
-        'owner_id': 1,
-        'owner_name': '测试用户',
-        'version_no': 1,
-        'create_time': None,
-        'update_time': None,
-    }
-    values.update(overrides)
-    return SimpleNamespace(**values)
-
-
-def test_plain_text_material_can_be_extracted_without_external_parser():
-    source = Path(__file__).with_name('.pipeline-notes-test.md')
-    try:
-        source.write_text('# 管道应力监测\n磁各向异性信号需要温度补偿。', encoding='utf-8')
-
-        text = PipelineDomainService.extract_plain_text(str(source), source.name)
-
-        assert '磁各向异性' in text
-    finally:
-        source.unlink(missing_ok=True)
-
-
-def test_gb18030_plain_text_material_can_be_extracted(tmp_path):
+@pytest.mark.parametrize('encoding', ['utf-8', 'utf-8-sig', 'gb18030', 'utf-16'])
+def test_plain_text_material_can_be_extracted_without_external_parser(env, tmp_path, encoding):
     source = tmp_path / '现场记录.txt'
-    source.write_bytes('管道腐蚀与阴极保护现场记录'.encode('gb18030'))
-
-    text = PipelineDomainService.extract_plain_text(str(source), source.name)
-
-    assert text == '管道腐蚀与阴极保护现场记录'
+    source.write_bytes('管道应力监测：磁各向异性需要温度补偿。'.encode(encoding))
+    assert '磁各向异性需要温度补偿' in env.materials.MaterialFileService.extract_plain_text(str(source), source.name)
 
 
-def test_docx_material_can_be_extracted_with_python_standard_library(tmp_path):
-    source = tmp_path / '管道应力监测.docx'
-    document_xml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-  <w:body>
-    <w:p><w:r><w:t>管道本体应力监测</w:t></w:r></w:p>
-    <w:p><w:r><w:t>现场应用需要</w:t></w:r><w:r><w:tab/></w:r><w:r><w:t>温度补偿</w:t></w:r></w:p>
-  </w:body>
-</w:document>"""
+def test_docx_material_can_be_extracted_with_standard_library(env, tmp_path):
+    source = tmp_path / '应力监测.docx'
+    xml = (
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        '<w:body><w:p><w:r><w:t>管道本体应力监测</w:t></w:r></w:p>'
+        '<w:p><w:r><w:t>现场应用需要</w:t></w:r><w:r><w:tab/></w:r>'
+        '<w:r><w:t>温度补偿</w:t></w:r></w:p></w:body></w:document>'
+    )
     with ZipFile(source, 'w', ZIP_DEFLATED) as archive:
-        archive.writestr('word/document.xml', document_xml)
-
-    text = PipelineDomainService.extract_plain_text(str(source), source.name)
-
-    assert text.splitlines()[0] == '管道本体应力监测'
-    assert '现场应用需要\t温度补偿' in text
+        archive.writestr('word/document.xml', xml)
+    text = env.materials.MaterialFileService.extract_plain_text(str(source), source.name)
+    assert text.splitlines() == ['管道本体应力监测', '现场应用需要\t温度补偿']
 
 
-def test_searchable_pdf_material_is_extracted_locally(monkeypatch, tmp_path):
+@pytest.mark.parametrize(
+    'limit,value,expected',
+    [('max_archive_entries', 1, 'too many archive entries'), ('max_archive_uncompressed_bytes', 4, 'expanded content')],
+)
+def test_docx_limits_are_checked_before_reading_xml(env, monkeypatch, tmp_path, limit, value, expected):
+    source = tmp_path / '受限.docx'
+    with ZipFile(source, 'w', ZIP_DEFLATED) as archive:
+        archive.writestr('word/document.xml', '<document/>')
+        archive.writestr('word/styles.xml', '<styles/>')
+    monkeypatch.setattr(env.materials.MaterialFileService, limit, value)
+    with pytest.raises(ValueError, match=expected):
+        env.materials.MaterialFileService._extract_docx_text(source)
+
+
+def test_searchable_pdf_material_is_ready_after_local_extraction(env, monkeypatch, tmp_path):
     source = tmp_path / '研究报告.pdf'
     source.write_bytes(b'%PDF-1.7')
     monkeypatch.setattr(
-        PipelineDomainService,
-        '_extract_pdf_text',
-        staticmethod(lambda _: '管道完整性管理与应力监测研究内容。'),
+        env.materials.MaterialFileService, '_extract_pdf_text', staticmethod(lambda _: '管道完整性与应力监测正文')
     )
-
-    status, message, text, metadata = PipelineDomainService._parse_material_file(str(source), source.name)
-
-    assert status == 'indexed'
-    assert 'PDF 已完成文本提取' in message
-    assert '应力监测' in text
-    assert metadata['parser'] == 'pypdf'
+    status, message, text, metadata = env.materials.MaterialFileService.parse(
+        str(source), source.name, requested_at='offline'
+    )
+    assert status == 'ready' and 'PDF 已完成文本提取' in message
+    assert text == '管道完整性与应力监测正文' and metadata['parser'] == 'pypdf'
 
 
-def test_scanned_or_invalid_pdf_fails_with_actionable_message(tmp_path):
+def test_pdf_page_limit_is_checked_before_page_extraction(env, monkeypatch, tmp_path):
+    source = tmp_path / '页数过多.pdf'
+    source.write_bytes(b'%PDF-1.7')
+    monkeypatch.setattr(env.materials.MaterialFileService, 'max_pdf_pages', 1)
+    monkeypatch.setattr(env.materials, 'PdfReader', lambda _: NS(is_encrypted=False, pages=[object(), object()]))
+    with pytest.raises(ValueError, match='page limit'):
+        env.materials.MaterialFileService._extract_pdf_text(source)
+
+
+def test_scanned_or_invalid_pdf_fails_with_actionable_message(env, tmp_path):
     source = tmp_path / '扫描报告.pdf'
     source.write_bytes(b'%PDF-1.7')
-
-    status, message, text, metadata = PipelineDomainService._parse_material_file(str(source), source.name)
-
-    assert status == 'failed'
-    assert '扫描版' in message
-    assert text == ''
+    status, message, text, metadata = env.materials.MaterialFileService.parse(
+        str(source), source.name, requested_at='offline'
+    )
+    assert status == 'failed' and '扫描版' in message and text == ''
     assert metadata['parser'] == 'pypdf'
 
 
-def test_research_generator_builds_traceable_sections_and_markdown():
-    payload = PipelineResearchJobCreateModel(
-        title='管道本体应力监测科研需求报告',
-        direction='管道应力监测',
-        scenario='科研项目立项',
-        requirements='明确现场标定和误差评价方法',
-        outline=[{'id': 1, 'title': '技术路线与试验方案', 'words': 1800}],
-    )
-    evidence = [
-        {
-            'id': 'paper-001',
-            'type': '论文',
-            'title': '磁各向异性应力监测综述',
-            'summary': '磁信号与轴向应力相关，现场应用需要温度补偿。',
-            'source': 'Journal of Pipeline Systems',
-            'location': '2026-07-09',
-        }
-    ]
-
-    sections, citations = PipelineDomainService._build_sections(payload, payload.outline, evidence)
-    markdown = PipelineDomainService._build_markdown(payload.title, sections, citations)
-
-    assert sections[0]['citations'] == 1
-    assert '[1]' in sections[0]['content']
-    assert '## 参考资料' in markdown
-    assert '磁各向异性应力监测综述' in markdown
-
-
-def test_monthly_digest_uses_month_specific_outline_and_digest_content():
-    payload = PipelineResearchJobCreateModel(
-        title='管网科技情报月报 2026年8月',
-        report_type='monthly',
-        direction='管网安全、检测技术',
-        period=['2026-08-01', '2026-08-31'],
-    )
-    evidence = [
-        {
-            'id': 'news-001',
-            'type': '科技资讯',
-            'title': '多源检测数据融合取得新进展',
-            'summary': '现场试验显示融合检测能够提升缺陷识别稳定性。',
-            'source': '能源科技观察',
-            'location': '2026-08-08',
-        }
-    ]
-
-    outline = PipelineDomainService._default_outline(payload.report_type)
-    sections, citations = PipelineDomainService._build_sections(payload, outline, evidence)
-
-    assert [section['title'] for section in outline] == [
-        '月度要闻',
-        '重点技术进展',
-        '行业趋势与变化',
-        '管网应用与实践',
-        '风险与机会研判',
-        '下月关注',
-    ]
-    assert len(sections) == 6
-    assert citations[0]['sourceId'] == 'news-001'
-    assert '汇总本周期可信信息' in sections[0]['content']
-
-
-def test_pipeline_upload_accepts_markdown_case_insensitively():
-    assert UploadUtil.check_file_extension(SimpleNamespace(filename='现场记录.MD')) is True
-    assert UploadUtil.check_file_extension(SimpleNamespace(filename='现场记录')) is False
+def test_markdown_upload_extension_check_is_case_insensitive(env, monkeypatch):
+    upload = importlib.import_module('app.infrastructure.services.file_upload')
+    monkeypatch.setattr(upload.UploadConfig, 'DEFAULT_ALLOWED_EXTENSION', ['md', 'txt'], raising=False)
+    assert upload.FileUploadSupport.check_file_extension(NS(filename='现场记录.MD'))
+    assert not upload.FileUploadSupport.check_file_extension(NS(filename='无后缀'))
 
 
 @pytest.mark.asyncio
-async def test_material_visibility_does_not_grant_user_one_global_access():
-    query_db = SimpleNamespace(execute=AsyncMock())
-    query_db.execute.return_value = SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: []))
-
-    await PipelineDao.list_accessible_materials(query_db, 1)
-
-    statement = query_db.execute.await_args.args[0]
-    assert ' OR true' not in str(statement.compile(compile_kwargs={'literal_binds': True})).lower()
-
-
-def test_job_status_labels_cover_terminal_states():
-    base = {
-        'task_id': 'job-1',
-        'title': '测试任务',
-        'report_type': 'research-demand',
-        'current_stage': 'completed',
-        'progress': 100,
-        'owner_name': '测试用户',
-        'report_id': 'report-1',
-        'selected_items': [],
-        'outline': [],
-        'stages': [],
-        'logs': [],
-        'config': {},
-        'error_message': None,
-        'create_time': None,
-        'update_time': None,
-    }
-
-    assert PipelineDomainService._job_dict(SimpleNamespace(**base, status='cancelled'))['statusLabel'] == '已取消'
-    assert PipelineDomainService._job_dict(SimpleNamespace(**base, status='failed'))['statusLabel'] == '生成失败'
+async def test_user_one_never_gets_global_material_access(env, db):
+    _, material = seed(env, db)
+    assert await env.library_repo.MaterialDao.list_accessible_materials(db, 1) == []
+    assert await env.library_repo.MaterialDao.get_owned_material(db, material.id, 1) is None
+    assert len(await env.library_repo.MaterialDao.list_accessible_materials(db, 7)) == 1
 
 
 @pytest.mark.asyncio
-async def test_running_research_job_can_be_cancelled(monkeypatch):
-    job = SimpleNamespace(
-        task_id='job-running',
-        title='测试任务',
-        report_type='research-demand',
-        status='running',
-        current_stage='writing',
-        progress=60,
-        owner_name='测试用户',
-        report_id=None,
-        selected_items=[],
-        outline=[],
-        stages=[{'key': 'writing', 'label': '章节生成', 'status': 'running'}],
-        logs=[],
-        config={},
-        error_message=None,
-        create_time=None,
-        update_time=None,
-    )
-    query_db = SimpleNamespace(commit=AsyncMock(), refresh=AsyncMock())
-    monkeypatch.setattr(PipelineDao, 'get_research_job', AsyncMock(return_value=job))
-
-    result = await PipelineDomainService.cancel_research_job(query_db, 1, job.task_id)
-
-    assert result['status'] == 'cancelled'
-    assert result['statusLabel'] == '已取消'
-    assert result['stages'][0]['status'] == 'cancelled'
-    query_db.commit.assert_awaited_once()
+async def test_material_detail_exposes_real_text_and_owner_management_flag(env, db):
+    _, material = seed(env, db)
+    material.edited_text = '用户编辑正文'
+    await db.commit()
+    result = await env.materials.MaterialService.get_material(db, 7, material.id)
+    assert result['canManage'] and result['ownerId'] == 7
+    assert result['extractedText'] == '原提取文本' and result['content'] == '用户编辑正文'
+    with raises(env, '无权'):
+        await env.materials.MaterialService.get_material(db, 8, material.id)
 
 
 @pytest.mark.asyncio
-async def test_material_detail_uses_access_scope_and_exposes_management_flag(monkeypatch):
-    material = _material(owner_id=2, permission_scope='private')
-    query_db = SimpleNamespace()
-    get_accessible = AsyncMock(return_value=material)
-    monkeypatch.setattr(PipelineDao, 'get_accessible_material', get_accessible)
-
-    result = await PipelineDomainService.get_material(query_db, 1, material.file_id)
-
-    assert result['id'] == material.file_id
-    assert result['extractedText'] == material.extracted_text
-    assert result['canManage'] is False
-    get_accessible.assert_awaited_once_with(query_db, material.file_id, 1)
+@pytest.mark.parametrize('scan_status', ['pending', 'quarantined', 'failed'])
+async def test_download_rechecks_file_scan_and_rejects_unscanned_material(env, db, tmp_path, monkeypatch, scan_status):
+    _, material = seed(env, db)
+    monkeypatch.setattr(env.cfg.UploadConfig, 'UPLOAD_PATH', str(tmp_path))
+    source = tmp_path / 'a.txt'
+    source.write_text('受控资料', encoding='utf-8')
+    monkeypatch.setattr(env.materials.FileScanService, 'scan', lambda *_: NS(status=scan_status))
+    with raises(env, '安全扫描'):
+        await env.materials.MaterialService.get_download(db, 7, material.id)
 
 
 @pytest.mark.asyncio
-async def test_material_detail_rejects_cross_scope_access(monkeypatch):
-    monkeypatch.setattr(PipelineDao, 'get_accessible_material', AsyncMock(return_value=None))
-
-    with pytest.raises(ServiceException) as exc_info:
-        await PipelineDomainService.get_material(SimpleNamespace(), 1, 'doc-private')
-    assert exc_info.value.message == '资料不存在或无权访问'
-
-
-@pytest.mark.asyncio
-async def test_material_download_requires_access_and_download_permission(monkeypatch, tmp_path):
-    source = tmp_path / '受控资料.md'
-    source.write_text('仅授权用户可下载', encoding='utf-8')
-    material = _material(file_path='/profile/upload/example.md', allow_download=False)
-    monkeypatch.setattr(PipelineDao, 'get_accessible_material', AsyncMock(return_value=material))
-
-    with pytest.raises(ServiceException) as exc_info:
-        await PipelineDomainService.get_material_download(SimpleNamespace(), 1, material.file_id)
-    assert exc_info.value.message == '当前资料禁止下载'
-
-    material.allow_download = True
-    monkeypatch.setattr(PipelineDomainService, '_material_local_path', lambda _: source)
-    path, name, media_type = await PipelineDomainService.get_material_download(SimpleNamespace(), 1, material.file_id)
-
-    assert path == source
-    assert name == material.name
-    assert media_type is None
+async def test_download_requires_owner_and_returns_original_filename(env, db, tmp_path, monkeypatch):
+    _, material = seed(env, db)
+    material.name = '用户改名不改变原文件名'
+    await db.commit()
+    monkeypatch.setattr(env.cfg.UploadConfig, 'UPLOAD_PATH', str(tmp_path))
+    source = tmp_path / 'a.txt'
+    source.write_text('受控资料', encoding='utf-8')
+    monkeypatch.setattr(env.materials.FileScanService, 'scan', lambda *_: NS(status='clean'))
+    with raises(env, '无权'):
+        await env.materials.MaterialService.get_download(db, 8, material.id)
+    path, name, mime = await env.materials.MaterialService.get_download(db, 7, material.id)
+    assert path == source.resolve() and name == 'a.txt' and mime == 'text/plain'
 
 
 @pytest.mark.asyncio
-async def test_evidence_resolution_excludes_unusable_materials_and_filters_digest_period(monkeypatch):
-    usable = _material(file_id='doc-usable')
-    failed = _material(file_id='doc-failed', parse_status='failed')
-    disallowed = _material(file_id='doc-no-ai', allow_ai_use=False)
-    in_period = SimpleNamespace(
-        article_id='news-in', title='周期内资讯', summary='周期内摘要', body='', source_name='来源',
-        published_time=datetime(2026, 8, 8),
-    )
-    out_period = SimpleNamespace(
-        article_id='news-out', title='周期外资讯', summary='周期外摘要', body='', source_name='来源',
-        published_time=datetime(2026, 9, 1),
-    )
-    monkeypatch.setattr(PipelineDao, 'list_accessible_materials', AsyncMock(return_value=[usable, failed, disallowed]))
-    monkeypatch.setattr(PipelineDao, 'list_articles', AsyncMock(return_value=[in_period, out_period]))
-    monkeypatch.setattr(PipelineDao, 'list_papers', AsyncMock(return_value=[]))
-
-    payload = PipelineResearchJobCreateModel(
-        title='八月简报', report_type='monthly', period=['2026-08-01', '2026-08-31']
-    )
-    evidence = await PipelineDomainService._resolve_evidence(
-        SimpleNamespace(), 1, ['doc-usable', 'doc-failed', 'doc-no-ai', 'news-in', 'news-out'], payload=payload
-    )
-
-    assert [item['id'] for item in evidence] == ['doc-usable', 'news-in']
+@pytest.mark.parametrize('status', ['queued', 'parsing', 'failed'])
+async def test_unusable_selected_material_is_explicit_error_not_silently_dropped(env, db, monkeypatch, status):
+    _, material = seed(env, db)
+    material.status = status
+    await db.commit()
+    monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
+    with raises(env, '解析就绪'):
+        await queue(env, db)
 
 
 @pytest.mark.asyncio
-async def test_intelligence_lists_and_details_hide_unapproved_items(monkeypatch):
-    def article(article_id, review_status):
-        return SimpleNamespace(
-            article_id=article_id,
-            article_type='news',
-            title=article_id,
-            source_name='来源',
-            published_time=datetime(2026, 8, 8),
-            relevance_score=80,
-            review_status=review_status,
-            tags=[],
-            summary='摘要',
-            canonical_url='https://example.com/article',
-            handoff_status='pending',
-            handoff_version='',
-            body='正文',
-            metadata_json={},
-            handoff_result_json={},
-        )
-
-    approved = article('article-approved', 'approved')
-    rejected = article('article-rejected', 'rejected')
-    monkeypatch.setattr(PipelineDao, 'list_articles', AsyncMock(return_value=[approved, rejected]))
-    monkeypatch.setattr(PipelineDao, 'list_papers', AsyncMock(return_value=[]))
-
-    listed = await PipelineDomainService.list_intelligence(
-        SimpleNamespace(), category=None, keyword=None, source_type=None, page_num=1, page_size=100
-    )
-
-    assert [item['id'] for item in listed['rows']] == ['article-approved']
-
-    monkeypatch.setattr(PipelineDao, 'get_article', AsyncMock(return_value=rejected))
-    monkeypatch.setattr(PipelineDao, 'get_paper', AsyncMock(return_value=None))
-    with pytest.raises(ServiceException) as exc_info:
-        await PipelineDomainService.get_intelligence_detail(SimpleNamespace(), rejected.article_id)
-    assert exc_info.value.message == '情报资料不存在或暂不可见'
+async def test_invalid_selection_never_falls_back_to_unselected_materials(env, db, monkeypatch):
+    seed(env, db)
+    monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
+    with raises(env, '无权'):
+        await queue(env, db, payload(selected_item_ids=['999999']))
+    assert not db.s.scalars(select(env.models.PipelineResearchJob)).all()
+    with raises(env, '1 至 50'):
+        await queue(env, db, payload(selected_item_ids=[]))
 
 
 @pytest.mark.asyncio
-async def test_digest_evidence_limit_is_enforced_by_backend(monkeypatch):
-    articles = [
-        SimpleNamespace(
-            article_id=f'news-{index}',
-            title=f'栏目资讯 {index}',
-            summary=f'摘要 {index}',
-            body='',
-            source_name='来源',
-            published_time=datetime(2026, 8, index + 1),
-            review_status='approved',
-        )
-        for index in range(4)
-    ]
-    monkeypatch.setattr(PipelineDao, 'list_accessible_materials', AsyncMock(return_value=[]))
-    monkeypatch.setattr(PipelineDao, 'list_articles', AsyncMock(return_value=articles))
-    monkeypatch.setattr(PipelineDao, 'list_papers', AsyncMock(return_value=[]))
-    payload = PipelineResearchJobCreateModel(
-        title='日报',
-        report_type='daily',
-        period=['2026-08-01', '2026-08-31'],
-        direction='检测技术、完整性管理',
-        options={'itemCount': 1, 'directions': ['检测技术', '完整性管理']},
-    )
-
-    evidence = await PipelineDomainService._resolve_evidence(
-        SimpleNamespace(), 2, [item.article_id for item in articles], payload=payload
-    )
-
-    assert [item['id'] for item in evidence] == ['news-0', 'news-1']
+async def test_task_is_persisted_with_report_and_frozen_template_before_processing(env, db, monkeypatch):
+    template, _ = seed(env, db)
+    template.sections = [{'id': 1, 'title': '真实模板章节'}]
+    await db.commit()
+    monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
+    result = await queue(env, db)
+    job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
+    assert result['status'] == 'queued' and result['progress'] == 0 and result['reportId']
+    assert job.config_snapshot['template']['sections'] == [{'id': 1, 'title': '真实模板章节'}]
+    assert job.materials[0]['content'] == '原提取文本'
+    template.sections = [{'id': 2, 'title': '后续修改'}]
+    await db.commit()
+    assert job.config_snapshot['template']['sections'][0]['title'] == '真实模板章节'
+    repeated = await queue(env, db)
+    assert repeated['reused'] and repeated['jobId'] == str(job.id)
 
 
 @pytest.mark.asyncio
-async def test_report_update_rejects_stale_revision(monkeypatch):
-    report = SimpleNamespace(
-        report_id='report-1',
-        version_no=3,
-        title='当前标题',
-        content='# 当前版本',
-        sections=[],
-        citations=[],
-        quality_issues=[],
-        metadata_json={},
-        status='draft',
-        word_count=4,
-        update_time=None,
+@pytest.mark.parametrize('status,label', [('cancelled', '已取消'), ('failed', '生成失败')])
+async def test_job_status_labels_cover_terminal_states(env, db, monkeypatch, status, label):
+    seed(env, db)
+    monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
+    result = await queue(env, db)
+    job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
+    job.status = status
+    assert env.app.ResearchApplicationService.job_dict(job)['statusLabel'] == label
+
+
+@pytest.mark.parametrize('submitted', [
+    [{'id': 1, 'title': '实际提交章节', 'words': 1000}, {'id': 2, 'title': '后续章节', 'words': 2000}],
+    [],
+    None,
+])
+def test_job_progress_outline_matches_submitted_snapshot_not_template_defaults(env, submitted):
+    template = [{'id': 1, 'title': '模板默认章节', 'words': 10600}]
+    request = {'outline': submitted} if submitted is not None else {}
+    job = env.models.PipelineResearchJob(
+        id=501, report_id=502, request_id='outline-display-test', status='queued', progress=0,
+        attempts=0, materials=[], config_snapshot={'request': request, 'template': {'sections': template}},
     )
-    query_db = SimpleNamespace(commit=AsyncMock(), refresh=AsyncMock())
-    monkeypatch.setattr(PipelineDao, 'get_report', AsyncMock(return_value=report))
-
-    with pytest.raises(ServiceException) as exc_info:
-        await PipelineDomainService.update_report(
-            query_db,
-            user_id=2,
-            owner_name='测试用户',
-            report_id=report.report_id,
-            payload=PipelineReportUpdateModel(title='覆盖标题', expected_version=2),
-        )
-
-    assert exc_info.value.message == '报告版本已变化，请刷新后再保存'
-    query_db.commit.assert_not_awaited()
+    result = env.app.ResearchApplicationService.job_dict(job)
+    expected = template if submitted is None else submitted
+    assert result['outline'] == expected
+    assert sum(section['words'] for section in result['outline']) == sum(section['words'] for section in expected)
+    assert result['config'] == request
 
 
-@pytest.mark.asyncio
-async def test_report_update_rejects_stale_timestamp_revision(monkeypatch):
-    report = SimpleNamespace(
-        report_id='report-1',
-        version_no=3,
-        title='当前标题',
-        content='# 当前版本',
-        sections=[],
-        citations=[],
-        quality_issues=[],
-        metadata_json={},
-        status='draft',
-        word_count=4,
-        update_time=datetime(2026, 10, 1, 11, 0, 0, 123456),
+@pytest.mark.parametrize('status', ['queued', 'running', 'completed', 'failed', 'cancelled'])
+def test_job_execution_display_matches_real_terminal_state(env, status):
+    from datetime import datetime
+
+    job = env.models.PipelineResearchJob(
+        id=601, report_id=602, request_id='execution-display', status=status,
+        progress=100 if status == 'completed' else 0, attempts=0 if status == 'queued' else 1,
+        materials=[], config_snapshot={'model': {'id': '1'}},
+        result_content='## 正文\n生成正文' if status == 'completed' else None,
+        created_at=datetime(2026, 10, 25, 10, 0),
+        started_at=None if status == 'queued' else datetime(2026, 10, 25, 10, 1),
+        finished_at=datetime(2026, 10, 25, 10, 2) if status in {'completed', 'failed', 'cancelled'} else None,
     )
-    query_db = SimpleNamespace(commit=AsyncMock(), refresh=AsyncMock(), rollback=AsyncMock())
-    monkeypatch.setattr(PipelineDao, 'get_report', AsyncMock(return_value=report))
-
-    with pytest.raises(ServiceException) as exc_info:
-        await PipelineDomainService.update_report(
-            query_db,
-            user_id=2,
-            owner_name='测试用户',
-            report_id=report.report_id,
-            payload=PipelineReportUpdateModel(
-                title='覆盖标题', expected_revision='2026-10-01T11:00:00.123455'
-            ),
-        )
-
-    assert exc_info.value.message == '报告已被其他页面修改，请刷新后再保存'
-    query_db.commit.assert_not_awaited()
+    result = env.app.ResearchApplicationService.job_dict(job)
+    assert result['generationMode'] == 'model'
+    assert result['logs'] and result['logs'][0]['time'] == '2026-10-25 10:00:00'
+    assert result['stage'] == status
+    assert result['startedAt'] == ('' if status == 'queued' else '2026-10-25 10:01:00')
+    if status in {'completed', 'failed', 'cancelled'}:
+        assert not any(row['status'] in {'running', 'waiting'} for row in result['stages'])
+        assert result['finishedAt'] == '2026-10-25 10:02:00'
+    if status == 'completed':
+        assert all(row['status'] == 'completed' for row in result['stages'])
+        assert '已保存' in result['logs'][-1]['message']
+    else:
+        assert not any(row['key'] == 'result' and row['status'] == 'completed' for row in result['stages'])
 
 
-@pytest.mark.asyncio
-async def test_only_owner_can_retry_material_parse(monkeypatch):
-    monkeypatch.setattr(PipelineDao, 'get_owned_material', AsyncMock(return_value=None))
-
-    with pytest.raises(ServiceException) as exc_info:
-        await PipelineDomainService.retry_material_parse(SimpleNamespace(), 1, 'doc-department-shared')
-    assert exc_info.value.message == '资料不存在或无权重新解析'
-
-
-@pytest.mark.asyncio
-async def test_owner_can_retry_docx_material_parse(monkeypatch, tmp_path):
-    source = tmp_path / '应力监测.docx'
-    with ZipFile(source, 'w', ZIP_DEFLATED) as archive:
-        archive.writestr(
-            'word/document.xml',
-            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-            '<w:body><w:p><w:r><w:t>磁各向异性应力监测</w:t></w:r></w:p></w:body></w:document>',
-        )
-    material = _material(
-        name=source.name,
-        file_path='/profile/upload/example.docx',
-        parse_status='failed',
-        parse_message='解析失败',
-        extracted_text='',
-        metadata_json={'parseAttempts': 1},
+@pytest.mark.parametrize('name', ['科研需求报告', '科技项目需求填报表', ''])
+def test_job_template_name_uses_frozen_template_not_request_id(env, name):
+    job = env.models.PipelineResearchJob(
+        id=701, report_id=702, request_id='template-name-display', status='queued', progress=0,
+        attempts=0, materials=[], config_snapshot={
+            'template': {'id': '31', 'name': name},
+            'request': {'template_id': '31'},
+        },
     )
-    query_db = SimpleNamespace(commit=AsyncMock(), refresh=AsyncMock(), rollback=AsyncMock())
-    monkeypatch.setattr(PipelineDao, 'get_owned_material', AsyncMock(return_value=material))
-    monkeypatch.setattr(PipelineDomainService, '_material_local_path', lambda _: source)
-
-    result = await PipelineDomainService.retry_material_parse(query_db, 1, material.file_id)
-
-    assert result['parseStatus'] == 'indexed'
-    assert result['extractedText'] == '磁各向异性应力监测'
-    assert result['metadata']['parser'] == 'docx-ooxml'
-    assert result['metadata']['parseAttempts'] == 2
-    query_db.commit.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_owner_delete_removes_record_workspace_links_and_local_file(monkeypatch, tmp_path):
-    source = tmp_path / '待删除资料.md'
-    source.write_text('管道资料', encoding='utf-8')
-    material = _material(file_path='/profile/upload/example.md')
-    query_db = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
-    delete_material = AsyncMock()
-    monkeypatch.setattr(PipelineDao, 'get_owned_material', AsyncMock(return_value=material))
-    monkeypatch.setattr(PipelineDao, 'delete_material', delete_material)
-    monkeypatch.setattr(PipelineDomainService, '_material_local_path', lambda _: source)
-
-    result = await PipelineDomainService.delete_material(query_db, 1, material.file_id)
-
-    assert result == {'id': material.file_id, 'deleted': True, 'fileDeleted': True}
-    assert not source.exists()
-    delete_material.assert_awaited_once_with(query_db, material.file_id, 1)
-    query_db.commit.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_report_version_can_be_loaded_and_restored_as_new_version(monkeypatch):
-    report = SimpleNamespace(
-        report_id='report-1',
-        source_task_id='job-1',
-        user_id=1,
-        owner_name='测试用户',
-        title='当前标题',
-        report_type='research-demand',
-        status='completed',
-        version_no=3,
-        content='# 当前版本',
-        sections=[{'id': 1, 'title': '当前章节', 'content': '当前正文'}],
-        citations=[],
-        quality_issues=[],
-        metadata_json={},
-        word_count=4,
-        create_time=None,
-        update_time=None,
-    )
-    version = SimpleNamespace(
-        report_id='report-1',
-        version_no=1,
-        title='历史标题',
-        content='# 历史版本',
-        sections=[{'id': 1, 'title': '历史章节', 'content': '历史正文'}],
-        citations=[{'id': 1, 'title': '证据'}],
-        source='generated',
-        operator_name='生成服务',
-        create_time=None,
-    )
-    query_db = SimpleNamespace(commit=AsyncMock(), refresh=AsyncMock())
-    monkeypatch.setattr(PipelineDao, 'get_report', AsyncMock(return_value=report))
-    monkeypatch.setattr(PipelineDao, 'get_report_version', AsyncMock(return_value=version))
-    add_version = AsyncMock()
-    monkeypatch.setattr(PipelineDao, 'add_report_version', add_version)
-
-    loaded = await PipelineDomainService.get_report_version(query_db, 1, report.report_id, 1)
-    restored = await PipelineDomainService.restore_report_version(
-        query_db,
-        user_id=1,
-        owner_name='测试用户',
-        report_id=report.report_id,
-        version_no=1,
-    )
-
-    assert loaded['content'] == '# 历史版本'
-    assert restored['version'] == 'V4.0'
-    assert restored['title'] == '历史标题'
-    assert restored['citations'][0]['title'] == '证据'
-    assert add_version.await_args.args[1].source == 'restored'
-    query_db.commit.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_report_diagram_is_saved_in_owned_report_metadata(monkeypatch):
-    report = SimpleNamespace(
-        report_id='report-1',
-        metadata_json={'templateId': 'tpl-1'},
-        update_time=None,
-    )
-    query_db = SimpleNamespace(commit=AsyncMock(), refresh=AsyncMock())
-    monkeypatch.setattr(PipelineDao, 'get_report', AsyncMock(return_value=report))
-    payload = PipelineDiagramUpdateModel(
-        diagram={
-            'diagramType': 'route',
-            'direction': 'lr',
-            'theme': 'blue',
-            'stages': {'input': [], 'analysis': [], 'validation': [], 'output': []},
-        }
-    )
-
-    saved = await PipelineDomainService.update_report_diagram(
-        query_db,
-        user_id=1,
-        report_id=report.report_id,
-        payload=payload,
-    )
-    loaded = await PipelineDomainService.get_report_diagram(query_db, 1, report.report_id)
-
-    assert saved['diagram']['direction'] == 'lr'
-    assert loaded['diagram']['diagramType'] == 'route'
-    assert report.metadata_json['templateId'] == 'tpl-1'
-    assert report.metadata_json['diagram']['savedAt']
-    query_db.commit.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_research_job_is_persisted_as_queued_before_background_processing(monkeypatch):
-    query_db = SimpleNamespace(commit=AsyncMock(), refresh=AsyncMock())
-    add_job = AsyncMock()
-    monkeypatch.setattr(PipelineDao, 'add_research_job', add_job)
-    payload = PipelineResearchJobCreateModel(
-        title='管道完整性科研需求报告',
-        selectedItemIds=['paper-001'],
-    )
-
-    result = await PipelineDomainService.queue_research_job(
-        query_db,
-        user_id=1,
-        owner_name='测试用户',
-        payload=payload,
-    )
-
-    assert result['status'] == 'queued'
-    assert result['progress'] == 0
-    assert result['reportId'] is None
-    assert all(stage['status'] == 'waiting' for stage in result['stages'])
-    add_job.assert_awaited_once()
-    query_db.commit.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_research_job_uses_published_template_when_outline_is_empty(monkeypatch):
-    query_db = SimpleNamespace(commit=AsyncMock(), refresh=AsyncMock())
-    add_job = AsyncMock()
-    template = SimpleNamespace(report_type='research-demand', version_label='V9.0', sections=[{'id': 1, 'title': '模板章节'}])
-    monkeypatch.setattr(PipelineDao, 'add_research_job', add_job)
-    monkeypatch.setattr(PipelineTemplateService, 'get_published', AsyncMock(return_value=template))
-    payload = PipelineResearchJobCreateModel(title='模板报告', templateId='research-template')
-
-    await PipelineDomainService.queue_research_job(
-        query_db,
-        user_id=1,
-        owner_name='测试用户',
-        payload=payload,
-    )
-
-    saved_job = add_job.await_args.args[1]
-    assert saved_job.template_version == 'V9.0'
-    assert saved_job.outline == template.sections
-
-
-@pytest.mark.asyncio
-async def test_research_job_rejects_unpublished_template(monkeypatch):
-    monkeypatch.setattr(PipelineTemplateService, 'get_published', AsyncMock(return_value=None))
-    payload = PipelineResearchJobCreateModel(title='未发布模板报告', templateId='draft-template')
-
-    with pytest.raises(ServiceException) as exc_info:
-        await PipelineDomainService.queue_research_job(
-            SimpleNamespace(), user_id=1, owner_name='测试用户', payload=payload
-        )
-
-    assert '尚未发布' in exc_info.value.message
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ('options', 'message'),
-    [
-        ({'language': 'bilingual'}, '当前版本仅支持简体中文输出'),
-        ({'length': 'long'}, '当前版本仅支持标准篇幅'),
-        ({'publicSupplement': True}, '当前版本仅支持使用已选资料，公开资料补充尚未开放'),
-    ],
-)
-async def test_research_job_rejects_unsupported_generation_options(options, message):
-    payload = PipelineResearchJobCreateModel(title='不支持的参数', options=options)
-
-    with pytest.raises(ServiceException) as exc_info:
-        await PipelineDomainService.queue_research_job(
-            SimpleNamespace(), user_id=2, owner_name='测试用户', payload=payload
-        )
-
-    assert exc_info.value.message == message
+    result = env.app.ResearchApplicationService.job_dict(job)
+    assert result['templateName'] == name
+    assert result['config']['template_id'] == '31'
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('status', ['queued', 'running'])
-async def test_active_research_job_cannot_be_queued_twice(monkeypatch, status):
-    job = SimpleNamespace(status=status)
-    monkeypatch.setattr(PipelineDao, 'get_research_job', AsyncMock(return_value=job))
-
-    with pytest.raises(ServiceException) as exc_info:
-        await PipelineDomainService.queue_research_job_retry(SimpleNamespace(), user_id=1, job_id='job-active')
-
-    assert exc_info.value.message == '任务正在执行，请勿重复提交'
-
-
-@pytest.mark.asyncio
-async def test_research_evidence_never_falls_back_to_unselected_materials(monkeypatch):
-    monkeypatch.setattr(PipelineDao, 'list_accessible_materials', AsyncMock(return_value=[_material()]))
-
-    evidence = await PipelineDomainService._resolve_evidence(SimpleNamespace(), 1, [])
-
-    assert evidence == []
+async def test_active_job_cannot_be_explicitly_retried(env, db, monkeypatch, status):
+    seed(env, db)
+    monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
+    result = await queue(env, db)
+    job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
+    job.status = status
+    await db.commit()
+    with raises(env, '只能重试失败'):
+        await env.app.ResearchApplicationService.queue_retry(db, user_id=7, job_id=job.id)
 
 
 @pytest.mark.asyncio
-async def test_sources_are_read_from_persistent_domain_table(monkeypatch):
-    source = SimpleNamespace(
-        source_id='source-news',
-        name='科技资讯源',
-        source_type='news',
-        schedule_cron='0 */6 * * *',
-        enabled=True,
-        status='active',
-        last_run_time=None,
-        success_count=9,
-        failure_count=1,
+async def test_running_task_cancel_fences_executor_and_keeps_report(env, db, monkeypatch):
+    seed(env, db)
+    monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
+    result = await queue(env, db)
+    job = await env.repo.ResearchDao.claim_research_job(db, result['jobId'], 7)
+    token = job.execution_token
+    result = await env.app.ResearchApplicationService.cancel_job(db, 7, job.id)
+    assert result['status'] == 'cancelled'
+    assert not await env.repo.ResearchDao.lock_running_research_job(db, job.id, 7, token)
+    assert await env.repo.ResearchDao.get_report(db, job.report_id, 7)
+
+
+@pytest.mark.asyncio
+async def test_report_edit_rejects_stale_version_and_revision_without_overwriting(env, db, monkeypatch):
+    seed(env, db)
+    monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
+    result = await queue(env, db)
+    service = env.app.ResearchApplicationService
+    with raises(env, '版本'):
+        await service.update_report(
+            db,
+            user_id=7,
+            owner_name='用户',
+            report_id=result['reportId'],
+            payload=NS(expected_version=2, expected_revision=None, title='覆盖标题', content='不能保存'),
+        )
+    with raises(env, '修订'):
+        await service.update_report(
+            db,
+            user_id=7,
+            owner_name='用户',
+            report_id=result['reportId'],
+            payload=NS(
+                expected_version=1, expected_revision='2026-01-01T00:00:00', title='覆盖标题', content='不能保存'
+            ),
+        )
+    report = await env.repo.ResearchDao.get_report(db, result['reportId'], 7)
+    assert report.title == '测试报告' and report.content == '' and report.version == 1
+
+
+@pytest.mark.asyncio
+async def test_only_owner_can_retry_parse_and_retry_preserves_edited_text(env, db):
+    _, material = seed(env, db)
+    material.status = 'failed'
+    material.edited_text = '保留用户编辑'
+    await db.commit()
+    with raises(env, '无权'):
+        await env.materials.MaterialService.retry_parse(db, 8, material.id)
+    result = await env.materials.MaterialService.retry_parse(db, 7, material.id)
+    assert result['parseStatus'] == 'queued' and result['editedText'] == '保留用户编辑'
+    assert result['extractedText'] == '原提取文本'
+
+
+@pytest.mark.asyncio
+async def test_owner_delete_cascades_basket_and_removes_only_owned_file(env, db, tmp_path, monkeypatch):
+    _, material = seed(env, db)
+    monkeypatch.setattr(env.cfg.UploadConfig, 'UPLOAD_PATH', str(tmp_path))
+    source = tmp_path / 'a.txt'
+    source.write_text('待删除正文', encoding='utf-8')
+    await env.app.ResearchWorkspaceService.upsert_item(
+        db, 7, NS(item_type='file', item_id=material.id, action='basket')
     )
-    monkeypatch.setattr(PipelineDao, 'list_sources', AsyncMock(return_value=[source]))
-
-    result = await PipelineDomainService.list_sources(SimpleNamespace())
-
-    assert result['total'] == 1
-    assert result['rows'][0]['id'] == 'source-news'
-    assert result['rows'][0]['success_rate'] == 90
+    with raises(env, '无权'):
+        await env.materials.MaterialService.delete_material(db, 8, material.id)
+    assert source.exists()
+    result = await env.materials.MaterialService.delete_material(db, 7, material.id)
+    assert result['fileDeleted'] and result['historicalSnapshotsRetained']
+    assert not source.exists() and not await env.repo.ResearchDao.list_workspace_items(db, 7)
+    assert await env.library_repo.MaterialDao.get_owned_material(db, material.id, 7) is None
 
 
 @pytest.mark.asyncio
-async def test_manual_collection_run_is_persisted_as_queued(monkeypatch):
-    source = SimpleNamespace(
-        source_id='source-news',
-        name='科技资讯源',
-        enabled=True,
-        status='active',
-        config_json={'pageSize': 20},
-        schedule_cron=None,
-        last_run_time=None,
-        last_run_status=None,
-        update_time=None,
+async def test_report_history_requires_owner_and_restores_as_new_version(env, db, monkeypatch):
+    seed(env, db)
+    monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
+    result = await queue(env, db)
+    service = env.app.ResearchApplicationService
+    for version, content in [(1, '第一稿'), (2, '第二稿')]:
+        await service.update_report(
+            db,
+            user_id=7,
+            owner_name='用户',
+            report_id=result['reportId'],
+            payload=NS(expected_version=version, expected_revision=None, title=None, content=content),
+        )
+    with raises(env, '无权'):
+        await service.get_report_version(db, 8, result['reportId'], 2)
+    history = await service.get_report_version(db, 7, result['reportId'], 2)
+    assert history['content'] == '第一稿'
+    restored = await service.restore_report_version(
+        db, user_id=7, owner_name='用户', report_id=result['reportId'], version_no=2
     )
-    query_db = SimpleNamespace(commit=AsyncMock())
-    add_run = AsyncMock()
-    monkeypatch.setattr(PipelineDao, 'get_source', AsyncMock(return_value=source))
-    monkeypatch.setattr(PipelineDao, 'add_collection_run', add_run)
+    assert restored['versionNo'] == 4 and restored['content'] == '第一稿'
+    old_current = await service.get_report_version(db, 7, result['reportId'], 3)
+    assert old_current['content'] == '第二稿'
 
-    result = await PipelineDomainService.queue_collection_run(query_db, source.source_id)
 
-    assert result['status'] == 'queued'
-    assert source.last_run_status == 'queued'
-    add_run.assert_awaited_once()
-    query_db.commit.assert_awaited_once()
+@pytest.mark.asyncio
+async def test_generated_images_are_owned_assets_not_report_metadata(env, db, monkeypatch):
+    template, _ = seed(env, db, image=True)
+    template.image_config = {'enabled': True, 'count': 1, 'prompt': '真实管道示意'}
+    await db.commit()
+    monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
+    result = await queue(env, db)
+    job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
+    report = await env.repo.ResearchDao.get_report(db, result['reportId'], 7)
+    await env.app.ResearchReportExportService.queue_images(db, job, report)
+    await db.commit()
+    images = await env.app.ResearchReportService.get_diagram(db, 7, report.id)
+    assert len(images['images']) == 1 and images['images'][0]['status'] == 'queued'
+    with raises(env, '无权'):
+        await env.app.ResearchReportService.get_diagram(db, 8, report.id)
+    assert not hasattr(report, 'metadata_json')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'options,message', [({'language': 'bilingual'}, '简体中文'), ({'publicSupplement': True}, '公开补充')]
+)
+async def test_unsupported_generation_options_fail_without_model_call(env, options, message):
+    with raises(env, message):
+        await env.app.ResearchApplicationService.queue_job(
+            object(), user_id=7, owner_name='用户', payload=payload(options=options)
+        )
+
+
+def test_report_markdown_sections_preserve_actual_content_without_generation(env):
+    module = importlib.import_module('app.research.services.report_content')
+    assert module.sections_from_markdown('直接正文') == [{'id': 1, 'title': '正文', 'content': '直接正文'}]
+    assert module.sections_from_markdown('# 报告\n\n## 背景\n\n现场证据\n\n## 结论\n\n用户结论') == [
+        {'id': 1, 'title': '背景', 'content': '现场证据'},
+        {'id': 2, 'title': '结论', 'content': '用户结论'},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_sources_are_read_directly_from_persistent_source_service(env, monkeypatch):
+    module = importlib.import_module('app.intelligence.services.sources')
+    source = NS(**{column.name: None for column in module.Source.__table__.columns})
+    source.id, source.name, source.type = 601, '科技资讯源', 'website'
+    source.adapter, source.config, source.is_enabled = 'registered', {}, True
+    database = NS(execute=AsyncMock(return_value=NS(scalars=lambda: NS(all=lambda: [source]))))
+    result = await module.IntelligenceSourceService.list_sources(database)
+    assert result['total'] == 1 and result['rows'][0]['id'] == '601'
+    assert result['rows'][0]['type'] == 'website'
+
+
+@pytest.mark.asyncio
+async def test_manual_collection_queues_using_collection_repository_not_main_dao(env, monkeypatch):
+    module = importlib.import_module('app.intelligence.services.sources')
+    source = NS(id=601, adapter='registered', url='https://offline.invalid', type='website', config={}, model_id=None)
+    run = NS(**{column.name: None for column in module.Run.__table__.columns})
+    run.id, run.source_id, run.status, run.trigger_type = 701, source.id, 'queued', 'manual'
+    run.request_id = 'manual:offline'
+    get = AsyncMock(return_value=source)
+    active = AsyncMock(return_value=None)
+    enqueue = AsyncMock(return_value=run)
+    monkeypatch.setattr(module.CollectionRepository, 'source', get)
+    monkeypatch.setattr(module.CollectionRepository, 'active', active)
+    monkeypatch.setattr(module.CollectionRepository, 'enqueue', enqueue)
+    database = NS(rollback=AsyncMock())
+    validate = []
+    result = await module.IntelligenceSourceService.queue_collection_run(
+        database, source.id, registry=NS(validate=lambda config: validate.append(config))
+    )
+    assert result['status'] == 'queued' and result['sourceId'] == str(source.id)
+    get.assert_awaited_once_with(database, source.id, lock=True)
+    active.assert_awaited_once_with(database, source.id)
+    enqueue.assert_awaited_once()
+    assert validate[0]['adapter'] == 'registered'

@@ -191,7 +191,7 @@
                            <el-tooltip placement="top">
                               <template #content>
                                  <div>
-                                    调用示例：module_task.scheduler_test.job
+                                    仅允许调用以 app. 开头的受信任应用任务函数
                                  </div>
                               </template>
                               <el-icon><question-filled /></el-icon>

@@ -1,116 +1,150 @@
 <template>
-  <div class="ps-page">
-    <PortalPageHeader title="论文资料" />
-    <div class="ps-toolbar ps-paper-toolbar"><div class="ps-search-inline"><Search /><input v-model.trim="keyword" placeholder="搜索题名、作者、机构或 DOI" /></div><el-select v-model="year" style="width: 130px"><el-option label="全部年份" value="all" /><el-option label="2026" value="2026" /><el-option label="2025" value="2025" /><el-option label="2024" value="2024" /></el-select><el-select v-model="access" style="width: 150px"><el-option label="全部全文状态" value="all" /><el-option v-for="item in accessOptions" :key="item" :label="item" :value="item" /></el-select></div>
+  <div class="ps-page ps-paper-library">
+    <div class="ps-toolbar ps-paper-toolbar"><div class="ps-search-inline"><Search /><input v-model.trim="keyword" aria-label="搜索论文资料" placeholder="搜索题名、作者或摘要" @keydown.enter="reload" /><button v-if="keyword" type="button" aria-label="清空论文关键词" @click="keyword = ''">清空</button></div><el-select v-model="year" filterable allow-create default-first-option aria-label="发表年份，可输入年份" style="width: 160px" @change="yearRange = []"><el-option label="全部年份" value="all" /><el-option v-for="item in yearOptions" :key="item" :label="String(item)" :value="String(item)" /></el-select>
+      <el-popover trigger="click" placement="bottom-end" :width="360" popper-class="ps-paper-filter-popover">
+        <template #reference><el-button :icon="Filter" :type="yearRange.length || journals.length ? 'primary' : 'default'" plain>更多筛选{{ yearRange.length || journals.length ? ' · 已设置' : '' }}</el-button></template>
+        <div class="ps-filter-panel ps-paper-advanced"><h3>高级筛选</h3><label>年份范围<el-date-picker v-model="yearRange" type="yearrange" value-format="YYYY" start-placeholder="起始年" end-placeholder="结束年" aria-label="论文发表年份范围" style="width: 100%" @change="changeYearRange" /></label><label>期刊 / 会议<el-select v-model="journals" multiple filterable allow-create default-first-option aria-label="期刊或会议名称，可输入" placeholder="输入名称或选择当前页期刊"><el-option v-for="item in journalOptions" :key="item" :label="item" :value="item" /></el-select></label><p>可输入期刊名称查询已入库记录。未选择年份时包含日期缺失记录。</p><el-button @click="yearRange = []; journals = []">清除高级筛选</el-button></div>
+      </el-popover>
+      <el-button @click="resetFilters">重置筛选</el-button></div>
     <div class="ps-content-with-filter">
-      <aside class="ps-filter-panel"><h3><Filter />筛选论文</h3><label>年份范围<el-slider v-model="yearRange" range :min="2020" :max="2026" /></label><label>期刊 / 会议<el-checkbox-group v-model="journals"><el-checkbox v-for="item in journalOptions" :key="item" :value="item">{{ item }}</el-checkbox></el-checkbox-group></label><label>关键词<div class="ps-keyword-cloud"><button v-for="word in ['缺陷识别', '应力监测', '数据融合', '数字孪生']" :key="word" type="button" @click="keyword = word">{{ word }}</button></div></label></aside>
-      <section class="ps-paper-list">
-        <div class="ps-list-summary">共 {{ filteredPapers.length }} 篇论文 · 按相关性排序</div>
+      <section v-loading="loading" :aria-busy="loading" class="ps-paper-list">
         <article v-for="paper in filteredPapers" :key="paper.id" class="ps-paper-card">
-          <div class="ps-paper-access" :class="`is-${accessClass(paper.access)}`">{{ paper.access }}</div>
           <div class="ps-paper-main">
-            <button type="button" class="ps-paper-title" @click="router.push(`/portal/papers/${paper.id}`)">{{ paper.titleZh }}</button>
-            <div class="ps-paper-en-title">{{ paper.title }}</div>
+            <div class="ps-paper-heading">
+            <router-link class="ps-paper-title" :to="`/portal/papers/${paper.id}`">{{ paper.titleZh }}</router-link>
+            </div>
+            <div v-if="paper.title && paper.title.trim() !== paper.titleZh?.trim()" class="ps-paper-en-title">{{ paper.title }}</div>
             <div class="ps-paper-authors">{{ paper.authors.join(' · ') }}<span>{{ paper.institutions.join('；') }}</span></div>
-            <p>{{ paper.abstract }}</p>
-            <div class="ps-tag-row"><span v-for="tag in paper.keywords" :key="tag" class="ps-tag">{{ tag }}</span></div>
+            <div class="ps-paper-meta" aria-label="论文概览">
+              <span class="ps-paper-journal-name">{{ paper.journal }}</span>
+              <span>发表时间 {{ paper.publishedDate || paper.year || '未提供' }}</span>
+              <span>被引次数 {{ paper.citationCount }}</span>
+              <a v-if="doiUrl(paper)" class="ps-paper-doi" :href="doiUrl(paper)" target="_blank" rel="noopener noreferrer">DOI: {{ paper.doi }}</a>
+              <span v-else-if="paper.doi" class="ps-paper-doi">DOI: {{ paper.doi }}</span>
+            </div>
           </div>
-          <aside class="ps-paper-meta" aria-label="论文概览">
-            <h3>文献概览</h3>
-            <div><span>来源期刊</span><strong>{{ paper.journal }}</strong></div>
-            <div><span>发表年份</span><strong>{{ paper.year }}</strong></div>
-            <div><span>被引次数</span><strong>{{ paper.citations || 0 }}</strong></div>
-            <div><span>DOI</span><strong>{{ paper.doi || '待补充' }}</strong></div>
-          </aside>
+          <div class="ps-paper-footer">
+          <div v-if="paper.keywords.length" class="ps-tag-row"><span v-for="tag in paper.keywords" :key="tag" class="ps-tag">{{ tag }}</span></div>
           <div class="ps-paper-actions">
-            <el-button type="primary" text @click="router.push(`/portal/papers/${paper.id}`)">查看详情</el-button>
-            <el-button @click="add(paper)">加入资料篮</el-button>
-            <el-button @click="copyCitation(paper)">复制引用</el-button>
-            <el-tooltip :content="paperUrl(paper) ? '在新窗口打开可信来源' : '当前记录未提供可访问链接'" placement="top">
-              <span class="ps-disabled-action-wrap">
-                <el-button text :disabled="!paperUrl(paper)" @click="openPaperSource(paper)">{{ sourceActionLabel(paper) }}</el-button>
-              </span>
-            </el-tooltip>
+            <el-button type="primary" plain :loading="busy(paper)" :disabled="busy(paper)" @click="add(paper)">{{ inBasket(paper) ? '取消加入资料篮' : '加入资料篮' }}</el-button>
+          </div>
           </div>
         </article>
-        <PortalEmptyState v-if="!filteredPapers.length" title="没有匹配的论文" description="尝试放宽年份、期刊或全文状态筛选。" />
+        <PortalEmptyState v-if="loadError && !loading" title="论文加载失败" :description="loadError" action-label="重新加载" @action="reload" />
+        <PortalEmptyState v-else-if="!filteredPapers.length && !loading" title="没有匹配的论文" description="尝试放宽年份或期刊筛选。" action-label="重置筛选" @action="resetFilters" />
+        <div v-if="total > 0 && !loading && !loadError" class="ps-pagination" aria-label="论文列表分页">
+          <el-pagination
+            v-model:current-page="currentPage"
+            v-model:page-size="pageSize"
+            :page-sizes="[10, 20, 50]"
+            :total="total"
+            :pager-count="5"
+            layout="total, sizes, ->, prev, pager, next, jumper"
+            background
+          />
+        </div>
       </section>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, toRefs, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Filter, Search } from '@element-plus/icons-vue'
-import PortalPageHeader from '../components/PortalPageHeader.vue'
 import PortalEmptyState from '../components/PortalEmptyState.vue'
 import usePortalStore from '@/store/modules/portal'
+import { listPipelineIntelligence, savePipelineWorkspaceItem, deletePipelineWorkspaceItem } from '@/api/pipeline/intelligence'
+import { normalizePortalPaper } from '@/store/modules/portal'
+import { useListQuery, useListRequest, useListWorkspace, validPage } from '@/utils/portal/listQuery'
+import { cleanSummary } from '@/utils/portal/discovery'
 
-const router = useRouter()
 const portalStore = usePortalStore()
-const keyword = ref('')
-const year = ref('all')
-const access = ref('all')
-const yearRange = ref([2020, 2026])
-const journals = ref([])
-const paperItems = computed(() => portalStore.paperItems)
-const accessOptions = ['开放获取', '用户上传', '仅元数据', '访问受限']
-const journalOptions = ['JPSE', 'NDT & E', 'RESS', 'Applied Energy']
-const filteredPapers = computed(() => paperItems.value.filter(item => (year.value === 'all' || String(item.year) === year.value) && (access.value === 'all' || item.access === access.value) && item.year >= yearRange.value[0] && item.year <= yearRange.value[1] && (!keyword.value || `${item.title}${item.titleZh}${(item.authors || []).join('')}${(item.institutions || []).join('')}${item.doi}${(item.keywords || []).join('')}`.toLowerCase().includes(keyword.value.toLowerCase()))))
-function add(paper) { ElMessage.success(portalStore.addToBasket({ ...paper, title: paper.titleZh, type: '论文' }) ? '已加入资料篮' : '资料已在资料篮中') }
-function accessClass(value) { return ({ '开放获取': 'open', '用户上传': 'upload', '仅元数据': 'meta', '访问受限': 'restricted' })[value] }
-function paperUrl(paper) {
-  const directUrl = paper?.fullTextUrl || paper?.full_text_url || paper?.documentUrl || paper?.document_url || paper?.sourceUrl || paper?.source_url || paper?.url || paper?.link
-  if (directUrl) return directUrl
-  return paper?.doi && paper.doi !== '待补充' ? `https://doi.org/${String(paper.doi).trim()}` : ''
-}
-function sourceActionLabel(paper) { return paper?.fullTextUrl || paper?.full_text_url || paper?.documentUrl || paper?.document_url ? '查看全文' : '查看来源' }
-function citationText(paper) {
-  const authors = (paper.authors || []).join(', ') || '作者信息待补充'
-  const title = paper.title || paper.titleZh || '题名待补充'
-  const journal = paper.journal || '来源待补充'
-  const doi = paper.doi && paper.doi !== '待补充' ? ` DOI: ${paper.doi}.` : ''
-  return `${authors}. ${title}[J]. ${journal}, ${paper.year || '年份待补充'}.${doi}`
-}
-async function writeClipboard(text) {
-  if (navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text)
-      return
-    } catch (error) {
-      // Some embedded browsers expose Clipboard API but deny it; use the selection fallback below.
-    }
+const currentYear = new Date().getFullYear()
+const query = useListQuery({ q: '', year: 'all', years: [], journals: [], page: 1, size: 10 })
+const { q: keyword, year, years: yearRange, journals, page: currentPage, size: pageSize } = toRefs(query)
+const { inBasket, busy, toggleBasket } = useListWorkspace(portalStore, { save: savePipelineWorkspaceItem, remove: deletePipelineWorkspaceItem })
+const journalOptions = computed(() => [...new Set([...(data.value?.rows || []).map(item => item.journal).filter(Boolean), ...journals.value])])
+const yearOptions = computed(() => [...new Set([currentYear, ...filteredPapers.value.map(item => item.year).filter(value => Number.isInteger(value)), ...(year.value === 'all' ? [] : [Number(year.value)])])].sort((a, b) => b - a))
+const selectedYearRange = computed(() => {
+  if (year.value !== 'all') {
+    const selected = Number(year.value)
+    return [selected, selected]
   }
-  const textarea = document.createElement('textarea')
-  textarea.value = text
-  textarea.setAttribute('readonly', '')
-  textarea.style.position = 'fixed'
-  textarea.style.opacity = '0'
-  document.body.appendChild(textarea)
-  textarea.select()
-  const copied = document.execCommand('copy')
-  textarea.remove()
-  if (!copied) throw new Error('copy failed')
+  return yearRange.value || []
+})
+const { data, loading, loadError, reload } = useListRequest(() => {
+  const [yearFrom, yearTo] = selectedYearRange.value.map(Number)
+  return {
+      category: 'paper',
+      keyword: keyword.value || undefined,
+      yearFrom,
+      yearTo,
+      journal: journals.value.length ? journals.value.join(',') : undefined,
+      pageNum: currentPage.value,
+      pageSize: pageSize.value
+  }
+}, params => {
+  if ([params.yearFrom, params.yearTo].some(value => value !== undefined && (!Number.isInteger(value) || value < 1600 || value > 2200))) throw new Error('请输入 1600–2200 之间的有效年份')
+  if (params.yearFrom > params.yearTo) throw new Error('起始年份不能晚于结束年份')
+  return listPipelineIntelligence(params)
+})
+const filteredPapers = computed(() => (data.value?.rows || []).map(item => ({
+  ...normalizePortalPaper(item),
+  authors: Array.isArray(item.authors) ? item.authors : item.authors ? [item.authors] : ['作者信息未提供'],
+  institutions: item.institutions || [],
+  journal: item.journal || '期刊 / 会议未提供',
+  abstract: cleanSummary(item.abstractZh || item.abstract_zh || item.abstract || item.summary) || '摘要未提供，请进入详情核对来源。',
+  citationCount: item.citations ?? item.citation_count ?? '未提供'
+})))
+const total = computed(() => Number(data.value?.total || 0))
+watch(data, value => { if (value) currentPage.value = validPage(total.value, pageSize.value, currentPage.value) })
+function changeYearRange(value) { year.value = 'all'; yearRange.value = value || [] }
+function resetFilters() {
+  const unchanged = !keyword.value && year.value === 'all' && !yearRange.value?.length && !journals.value.length && currentPage.value === 1
+  keyword.value = ''; year.value = 'all'; yearRange.value = []; journals.value = []; currentPage.value = 1
+  if (unchanged) reload()
 }
-async function copyCitation(paper) {
+async function add(paper) {
   try {
-    await writeClipboard(citationText(paper))
-    ElMessage.success('引用信息已复制到剪贴板')
-  } catch (error) {
-    ElMessage.error('复制失败，请在详情页手动选择引用信息')
-  }
+    const result = await toggleBasket(paper, 'paper')
+    if (result === 'saved') ElMessage.success('已加入资料篮')
+    else if (result === 'removed') ElMessage.success('已取消加入资料篮')
+  } catch (error) { ElMessage.error(error?.msg || '资料篮更新失败，请重试') }
 }
-function openPaperSource(paper) {
-  const url = paperUrl(paper)
-  if (!url) return
-  try {
-    const target = new URL(url, window.location.origin)
-    if (!['http:', 'https:'].includes(target.protocol)) throw new Error('unsupported protocol')
-    window.open(target.href, '_blank', 'noopener,noreferrer')
-  } catch (error) {
-    ElMessage.error('来源链接无效，暂时无法打开')
-  }
+function doiUrl(paper) {
+  const doi = String(paper?.doi || '').trim().replace(/^doi:\s*/i, '').replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '')
+  if (!/^10\.\d{4,9}\/\S+$/i.test(doi)) return ''
+  return `https://doi.org/${doi.split('/').map(encodeURIComponent).join('/')}`
 }
 </script>
+
+<style scoped>
+.ps-paper-library .ps-paper-card { display: block; padding: 18px 20px; border-radius: 10px; }
+.ps-paper-heading { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 8px; }
+.ps-paper-heading .ps-paper-title { flex: 1; min-width: 0; margin: 0; font-size: 17px; font-weight: 600; line-height: 1.45; text-align: left; overflow-wrap: anywhere; text-decoration: none; }
+.ps-paper-main .ps-paper-authors { margin-bottom: 4px; }
+.ps-paper-main .ps-paper-meta { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.ps-paper-meta .ps-paper-journal-name { color: var(--ps-ink-2); font-weight: 600; }
+.ps-paper-meta .ps-paper-doi { overflow-wrap: anywhere; min-width: 0; }
+.ps-paper-meta a.ps-paper-doi { color: var(--ps-blue); text-decoration: none; }
+.ps-paper-meta a.ps-paper-doi:hover { text-decoration: underline; }
+.ps-paper-meta a.ps-paper-doi:focus-visible { outline: 2px solid var(--ps-blue); outline-offset: 2px; }
+.ps-paper-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--ps-line-soft); }
+.ps-paper-footer .ps-tag-row { flex: 1 1 200px; min-width: 0; margin: 0; gap: 6px; }
+.ps-paper-library .ps-paper-actions { display: flex; flex: 0 1 auto; align-items: center; flex-wrap: wrap; gap: 4px; margin: 0 0 0 auto; padding: 0; border: 0; }
+.ps-paper-actions :deep(.el-button) { margin-left: 0; min-height: 36px; padding-inline: 10px; }
+.ps-paper-actions :deep(.el-button.is-text) { color: var(--ps-muted); }
+.ps-paper-actions :deep(.el-button.is-text:hover) { color: var(--ps-blue); }
+@media (max-width: 600px) {
+  .ps-paper-library .ps-paper-card { padding: 16px; }
+  .ps-paper-heading { flex-direction: column; gap: 8px; }
+  .ps-paper-heading .ps-paper-title { width: 100%; font-size: 16px; }
+  .ps-paper-main .ps-paper-meta { gap: 4px 12px; }
+  .ps-paper-main .ps-paper-authors span { display: block; margin-left: 0; }
+  .ps-paper-actions :deep(.el-button) { min-height: 44px; }
+  .ps-paper-footer { align-items: flex-start; }
+  .ps-paper-footer .ps-tag-row { flex-basis: 100%; }
+  .ps-paper-library .ps-paper-actions { justify-content: flex-end; width: 100%; }
+}
+</style>

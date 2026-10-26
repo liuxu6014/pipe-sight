@@ -10,8 +10,8 @@ from exceptions.exception import (
     ServiceException,
     ServiceWarning,
 )
-from utils.log_util import logger
-from utils.response_util import JSONResponse, ResponseUtil, jsonable_encoder
+from app.infrastructure.services.logging_support import logger
+from common.http.responses import JSONResponse, ResponseUtil, jsonable_encoder
 
 
 def handle_exception(app: FastAPI) -> None:

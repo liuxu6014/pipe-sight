@@ -1,11 +1,5 @@
 <template>
   <div class="ps-page ps-knowledge-detail-page" :aria-busy="loading">
-    <nav class="ps-breadcrumb" aria-label="当前位置">
-      <button type="button" @click="router.push('/portal/knowledge')">知识库</button>
-      <ArrowRight />
-      <b>资料详情</b>
-    </nav>
-
     <div v-if="loadError && document" class="ps-inline-state is-warning" role="status">
       <WarningFilled /><span>{{ loadError }}</span><button type="button" @click="loadDocument">重新获取</button>
     </div>
@@ -55,9 +49,9 @@
       </section>
 
       <section v-if="document.status !== '已解析'" class="ps-parse-overview" :class="statusClass(document.status)">
-        <span class="ps-parse-overview-icon"><Loading v-if="document.status !== '解析失败'" /><WarningFilled v-else /></span>
+        <span class="ps-parse-overview-icon"><Loading v-if="!securityBlocked && document.status !== '解析失败'" /><WarningFilled v-else /></span>
         <div>
-          <h2>{{ document.status === '解析失败' ? '资料解析未完成' : '资料正在进入可检索状态' }}</h2>
+          <h2>{{ securityBlocked ? '资料尚未通过安全检查' : document.status === '解析失败' ? '资料解析未完成' : '资料正在进入可检索状态' }}</h2>
           <p>{{ parseStateDescription }}</p>
         </div>
         <el-button v-if="canManage" :loading="reparsing" @click="reparse">重新解析</el-button>
@@ -129,7 +123,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowRight, Clock, Collection, Document, Loading, MoreFilled, Operation, WarningFilled, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
+import { Clock, Collection, Document, Loading, MoreFilled, Operation, WarningFilled, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
 import PortalEmptyState from '../components/PortalEmptyState.vue'
 import usePortalStore from '@/store/modules/portal'
 import {
@@ -153,7 +147,7 @@ const detailTabs = ['解析信息', '切块结果', '引用记录']
 
 const storeDocument = computed(() => portalStore.knowledgeDocuments.find(item => String(item.id) === String(route.params.id)) || null)
 const document = computed(() => liveDocument.value || storeDocument.value)
-const parsedText = computed(() => String(document.value?.parsedText || document.value?.extractedText || document.value?.content || '').trim())
+const parsedText = computed(() => String(document.value?.editedText ?? document.value?.edited_text ?? document.value?.extractedText ?? document.value?.extracted_text ?? document.value?.parsedText ?? document.value?.content ?? '').trim())
 const chunks = computed(() => Array.isArray(document.value?.chunks) ? document.value.chunks : [])
 const references = computed(() => Array.isArray(document.value?.references) ? document.value.references : [])
 const canManage = computed(() => document.value?.canManage !== false)
@@ -173,15 +167,23 @@ const versions = computed(() => {
   if (Array.isArray(document.value?.versions) && document.value.versions.length) return document.value.versions
   return [{ id: 'current', label: '当前版本', updatedAt: document.value?.updatedAt || '最近更新', owner: document.value?.owner || '平台知识库' }]
 })
-const parseStateDescription = computed(() => document.value?.status === '解析失败'
-  ? (document.value?.parseError || '请检查文件是否损坏、加密或格式不受支持，然后重新提交解析。')
-  : '解析完成后可用于科研报告、情报简报和资料引用。TXT、MD、DOCX 和可搜索 PDF 可直接提取文字；扫描版 PDF 需先完成 OCR，旧版 DOC 请转换为 DOCX。')
+const parseStateDescription = computed(() => {
+  const status = document.value?.status
+  if (status === '待安全扫描') return document.value?.scanMessage || '当前未配置或尚未完成安全扫描，资料不会进入解析、下载或 AI 使用流程。'
+  if (status === '已隔离') return document.value?.scanMessage || '安全扫描发现风险，资料已被隔离，不能解析、下载或用于 AI。'
+  if (status === '扫描失败') return document.value?.scanMessage || '安全扫描未完成，请检查扫描服务后重新提交。'
+  if (status === '解析失败') return document.value?.parseError || '请检查文件是否损坏、加密或格式不受支持，然后重新提交解析。'
+  return '解析完成后可用于科研报告、情报简报和资料引用。TXT、MD、DOCX 和可搜索 PDF 可直接提取文字；扫描版 PDF 需先完成 OCR，旧版 DOC 请转换为 DOCX。'
+})
 
 function normalizeParagraphs(value) {
   if (Array.isArray(value)) return value.map(String).filter(Boolean)
   return String(value || '').split(/\n{2,}|\r?\n/).map(item => item.trim()).filter(Boolean)
 }
 function normalizeDocument(item = {}) {
+  const permissionScope = item.permissionScope || item.permission_scope || (
+    ['公开', '全员可见', 'public'].includes(item.permission) ? 'public' : 'private'
+  )
   return {
     ...item,
     id: item.id || item.materialId,
@@ -191,14 +193,20 @@ function normalizeDocument(item = {}) {
     pages: Number(item.pages || 0),
     owner: item.owner || item.department || '平台知识库',
     uploader: item.uploader || item.uploadedBy,
-    permission: item.permission || item.permissionLabel || '仅自己可见',
-    allowDownload: item.allowDownload !== false,
-    status: ({ indexed: '已解析', parsing: '解析中', queued: '待解析', planned: '待解析', failed: '解析失败' })[item.status] || item.status || '待解析',
+    permissionScope,
+    permission: permissionScope === 'public' ? '全员可见' : '仅自己可见',
+    allowDownload: item.allowDownload !== false && item.allow_download !== false,
+    allowAiUse: item.allowAiUse !== false && item.allow_ai_use !== false,
+    parseMessage: item.parseMessage || item.parse_message || '',
+    scanStatus: item.scanStatus || item.scan_status || 'clean',
+    scanMessage: item.scanMessage || item.scan_message || '',
+    status: ({ pending: '待安全扫描', quarantined: '已隔离', failed: '扫描失败' })[item.scanStatus || item.scan_status] || ({ ready: '已解析', indexed: '已解析', parsing: '解析中', queued: '待解析', planned: '待解析', failed: '解析失败' })[item.status] || item.status || '待解析',
     updatedAt: item.updated_at || item.updatedAt || '最近更新',
     summary: item.summary || item.scenario || ''
   }
 }
-function statusClass(status) { return { 'is-processing': ['解析中', '待解析'].includes(status), 'is-failed': status === '解析失败' } }
+const securityBlocked = computed(() => ['待安全扫描', '已隔离', '扫描失败'].includes(document.value?.status))
+function statusClass(status) { return { 'is-processing': ['解析中', '待解析', '待安全扫描'].includes(status), 'is-failed': ['解析失败', '已隔离', '扫描失败'].includes(status) } }
 function add() { ElMessage.success(portalStore.addToBasket({ ...document.value, title: document.value.name }) ? '已加入资料篮' : '资料已在资料篮中') }
 function downloadDocument() {
   if (!document.value?.allowDownload) return ElMessage.warning('当前资料禁止下载')

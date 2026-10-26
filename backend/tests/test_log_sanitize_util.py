@@ -13,10 +13,15 @@ from loguru import logger as _logger
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
+from app.infrastructure.services.logging_support import (
+    LoggerInitializer,
+    LogSanitizer,
+    _build_text_assignment_patterns,
+    _build_text_key_pattern,
+)
 from common.annotation.log_annotation import Log, RequestLogFieldRoot, ResponseLogFieldRoot
-from common.enums import BusinessType
+from common.enums.audit import BusinessType
 from config.env import LogConfig
-from utils.log_util import LoggerInitializer, LogSanitizer, _build_text_assignment_patterns, _build_text_key_pattern
 
 
 @pytest.fixture(autouse=True)

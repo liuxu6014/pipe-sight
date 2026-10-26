@@ -1,0 +1,2680 @@
+{
+  "version": "20261025-compact-v1",
+  "source": "output/管网平台精简数据库设计_20261025.md",
+  "tables": [
+    {
+      "name": "news_articles",
+      "columns": [
+        {
+          "name": "id",
+          "type": "ID",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null
+        },
+        {
+          "name": "source_id",
+          "type": "ID",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "title",
+          "type": "varchar(1000)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "url",
+          "type": "text",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "author",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "published_at",
+          "type": "时间",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "content",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "content_zh",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "category_id",
+          "type": "ID",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "is_pushed",
+          "type": "boolean",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "updated_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "papers",
+      "columns": [
+        {
+          "name": "id",
+          "type": "ID",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null
+        },
+        {
+          "name": "source_id",
+          "type": "ID",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "title",
+          "type": "varchar(1000)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "title_zh",
+          "type": "varchar(1000)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "url",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "doi",
+          "type": "varchar(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "authors",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "journal",
+          "type": "varchar(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "published_date",
+          "type": "varchar(10)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "abstract",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "abstract_zh",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "category_id",
+          "type": "ID",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "is_pushed",
+          "type": "boolean",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "updated_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "categories",
+      "columns": [
+        {
+          "name": "id",
+          "type": "ID",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null
+        },
+        {
+          "name": "name",
+          "type": "varchar(100)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "prompt",
+          "type": "text",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "model_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "applies_to",
+          "type": "varchar(16)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "is_enabled",
+          "type": "boolean",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "sort_order",
+          "type": "integer",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "updated_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "data_sources",
+      "columns": [
+        {
+          "name": "id",
+          "type": "ID",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null
+        },
+        {
+          "name": "name",
+          "type": "varchar(255)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "type",
+          "type": "varchar(16)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "url",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "adapter",
+          "type": "varchar(128)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "cron",
+          "type": "varchar(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "timezone",
+          "type": "varchar(64)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "next_run_at",
+          "type": "时间",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "config",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "model_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "is_enabled",
+          "type": "boolean",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "updated_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "knowledge_files",
+      "columns": [
+        {
+          "name": "id",
+          "type": "ID",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null
+        },
+        {
+          "name": "user_id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "name",
+          "type": "varchar(255)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "filename",
+          "type": "varchar(255)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "storage_key",
+          "type": "text",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "mime_type",
+          "type": "varchar(128)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "size",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "hash",
+          "type": "varchar(64)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "extracted_text",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "edited_text",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "version",
+          "type": "integer",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "status",
+          "type": "varchar(16)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "error",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "updated_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "templates",
+      "columns": [
+        {
+          "name": "id",
+          "type": "ID",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null
+        },
+        {
+          "name": "name",
+          "type": "varchar(255)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "purpose",
+          "type": "varchar(16)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "prompt",
+          "type": "text",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "model_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "image_model_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "sections",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "image_config",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "is_enabled",
+          "type": "boolean",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "updated_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "ai_models",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null
+        },
+        {
+          "name": "name",
+          "type": "varchar(100)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "provider",
+          "type": "varchar(50)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "code",
+          "type": "varchar(100)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "base_url",
+          "type": "text",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "credential_ref",
+          "type": "text",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "capabilities",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "parameters",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "is_enabled",
+          "type": "boolean",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "updated_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "reports",
+      "columns": [
+        {
+          "name": "id",
+          "type": "ID",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null
+        },
+        {
+          "name": "user_id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "title",
+          "type": "varchar(1000)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "type",
+          "type": "varchar(32)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "template_id",
+          "type": "ID",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "content",
+          "type": "text",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "version",
+          "type": "integer",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "updated_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "generation_tasks",
+      "columns": [
+        {
+          "name": "id",
+          "type": "ID",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null
+        },
+        {
+          "name": "report_id",
+          "type": "ID",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "schedule_id",
+          "type": "ID",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "request_id",
+          "type": "varchar(128)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "status",
+          "type": "varchar(16)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "progress",
+          "type": "smallint",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "config_snapshot",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "materials",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "result_content",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "error",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "attempts",
+          "type": "integer",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "lease_expires_at",
+          "type": "时间",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "execution_token",
+          "type": "ID",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "started_at",
+          "type": "时间",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "finished_at",
+          "type": "时间",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "updated_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "report_assets",
+      "columns": [
+        {
+          "name": "id",
+          "type": "ID",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null
+        },
+        {
+          "name": "report_id",
+          "type": "ID",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "task_id",
+          "type": "ID",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "type",
+          "type": "varchar(16)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "storage_key",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "mime_type",
+          "type": "varchar(128)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "prompt",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "model_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "config_snapshot",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "position",
+          "type": "varchar(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "status",
+          "type": "varchar(16)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "error",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "updated_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "digest_schedules",
+      "columns": [
+        {
+          "name": "id",
+          "type": "ID",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null
+        },
+        {
+          "name": "user_id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "name",
+          "type": "varchar(255)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "template_id",
+          "type": "ID",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "frequency",
+          "type": "varchar(16)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "weekday",
+          "type": "smallint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "month_day",
+          "type": "smallint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "run_time",
+          "type": "time",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "timezone",
+          "type": "varchar(64)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "selection_config",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "generation_config",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "is_enabled",
+          "type": "boolean",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "next_run_at",
+          "type": "时间",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "updated_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "basket_items",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null
+        },
+        {
+          "name": "user_id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "action",
+          "type": "varchar(16)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "article_id",
+          "type": "ID",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "paper_id",
+          "type": "ID",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "file_id",
+          "type": "ID",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "report_id",
+          "type": "ID",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "collection_runs",
+      "columns": [
+        {
+          "name": "id",
+          "type": "ID",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null
+        },
+        {
+          "name": "source_id",
+          "type": "ID",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "parent_id",
+          "type": "ID",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "trigger_type",
+          "type": "varchar(16)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "request_id",
+          "type": "varchar(128)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "status",
+          "type": "varchar(16)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "available_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "config_snapshot",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "checkpoint",
+          "type": "jsonb",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "fetched_count",
+          "type": "integer",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "saved_count",
+          "type": "integer",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "failed_count",
+          "type": "integer",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "error",
+          "type": "text",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "stop_requested_at",
+          "type": "时间",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "execution_token",
+          "type": "ID",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "lease_expires_at",
+          "type": "时间",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "started_at",
+          "type": "时间",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "finished_at",
+          "type": "时间",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "created_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "updated_at",
+          "type": "时间",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "users",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "user_id"
+        },
+        {
+          "name": "username",
+          "type": "character varying(30)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": "user_name"
+        },
+        {
+          "name": "nickname",
+          "type": "character varying(30)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": "nick_name"
+        },
+        {
+          "name": "user_type",
+          "type": "character varying(2)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "user_type"
+        },
+        {
+          "name": "email",
+          "type": "character varying(50)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "email"
+        },
+        {
+          "name": "phone",
+          "type": "character varying(11)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "phonenumber"
+        },
+        {
+          "name": "sex",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "sex"
+        },
+        {
+          "name": "avatar",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "avatar"
+        },
+        {
+          "name": "password_hash",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "password"
+        },
+        {
+          "name": "status",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "status"
+        },
+        {
+          "name": "del_flag",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "del_flag"
+        },
+        {
+          "name": "login_ip",
+          "type": "character varying(128)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "login_ip"
+        },
+        {
+          "name": "last_login_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "login_date"
+        },
+        {
+          "name": "password_updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "pwd_update_date"
+        },
+        {
+          "name": "created_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_by"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_time"
+        },
+        {
+          "name": "updated_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_by"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_time"
+        },
+        {
+          "name": "remark",
+          "type": "character varying(500)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "remark"
+        }
+      ]
+    },
+    {
+      "name": "roles",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "role_id"
+        },
+        {
+          "name": "name",
+          "type": "character varying(30)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": "role_name"
+        },
+        {
+          "name": "code",
+          "type": "character varying(100)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": "role_key"
+        },
+        {
+          "name": "sort_order",
+          "type": "integer",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": "role_sort"
+        },
+        {
+          "name": "data_scope",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "data_scope"
+        },
+        {
+          "name": "menu_check_strictly",
+          "type": "smallint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "menu_check_strictly"
+        },
+        {
+          "name": "status",
+          "type": "character(1)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": "status"
+        },
+        {
+          "name": "del_flag",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "del_flag"
+        },
+        {
+          "name": "created_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_by"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_time"
+        },
+        {
+          "name": "updated_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_by"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_time"
+        },
+        {
+          "name": "remark",
+          "type": "character varying(500)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "remark"
+        }
+      ]
+    },
+    {
+      "name": "menus",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "menu_id"
+        },
+        {
+          "name": "name",
+          "type": "character varying(50)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": "menu_name"
+        },
+        {
+          "name": "parent_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "parent_id"
+        },
+        {
+          "name": "sort_order",
+          "type": "integer",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "order_num"
+        },
+        {
+          "name": "path",
+          "type": "character varying(200)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "path"
+        },
+        {
+          "name": "component",
+          "type": "character varying(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "component"
+        },
+        {
+          "name": "query",
+          "type": "character varying(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "query"
+        },
+        {
+          "name": "route_name",
+          "type": "character varying(50)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "route_name"
+        },
+        {
+          "name": "is_frame",
+          "type": "integer",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "is_frame"
+        },
+        {
+          "name": "is_cache",
+          "type": "integer",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "is_cache"
+        },
+        {
+          "name": "type",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "menu_type"
+        },
+        {
+          "name": "visible",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "visible"
+        },
+        {
+          "name": "status",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "status"
+        },
+        {
+          "name": "permissions",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "perms"
+        },
+        {
+          "name": "icon",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "icon"
+        },
+        {
+          "name": "created_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_by"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_time"
+        },
+        {
+          "name": "updated_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_by"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_time"
+        },
+        {
+          "name": "remark",
+          "type": "character varying(500)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "remark"
+        }
+      ]
+    },
+    {
+      "name": "user_roles",
+      "columns": [
+        {
+          "name": "user_id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "user_id"
+        },
+        {
+          "name": "role_id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "role_id"
+        }
+      ]
+    },
+    {
+      "name": "role_menus",
+      "columns": [
+        {
+          "name": "role_id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "role_id"
+        },
+        {
+          "name": "menu_id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "menu_id"
+        }
+      ]
+    },
+    {
+      "name": "settings",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "config_id"
+        },
+        {
+          "name": "name",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "config_name"
+        },
+        {
+          "name": "key",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "config_key"
+        },
+        {
+          "name": "value",
+          "type": "character varying(500)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "config_value"
+        },
+        {
+          "name": "type",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "config_type"
+        },
+        {
+          "name": "created_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_by"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_time"
+        },
+        {
+          "name": "updated_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_by"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_time"
+        },
+        {
+          "name": "remark",
+          "type": "character varying(500)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "remark"
+        }
+      ]
+    },
+    {
+      "name": "dict_types",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "dict_id"
+        },
+        {
+          "name": "name",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "dict_name"
+        },
+        {
+          "name": "code",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "dict_type"
+        },
+        {
+          "name": "status",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "status"
+        },
+        {
+          "name": "created_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_by"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_time"
+        },
+        {
+          "name": "updated_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_by"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_time"
+        },
+        {
+          "name": "remark",
+          "type": "character varying(500)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "remark"
+        }
+      ]
+    },
+    {
+      "name": "dict_items",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "dict_code"
+        },
+        {
+          "name": "sort_order",
+          "type": "integer",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "dict_sort"
+        },
+        {
+          "name": "label",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "dict_label"
+        },
+        {
+          "name": "value",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "dict_value"
+        },
+        {
+          "name": "type_code",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "dict_type"
+        },
+        {
+          "name": "css_class",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "css_class"
+        },
+        {
+          "name": "list_class",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "list_class"
+        },
+        {
+          "name": "is_default",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "is_default"
+        },
+        {
+          "name": "status",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "status"
+        },
+        {
+          "name": "created_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_by"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_time"
+        },
+        {
+          "name": "updated_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_by"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_time"
+        },
+        {
+          "name": "remark",
+          "type": "character varying(500)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "remark"
+        }
+      ]
+    },
+    {
+      "name": "login_logs",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "info_id"
+        },
+        {
+          "name": "username",
+          "type": "character varying(50)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "user_name"
+        },
+        {
+          "name": "ip",
+          "type": "character varying(128)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "ipaddr"
+        },
+        {
+          "name": "location",
+          "type": "character varying(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "login_location"
+        },
+        {
+          "name": "browser",
+          "type": "character varying(50)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "browser"
+        },
+        {
+          "name": "os",
+          "type": "character varying(50)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "os"
+        },
+        {
+          "name": "status",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "status"
+        },
+        {
+          "name": "message",
+          "type": "character varying(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "msg"
+        },
+        {
+          "name": "logged_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "login_time"
+        }
+      ]
+    },
+    {
+      "name": "operation_logs",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "oper_id"
+        },
+        {
+          "name": "title",
+          "type": "character varying(50)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "title"
+        },
+        {
+          "name": "business_type",
+          "type": "integer",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "business_type"
+        },
+        {
+          "name": "method",
+          "type": "character varying(100)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "method"
+        },
+        {
+          "name": "request_method",
+          "type": "character varying(10)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "request_method"
+        },
+        {
+          "name": "operator_type",
+          "type": "integer",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "operator_type"
+        },
+        {
+          "name": "username",
+          "type": "character varying(50)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "oper_name"
+        },
+        {
+          "name": "url",
+          "type": "character varying(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "oper_url"
+        },
+        {
+          "name": "ip",
+          "type": "character varying(128)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "oper_ip"
+        },
+        {
+          "name": "location",
+          "type": "character varying(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "oper_location"
+        },
+        {
+          "name": "request_data",
+          "type": "character varying(2000)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "oper_param"
+        },
+        {
+          "name": "response_data",
+          "type": "character varying(2000)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "json_result"
+        },
+        {
+          "name": "status",
+          "type": "integer",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "status"
+        },
+        {
+          "name": "error",
+          "type": "character varying(2000)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "error_msg"
+        },
+        {
+          "name": "operated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "oper_time"
+        },
+        {
+          "name": "duration_ms",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "cost_time"
+        }
+      ]
+    },
+    {
+      "name": "scheduled_jobs",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "job_id"
+        },
+        {
+          "name": "name",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "job_name"
+        },
+        {
+          "name": "group_key",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "job_group"
+        },
+        {
+          "name": "executor",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "job_executor"
+        },
+        {
+          "name": "invoke_target",
+          "type": "character varying(500)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": "invoke_target"
+        },
+        {
+          "name": "args",
+          "type": "character varying(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "job_args"
+        },
+        {
+          "name": "kwargs",
+          "type": "character varying(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "job_kwargs"
+        },
+        {
+          "name": "cron_expression",
+          "type": "character varying(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "cron_expression"
+        },
+        {
+          "name": "misfire_policy",
+          "type": "character varying(20)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "misfire_policy"
+        },
+        {
+          "name": "concurrent",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "concurrent"
+        },
+        {
+          "name": "status",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "status"
+        },
+        {
+          "name": "created_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_by"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_time"
+        },
+        {
+          "name": "updated_by",
+          "type": "character varying(64)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_by"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "update_time"
+        },
+        {
+          "name": "remark",
+          "type": "character varying(500)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "remark"
+        }
+      ]
+    },
+    {
+      "name": "job_logs",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": "job_log_id"
+        },
+        {
+          "name": "job_id",
+          "type": "bigint",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "job_id"
+        },
+        {
+          "name": "name",
+          "type": "character varying(64)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": "job_name"
+        },
+        {
+          "name": "group_key",
+          "type": "character varying(64)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": "job_group"
+        },
+        {
+          "name": "executor",
+          "type": "character varying(64)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": "job_executor"
+        },
+        {
+          "name": "invoke_target",
+          "type": "character varying(500)",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": "invoke_target"
+        },
+        {
+          "name": "args",
+          "type": "character varying(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "job_args"
+        },
+        {
+          "name": "kwargs",
+          "type": "character varying(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "job_kwargs"
+        },
+        {
+          "name": "trigger",
+          "type": "character varying(255)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "job_trigger"
+        },
+        {
+          "name": "message",
+          "type": "character varying(500)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "job_message"
+        },
+        {
+          "name": "status",
+          "type": "character(1)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "status"
+        },
+        {
+          "name": "error",
+          "type": "character varying(2000)",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "exception_info"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(0) without time zone",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": "create_time"
+        }
+      ]
+    },
+    {
+      "name": "apscheduler_jobs",
+      "columns": [
+        {
+          "name": "id",
+          "type": "character varying(191)",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null
+        },
+        {
+          "name": "next_run_time",
+          "type": "double precision",
+          "nullable": true,
+          "primary_key": false,
+          "old_name": null
+        },
+        {
+          "name": "job_state",
+          "type": "bytea",
+          "nullable": false,
+          "primary_key": false,
+          "old_name": null
+        }
+      ]
+    },
+    {
+      "name": "alembic_version",
+      "columns": [
+        {
+          "name": "version_num",
+          "type": "character varying(64)",
+          "nullable": false,
+          "primary_key": true,
+          "old_name": null
+        }
+      ]
+    }
+  ],
+  "foreign_keys": [
+    {
+      "table": "news_articles",
+      "columns": [
+        "source_id"
+      ],
+      "target": "data_sources",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "news_articles",
+      "columns": [
+        "category_id"
+      ],
+      "target": "categories",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "papers",
+      "columns": [
+        "source_id"
+      ],
+      "target": "data_sources",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "papers",
+      "columns": [
+        "category_id"
+      ],
+      "target": "categories",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "categories",
+      "columns": [
+        "model_id"
+      ],
+      "target": "ai_models",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "data_sources",
+      "columns": [
+        "model_id"
+      ],
+      "target": "ai_models",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "knowledge_files",
+      "columns": [
+        "user_id"
+      ],
+      "target": "users",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "templates",
+      "columns": [
+        "model_id"
+      ],
+      "target": "ai_models",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "templates",
+      "columns": [
+        "image_model_id"
+      ],
+      "target": "ai_models",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "reports",
+      "columns": [
+        "user_id"
+      ],
+      "target": "users",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "reports",
+      "columns": [
+        "template_id"
+      ],
+      "target": "templates",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "generation_tasks",
+      "columns": [
+        "report_id"
+      ],
+      "target": "reports",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "generation_tasks",
+      "columns": [
+        "schedule_id"
+      ],
+      "target": "digest_schedules",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "report_assets",
+      "columns": [
+        "report_id"
+      ],
+      "target": "reports",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "report_assets",
+      "columns": [
+        "model_id"
+      ],
+      "target": "ai_models",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "digest_schedules",
+      "columns": [
+        "user_id"
+      ],
+      "target": "users",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "digest_schedules",
+      "columns": [
+        "template_id"
+      ],
+      "target": "templates",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "basket_items",
+      "columns": [
+        "user_id"
+      ],
+      "target": "users",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "basket_items",
+      "columns": [
+        "article_id"
+      ],
+      "target": "news_articles",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "basket_items",
+      "columns": [
+        "paper_id"
+      ],
+      "target": "papers",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "basket_items",
+      "columns": [
+        "file_id"
+      ],
+      "target": "knowledge_files",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "basket_items",
+      "columns": [
+        "report_id"
+      ],
+      "target": "reports",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "collection_runs",
+      "columns": [
+        "source_id"
+      ],
+      "target": "data_sources",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "user_roles",
+      "columns": [
+        "user_id"
+      ],
+      "target": "users",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "user_roles",
+      "columns": [
+        "role_id"
+      ],
+      "target": "roles",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "role_menus",
+      "columns": [
+        "role_id"
+      ],
+      "target": "roles",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "role_menus",
+      "columns": [
+        "menu_id"
+      ],
+      "target": "menus",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "dict_items",
+      "columns": [
+        "type_code"
+      ],
+      "target": "dict_types",
+      "target_columns": [
+        "code"
+      ]
+    },
+    {
+      "table": "job_logs",
+      "columns": [
+        "job_id"
+      ],
+      "target": "scheduled_jobs",
+      "target_columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "report_assets",
+      "columns": [
+        "task_id",
+        "report_id"
+      ],
+      "target": "generation_tasks",
+      "target_columns": [
+        "id",
+        "report_id"
+      ]
+    },
+    {
+      "table": "collection_runs",
+      "columns": [
+        "parent_id",
+        "source_id"
+      ],
+      "target": "collection_runs",
+      "target_columns": [
+        "id",
+        "source_id"
+      ]
+    }
+  ],
+  "optional_tables": [
+    "model_calls",
+    "report_versions"
+  ]
+}

@@ -8,7 +8,7 @@
 
 PipeSight 最终使用 **23 张应用表**：
 
-采集后的资讯和论文由 PipeSight 先落库，再交给 InsightHub 做领域、分类、Prompt、风险和向量处理。双方不合并表名；PipeSight 只在现有 `data_sources`、`collection_runs`、`news_articles`、`papers` 中增加 `handoff_*` 交接字段。详细契约见 [PipeSight-InsightHub 数据交接适配说明](../交接文档/PipeSight-InsightHub-数据交接适配说明.md)。
+采集后的资讯和论文由 PipeSight 先落库，再交给 InsightHub 做领域、分类、Prompt、风险和向量处理。双方不合并表名；PipeSight 只在现有 `data_sources`、`collection_runs`、`news_articles`、`papers` 中增加 `handoff_*` 交接字段。详细契约见 [PipeSight-InsightHub 数据交接适配说明](../handover/PipeSight-InsightHub-数据交接适配说明.md)。
 
 | 数据域 | 表数 | 职责 |
 |---|---:|---|

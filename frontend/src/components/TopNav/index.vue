@@ -5,8 +5,8 @@
     @select="handleSelect"
     :ellipsis="false"
   >
-    <template v-for="(item, index) in topMenus">
-      <el-menu-item :style="{'--theme': theme}" :index="item.path" :key="index" v-if="index < visibleNumber">
+    <template v-for="item in topMenus" :key="item.path">
+      <el-menu-item :style="{'--theme': theme}" :index="item.path">
         <svg-icon
         v-if="item.meta && item.meta.icon && item.meta.icon !== '#'"
         :icon-class="item.meta.icon"/>
@@ -15,13 +15,12 @@
     </template>
 
     <!-- 顶部菜单超出数量折叠 -->
-    <el-sub-menu :style="{'--theme': theme}" index="more" v-if="topMenus.length > visibleNumber">
+    <el-sub-menu :style="{'--theme': theme}" index="more" v-if="moreRoutes.length">
       <template #title>更多菜单</template>
-      <template v-for="(item, index) in topMenus">
+      <template v-for="item in moreRoutes" :key="item.path">
         <el-menu-item
           :index="item.path"
-          :key="index"
-          v-if="index >= visibleNumber">
+          >
         <svg-icon
           v-if="item.meta && item.meta.icon && item.meta.icon !== '#'"
           :icon-class="item.meta.icon"/>
@@ -33,18 +32,16 @@
 </template>
 
 <script setup>
-import { constantRoutes } from "@/router"
-import { isHttp } from '@/utils/validate'
+import { isExternal } from '@/utils/validate'
 import useAppStore from '@/store/modules/app'
 import useSettingsStore from '@/store/modules/settings'
 import usePermissionStore from '@/store/modules/permission'
+import { findNavigationGroup, splitNavigationMenus } from '@/utils/management-navigation'
 
 // 顶部栏初始数
-const visibleNumber = ref(null);
+const visibleNumber = ref(5);
 // 当前激活菜单的 index
 const currentIndex = ref(null);
-// 隐藏侧边栏路由
-const hideList = ['/index', '/user/profile'];
 
 const appStore = useAppStore()
 const settingsStore = useSettingsStore()
@@ -55,106 +52,46 @@ const router = useRouter();
 // 主题颜色
 const theme = computed(() => settingsStore.theme);
 // 所有的路由信息
-const routers = computed(() => permissionStore.topbarRouters);
+const routers = computed(() => permissionStore.navigationRoutes);
 
 // 顶部显示菜单
-const topMenus = computed(() => {
-  let topMenus = [];
-  routers.value.map((menu) => {
-    if (menu.hidden !== true) {
-      // 兼容顶部栏一级菜单内部跳转
-      if (menu.path === '/' && menu.children) {
-          topMenus.push(menu.children[0]);
-      } else {
-          topMenus.push(menu);
-      }
-    }
-  })
-  return topMenus;
-})
+const menuPartition = computed(() => splitNavigationMenus(routers.value, visibleNumber.value));
+const topMenus = computed(() => menuPartition.value.visible);
+const moreRoutes = computed(() => menuPartition.value.more);
+const activeMenu = computed(() => currentIndex.value || findNavigationGroup(route, routers.value)?.path || '');
 
-// 设置子路由
-const childrenMenus = computed(() => {
-  let childrenMenus = [];
-  routers.value.map((router) => {
-    for (let item in router.children) {
-      if (router.children[item].parentPath === undefined) {
-        if(router.path === "/") {
-          router.children[item].path = "/" + router.children[item].path;
-        } else {
-          if(!isHttp(router.children[item].path)) {
-            router.children[item].path = router.path + "/" + router.children[item].path;
-          }
-        }
-        router.children[item].parentPath = router.path;
-      }
-      childrenMenus.push(router.children[item]);
-    }
-  })
-  return constantRoutes.concat(childrenMenus);
-})
-
-// 默认激活的菜单
-const activeMenu = computed(() => {
-  const path = route.path;
-  let activePath = path;
-  if (path !== undefined && path.lastIndexOf("/") > 0 && hideList.indexOf(path) === -1) {
-    const tmpPath = path.substring(1, path.length);
-    if (!route.meta.link) {
-      activePath = "/" + tmpPath.substring(0, tmpPath.indexOf("/"));
-      appStore.toggleSideBarHide(false);
-    }
-  } else if(!route.children) {
-    activePath = path;
-    appStore.toggleSideBarHide(true);
+// 路由或授权菜单变化时选择其实际所属模块；computed 中不再改写路由和侧栏。
+watch([() => route.path, () => route.meta.activeMenu, routers, () => settingsStore.navType], () => {
+  if (Number(settingsStore.navType) !== 2) return
+  const group = findNavigationGroup(route, routers.value)
+  currentIndex.value = group?.path || ''
+  if (group && permissionStore.selectNavigationGroup(group.path)) {
+    appStore.toggleSideBarHide(false)
+  } else {
+    permissionStore.restoreSidebarRouters()
+    appStore.toggleSideBarHide(Boolean(group))
   }
-  activeRoutes(activePath);
-  return activePath;
-})
+}, { immediate: true })
 
 function setVisibleNumber() {
   const width = document.body.getBoundingClientRect().width / 3;
-  visibleNumber.value = parseInt(width / 85);
+  visibleNumber.value = Math.max(1, Math.floor(width / 85));
 }
 
-function handleSelect(key, keyPath) {
+function handleSelect(key) {
+  const menu = routers.value.find(item => item.path === key && !item.hidden);
+  if (!menu) return
   currentIndex.value = key;
-  const route = routers.value.find(item => item.path === key);
-  if (isHttp(key)) {
+  if (isExternal(key)) {
     // http(s):// 路径新窗口打开
     window.open(key, "_blank");
-  } else if (!route || !route.children) {
-    // 没有子路由路径内部打开
-    const routeMenu = childrenMenus.value.find(item => item.path === key);
-    if (routeMenu && routeMenu.query) {
-      let query = JSON.parse(routeMenu.query);
-      router.push({ path: key, query: query });
-    } else {
-      router.push({ path: key });
-    }
-    appStore.toggleSideBarHide(true);
-  } else {
-    // 显示左侧联动菜单
-    activeRoutes(key);
+  } else if (permissionStore.selectNavigationGroup(key)) {
     appStore.toggleSideBarHide(false);
-  }
-}
-
-function activeRoutes(key) {
-  let routes = [];
-  if (childrenMenus.value && childrenMenus.value.length > 0) {
-    childrenMenus.value.map((item) => {
-      if (key == item.parentPath || (key == "index" && "" == item.path)) {
-        routes.push(item);
-      }
-    });
-  }
-  if(routes.length > 0) {
-    permissionStore.setSidebarRouters(routes);
   } else {
+    const query = typeof menu.query === 'string' ? JSON.parse(menu.query) : menu.query;
+    router.push(query ? { path: key, query } : { path: key });
     appStore.toggleSideBarHide(true);
   }
-  return routes;
 }
 
 onMounted(() => {

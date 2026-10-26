@@ -5,11 +5,12 @@ import 'nprogress/nprogress.css'
 import { getToken } from '@/utils/auth'
 import { isHttp } from '@/utils/validate'
 import {
-  getDefaultLoginPath,
+  canAccessApplicationPath,
   getLoginRedirect,
   isPortalLoginPath,
   isPortalProtectedPath,
-  isPublicAuthPath
+  isPublicAuthPath,
+  resolvePostLoginPath
 } from '@/utils/portal/auth'
 import { isRelogin } from '@/utils/request'
 import useUserStore from '@/store/modules/user'
@@ -48,7 +49,7 @@ router.beforeEach((to, from, next) => {
     if (to.path === '/login') {
       if (useUserStore().roles.length === 0) {
         loadCurrentUserRoutes().then(() => {
-          next({ path: getDefaultLoginPath(useUserStore()), replace: true })
+          next({ ...router.resolve(resolvePostLoginPath(useUserStore(), to.query.redirect)), replace: true })
           NProgress.done()
         }).catch(err => {
           useUserStore().logOut().then(() => {
@@ -58,7 +59,7 @@ router.beforeEach((to, from, next) => {
           })
         })
       } else {
-        next({ path: getDefaultLoginPath(useUserStore()), replace: true })
+        next({ ...router.resolve(resolvePostLoginPath(useUserStore(), to.query.redirect)), replace: true })
         NProgress.done()
       }
     } else if (isPortalLoginPath(to.path)) {
@@ -79,7 +80,8 @@ router.beforeEach((to, from, next) => {
           })
         })
       } else {
-        next()
+        // 用户只进入业务门户和本人账号设置；管理接口仍须独立执行后端权限校验。
+        next(canAccessApplicationPath(useUserStore(), to.path) ? undefined : { path: '/portal', replace: true })
       }
     }
   } else {

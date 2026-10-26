@@ -3,11 +3,11 @@ from redis import asyncio as aioredis
 from redis.exceptions import AuthenticationError, RedisError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
+from app.infrastructure.services.logging_support import logger
+from app.system.services.configuration import ConfigService
+from app.system.services.dictionary import DictDataService
 from config.database import AsyncSessionLocal
 from config.env import RedisConfig
-from module_admin.service.config_service import ConfigService
-from module_admin.service.dict_service import DictDataService
-from utils.log_util import logger
 
 
 class RedisUtil:

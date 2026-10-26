@@ -4,7 +4,7 @@
   --pipeline-blue-deep: #003f68;
   --pipeline-blue-soft: #eaf4fa;
   --pipeline-ink: #172b3d;
-  --pipeline-muted: #617181;
+  --pipeline-muted: #526277;
   --pipeline-rule: #d9e2e9;
   --pipeline-surface: #ffffff;
   --pipeline-canvas: #f4f7f9;
@@ -18,15 +18,11 @@
   --el-color-primary-light-9: #edf6fb;
   position: relative;
   min-height: calc(100vh - 84px);
-  max-width: 1260px;
+  max-width: 1600px;
   margin: 0 auto;
-  overflow: hidden;
-  padding: 30px 34px 52px;
-  background:
-    linear-gradient(90deg, rgba(0, 84, 135, 0.025) 1px, transparent 1px),
-    linear-gradient(rgba(0, 84, 135, 0.018) 1px, transparent 1px),
-    var(--pipeline-canvas);
-  background-size: 28px 28px;
+  min-width: 0;
+  padding: 24px 28px 40px;
+  background: var(--pipeline-canvas);
   color: var(--pipeline-ink);
   font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
@@ -34,20 +30,20 @@
 .pipeline-page .page-heading {
   position: relative;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 24px;
-  min-height: 112px;
-  margin: -30px -34px 26px;
-  padding: 30px 34px 22px;
+  min-height: 84px;
+  margin: 0 0 24px;
+  padding: 0 0 20px;
   border-bottom: 1px solid var(--pipeline-rule);
-  background: rgba(255, 255, 255, 0.94);
+  background: transparent;
 }
 
 .pipeline-page .page-heading::before {
   position: absolute;
   bottom: -1px;
-  left: 34px;
+  left: 0;
   width: 78px;
   height: 3px;
   background: var(--pipeline-blue);
@@ -57,7 +53,7 @@
 .pipeline-page .eyebrow {
   margin: 0 0 8px;
   color: var(--pipeline-blue);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.13em;
 }
@@ -65,9 +61,9 @@
 .pipeline-page .page-heading h1 {
   margin: 0;
   color: var(--pipeline-ink);
-  font-family: "Noto Serif SC", "Songti SC", SimSun, serif;
+  font-family: inherit;
   font-size: clamp(25px, 2.4vw, 31px);
-  font-weight: 800;
+  font-weight: 650;
   letter-spacing: 0.02em;
   line-height: 1.3;
 }
@@ -87,9 +83,9 @@
 .pipeline-page .action-card,
 .pipeline-page .stat-card {
   border: 1px solid var(--pipeline-rule);
-  border-radius: 3px;
+  border-radius: 10px;
   background: var(--pipeline-surface);
-  box-shadow: 0 10px 24px rgba(19, 53, 76, 0.035);
+  box-shadow: none;
 }
 
 .pipeline-page .el-card__header {
@@ -99,7 +95,7 @@
   padding: 14px 20px;
   border-bottom: 1px solid #e4eaee;
   color: var(--pipeline-ink);
-  font-family: "Noto Serif SC", "Songti SC", SimSun, serif;
+  font-family: inherit;
   font-size: 16px;
   font-weight: 700;
 }
@@ -117,8 +113,8 @@
 }
 
 .pipeline-page .el-button {
-  min-height: 34px;
-  border-radius: 2px;
+  min-height: 40px;
+  border-radius: 6px;
   font-weight: 600;
   transition: border-color 180ms ease, color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
 }
@@ -162,7 +158,7 @@
 .pipeline-page .el-table th.el-table__cell {
   height: 48px;
   color: #3a566a;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.06em;
 }
@@ -233,12 +229,12 @@ html.dark .pipeline-page .el-table {
     align-items: flex-start;
     flex-direction: column;
     min-height: auto;
-    margin: -22px -16px 20px;
-    padding: 22px 16px 18px;
+    margin: 0 0 20px;
+    padding: 0 0 18px;
   }
 
   .pipeline-page .page-heading::before {
-    left: 16px;
+    left: 0;
   }
 
   .pipeline-page .page-heading > .el-button,
@@ -335,7 +331,7 @@ html.dark .pipeline-page .el-table {
 .brand-sub {
   margin-top: 3px;
   color: rgba(255,255,255,.72);
-  font-size: 11px;
+  font-size: 13px;
   letter-spacing: .08em;
 }
 
@@ -365,7 +361,7 @@ html.dark .pipeline-page .el-table {
   gap: 8px;
   margin: 0 24px 0 22px;
   color: rgba(255,255,255,.58);
-  font-size: 12px;
+  font-size: 13px;
   white-space: nowrap;
 }
 
@@ -545,7 +541,7 @@ html.dark .pipeline-page .el-table {
   border-radius: 999px;
   background: rgba(255, 255, 255, .86);
   color: #0f5f92;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
   letter-spacing: .12em;
 }
@@ -657,7 +653,7 @@ html.dark .pipeline-page .el-table {
 
 .home-action-grid span {
   color: #0f72a8;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
   letter-spacing: .12em;
 }
@@ -703,7 +699,7 @@ html.dark .pipeline-page .el-table {
 
 .mission-head span {
   color: #0f72a8;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
   letter-spacing: .12em;
 }
@@ -777,7 +773,7 @@ html.dark .pipeline-page .el-table {
 .home-insight-card span {
   display: block;
   color: #6e8192;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .home-insight-card strong {
@@ -792,7 +788,7 @@ html.dark .pipeline-page .el-table {
   display: block;
   margin-top: 12px;
   color: #6e8192;
-  font-size: 12px;
+  font-size: 13px;
   font-style: normal;
 }
 
@@ -830,7 +826,7 @@ html.dark .pipeline-page .el-table {
 
 .platform-panel-head span {
   color: #68798a;
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: .08em;
 }
 
@@ -857,7 +853,7 @@ html.dark .pipeline-page .el-table {
 .flow-order,
 .topic-rank-platform {
   color: #7992a5;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -898,7 +894,7 @@ html.dark .pipeline-page .el-table {
 .topic-row-platform small,
 .review-row-platform small {
   color: #6f7f91;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .news-view,
@@ -966,7 +962,7 @@ html.dark .pipeline-page .el-table {
 .news-kicker {
   margin: 0 0 18px;
   color: rgba(255,255,255,.78);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: .06em;
 }
@@ -1549,7 +1545,7 @@ html.dark .pipeline-page .el-table {
   border: 1px solid #c6ddeb;
   background: #dcecf7;
   color: #174c74;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 560;
 }
 
@@ -1809,7 +1805,7 @@ html.dark .pipeline-page .el-table {
   display: block;
   margin: 7px 0 0;
   color: #68798a;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.55;
 }
 
@@ -2181,7 +2177,7 @@ html.dark .pipeline-page .el-table {
 .related-meta {
   margin-top: 7px;
   color: #7a8796;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .pipeline-report-shell .report-section-nav {
@@ -2234,7 +2230,7 @@ html.dark .pipeline-page .el-table {
 
 .lead-caption {
   color: #1d75aa;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: .08em;
 }
@@ -2283,7 +2279,7 @@ html.dark .pipeline-page .el-table {
 .report-highlights em {
   display: block;
   color: #6f7f91;
-  font-size: 12px;
+  font-size: 13px;
   font-style: normal;
 }
 
@@ -2351,7 +2347,7 @@ html.dark .pipeline-page .el-table {
 .index-copy em {
   margin-top: 4px;
   color: #7a8796;
-  font-size: 12px;
+  font-size: 13px;
   font-style: normal;
 }
 
@@ -2603,7 +2599,7 @@ html.dark .pipeline-page .el-table {
   display: block;
   margin-top: 4px;
   color: rgba(255, 255, 255, .68);
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: .08em;
 }
 
@@ -2641,7 +2637,7 @@ html.dark .pipeline-page .el-table {
   display: block;
   margin-top: 5px;
   color: rgba(255, 255, 255, .58);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .portal-user-card {
@@ -2656,7 +2652,7 @@ html.dark .pipeline-page .el-table {
 .portal-user-card > span {
   display: block;
   color: rgba(255, 255, 255, .6);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .portal-user-card strong {
@@ -2710,7 +2706,7 @@ html.dark .pipeline-page .el-table {
 .portal-section-head p {
   margin: 0 0 8px;
   color: #1d75aa;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
   letter-spacing: .12em;
 }
@@ -2823,7 +2819,7 @@ html.dark .pipeline-page .el-table {
 .portal-report-link span,
 .portal-report-index button span {
   color: #6d7c8b;
-  font-size: 12px;
+  font-size: 13px;
   font-style: normal;
 }
 
@@ -2959,7 +2955,7 @@ html.dark .pipeline-page .el-table {
   border-radius: 999px;
   background: #e8f2f8;
   color: #245d87;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -3612,7 +3608,7 @@ html.dark .pipeline-page .el-table {
   border-radius: 4px;
   background: rgba(45, 155, 234, .08);
   color: #1d66a6;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 800;
   letter-spacing: 0;
 }
@@ -3713,7 +3709,7 @@ html.dark .pipeline-page .el-table {
 .pipeline-user-portal .news-stat-card em {
   display: block;
   color: var(--portal-calm-muted);
-  font-size: 12px;
+  font-size: 13px;
   font-style: normal;
 }
 
@@ -3833,7 +3829,7 @@ html.dark .pipeline-page .el-table {
 .pipeline-user-portal .news-track-list span {
   margin-top: 6px;
   color: var(--portal-calm-muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .pipeline-user-portal .news-item {
@@ -4144,7 +4140,7 @@ html.dark .pipeline-page .el-table {
   border-radius: 4px;
   background: rgba(45, 155, 234, .08);
   color: #1d66a6;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 800;
   line-height: 1.2;
 }
@@ -4183,7 +4179,7 @@ html.dark .pipeline-page .el-table {
 .pipeline-user-portal .article-review-grid span {
   display: block;
   color: var(--portal-calm-muted);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.3;
 }
 
@@ -4773,7 +4769,7 @@ html.dark .pipeline-page .el-table {
   display: block;
   margin: 0 8px 8px;
   color: var(--portal-calm-muted);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.4;
 }
 
@@ -4817,7 +4813,7 @@ html.dark .pipeline-page .el-table {
   display: block;
   margin: 0 0 8px;
   color: var(--portal-calm-muted);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.4;
 }
 
@@ -4829,7 +4825,7 @@ html.dark .pipeline-page .el-table {
   gap: 10px;
   border-bottom: 1px solid #eef2f7;
   color: #475569;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .pipeline-user-portal .news-side-stat:last-child {
@@ -4991,7 +4987,7 @@ html.dark .pipeline-page .el-table {
   border-bottom: 1px solid #edf2f7;
   background: #f8fafc;
   color: #475569;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .pipeline-user-portal .source {
@@ -5051,7 +5047,7 @@ html.dark .pipeline-page .el-table {
   border-radius: 4px;
   background: #ffffff;
   color: #64748b;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .pipeline-user-portal .news-feed-card h3 {
@@ -5086,7 +5082,7 @@ html.dark .pipeline-page .el-table {
   border-radius: 4px;
   background: rgba(16, 185, 129, .10);
   color: #047857;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.3;
 }
 
@@ -5127,7 +5123,7 @@ html.dark .pipeline-page .el-table {
   color: #64748b;
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   transition: background-color .16s ease, border-color .16s ease, color .16s ease;
 }
 

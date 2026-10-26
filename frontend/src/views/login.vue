@@ -11,15 +11,6 @@
             <img class="calm-brand-logo" :src="PIPECHINA_LOGO_URL" :data-source="PIPECHINA_LOGO_SOURCE_URL" alt="国家管网标识" />
           </button>
 
-          <button
-            v-for="item in portalDestinations"
-            :key="item.path"
-            type="button"
-            class="calm-nav-link"
-            @click="selectDestination(item.path)"
-          >
-            {{ item.title }}
-          </button>
         </div>
 
       </nav>
@@ -33,9 +24,6 @@
         <div class="calm-start-actions">
           <button class="calm-start-primary" type="button" @click="startTrial">
             进入平台
-          </button>
-          <button class="calm-start-secondary" type="button" @click="revealLogin">
-            登录账户
           </button>
         </div>
 
@@ -145,7 +133,8 @@
                       </template>
                     </el-input>
                     <button type="button" class="calm-code-img" aria-label="刷新验证码" @click="getCode">
-                      <img :src="codeUrl" alt="" />
+                      <img v-if="codeUrl" :src="codeUrl" alt="验证码图片" @error="handleCodeImageError" />
+                      <span v-else class="calm-code-error">验证码加载失败<br />点击刷新</span>
                     </button>
                   </div>
                 </el-form-item>
@@ -156,7 +145,7 @@
                 </div>
 
                 <button class="calm-submit" type="button" :disabled="loading" @click.prevent="handleLogin">
-                  <span>{{ loading ? '验证中...' : '登 录' }}</span>
+                  <span>{{ loading ? '验证中...' : (loginAuthenticated ? '重试进入' : '登 录') }}</span>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
                     <path d="M5 12h14" />
                     <path d="m13 6 6 6-6 6" />
@@ -200,6 +189,7 @@ const loginCardRef = ref()
 const loginTrigger = ref(null)
 const bodyOverflowBeforeModal = ref('')
 const loading = ref(false)
+const loginAuthenticated = ref(false)
 const loginVisible = ref(false)
 const captchaEnabled = ref(true)
 const register = ref(false)
@@ -287,7 +277,10 @@ function startTrial() {
 }
 
 function revealLogin() {
-  if (!loginVisible.value) loginTrigger.value = document.activeElement
+  if (!loginVisible.value) {
+    loginTrigger.value = document.activeElement
+    getCode()
+  }
   loginVisible.value = true
 }
 
@@ -323,8 +316,8 @@ function handleDialogKeydown(event) {
 }
 
 function handleLogin() {
-  loginRef.value.validate(valid => {
-    if (!valid) return
+  if (loading.value) return
+  const submit = () => {
     loading.value = true
     Cookies.remove('password')
     if (loginForm.value.rememberMe) {
@@ -335,7 +328,9 @@ function handleLogin() {
       Cookies.remove('rememberMe')
     }
 
-    userStore.login(loginForm.value).then(async () => {
+    const authentication = loginAuthenticated.value ? Promise.resolve() : userStore.login(loginForm.value)
+    authentication.then(async () => {
+      loginAuthenticated.value = true
       const query = route.query || {}
       const otherQueryParams = Object.keys(query).reduce((acc, cur) => {
         if (cur !== 'redirect') {
@@ -344,16 +339,27 @@ function handleLogin() {
         return acc
       }, {})
       const targetPath = await resolvePostLoginTarget(redirect.value)
-      router.push({ path: targetPath, query: otherQueryParams })
-    }).catch(() => {
-      ElMessage.error('账号、密码或验证码不正确')
-      loginForm.value.password = ''
-      loginForm.value.code = ''
-      if (captchaEnabled.value) getCode()
+      const destination = router.resolve(targetPath)
+      await router.push({ path: destination.path, query: { ...destination.query, ...otherQueryParams }, hash: destination.hash })
+    }).catch(error => {
+      if (loginAuthenticated.value) {
+        ElMessage.error('登录成功，但用户信息或菜单加载失败，请重试')
+      } else {
+        ElMessage.error(error?.message || '登录失败，请检查账号、密码或验证码')
+        loginForm.value.password = ''
+        loginForm.value.code = ''
+        if (captchaEnabled.value) getCode()
+      }
     }).finally(() => {
       loading.value = false
     })
-  })
+  }
+  // 登录后的加载失败只重试用户信息和菜单，不重复提交已消费的验证码。
+  if (loginAuthenticated.value) {
+    submit()
+  } else {
+    loginRef.value.validate(valid => { if (valid) submit() })
+  }
 }
 
 async function resolvePostLoginTarget(requestedPath) {
@@ -369,17 +375,25 @@ async function resolvePostLoginTarget(requestedPath) {
 }
 
 function getCode() {
+  codeUrl.value = ''
+  loginForm.value.code = ''
+  loginForm.value.uuid = ''
   getCodeImg().then(res => {
     captchaEnabled.value = res.captchaEnabled === undefined ? true : res.captchaEnabled
     register.value = res.registerEnabled === undefined ? false : res.registerEnabled
     if (captchaEnabled.value) {
-      codeUrl.value = 'data:image/gif;base64,' + res.img
+      codeUrl.value = 'data:image/png;base64,' + res.img
       loginForm.value.uuid = res.uuid
     }
   }).catch(() => {
-    captchaEnabled.value = false
+    captchaEnabled.value = true
     ElMessage.warning('验证码暂时无法加载，请稍后重试')
   })
+}
+
+function handleCodeImageError() {
+  codeUrl.value = ''
+  loginForm.value.uuid = ''
 }
 
 function getCookie() {
@@ -792,6 +806,18 @@ onBeforeUnmount(() => {
     height: 100%;
     object-fit: cover;
   }
+}
+
+.calm-code-error {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  color: #9a6a32;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: center;
 }
 
 .calm-form-options {

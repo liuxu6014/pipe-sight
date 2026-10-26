@@ -148,7 +148,8 @@ service.interceptors.response.use(async res => {
     const response = error.response
     const responseStatus = response?.status
     const responseCode = response?.data?.code
-    const responseMsg = response?.data?.msg
+    const detail = response?.data?.detail
+    const responseMsg = response?.data?.msg || (typeof detail === 'string' ? detail : Array.isArray(detail) ? detail.map(item => item.msg).filter(Boolean).join('；') : '')
     if (responseMsg) {
       const messageType = responseStatus === 429 || responseCode === 429 ? 'warning' : 'error'
       ElMessage({ message: responseMsg, type: messageType, duration: 5 * 1000 })

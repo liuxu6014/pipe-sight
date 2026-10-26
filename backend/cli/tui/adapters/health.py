@@ -1,10 +1,11 @@
 from dataclasses import dataclass, field
 from typing import Any
 
+from cli.output import SHELL_TEXT_FORMATTER
+from cli.runtime.nested_cli import NESTED_CLI_SUPPORT
 from cli.tui.copy import TUI_COPY
 from cli.tui.diagnostics import TUI_DIAGNOSTIC_SERVICE
 from cli.tui.keymaps import TUI_KEYMAP_REGISTRY
-from cli.utils import NESTED_CLI_SUPPORT, SHELL_TEXT_FORMATTER
 
 DEPENDENCY_CHECK_TOTAL = 3
 DASHBOARD_PANEL_MAX_LINES = 8
@@ -541,7 +542,6 @@ class DashboardPanelBuilder:
                 '## 次级入口',
                 f'[{TUI_KEYMAP_REGISTRY.get_navigation_shortcut("configs").upper()}] 参数配置 · {TUI_DIAGNOSTIC_SERVICE.build_configs_focus_hint()}',
                 '## 扩展入口',
-                f'[{TUI_KEYMAP_REGISTRY.get_navigation_shortcut("gen").upper()}] 代码生成 · {TUI_DIAGNOSTIC_SERVICE.build_gen_focus_hint()}',
                 f'[{TUI_KEYMAP_REGISTRY.get_navigation_shortcut("app").upper()}] 应用 · 配置摘要 / 路由状态',
             ]
 

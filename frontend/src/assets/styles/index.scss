@@ -6,6 +6,7 @@
 @use './ruoyi.scss';
 @use './pipeline.scss';
 @use './portal.scss';
+@use './workspace.scss';
 
 body {
   height: 100%;
@@ -99,7 +100,7 @@ div:focus {
   }
 }
 
-aside {
+.legacy-aside {
   background: #eef1f6;
   padding: 8px 24px;
   margin-bottom: 20px;

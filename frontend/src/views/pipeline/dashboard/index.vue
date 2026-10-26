@@ -2,9 +2,9 @@
   <div class="pipeline-page pipeline-dashboard">
     <section class="page-heading">
       <div>
-        <p class="eyebrow">后台管理 · 管网项目</p>
-        <h1>国家管网科技情报与科研辅助平台工作台</h1>
-        <p class="summary">面向管理员汇总采集、研判、审核与报告生成状态；用户端展示入口已移至 /portal。</p>
+        <p class="eyebrow">管理端</p>
+        <h1>管理首页</h1>
+        <p class="summary">查看当前业务状态，定位待处理事项。汇总不是运行健康或行业趋势结论。</p>
       </div>
       <div class="heading-actions">
         <el-button plain :icon="Monitor" @click="$router.push('/portal')">查看用户端</el-button>
@@ -13,18 +13,25 @@
       </div>
     </section>
 
+    <el-alert v-if="dashboardError" type="warning" show-icon :closable="false" class="dashboard-load-error">
+      <template #title>{{ dashboardError }}</template>
+      <template #default><button type="button" class="dashboard-retry" @click="loadDashboard">重新加载</button></template>
+    </el-alert>
+
+    <template v-else>
+
     <el-row :gutter="16" class="metric-grid">
       <el-col v-for="item in dashboard.metrics" :key="item.label" :xs="24" :sm="12" :lg="6">
         <el-card shadow="never" class="metric-card">
           <span>{{ item.label }}</span>
           <strong>{{ item.value }}{{ item.unit }}</strong>
-          <em>{{ item.trend === 'up' ? '持续提升' : '稳定运行' }}</em>
+          <em>当前记录数量 · 非趋势指标</em>
         </el-card>
       </el-col>
     </el-row>
 
-    <section class="management-entry-grid" aria-label="管理功能入口">
-      <button v-for="item in adminEntries" :key="item.path" type="button" @click="$router.push(item.path)">
+    <section class="management-entry-grid ws-card-grid" aria-label="管理功能入口">
+          <button v-for="item in visibleAdminEntries" :key="item.path" type="button" @click="$router.push(item.path)">
         <span><component :is="item.icon" /></span>
         <span><strong>{{ item.title }}</strong><small>{{ item.description }}</small></span>
         <ArrowRight />
@@ -36,8 +43,8 @@
         <el-card shadow="never" class="panel-card">
           <template #header>
             <div class="card-header">
-              <span>采集处理链路</span>
-              <el-tag type="primary" effect="plain">后台监控</el-tag>
+              <span>最近采集任务</span>
+              <el-tag type="info" effect="plain">任务进度，不代表数据审核通过</el-tag>
             </div>
           </template>
           <div v-for="item in dashboard.collect_status" :key="item.name" class="status-row">
@@ -47,62 +54,47 @@
             </div>
             <el-progress :percentage="item.value" :status="item.status === 'warning' ? 'warning' : undefined" />
           </div>
+          <el-empty v-if="!dashboard.collect_status?.length" description="当前没有采集运行记录" :image-size="64" />
         </el-card>
       </el-col>
 
       <el-col :xs="24" :lg="10">
         <el-card shadow="never" class="panel-card">
-          <template #header>热点主题</template>
+          <template #header>已展示内容的标签计数</template>
           <div v-for="topic in dashboard.hot_topics" :key="topic.name" class="topic-row">
             <strong>{{ topic.name }}</strong>
             <span>{{ topic.count }} 条</span>
-            <el-progress :percentage="topic.heat" :show-text="false" />
           </div>
+          <p class="dashboard-scope-note">按当前可展示内容的标签计数，不代表技术热度或行业趋势。</p>
+          <el-empty v-if="!dashboard.hot_topics?.length" description="暂无可统计的已展示标签" :image-size="64" />
         </el-card>
       </el-col>
     </el-row>
 
-    <el-card shadow="never" class="panel-card">
-      <template #header>
-        <div class="card-header">
-          <span>待审核报告</span>
-          <el-button text type="primary" @click="$router.push('/pipeline/report')">进入报告管理</el-button>
-        </div>
-      </template>
-      <el-table :data="dashboard.pending_reviews" border>
-        <el-table-column prop="title" label="报告名称" min-width="220" show-overflow-tooltip />
-        <el-table-column prop="type" label="类型" width="150" />
-        <el-table-column prop="owner" label="责任组" width="150" />
-        <el-table-column prop="coverage" label="覆盖资讯" width="120" align="right" />
-        <el-table-column prop="status" label="状态" width="120">
-          <template #default="{ row }">
-            <el-tag :type="statusType(row.status)" effect="light">{{ statusText(row.status) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="updated_at" label="更新时间" width="180" />
-      </el-table>
-    </el-card>
+    </template>
   </div>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { ArrowRight, Collection, Connection, DataAnalysis, Document, EditPen, MagicStick, Monitor, Refresh } from '@element-plus/icons-vue'
+import { ArrowRight, Collection, Connection, DataAnalysis, Document, EditPen, MagicStick, Monitor, Refresh, Stamp } from '@element-plus/icons-vue'
 import { getPipelineDashboard } from '@/api/pipeline/intelligence'
+import { checkPermi } from '@/utils/permission'
 
 defineOptions({ name: 'PipelineDashboard' })
 
 const loading = ref(false)
-const dashboard = ref({ metrics: [], collect_status: [], hot_topics: [], pending_reviews: [] })
+const dashboardError = ref('')
+const dashboard = ref({ metrics: [], collect_status: [], hot_topics: [] })
 const adminEntries = [
-  { title: '数据源管理', description: '维护网站、公众号和论文来源', path: '/pipeline/source', icon: Connection },
-  { title: '采集任务', description: '调度采集、清洗和解析任务', path: '/pipeline/task', icon: DataAnalysis },
-  { title: '数据治理', description: '处理重复、缺失和质量异常', path: '/pipeline/governance', icon: Collection },
-  { title: '模板管理', description: '维护报告模板和版本结构', path: '/pipeline/template', icon: Document },
-  { title: '模型与 Prompt', description: '配置模型路由和提示词版本', path: '/pipeline/model', icon: MagicStick },
-  { title: '报告与导出', description: '审核报告并跟踪导出任务', path: '/pipeline/report', icon: EditPen }
+  { title: '数据源管理', description: '维护网站、公众号和论文来源', path: '/pipeline/source', permission: 'pipeline:source:list', icon: Connection },
+  { title: '采集任务', description: '调度采集、清洗和解析任务', path: '/pipeline/task', permission: 'pipeline:task:list', icon: DataAnalysis },
+  { title: '模板管理', description: '维护提示词、章节和生成模型', path: '/pipeline/template', permission: 'pipeline:template:list', icon: Document },
+  { title: '模型与类别提示词', description: '配置模型能力、类别及提示词', path: '/pipeline/model', permission: 'ai:model:list', icon: MagicStick },
+  { title: '报告与导出', description: '编辑报告并跟踪导出任务', path: '/pipeline/report', permission: 'pipeline:report:list', icon: EditPen }
 ]
+const visibleAdminEntries = computed(() => adminEntries.filter(item => checkPermi([item.permission])))
 
 function statusType(status) {
   return { running: 'primary', success: 'success', warning: 'warning', reviewing: 'warning', draft: 'info', planned: 'primary' }[status] || 'info'
@@ -114,10 +106,13 @@ function statusText(status) {
 
 async function loadDashboard() {
   loading.value = true
+  dashboardError.value = ''
   try {
     const res = await getPipelineDashboard()
     dashboard.value = res.data
   } catch (error) {
+    dashboard.value = { metrics: [], collect_status: [], hot_topics: [] }
+    dashboardError.value = error?.msg || '工作台数据暂时无法加载，请检查服务后重试'
     ElMessage.warning('暂时无法获取管网情报工作台数据')
   } finally {
     loading.value = false
@@ -136,6 +131,19 @@ onMounted(loadDashboard)
 
 .metric-grid {
   margin-bottom: 2px;
+}
+
+.dashboard-load-error {
+  margin-bottom: 18px;
+}
+
+.dashboard-retry {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #2764e7;
+  cursor: pointer;
+  font-size: 13px;
 }
 
 .metric-card {
@@ -213,7 +221,7 @@ onMounted(loadDashboard)
   margin-top: 4px;
   overflow: hidden;
   color: #698092;
-  font-size: 10px;
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

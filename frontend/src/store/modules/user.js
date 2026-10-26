@@ -4,6 +4,7 @@ import { login, logout, getInfo } from '@/api/login'
 import { getToken, setToken, removeToken } from '@/utils/auth'
 import { isHttp, isEmpty } from "@/utils/validate"
 import defAva from '@/assets/images/profile.jpg'
+import { endSession } from '@/utils/endSession'
 
 const useUserStore = defineStore(
   'user',
@@ -73,8 +74,7 @@ const useUserStore = defineStore(
       },
       // 退出系统
       logOut() {
-        return new Promise((resolve, reject) => {
-          logout(this.token).then(() => {
+        return endSession(() => logout(this.token), async () => {
             this.token = ''
             this.id = ''
             this.name = ''
@@ -83,11 +83,7 @@ const useUserStore = defineStore(
             this.roles = []
             this.permissions = []
             removeToken()
-            import('./portal').then(({ default: usePortalStore }) => usePortalStore().reset()).catch(() => {})
-            resolve()
-          }).catch(error => {
-            reject(error)
-          })
+            await import('./portal').then(({ default: usePortalStore }) => usePortalStore().reset()).catch(() => {})
         })
       }
     }

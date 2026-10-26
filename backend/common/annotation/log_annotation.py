@@ -16,16 +16,16 @@ from starlette.status import HTTP_200_OK
 from typing_extensions import ParamSpec
 from user_agents import parse
 
-from common.context import RequestContext
-from common.enums import BusinessType
+from app.infrastructure.schemas.log import LogininforModel, OperLogModel
+from app.infrastructure.services.log import LogQueueService
+from app.infrastructure.services.logging_support import LogSanitizer, logger
+from common.enums.audit import BusinessType
+from common.http.client_ip import ClientIpResolver
+from common.http.context import RequestContext
+from common.http.dependencies import RouteDependencyGuard
+from common.http.responses import ResponseUtil
 from config.env import AppConfig
 from exceptions.exception import LoginException, ServiceException, ServiceWarning
-from module_admin.entity.vo.log_vo import LogininforModel, OperLogModel
-from module_admin.service.log_service import LogQueueService
-from utils.client_ip_util import ClientIPUtil
-from utils.dependency_util import DependencyUtil
-from utils.log_util import LogSanitizer, logger
-from utils.response_util import ResponseUtil
 
 P = ParamSpec('P')
 R = TypeVar('R')
@@ -160,7 +160,7 @@ class Log:
             # 获取上下文信息
             request_name_list = get_function_parameters_name_by_type(func, Request)
             request = get_function_parameters_value_by_name(func, request_name_list[0], *args, **kwargs)
-            DependencyUtil.check_exclude_routes(request, err_msg='当前路由不在认证规则内，不可使用Log装饰器')
+            RouteDependencyGuard.check_exclude_routes(request, err_msg='当前路由不在认证规则内，不可使用Log装饰器')
             request_method = request.method
             user_agent = request.headers.get('User-Agent') or ''
             # 获取操作类型
@@ -168,7 +168,7 @@ class Log:
             # 获取请求的url
             oper_url = request.url.path
             # 获取请求ip
-            oper_ip = ClientIPUtil.get_client_ip(request)
+            oper_ip = ClientIpResolver.get_client_ip(request)
             # 获取请求ip归属区域
             oper_location = await self._get_oper_location(oper_ip)
             # 获取请求参数
@@ -234,7 +234,9 @@ class Log:
                         }
                     )
 
-                    await LogQueueService.enqueue_login_log(request, LogininforModel(**login_log), func_path)
+                    await LogQueueService.enqueue_login_log(
+                        request.app.state.redis, LogininforModel(**login_log), func_path
+                    )
             else:
                 current_user = RequestContext.get_current_user()
                 oper_name = current_user.user.user_name
@@ -255,7 +257,7 @@ class Log:
                     operTime=oper_time,
                     costTime=int(cost_time),
                 )
-                await LogQueueService.enqueue_operation_log(request, operation_log, func_path)
+                await LogQueueService.enqueue_operation_log(request.app.state.redis, operation_log, func_path)
 
             return result
 

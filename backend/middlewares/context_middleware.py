@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
 
-from common.context import RequestContext
+from common.http.context import RequestContext
 
 
 class ContextCleanupMiddleware(BaseHTTPMiddleware):

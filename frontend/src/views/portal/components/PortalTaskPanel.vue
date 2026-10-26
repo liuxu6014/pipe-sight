@@ -2,7 +2,7 @@
   <el-drawer v-model="store.taskPanelVisible" title="任务进度" size="420px" class="ps-task-drawer">
     <div class="ps-task-panel-head">
       <p>{{ store.runningTaskCount }} 个任务正在处理</p>
-      <el-button text type="primary" @click="router.push('/portal/me/tasks')">查看全部</el-button>
+      <el-button text type="primary" @click="router.push('/portal/me/reports')">查看全部</el-button>
     </div>
     <div class="ps-task-list">
       <button v-for="task in store.tasks" :key="task.id" type="button" class="ps-task-row" @click="openTask(task)">

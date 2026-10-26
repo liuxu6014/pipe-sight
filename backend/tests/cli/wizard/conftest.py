@@ -49,16 +49,6 @@ def db_upgrade_flow(load_module: Callable[[str], ModuleType]) -> ModuleType:
 
 
 @pytest.fixture
-def gen_export_flow(load_module: Callable[[str], ModuleType]) -> ModuleType:
-    return load_module('cli.wizard.flows.gen_export')
-
-
-@pytest.fixture
-def gen_import_flow(load_module: Callable[[str], ModuleType]) -> ModuleType:
-    return load_module('cli.wizard.flows.gen_import')
-
-
-@pytest.fixture
 def prod_check_flow(load_module: Callable[[str], ModuleType]) -> ModuleType:
     return load_module('cli.wizard.flows.prod_check')
 

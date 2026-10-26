@@ -1,0 +1,469 @@
+from collections.abc import Sequence
+from datetime import datetime, time
+from typing import Any
+
+from sqlalchemy import ColumnElement, and_, delete, desc, or_, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.infrastructure.services.pagination import PaginationService
+from app.infrastructure.services.persistence_mapping import PersistenceMapping
+from app.system.models.menu import SysMenu
+from app.system.models.role import SysRole, SysRoleMenu
+from app.system.models.user import SysUser, SysUserRole
+from app.system.schemas.user import (
+    UserModel,
+    UserPageQueryModel,
+    UserRoleModel,
+    UserRolePageQueryModel,
+    UserRoleQueryModel,
+)
+from common.http.schemas import PageModel
+
+
+class UserDao:
+    """
+    用户管理模块数据库操作层
+    """
+
+    @classmethod
+    async def get_user_by_name(cls, db: AsyncSession, user_name: str) -> SysUser | None:
+        """
+        根据用户名获取用户信息
+
+        :param db: orm对象
+        :param user_name: 用户名
+        :return: 当前用户名的用户信息对象
+        """
+        query_user_info = (
+            (
+                await db.execute(
+                    select(SysUser)
+                    .where(SysUser.status == '0', SysUser.del_flag == '0', SysUser.username == user_name)
+                    .order_by(desc(SysUser.created_at))
+                    .distinct()
+                )
+            )
+            .scalars()
+            .first()
+        )
+
+        return query_user_info
+
+    @classmethod
+    async def get_user_by_info(cls, db: AsyncSession, user: UserModel) -> SysUser | None:
+        """
+        根据用户参数获取用户信息
+
+        :param db: orm对象
+        :param user: 用户参数
+        :return: 当前用户参数的用户信息对象
+        """
+        query_user_info = (
+            (
+                await db.execute(
+                    select(SysUser)
+                    .where(
+                        SysUser.username == user.user_name if user.user_name else True,
+                        SysUser.phone == user.phonenumber if user.phonenumber else True,
+                        SysUser.email == user.email if user.email else True,
+                    )
+                    .order_by(desc(SysUser.created_at))
+                    .distinct()
+                )
+            )
+            .scalars()
+            .first()
+        )
+
+        return query_user_info
+
+    @classmethod
+    async def get_user_by_id(cls, db: AsyncSession, user_id: int) -> dict[str, Any]:
+        """
+        根据user_id获取用户信息
+
+        :param db: orm对象
+        :param user_id: 用户id
+        :return: 当前user_id的用户信息对象
+        """
+        query_user_basic_info = (
+            (
+                await db.execute(
+                    select(SysUser)
+                    .where(SysUser.status == '0', SysUser.del_flag == '0', SysUser.id == user_id)
+                    .distinct()
+                )
+            )
+            .scalars()
+            .first()
+        )
+        query_user_role_info = (
+            (
+                await db.execute(
+                    select(SysRole)
+                    .select_from(SysUser)
+                    .where(SysUser.status == '0', SysUser.del_flag == '0', SysUser.id == user_id)
+                    .join(SysUserRole, SysUser.id == SysUserRole.user_id, isouter=True)
+                    .join(
+                        SysRole,
+                        and_(SysUserRole.role_id == SysRole.id, SysRole.status == '0', SysRole.del_flag == '0'),
+                    )
+                    .distinct()
+                )
+            )
+            .scalars()
+            .all()
+        )
+        role_id_list = [item.id for item in query_user_role_info]
+        if 1 in role_id_list:
+            query_user_menu_info = (
+                (await db.execute(select(SysMenu).where(SysMenu.status == '0').distinct())).scalars().all()
+            )
+        else:
+            query_user_menu_info = (
+                (
+                    await db.execute(
+                        select(SysMenu)
+                        .select_from(SysUser)
+                        .where(SysUser.status == '0', SysUser.del_flag == '0', SysUser.id == user_id)
+                        .join(SysUserRole, SysUser.id == SysUserRole.user_id, isouter=True)
+                        .join(
+                            SysRole,
+                            and_(SysUserRole.role_id == SysRole.id, SysRole.status == '0', SysRole.del_flag == '0'),
+                            isouter=True,
+                        )
+                        .join(SysRoleMenu, SysRole.id == SysRoleMenu.role_id, isouter=True)
+                        .join(SysMenu, and_(SysRoleMenu.menu_id == SysMenu.id, SysMenu.status == '0'))
+                        .order_by(SysMenu.sort_order)
+                        .distinct()
+                    )
+                )
+                .scalars()
+                .all()
+            )
+
+        results = {
+            'user_basic_info': query_user_basic_info,
+            'user_role_info': query_user_role_info,
+            'user_menu_info': query_user_menu_info,
+        }
+
+        return results
+
+    @classmethod
+    async def get_user_detail_by_id(cls, db: AsyncSession, user_id: int) -> dict[str, Any]:
+        """
+        根据user_id获取用户详细信息
+
+        :param db: orm对象
+        :param user_id: 用户id
+        :return: 当前user_id的用户信息对象
+        """
+        query_user_basic_info = (
+            (await db.execute(select(SysUser).where(SysUser.del_flag == '0', SysUser.id == user_id).distinct()))
+            .scalars()
+            .first()
+        )
+        query_user_role_info = (
+            (
+                await db.execute(
+                    select(SysRole)
+                    .select_from(SysUser)
+                    .where(SysUser.del_flag == '0', SysUser.id == user_id)
+                    .join(SysUserRole, SysUser.id == SysUserRole.user_id, isouter=True)
+                    .join(
+                        SysRole,
+                        and_(SysUserRole.role_id == SysRole.id, SysRole.status == '0', SysRole.del_flag == '0'),
+                    )
+                    .distinct()
+                )
+            )
+            .scalars()
+            .all()
+        )
+        query_user_menu_info = (
+            (
+                await db.execute(
+                    select(SysMenu)
+                    .select_from(SysUser)
+                    .where(SysUser.del_flag == '0', SysUser.id == user_id)
+                    .join(SysUserRole, SysUser.id == SysUserRole.user_id, isouter=True)
+                    .join(
+                        SysRole,
+                        and_(SysUserRole.role_id == SysRole.id, SysRole.status == '0', SysRole.del_flag == '0'),
+                        isouter=True,
+                    )
+                    .join(SysRoleMenu, SysRole.id == SysRoleMenu.role_id, isouter=True)
+                    .join(SysMenu, and_(SysRoleMenu.menu_id == SysMenu.id, SysMenu.status == '0'))
+                    .distinct()
+                )
+            )
+            .scalars()
+            .all()
+        )
+        results = {
+            'user_basic_info': query_user_basic_info,
+            'user_role_info': query_user_role_info,
+            'user_menu_info': query_user_menu_info,
+        }
+
+        return results
+
+    @classmethod
+    async def get_user_list(
+        cls, db: AsyncSession, query_object: UserPageQueryModel, data_scope_sql: ColumnElement, is_page: bool = False
+    ) -> PageModel | list[list[dict[str, Any]]]:
+        """
+        根据查询参数获取用户列表信息
+
+        :param db: orm对象
+        :param query_object: 查询参数对象
+        :param data_scope_sql: 数据权限对应的查询sql语句
+        :param is_page: 是否开启分页
+        :return: 用户列表信息对象
+        """
+        query = (
+            select(SysUser)
+            .where(
+                SysUser.del_flag == '0',
+                SysUser.id == query_object.user_id if query_object.user_id is not None else True,
+                SysUser.username.like(f'%{query_object.user_name}%') if query_object.user_name else True,
+                SysUser.nickname.like(f'%{query_object.nick_name}%') if query_object.nick_name else True,
+                SysUser.email.like(f'%{query_object.email}%') if query_object.email else True,
+                SysUser.phone.like(f'%{query_object.phonenumber}%') if query_object.phonenumber else True,
+                SysUser.status == query_object.status if query_object.status else True,
+                SysUser.sex == query_object.sex if query_object.sex else True,
+                SysUser.created_at.between(
+                    datetime.combine(datetime.strptime(query_object.begin_time, '%Y-%m-%d'), time(00, 00, 00)),
+                    datetime.combine(datetime.strptime(query_object.end_time, '%Y-%m-%d'), time(23, 59, 59)),
+                )
+                if query_object.begin_time and query_object.end_time
+                else True,
+                data_scope_sql,
+            )
+            .order_by(SysUser.id)
+            .distinct()
+        )
+        user_list: PageModel | list[list[dict[str, Any]]] = await PaginationService.paginate(
+            db, query, query_object.page_num, query_object.page_size, is_page
+        )
+
+        return user_list
+
+    @classmethod
+    async def add_user_dao(cls, db: AsyncSession, user: UserModel) -> SysUser:
+        """
+        新增用户数据库操作
+
+        :param db: orm对象
+        :param user: 用户对象
+        :return: 新增校验结果
+        """
+        db_user = SysUser(
+            **PersistenceMapping.to_record(SysUser, user.model_dump(exclude={'admin', 'role_ids', 'role'}))
+        )
+        db.add(db_user)
+        await db.flush()
+
+        return db_user
+
+    @classmethod
+    async def edit_user_dao(cls, db: AsyncSession, user: dict) -> None:
+        """
+        编辑用户数据库操作
+
+        :param db: orm对象
+        :param user: 需要更新的用户字典
+        :return: 编辑校验结果
+        """
+        user = PersistenceMapping.to_record(SysUser, user)
+        persistence_fields = set(SysUser.__table__.columns.keys())
+        await db.execute(update(SysUser), [{key: value for key, value in user.items() if key in persistence_fields}])
+
+    @classmethod
+    async def delete_user_dao(cls, db: AsyncSession, user: UserModel) -> None:
+        """
+        删除用户数据库操作
+
+        :param db: orm对象
+        :param user: 用户对象
+        :return:
+        """
+        await db.execute(
+            update(SysUser)
+            .where(SysUser.id == user.user_id)
+            .values(del_flag='2', updated_by=user.update_by, updated_at=user.update_time)
+        )
+
+    @classmethod
+    async def get_user_role_allocated_list_by_user_id(
+        cls, db: AsyncSession, query_object: UserRoleQueryModel
+    ) -> Sequence[SysRole]:
+        """
+        根据用户id获取用户已分配的角色列表信息数据库操作
+
+        :param db: orm对象
+        :param query_object: 用户角色查询对象
+        :return: 用户已分配的角色列表信息
+        """
+        allocated_role_list = (
+            (
+                await db.execute(
+                    select(SysRole)
+                    .where(
+                        SysRole.del_flag == '0',
+                        SysRole.id != 1,
+                        SysRole.name == query_object.role_name if query_object.role_name else True,
+                        SysRole.code == query_object.role_key if query_object.role_key else True,
+                        SysRole.id.in_(select(SysUserRole.role_id).where(SysUserRole.user_id == query_object.user_id)),
+                    )
+                    .distinct()
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        return allocated_role_list
+
+    @classmethod
+    async def get_user_role_allocated_list_by_role_id(
+        cls,
+        db: AsyncSession,
+        query_object: UserRolePageQueryModel,
+        data_scope_sql: ColumnElement,
+        is_page: bool = False,
+    ) -> PageModel | list[dict[str, Any]]:
+        """
+        根据角色id获取已分配的用户列表信息
+
+        :param db: orm对象
+        :param query_object: 用户角色查询对象
+        :param data_scope_sql: 数据权限对应的查询sql语句
+        :param is_page: 是否开启分页
+        :return: 角色已分配的用户列表信息
+        """
+        query = (
+            select(SysUser)
+            .join(SysUserRole, SysUserRole.user_id == SysUser.id, isouter=True)
+            .join(SysRole, SysRole.id == SysUserRole.role_id, isouter=True)
+            .where(
+                SysUser.del_flag == '0',
+                SysUser.username == query_object.user_name if query_object.user_name else True,
+                SysUser.phone == query_object.phonenumber if query_object.phonenumber else True,
+                SysRole.id == query_object.role_id,
+                data_scope_sql,
+            )
+            .distinct()
+        )
+        allocated_user_list: PageModel | list[dict[str, Any]] = await PaginationService.paginate(
+            db, query, query_object.page_num, query_object.page_size, is_page
+        )
+
+        return allocated_user_list
+
+    @classmethod
+    async def get_user_role_unallocated_list_by_role_id(
+        cls,
+        db: AsyncSession,
+        query_object: UserRolePageQueryModel,
+        data_scope_sql: ColumnElement,
+        is_page: bool = False,
+    ) -> PageModel | list[dict[str, Any]]:
+        """
+        根据角色id获取未分配的用户列表信息
+
+        :param db: orm对象
+        :param query_object: 用户角色查询对象
+        :param data_scope_sql: 数据权限对应的查询sql语句
+        :param is_page: 是否开启分页
+        :return: 角色未分配的用户列表信息
+        """
+        query = (
+            select(SysUser)
+            .join(SysUserRole, SysUserRole.user_id == SysUser.id, isouter=True)
+            .join(SysRole, SysRole.id == SysUserRole.role_id, isouter=True)
+            .where(
+                SysUser.del_flag == '0',
+                SysUser.username == query_object.user_name if query_object.user_name else True,
+                SysUser.phone == query_object.phonenumber if query_object.phonenumber else True,
+                or_(SysRole.id != query_object.role_id, SysRole.id.is_(None)),
+                ~SysUser.id.in_(
+                    select(SysUser.id)
+                    .select_from(SysUser)
+                    .join(
+                        SysUserRole,
+                        and_(SysUserRole.user_id == SysUser.id, SysUserRole.role_id == query_object.role_id),
+                    )
+                ),
+                data_scope_sql,
+            )
+            .distinct()
+        )
+        unallocated_user_list: PageModel | list[dict[str, Any]] = await PaginationService.paginate(
+            db, query, query_object.page_num, query_object.page_size, is_page
+        )
+
+        return unallocated_user_list
+
+    @classmethod
+    async def add_user_role_dao(cls, db: AsyncSession, user_role: UserRoleModel) -> None:
+        """
+        新增用户角色关联信息数据库操作
+
+        :param db: orm对象
+        :param user_role: 用户角色关联对象
+        :return:
+        """
+        db_user_role = SysUserRole(**PersistenceMapping.to_record(SysUserRole, user_role.model_dump()))
+        db.add(db_user_role)
+
+    @classmethod
+    async def delete_user_role_dao(cls, db: AsyncSession, user_role: UserRoleModel) -> None:
+        """
+        删除用户角色关联信息数据库操作
+
+        :param db: orm对象
+        :param user_role: 用户角色关联对象
+        :return:
+        """
+        await db.execute(delete(SysUserRole).where(SysUserRole.user_id.in_([user_role.user_id])))
+
+    @classmethod
+    async def delete_user_role_by_user_and_role_dao(cls, db: AsyncSession, user_role: UserRoleModel) -> None:
+        """
+        根据用户id及角色id删除用户角色关联信息数据库操作
+
+        :param db: orm对象
+        :param user_role: 用户角色关联对象
+        :return:
+        """
+        await db.execute(
+            delete(SysUserRole).where(
+                SysUserRole.user_id == user_role.user_id if user_role.user_id else True,
+                SysUserRole.role_id == user_role.role_id if user_role.role_id else True,
+            )
+        )
+
+    @classmethod
+    async def get_user_role_detail(cls, db: AsyncSession, user_role: UserRoleModel) -> SysUserRole | None:
+        """
+        根据用户角色关联获取用户角色关联详细信息
+
+        :param db: orm对象
+        :param user_role: 用户角色关联对象
+        :return: 用户角色关联信息
+        """
+        user_role_info = (
+            (
+                await db.execute(
+                    select(SysUserRole)
+                    .where(SysUserRole.user_id == user_role.user_id, SysUserRole.role_id == user_role.role_id)
+                    .distinct()
+                )
+            )
+            .scalars()
+            .first()
+        )
+
+        return user_role_info

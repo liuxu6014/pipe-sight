@@ -1,0 +1,148 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
+import { sortResearchReports } from '../src/views/portal/utils/reportList.js'
+
+test('portal spacing is compact without changing management, reading typography or paper canvas sizing', () => {
+  const styles = readFileSync(new URL('../src/assets/styles/workspace.scss', import.meta.url), 'utf8')
+  assert.match(styles, /\.ps-portal \.ps-workspace-surface > \.ps-page \{[^}]*padding-block: var\(--ws-page-space\) 12px;/)
+  assert.match(styles, /\.ps-management-shell \.ps-workspace-surface[^}]*padding: var\(--ws-page-space\) var\(--ws-gutter\) 40px;/)
+  assert.match(styles, /\.ps-page-header \{ min-height: 44px; margin-bottom: 12px;/)
+  assert.match(styles, /\.ps-report-main > \.ps-empty-state \{[^}]*min-height: 180px;/)
+  assert.match(styles, /\.ps-digest-list \{ margin-top: 12px; min-height: 0;/)
+  assert.match(styles, /\.ps-report-main \{ min-height: 0;/)
+  assert.match(styles, /\.ps-editor-page \{ height: calc\(100dvh - 70px\)/)
+})
+
+test('research creation shrinks to content while keeping long steps scrollable', () => {
+  const styles = readFileSync(new URL('../src/assets/styles/workspace.scss', import.meta.url), 'utf8')
+  assert.match(styles, /\.ps-research-create-page \{ height: auto; max-height: calc\(100dvh - 70px\); padding-bottom: 12px;/)
+  assert.match(styles, /\.ps-research-create-page \.ps-step-footer \{ display: flex; gap: 12px; min-height: 56px; padding: 6px 20px;/)
+  assert.match(styles, /\.ps-research-create-page \.ps-step-card \{ flex: 0 1 auto;/)
+  assert.match(styles, /\.ps-research-create-page \.ps-step-content \{ flex: 0 1 auto; min-height: 0; overflow-y: auto;/)
+  assert.match(styles, /\.ps-research-create-page \.ps-step-content \{ min-height: 0; padding: 16px 20px;/)
+})
+
+test('digest creation uses compact content-driven cards without changing the single-page workflow', () => {
+  const source = readFileSync(new URL('../src/views/portal/pages/DigestCreateView.vue', import.meta.url), 'utf8')
+  const styles = readFileSync(new URL('../src/assets/styles/workspace.scss', import.meta.url), 'utf8')
+  assert.doesNotMatch(source, /<h2>报告配置<\/h2>|ps-form-note|ps-step-title|下一步：/)
+  assert.doesNotMatch(source, /<h3>已选资料<\/h3>|v-for="item in selectedCandidates"/)
+  assert.match(source, /@change="toggleCandidate\(item.id, \$event\)"/)
+  assert.match(source, /@click="createDigest">开始生成/)
+  assert.match(source, /v-model:page-size="previewPageSize" :page-sizes="\[10, 20, 50\]"/)
+  assert.match(source, /const previewPageSize = ref\(10\)/)
+  assert.match(styles, /\.ps-digest-create-page \{ height: auto; max-height: calc\(100dvh - 70px\); padding-bottom: 12px;/)
+  assert.match(styles, /\.ps-digest-create-page \.ps-form-footer \{ flex-shrink: 0; min-height: 56px; padding: 6px 20px;/)
+  assert.doesNotMatch(source, /ps-create-split|ps-preview-sidebar/)
+  assert.match(source, /v-show="settingsExpanded" id="digest-generation-settings"/)
+  assert.match(source, /:aria-expanded="settingsExpanded" aria-controls="digest-generation-settings"/)
+  assert.match(source, /v-if="previewTotal > 0" class="ps-pagination/)
+  assert.match(styles, /\.ps-digest-create-page > :not\(\.ps-digest-candidates\) \{ flex-shrink: 0;/)
+  assert.match(parse(source).descriptor.styles[0].content, /\.ps-digest-create-page \{ display: flex; flex-direction: column; gap: 12px;/)
+})
+
+test('digest pagination is a fixed sibling of the scrollable candidates rather than part of its contents', () => {
+  const source = readFileSync(new URL('../src/views/portal/pages/DigestCreateView.vue', import.meta.url), 'utf8')
+  const styles = readFileSync(new URL('../src/assets/styles/workspace.scss', import.meta.url), 'utf8')
+  const { descriptor } = parse(source)
+  const hasClass = (node, name) => node.props?.some(prop => prop.name === 'class' && prop.value?.content.split(' ').includes(name))
+  const find = (node, predicate) => predicate(node) ? node : (node.children || []).map(child => find(child, predicate)).find(Boolean)
+  const panel = find(descriptor.template.ast, node => hasClass(node, 'ps-digest-candidates'))
+  const scroll = panel.children.find(node => hasClass(node, 'ps-digest-candidate-scroll'))
+  const pagination = panel.children.find(node => hasClass(node, 'ps-digest-candidate-pagination'))
+  assert.ok(scroll)
+  assert.ok(pagination)
+  const tools = panel.children.find(node => hasClass(node, 'ps-digest-candidate-tools'))
+  assert.ok(tools)
+  assert.ok(panel.children.find(node => hasClass(node, 'ps-section-head')))
+  assert.equal(find(scroll, node => hasClass(node, 'ps-digest-candidate-tools')), undefined)
+  assert.equal(find(scroll, node => node.props?.some(prop => prop.arg?.content === 'click' && prop.exp?.content === 'selectCurrentPage')), undefined)
+  assert.match(styles, /\.ps-digest-candidate-tools \{ flex-shrink: 0;/)
+  assert.equal(find(scroll, node => node.tag === 'el-pagination'), undefined)
+  assert.ok(find(pagination, node => node.tag === 'el-pagination'))
+  assert.match(styles, /\.ps-digest-candidate-scroll \{[^}]*min-height: 0;[^}]*overflow-y: auto;/)
+  assert.match(styles, /\.ps-digest-candidates > \.ps-digest-candidate-pagination \{ flex-shrink: 0;/)
+})
+
+test('digest keeps settings toggle and submit buttons in the same footer beneath collapsible configuration', () => {
+  const source = readFileSync(new URL('../src/views/portal/pages/DigestCreateView.vue', import.meta.url), 'utf8')
+  const { descriptor } = parse(source)
+  const hasClass = (node, name) => node.props?.some(prop => prop.name === 'class' && prop.value?.content.split(' ').includes(name))
+  const page = descriptor.template.ast.children.find(node => hasClass(node, 'ps-digest-create-page'))
+  const classes = ['ps-digest-filters', 'ps-digest-candidates', 'ps-digest-settings']
+  const indices = classes.map(name => page.children.findIndex(node => hasClass(node, name)))
+  assert.ok(indices.every(index => index >= 0))
+  assert.deepEqual([...indices].sort((a, b) => a - b), indices)
+  const settings = page.children[indices[2]]
+  const footer = settings.children.find(node => hasClass(node, 'ps-digest-submit'))
+  assert.ok(footer)
+  assert.ok(footer.children.some(node => hasClass(node, 'ps-digest-settings-toggle')))
+  const actions = footer.children.find(node => hasClass(node, 'ps-digest-submit-actions'))
+  assert.equal(actions.children.filter(node => node.tag === 'el-button').length, 2)
+  assert.match(source, /const settingsExpanded = ref\(false\)/)
+  assert.ok(settings.children.some(node => node.props?.some(prop => prop.name === 'else-if' && prop.exp?.content === 'templatesError')))
+})
+
+test('research material tools and tabs stay outside the scrolling rows', () => {
+  const source = readFileSync(new URL('../src/views/portal/pages/ResearchCreateView.vue', import.meta.url), 'utf8')
+  const { descriptor } = parse(source)
+  const hasClass = (node, name) => node.props?.some(prop => prop.name === 'class' && prop.value?.content.split(' ').includes(name))
+  const find = (node, predicate) => predicate(node) ? node : (node.children || []).map(child => find(child, predicate)).find(Boolean)
+  const materialSource = find(descriptor.template.ast, node => hasClass(node, 'ps-material-source'))
+  const rows = materialSource.children.find(node => hasClass(node, 'ps-research-material-scroll'))
+  assert.ok(rows)
+  assert.ok(materialSource.children.find(node => hasClass(node, 'ps-research-material-toolbar')))
+  assert.ok(materialSource.children.find(node => hasClass(node, 'ps-tabs-line')))
+  assert.equal(find(rows, node => hasClass(node, 'ps-research-material-toolbar')), undefined)
+  assert.equal(find(rows, node => hasClass(node, 'ps-tabs-line')), undefined)
+  assert.match(descriptor.styles[0].content, /\.ps-material-step \{[^}]*overflow: hidden;/)
+  assert.match(descriptor.styles[0].content, /\.ps-research-material-scroll \{[^}]*min-height: 0; overflow-y: auto;/)
+})
+
+test('report sorting is deterministic, keeps missing dates last, and never mutates shared rows', () => {
+  const rows = [{ id: 'a', title: 'A', updatedAt: '2026-10-10' }, { id: 'b', title: 'B', updatedAt: '2026-10-14' }, { id: 'c', title: 'C', updatedAt: '未知' }]
+  assert.deepEqual(sortResearchReports(rows).map(item => item.id), ['b', 'a', 'c'])
+  assert.deepEqual(sortResearchReports(rows, 'updated-asc').map(item => item.id), ['a', 'b', 'c'])
+  assert.deepEqual(sortResearchReports(rows, 'title').map(item => item.id), ['a', 'b', 'c'])
+  assert.deepEqual(rows.map(item => item.id), ['a', 'b', 'c'])
+  assert.deepEqual(sortResearchReports([]), [])
+})
+
+test('research workspace and shared empty state compile with explicit accessible actions', () => {
+  for (const filename of ['pages/ResearchWorkbenchView.vue', 'pages/ResearchCreateView.vue', 'pages/DigestCreateView.vue', 'components/PortalEmptyState.vue']) {
+    const source = readFileSync(new URL(`../src/views/portal/${filename}`, import.meta.url), 'utf8')
+    const { descriptor, errors } = parse(source)
+    assert.deepEqual(errors, [])
+    const script = compileScript(descriptor, { id: filename })
+    const template = compileTemplate({ source: descriptor.template.content, filename, id: filename, compilerOptions: { bindingMetadata: script.bindings } })
+    assert.deepEqual(template.errors, [])
+  }
+})
+
+test('research creation keeps a compact icon return and groups cancel with next on the right', () => {
+  const source = readFileSync(new URL('../src/views/portal/pages/ResearchCreateView.vue', import.meta.url), 'utf8')
+  const { descriptor } = parse(source)
+  assert.doesNotMatch(descriptor.template.content, /模板版本|v-model="form.version"|<span>科研工作台<\/span>/)
+  assert.doesNotMatch(descriptor.template.content, /ps-evidence-status|带入资料的授权核验|重新核验全部选材/)
+  assert.doesNotMatch(descriptor.template.content, /管理研究资料|选中后请求授权详情|ps-research-material-link/)
+  assert.doesNotMatch(descriptor.template.content, /ps-step-title|<h2>/)
+  assert.doesNotMatch(descriptor.template.content, /ps-create-progress/)
+  assert.doesNotMatch(source, /ps-step-note|stepHint|下一步：/)
+  assert.equal((descriptor.template.content.match(/<el-step title=/g) || []).length, 4)
+  assert.doesNotMatch(descriptor.template.content, /<el-step\b[^>]*description=/)
+  assert.match(descriptor.template.content, /@change="uploadResearchMaterial"/)
+  assert.doesNotMatch(descriptor.template.content, /ps-selected-basket|待核验|已核验|重试核验/)
+  assert.match(descriptor.template.content, /class="ps-research-material-toolbar"[\s\S]*?上传资料/)
+  assert.match(descriptor.styles[0].content, /\.ps-material-picker \{ grid-template-columns: minmax\(0, 1fr\)/)
+  assert.match(descriptor.template.content, /<el-dialog v-model="uploadDialogVisible" title="上传资料"/)
+  assert.match(descriptor.template.content, /aria-label="研究资料列表分页"/)
+  assert.match(descriptor.template.content, /@click="selectCurrentMaterialPage">\{\{ currentMaterialPageSelected \? '取消当前页选择' : '全选当前页'/)
+  assert.match(descriptor.template.content, /:page-sizes="\[10, 20, 50\]"/)
+  assert.match(source, /searchPipelineResearchMaterials\(\{[\s\S]*?pageNum: materialPage.value/)
+  assert.match(descriptor.template.content, /v-if="activeStep === 1 && !verifying && selectionProblems.length"/)
+  assert.match(descriptor.template.content, /aria-label="返回科研工作台" title="返回科研工作台"/)
+  assert.match(descriptor.template.content, /class="ps-step-footer-actions"[\s\S]*?>取消<\/el-button>[\s\S]*?>下一步<\/el-button>/)
+  assert.match(descriptor.styles[0].content, /\.ps-step-footer-actions\s*\{[^}]*margin-left:\s*auto/)
+})

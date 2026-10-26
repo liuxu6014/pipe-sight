@@ -1,0 +1,36 @@
+{
+  "verified_on": "2026-10-17",
+  "purpose": "用户请求的三篇论文文字阅读版；从校验过的官方PDF提取正文，复杂图表保留局部原图；不变更转载或AI使用权限，不修改论文记录。",
+  "records": {
+    "10.3390/coatings14030358": {
+      "pdf_url": "https://mdpi-res.com/d_attachment/coatings/coatings-14-00358/article_deploy/coatings-14-00358.pdf",
+      "pages": 24,
+      "asset_key": "paper-fafd2f6db491e733a48ab2cd",
+      "pages_sha256": "a4e2b0cea9aaab263ebd5e74e7424254c387f812b429ab2954764a07098eb39e",
+      "sha256": "7eede6f34403808b0886f17e49ed48531b6798fd0a65b4586447c51fe7b8ef21",
+      "text_sha256": "51adb34a4088b3a101314a28652374c181e937379e3d91465400543f751b0ee6",
+      "text_characters": 90089,
+      "reader_kind": "extracted_text"
+    },
+    "10.6047/j.issn.1000-8241.2024.03.001": {
+      "pdf_url": "https://yqcy.pipechina.com.cn/cn/article/pdf/preview/10.6047/j.issn.1000-8241.2024.03.001.pdf",
+      "pages": 16,
+      "asset_key": "paper-f0f9c3a0e21f0767c5d3a627",
+      "pages_sha256": "9e1c91525d37274dbb2e277d360a433ffd99d86f3607d5218f1e508e9caaf492",
+      "sha256": "0b9619c645aefecc093fc33844570517fa673c8ec36cb2b33f7f4661bead04ad",
+      "text_sha256": "5a34601441de31701e1e8b9edbc529bcee70ef175e87e8d1a3a4f16e6d60129d",
+      "text_characters": 35803,
+      "reader_kind": "extracted_text"
+    },
+    "10.6047/j.issn.1000-8241.2020.11.002": {
+      "pdf_url": "https://yqcy.pipechina.com.cn/cn/article/pdf/preview/10.6047/j.issn.1000-8241.2020.11.002.pdf",
+      "pages": 9,
+      "asset_key": "paper-c9f9dec26a7f48120c37ebb4",
+      "pages_sha256": "0c41864854e7169ece31581e9d78b8290d2439b55f771ce4063d64c1dd58650e",
+      "sha256": "4ad58187d3ac5fe953516e4d9bbc3d037d5278adc687b6b62b967b49ff800fc9",
+      "text_sha256": "52e7b0d79f093f4a99f0e4ebe1e635d9680f58c0d8c43f0b463484447a78c059",
+      "text_characters": 19103,
+      "reader_kind": "extracted_text"
+    }
+  }
+}

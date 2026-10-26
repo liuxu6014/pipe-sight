@@ -8,7 +8,7 @@ import typer
 from cli.context import CliContext, OutputOption
 from cli.core import DEFAULT_CORE_SERVICES, CliContextFactory, CliExecutionService
 from cli.output import CommandResult
-from cli.utils import NESTED_CLI_SUPPORT
+from cli.runtime.nested_cli import NESTED_CLI_SUPPORT
 from cli.wizard.preview import WIZARD_PREVIEW_RENDERER, WizardPreviewRenderer
 from cli.wizard.prompts import WIZARD_PROMPT_SERVICE, WizardPromptService
 

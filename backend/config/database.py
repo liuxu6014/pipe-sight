@@ -89,7 +89,10 @@ def create_async_session_local(engine: AsyncEngine) -> async_sessionmaker:
     :param engine: 异步 SQLAlchemy Engine
     :return: 异步 Session 工厂
     """
-    return async_sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    # AsyncSession 不能在普通属性访问中隐式执行过期字段的同步懒加载。
+    # 提交后保留已加载状态，避免 Worker 在 commit 后读取 ORM 字段时触发
+    # MissingGreenlet；需要最新数据的流程应显式 refresh/re-query。
+    return async_sessionmaker(autocommit=False, autoflush=False, bind=engine, expire_on_commit=False)
 
 
 def create_sync_session_local(engine: Engine) -> sessionmaker:

@@ -1,4 +1,6 @@
 import { createWebHistory, createRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { legacyDetailGuard } from '@/utils/portal/legacyRoute'
 /* Layout */
 import Layout from '@/layout'
 
@@ -73,8 +75,8 @@ export const constantRoutes = [
       { path: 'news/:itemId', name: 'PortalNewsDetail', component: () => import('@/views/portal/pages/NewsDetailView.vue'), meta: { title: '资讯详情' } },
       { path: 'papers', name: 'PortalPapers', component: () => import('@/views/portal/pages/PaperListView.vue'), meta: { title: '论文资料' } },
       { path: 'papers/:itemId', name: 'PortalPaperDetail', component: () => import('@/views/portal/pages/PaperDetailView.vue'), meta: { title: '论文详情' } },
-      { path: 'research', name: 'PortalResearch', component: () => import('@/views/portal/pages/ResearchWorkbenchView.vue'), meta: { title: '科研工作台' } },
-      { path: 'research/create', name: 'PortalResearchCreate', component: () => import('@/views/portal/pages/ResearchCreateView.vue'), meta: { title: '新建科研任务' } },
+      { path: 'research', name: 'PortalResearch', component: () => import('@/views/portal/pages/ResearchWorkbenchView.vue'), meta: { title: '科研报告' } },
+      { path: 'research/create', name: 'PortalResearchCreate', component: () => import('@/views/portal/pages/ResearchCreateView.vue'), meta: { title: '新建科研报告' } },
       { path: 'research/tasks/:id', name: 'PortalResearchTask', component: () => import('@/views/portal/pages/ResearchTaskView.vue'), meta: { title: '任务进度' } },
       { path: 'research/reports/:id', name: 'PortalReportEditor', component: () => import('@/views/portal/pages/ReportEditorView.vue'), meta: { title: '报告编辑器' } },
       { path: 'research/reports/:id/diagram', name: 'PortalDiagramEditor', component: () => import('@/views/portal/pages/DiagramEditorView.vue'), meta: { title: '图形编辑器' } },
@@ -82,12 +84,34 @@ export const constantRoutes = [
       { path: 'digests/create', name: 'PortalDigestCreate', component: () => import('@/views/portal/pages/DigestCreateView.vue'), meta: { title: '新建简报' } },
       { path: 'digests/:id', name: 'PortalDigestEditor', component: () => import('@/views/portal/pages/DigestEditorView.vue'), meta: { title: '简报编辑' } },
       { path: 'reports/:itemId?', redirect: to => to.params.itemId ? `/portal/digests/${to.params.itemId}` : '/portal/digests' },
-      { path: 'knowledge', name: 'PortalKnowledge', component: () => import('@/views/portal/pages/KnowledgeView.vue'), meta: { title: '知识库' } },
+      { path: 'knowledge', name: 'PortalKnowledge', component: () => import('@/views/portal/pages/KnowledgeView.vue'), meta: { title: '研究资料' } },
       { path: 'knowledge/:id', name: 'PortalKnowledgeDetail', component: () => import('@/views/portal/pages/KnowledgeDetailView.vue'), meta: { title: '资料详情' } },
-      { path: 'me/tasks', name: 'PortalMyTasks', component: () => import('@/views/portal/pages/MyWorkspaceView.vue'), props: { mode: 'tasks' }, meta: { title: '我的任务' } },
-      { path: 'me/reports', name: 'PortalMyReports', component: () => import('@/views/portal/pages/MyWorkspaceView.vue'), props: { mode: 'reports' }, meta: { title: '我的报告' } },
-      { path: 'me/favorites', name: 'PortalMyFavorites', component: () => import('@/views/portal/pages/MyWorkspaceView.vue'), props: { mode: 'favorites' }, meta: { title: '我的收藏' } }
+      { path: 'me', redirect: '/portal/me/reports' },
+      { path: 'profile', name: 'PortalProfile', component: () => import('@/views/portal/pages/ProfileView.vue'), meta: { title: '个人资料设置' } },
+      { path: 'basket', name: 'PortalBasket', component: () => import('@/views/portal/pages/MyWorkspaceView.vue'), props: { mode: 'basket' }, meta: { title: '资料篮' } },
+      { path: 'me/basket', name: 'PortalMyBasket', redirect: '/portal/basket' },
+      { path: 'me/tasks', name: 'PortalMyTasks', redirect: to => ({ path: '/portal/me/reports', query: { ...to.query, ...(to.query.status === 'completed' ? { status: 'generated' } : {}) }, hash: to.hash }) },
+      { path: 'me/reports', name: 'PortalMyReports', redirect: to => ({ path: '/portal/research', query: to.query, hash: to.hash }) },
+      { path: 'me/favorites', name: 'PortalMyFavorites', redirect: '/portal/basket' }
     ]
+  },
+  {
+    path: '/pipeline/dashboard',
+    component: Layout,
+    hidden: true,
+    children: [{ path: '', component: () => import('@/views/pipeline/dashboard/index.vue'), name: 'PipelineDashboard', meta: { title: '管网情报工作台', icon: 'dashboard' } }]
+  },
+  {
+    path: '/pipeline/intelligence',
+    component: Layout,
+    hidden: true,
+    children: [{ path: '', component: () => import('@/views/pipeline/intelligence/index.vue'), name: 'PipelineIntelligence', meta: { title: '情报内容审核', icon: 'documentation' } }]
+  },
+  {
+    path: '/pipeline/intelligence/detail',
+    component: Layout,
+    hidden: true,
+    children: [{ path: '', component: () => import('@/views/pipeline/intelligence/detail.vue'), name: 'PipelineIntelligenceDetail', meta: { title: '情报详情', activeMenu: '/pipeline/intelligence' } }]
   },
   {
     path: '/pipeline/manuscript',
@@ -103,12 +127,6 @@ export const constantRoutes = [
     ]
   },
   {
-    path: '/pipeline/governance',
-    component: Layout,
-    hidden: true,
-    children: [{ path: '', component: () => import('@/views/pipeline/governance/index.vue'), name: 'PipelineGovernance', meta: { title: '数据治理', icon: 'build' } }]
-  },
-  {
     path: '/pipeline/template',
     component: Layout,
     hidden: true,
@@ -118,7 +136,7 @@ export const constantRoutes = [
     path: '/pipeline/model',
     component: Layout,
     hidden: true,
-    children: [{ path: '', component: () => import('@/views/pipeline/model/index.vue'), name: 'PipelineModel', meta: { title: '模型与 Prompt', icon: 'ai' } }]
+    children: [{ path: '', component: () => import('@/views/pipeline/model/index.vue'), name: 'PipelineModel', meta: { title: '模型与类别提示词', icon: 'ai' } }]
   },
   {
     path: "/:pathMatch(.*)*",
@@ -148,6 +166,20 @@ export const constantRoutes = [
 
 // 动态路由，基于用户权限动态去加载
 export const dynamicRoutes = [
+  {
+    path: '/pipeline/digest',
+    component: Layout,
+    roles: ['admin'],
+    meta: { managementEntry: true },
+    children: [{ path: '', name: 'PipelineDigests', component: () => import('@/views/pipeline/report/index.vue'), meta: { title: '简报管理', icon: 'documentation' } }]
+  },
+  {
+    path: '/pipeline/knowledge',
+    component: Layout,
+    roles: ['admin'],
+    meta: { managementEntry: true },
+    children: [{ path: '', name: 'PipelineKnowledge', component: () => import('@/views/pipeline/knowledge/index.vue'), meta: { title: '资料库管理', icon: 'documentation' } }]
+  },
   {
     path: '/system/user-auth',
     component: Layout,
@@ -216,5 +248,7 @@ const router = createRouter({
     return { top: 0 }
   },
 });
+
+router.beforeEach(legacyDetailGuard(message => ElMessage.warning(message)))
 
 export default router;

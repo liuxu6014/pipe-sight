@@ -1,15 +1,16 @@
 # 构建阶段
-FROM node:18-slim AS builder
+FROM node:20-slim AS builder
 WORKDIR /app
-
-# 复制源代码
-COPY . .
 
 # 设置npm镜像源
 RUN npm config set registry https://registry.npmmirror.com
 
-# 安装依赖
-RUN npm install
+# 先安装锁定依赖，业务代码变更时可以复用依赖层。
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# 复制源代码
+COPY . .
 
 # 执行docker构建命令
 RUN npm run build:docker

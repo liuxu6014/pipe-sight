@@ -25,6 +25,9 @@ class AppSettings(BaseSettings):
     app_ip_location_query: bool = True
     app_same_time_login: bool = True
     app_demo_mode: bool = False
+    pipeline_auto_bootstrap_sources: bool = False
+    pipeline_task_scheduler_enabled: bool = True
+    pipeline_internal_token: str = ''
     app_disable_swagger: bool = False
     app_disable_redoc: bool = False
     app_trusted_proxy_ips: str = '127.0.0.1,::1'
@@ -47,11 +50,11 @@ class DataBaseSettings(BaseSettings):
     数据库配置
     """
 
-    db_type: Literal['mysql', 'postgresql'] = 'mysql'
+    db_type: Literal['mysql', 'postgresql'] = 'postgresql'
     db_host: str = '127.0.0.1'
-    db_port: int = 3306
-    db_username: str = 'root'
-    db_password: str = 'mysqlroot'
+    db_port: int = 5432
+    db_username: str = 'postgres'
+    db_password: str = 'root'
     db_database: str = 'ruoyi-fastapi'
     db_echo: bool = True
     db_max_overflow: int = 10
@@ -83,12 +86,12 @@ class InsightHubSettings(BaseSettings):
     """InsightHub 外部新闻处理库连接配置。"""
 
     insighthub_enabled: bool = False
-    insighthub_db_host: str = '172.16.4.166'
+    insighthub_db_host: str = '127.0.0.1'
     insighthub_db_port: int = 5432
-    insighthub_db_name: str = 'pipeline_news'
+    insighthub_db_name: str = 'ruoyi-fastapi'
     insighthub_db_schema: str = 'news'
-    insighthub_db_user: str = 'news_app'
-    insighthub_db_password: str = ''
+    insighthub_db_user: str = 'postgres'
+    insighthub_db_password: str = 'root'
     insighthub_db_sslmode: Literal['disable', 'require'] = 'disable'
     insighthub_db_timeout_seconds: int = 10
     insighthub_poll_interval_seconds: int = Field(default=30, ge=5, le=3600)
@@ -159,24 +162,6 @@ class TransportCryptoSettings(BaseSettings):
     )
 
 
-class GenSettings:
-    """
-    代码生成配置
-    """
-
-    author = 'insistence'
-    package_name = 'module_admin.system'
-    auto_remove_pre = False
-    table_prefix = 'sys_'
-    allow_overwrite = False
-
-    GEN_PATH = 'vf_admin/gen_path'
-
-    def __init__(self) -> None:
-        if not os.path.exists(self.GEN_PATH):
-            os.makedirs(self.GEN_PATH)
-
-
 class UploadSettings:
     """
     上传配置
@@ -185,6 +170,13 @@ class UploadSettings:
     UPLOAD_PREFIX = '/profile'
     UPLOAD_PATH = 'vf_admin/upload_path'
     UPLOAD_MACHINE = 'A'
+    MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+    # 例如：clamdscan --no-summary；命令通过参数传入待扫描文件路径，不经过 shell。
+    FILE_SCAN_COMMAND = ''
+    # external：使用 FILE_SCAN_COMMAND；basic：仅用于明确标注的本地环境，执行基础
+    # 文件检查，不提供病毒库能力；其他值或空命令均安全地保持 pending。
+    FILE_SCAN_MODE = 'external'
+    FILE_SCAN_TIMEOUT_SECONDS = 30
     DEFAULT_ALLOWED_EXTENSION = [
         # 图片
         'bmp',
@@ -218,6 +210,14 @@ class UploadSettings:
     DOWNLOAD_PATH = 'vf_admin/download_path'
 
     def __init__(self) -> None:
+        # GetConfig loads the selected .env before creating this instance.
+        # Class-body reads happen too early and silently ignore that file.
+        self.FILE_SCAN_COMMAND = os.getenv('FILE_SCAN_COMMAND', '').strip()
+        self.FILE_SCAN_MODE = os.getenv('FILE_SCAN_MODE', 'external').strip().lower()
+        try:
+            self.FILE_SCAN_TIMEOUT_SECONDS = max(1, int(os.getenv('FILE_SCAN_TIMEOUT_SECONDS', '30')))
+        except ValueError:
+            self.FILE_SCAN_TIMEOUT_SECONDS = 30
         if not os.path.exists(self.UPLOAD_PATH):
             os.makedirs(self.UPLOAD_PATH)
         if not os.path.exists(self.DOWNLOAD_PATH):
@@ -281,13 +281,6 @@ class GetConfig:
         """
         return TransportCryptoSettings()
 
-    def get_gen_config(self) -> GenSettings:
-        """
-        获取代码生成配置
-        """
-        # 实例化代码生成配置
-        return GenSettings()
-
     def get_upload_config(self) -> UploadSettings:
         """
         获取上传配置
@@ -346,7 +339,5 @@ InsightHubConfig = InsightHubSettings()
 LogConfig = get_config.get_log_config()
 # 传输层加解密配置
 TransportCryptoConfig = get_config.get_transport_crypto_config()
-# 代码生成配置
-GenConfig = get_config.get_gen_config()
 # 上传配置
 UploadConfig = get_config.get_upload_config()

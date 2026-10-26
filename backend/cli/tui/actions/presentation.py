@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 
+from cli.output import SHELL_TEXT_FORMATTER
 from cli.tui.actions.models import TuiActionResult
 from cli.tui.actions.registry import TuiActionRegistry
 from cli.tui.adapters.models import BrowserRecordSnapshot
 from cli.tui.capabilities import TuiCapabilityRegistry
 from cli.tui.copy import TUI_COPY
 from cli.tui.keymaps import TUI_KEYMAP_REGISTRY
-from cli.utils import SHELL_TEXT_FORMATTER
 
 
 @dataclass(frozen=True)

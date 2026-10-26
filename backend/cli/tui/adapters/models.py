@@ -1,9 +1,9 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from cli.output import SHELL_TEXT_FORMATTER
 from cli.tui.copy import TUI_COPY
 from cli.tui.search import PageFilterOption, PageSearchContext
-from cli.utils import SHELL_TEXT_FORMATTER
 
 
 @dataclass(frozen=True)

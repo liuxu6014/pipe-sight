@@ -17,7 +17,7 @@ class JobInfrastructureGateway:
 
         :return: 分页模型类型
         """
-        return import_module('common.vo').PageModel
+        return import_module('common.http.schemas').PageModel
 
     @staticmethod
     def get_async_session_local() -> Any:
@@ -47,13 +47,13 @@ class JobInfrastructureGateway:
         return import_module('config.get_scheduler').SchedulerUtil
 
     @staticmethod
-    def get_job_vo_module() -> Any:
+    def get_job_schema_module() -> Any:
         """
-        获取定时任务 VO 模块。
+        获取定时任务 Schema 模块。
 
-        :return: 定时任务 VO 模块
+        :return: 定时任务 Schema 模块
         """
-        return import_module('module_admin.entity.vo.job_vo')
+        return import_module('app.infrastructure.schemas.jobs')
 
     @staticmethod
     def get_job_service() -> Any:
@@ -62,7 +62,7 @@ class JobInfrastructureGateway:
 
         :return: 定时任务服务类
         """
-        return import_module('module_admin.service.job_service').JobService
+        return import_module('app.infrastructure.services.jobs').JobService
 
     @staticmethod
     def get_job_log_service() -> Any:
@@ -71,4 +71,4 @@ class JobInfrastructureGateway:
 
         :return: 定时任务日志服务类
         """
-        return import_module('module_admin.service.job_log_service').JobLogService
+        return import_module('app.infrastructure.services.job_logs').JobLogService

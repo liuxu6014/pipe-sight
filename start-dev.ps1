@@ -27,7 +27,7 @@ $RepoRoot = $PSScriptRoot
 $BackendRoot = Join-Path $RepoRoot 'backend'
 $FrontendRoot = Join-Path $RepoRoot 'frontend'
 $BackendPython = Join-Path $BackendRoot '.venv\Scripts\python.exe'
-$BackendApp = Join-Path $BackendRoot 'app.py'
+$BackendApiModule = 'app.entrypoints.api'
 $ViteEntry = Join-Path $FrontendRoot 'node_modules\vite\bin\vite.js'
 $RuntimeRoot = Join-Path $RepoRoot '.runtime\pipesight-dev'
 $BackendPidFile = Join-Path $RuntimeRoot 'backend.pid'
@@ -180,7 +180,7 @@ function Test-OwnedProcess {
         return (
             $executable.StartsWith((Join-Path $backend '.venv').ToLowerInvariant()) -or
             $commandLine.Contains($backend) -or
-            ($commandLine.Contains($repo) -and $commandLine.Contains('app.py'))
+            ($commandLine.Contains($repo) -and $commandLine.Contains('app.entrypoints.api'))
         )
     }
 
@@ -292,7 +292,7 @@ function Get-CombinedHash {
 function Ensure-BackendDependencies {
     param([string]$UvPath)
 
-    $requirementsPath = Join-Path $BackendRoot 'requirements.txt'
+    $requirementsPath = Join-Path $BackendRoot 'requirements-pg.txt'
     $pyprojectPath = Join-Path $BackendRoot 'pyproject.toml'
     $stampPath = Join-Path $BackendRoot '.venv\.pipesight-dependencies.sha256'
     $expectedHash = Get-CombinedHash -Paths @($requirementsPath, $pyprojectPath)
@@ -320,7 +320,7 @@ function Ensure-BackendDependencies {
         $previousErrorActionPreference = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
         try {
-            & $BackendPython -c "import uvicorn, fastapi, asyncmy, asyncpg, pymysql, redis" *> $null
+            & $BackendPython -c "import uvicorn, fastapi, asyncpg, redis" *> $null
             $dependencyCheckFailed = $LASTEXITCODE -ne 0
         }
         finally {
@@ -344,9 +344,9 @@ function Ensure-BackendDependencies {
         Write-Host 'Installing backend requirements with uv (first run may take several minutes)...'
         Push-Location $BackendRoot
         try {
-            & $UvPath pip install --python $BackendPython -r requirements.txt
+            & $UvPath pip install --python $BackendPython -r requirements-pg.txt
             if ($LASTEXITCODE -ne 0) {
-                throw 'uv failed to install backend/requirements.txt.'
+                throw 'uv failed to install backend/requirements-pg.txt.'
             }
         }
         finally {
@@ -354,7 +354,7 @@ function Ensure-BackendDependencies {
         }
     }
 
-    & $BackendPython -c "import uvicorn, fastapi, asyncmy, asyncpg, pymysql, redis"
+    & $BackendPython -c "import uvicorn, fastapi, asyncpg, redis"
     if ($LASTEXITCODE -ne 0) {
         throw 'Backend dependency verification failed; uvicorn or another runtime dependency is still unavailable.'
     }
@@ -447,25 +447,33 @@ function Test-DockerEngine {
 function Start-DockerInfrastructure {
     param([string]$DockerPath)
 
-    Write-Host 'Local MySQL/Redis are not both available; starting Docker infrastructure...'
+    Write-Host 'Local PostgreSQL/Redis are not both available; starting Docker infrastructure...'
     if (-not (Test-DockerEngine -DockerPath $DockerPath)) {
         throw 'Docker is installed but the Docker engine is not running. Start Docker Desktop and retry, or use -Infrastructure Local.'
     }
 
-    & $DockerPath compose -f (Join-Path $RepoRoot 'docker-compose.my.yml') up -d ruoyi-mysql ruoyi-redis
+    & $DockerPath compose -p pipesight-pg -f (Join-Path $RepoRoot 'docker-compose.pg.yml') up -d ruoyi-pg ruoyi-redis
     if ($LASTEXITCODE -ne 0) {
-        throw 'Docker Compose failed to start MySQL and Redis.'
+        throw 'Docker Compose failed to start PostgreSQL and Redis.'
     }
 
-    Wait-TcpPort -HostName '127.0.0.1' -Port 13306 -TimeoutSeconds 90
+    Wait-TcpPort -HostName '127.0.0.1' -Port 15432 -TimeoutSeconds 90
     Wait-TcpPort -HostName '127.0.0.1' -Port 16379 -TimeoutSeconds 60
 
-    $env:DB_TYPE = 'mysql'
+    $env:DB_TYPE = 'postgresql'
     $env:DB_HOST = '127.0.0.1'
-    $env:DB_PORT = '13306'
-    $env:DB_USERNAME = 'root'
-    $env:DB_PASSWORD = 'root'
+    $env:DB_PORT = '15432'
+    $env:DB_USERNAME = 'postgres'
+    $composeDbPassword = Get-DotEnvValue -Name 'POSTGRES_PASSWORD' -DefaultValue (Get-DotEnvValue -Name 'DB_PASSWORD' -DefaultValue 'root')
+    $env:DB_PASSWORD = $composeDbPassword
     $env:DB_DATABASE = 'ruoyi-fastapi'
+    $env:INSIGHTHUB_DB_TYPE = 'postgresql'
+    $env:INSIGHTHUB_DB_HOST = '127.0.0.1'
+    $env:INSIGHTHUB_DB_PORT = '15432'
+    $env:INSIGHTHUB_DB_USERNAME = 'postgres'
+    $env:INSIGHTHUB_DB_PASSWORD = $composeDbPassword
+    $env:INSIGHTHUB_DB_DATABASE = 'ruoyi-fastapi'
+    $env:INSIGHTHUB_DB_SCHEMA = 'news'
     $env:REDIS_HOST = '127.0.0.1'
     $env:REDIS_PORT = '16379'
     $env:REDIS_USERNAME = ''
@@ -474,25 +482,25 @@ function Start-DockerInfrastructure {
 }
 
 function Use-LocalInfrastructure {
-    $databasePort = [int](Get-DotEnvValue -Name 'DB_PORT' -DefaultValue '3306')
+    $databasePort = [int](Get-DotEnvValue -Name 'DB_PORT' -DefaultValue '5432')
     $redisPort = [int](Get-DotEnvValue -Name 'REDIS_PORT' -DefaultValue '6379')
     if (-not (Test-TcpPort -HostName '127.0.0.1' -Port $databasePort)) {
-        throw "MySQL is not listening on 127.0.0.1:$databasePort. Start it or use -Infrastructure Docker."
+        throw "PostgreSQL is not listening on 127.0.0.1:$databasePort. Start it or use -Infrastructure Docker."
     }
     if (-not (Test-TcpPort -HostName '127.0.0.1' -Port $redisPort)) {
         throw "Redis is not listening on 127.0.0.1:$redisPort. Start it or use -Infrastructure Docker."
     }
 
-    $databaseType = Get-DotEnvValue -Name 'DB_TYPE' -DefaultValue 'mysql'
-    if ($databaseType -ne 'mysql') {
-        throw "The one-click local initializer currently targets MySQL, but backend/.env.dev has DB_TYPE=$databaseType. Use the documented PostgreSQL Docker workflow instead."
+    $databaseType = Get-DotEnvValue -Name 'DB_TYPE' -DefaultValue 'postgresql'
+    if ($databaseType -ne 'postgresql') {
+        throw "The one-click local initializer targets PostgreSQL, but backend/.env.dev has DB_TYPE=$databaseType. Use PostgreSQL configuration."
     }
 
     $env:DB_TYPE = $databaseType
     $env:DB_HOST = Get-DotEnvValue -Name 'DB_HOST' -DefaultValue '127.0.0.1'
     $env:DB_PORT = [string]$databasePort
-    $env:DB_USERNAME = Get-DotEnvValue -Name 'DB_USERNAME' -DefaultValue 'root'
-    $env:DB_PASSWORD = Get-DotEnvValue -Name 'DB_PASSWORD' -DefaultValue ''
+    $env:DB_USERNAME = Get-DotEnvValue -Name 'DB_USERNAME' -DefaultValue 'postgres'
+    $env:DB_PASSWORD = Get-DotEnvValue -Name 'DB_PASSWORD' -DefaultValue 'root'
     $env:DB_DATABASE = Get-DotEnvValue -Name 'DB_DATABASE' -DefaultValue 'ruoyi-fastapi'
     $env:REDIS_HOST = Get-DotEnvValue -Name 'REDIS_HOST' -DefaultValue '127.0.0.1'
     $env:REDIS_PORT = [string]$redisPort
@@ -502,86 +510,83 @@ function Use-LocalInfrastructure {
 }
 
 function Initialize-Database {
-    $baseSql = Join-Path $BackendRoot 'sql\ruoyi-fastapi.sql'
-    $pipelineSql = Join-Path $BackendRoot 'sql\pipeline-domain.sql'
-    $pipelineEnhancementSql = Join-Path $BackendRoot 'sql\pipeline-domain-enhancement.sql'
-    $initScriptPath = Join-Path $RuntimeRoot 'initialize_mysql.py'
+    $baseSql = Join-Path $BackendRoot 'sql\ruoyi-fastapi-pg.sql'
+    $pipelineSql = Join-Path $BackendRoot 'sql\pipeline-domain-pg.sql'
+    $pipelineEnhancementSql = Join-Path $BackendRoot 'sql\pipeline-domain-enhancement-pg.sql'
+    $insightHubSql = Join-Path $RepoRoot 'backend\sql\insighthub-schema.pg.sql'
+    $initScriptPath = Join-Path $RuntimeRoot 'initialize_postgresql.py'
     $initCode = @'
+import asyncio
 import os
 import re
 import sys
 from pathlib import Path
 
-import pymysql
-from pymysql.constants import CLIENT
+import asyncpg
 
 
-def execute_sql(cursor, path: str) -> None:
+async def execute_sql(connection, path: str) -> None:
     sql = Path(path).read_text(encoding="utf-8-sig")
-    cursor.execute(sql)
-    while cursor.nextset():
-        pass
+    # asyncpg executes SQL directly and does not understand psql meta-commands.
+    sql = "\n".join(line for line in sql.splitlines() if not line.lstrip().startswith("\\"))
+    await connection.execute(sql)
 
 
 database = os.environ["DB_DATABASE"]
 if not re.fullmatch(r"[A-Za-z0-9_-]+", database):
     raise SystemExit(f"Unsafe database name: {database!r}")
 
-connection = pymysql.connect(
-    host=os.environ["DB_HOST"],
-    port=int(os.environ["DB_PORT"]),
-    user=os.environ["DB_USERNAME"],
-    password=os.environ.get("DB_PASSWORD", ""),
-    charset="utf8mb4",
-    autocommit=True,
-    client_flag=CLIENT.MULTI_STATEMENTS,
-)
-try:
-    with connection.cursor() as cursor:
-        quoted_database = "`" + database.replace("`", "``") + "`"
-        cursor.execute(
-            f"CREATE DATABASE IF NOT EXISTS {quoted_database} "
-            "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci"
+async def main() -> None:
+    connect_args = dict(
+        host=os.environ["DB_HOST"],
+        port=int(os.environ["DB_PORT"]),
+        user=os.environ["DB_USERNAME"],
+        password=os.environ.get("DB_PASSWORD", ""),
+    )
+    admin = await asyncpg.connect(database="postgres", **connect_args)
+    try:
+        exists = await admin.fetchval("SELECT 1 FROM pg_database WHERE datname = $1", database)
+        if not exists:
+            await admin.execute('CREATE DATABASE "' + database.replace('"', '""') + '"')
+    finally:
+        await admin.close()
+
+    connection = await asyncpg.connect(database=database, **connect_args)
+    try:
+        has_base_tables = await connection.fetchval(
+            "SELECT EXISTS (SELECT 1 FROM information_schema.tables "
+            "WHERE table_schema = 'public' AND table_name = 'sys_user')"
         )
-        cursor.execute(f"USE {quoted_database}")
-        legacy_renames = [
-            ("pipeline_material", "knowledge_files"),
-            ("materials", "knowledge_files"),
-            ("pipeline_workspace_item", "user_saved_items"),
-            ("workspace_items", "user_saved_items"),
-            ("pipeline_research_job", "generation_tasks"),
-            ("jobs", "generation_tasks"),
-            ("pipeline_report", "reports"),
-            ("pipeline_report_version", "report_versions"),
-            ("pipeline_source", "data_sources"),
-            ("sources", "data_sources"),
-            ("pipeline_crawl_run", "collection_runs"),
-            ("crawl_runs", "collection_runs"),
-            ("crawl_tasks", "collection_runs"),
-        ]
-        cursor.execute("SHOW TABLES")
-        existing_tables = {row[0] for row in cursor.fetchall()}
-        for old_name, new_name in legacy_renames:
-            if old_name in existing_tables and new_name not in existing_tables:
-                cursor.execute(f"RENAME TABLE `{old_name}` TO `{new_name}`")
-                existing_tables.remove(old_name)
-                existing_tables.add(new_name)
-        cursor.execute("SHOW TABLES LIKE 'sys_user'")
-        if cursor.fetchone() is None:
-            print("Base RuoYi tables are missing; importing ruoyi-fastapi.sql...")
-            execute_sql(cursor, sys.argv[1])
-        print("Applying idempotent PipeSight domain tables...")
-        execute_sql(cursor, sys.argv[2])
-        print("Applying normalized PipeSight domain tables...")
-        execute_sql(cursor, sys.argv[3])
-finally:
-    connection.close()
+        if not has_base_tables:
+            print("Base RuoYi tables are missing; importing ruoyi-fastapi-pg.sql...")
+            await execute_sql(connection, sys.argv[1])
+        if not has_base_tables:
+            print("Applying PipeSight baseline tables before Alembic migrations...")
+            await execute_sql(connection, sys.argv[2])
+            await execute_sql(connection, sys.argv[3])
+        if len(sys.argv) > 4 and Path(sys.argv[4]).exists():
+            print("Applying InsightHub PostgreSQL schema...")
+            await execute_sql(connection, sys.argv[4])
+    finally:
+        await connection.close()
+
+
+asyncio.run(main())
 '@
 
     [System.IO.File]::WriteAllText($initScriptPath, $initCode, [System.Text.UTF8Encoding]::new($false))
-    & $BackendPython $initScriptPath $baseSql $pipelineSql $pipelineEnhancementSql
+    & $BackendPython $initScriptPath $baseSql $pipelineSql $pipelineEnhancementSql $insightHubSql
     if ($LASTEXITCODE -ne 0) {
         throw "Database initialization failed for $($env:DB_HOST):$($env:DB_PORT)/$($env:DB_DATABASE). Check credentials in backend/.env.dev or Docker health."
+    }
+    Push-Location $BackendRoot
+    try {
+        & $BackendPython -m alembic upgrade head
+        if ($LASTEXITCODE -ne 0) {
+            throw 'Database migrations failed; backend startup has been stopped.'
+        }
+    } finally {
+        Pop-Location
     }
 }
 
@@ -657,8 +662,8 @@ Write-Step 'Preparing dependencies'
 Ensure-BackendDependencies -UvPath $uvPath
 Ensure-FrontendDependencies -NpmPath $npmPath
 
-Write-Step 'Checking MySQL and Redis'
-$localDatabasePort = [int](Get-DotEnvValue -Name 'DB_PORT' -DefaultValue '3306')
+Write-Step 'Checking PostgreSQL and Redis'
+$localDatabasePort = [int](Get-DotEnvValue -Name 'DB_PORT' -DefaultValue '5432')
 $localRedisPort = [int](Get-DotEnvValue -Name 'REDIS_PORT' -DefaultValue '6379')
 $useDocker = $Infrastructure -eq 'Docker'
 if ($Infrastructure -eq 'Auto') {
@@ -669,13 +674,13 @@ if ($Infrastructure -eq 'Auto') {
 }
 
 if ($useDocker) {
-    $dockerPath = Assert-Command -Name 'docker' -InstallHint 'Install Docker Desktop, or start local MySQL and Redis and use -Infrastructure Local.'
+    $dockerPath = Assert-Command -Name 'docker' -InstallHint 'Install Docker Desktop, or start local PostgreSQL and Redis and use -Infrastructure Local.'
     Start-DockerInfrastructure -DockerPath $dockerPath
 }
 else {
     Use-LocalInfrastructure
 }
-Write-Host "Using MySQL at $($env:DB_HOST):$($env:DB_PORT) and Redis at $($env:REDIS_HOST):$($env:REDIS_PORT)."
+Write-Host "Using PostgreSQL at $($env:DB_HOST):$($env:DB_PORT) and Redis at $($env:REDIS_HOST):$($env:REDIS_PORT)."
 
 if (-not $SkipDatabaseInit) {
     Write-Step 'Initializing database tables'
@@ -730,8 +735,9 @@ try {
         Write-Step 'Starting backend with uv'
         $backendStartArguments = @{
             FilePath = $uvPath
-            ArgumentList = @('run', '--project', $BackendRoot, '--no-sync', 'python', $BackendApp, '--env=dev')
+            ArgumentList = @('run', '--project', $BackendRoot, '--no-sync', 'python', '-m', $BackendApiModule, '--env=dev')
             WorkingDirectory = $BackendRoot
+            Environment = @{ PYTHONPATH = "$(Join-Path $BackendRoot 'src');$BackendRoot" }
             RedirectStandardOutput = $BackendStdout
             RedirectStandardError = $BackendStderr
             WindowStyle = 'Hidden'

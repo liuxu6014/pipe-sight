@@ -68,8 +68,8 @@ TRANSPORT_CRYPTO_MAX_GET_URL_LENGTH=4096
 
 后端容器启动命令分别是：
 
-- `python app.py --env=dockermy`
-- `python app.py --env=dockerpg`
+- `python -m app.entrypoints.api --env=dockermy`
+- `python -m app.entrypoints.api --env=dockerpg`
 
 所以 Docker 环境需要直接在以下文件中配置传输层密钥：
 

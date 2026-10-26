@@ -109,5 +109,9 @@ def ensure_custom_completion_classes_registered() -> None:
 
     :return: None
     """
-    if get_completion_class(PowerShellComplete.name) is None:
+    # Click versions that ship a built-in PowerShell handler register it before
+    # the application starts.  Replace that handler rather than checking only
+    # for a missing name: the built-in implementation expects COMP_CWORD to be
+    # an integer, while PowerShell passes the current word text.
+    if get_completion_class(PowerShellComplete.name) is not PowerShellComplete:
         add_completion_class(PowerShellComplete)

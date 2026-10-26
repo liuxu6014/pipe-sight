@@ -10,7 +10,7 @@ const dashboardSource = readFileSync(new URL('../src/views/pipeline/dashboard/in
 test('manuscript api maps to migrated generation endpoints', () => {
   assert.match(apiSource, /url:\s*'\/manuscript\/generate'/)
   assert.match(apiSource, /url:\s*'\/manuscript\/jobs'/)
-  assert.match(apiSource, /\/manuscript\/jobs\/\$\{jobId\}\/export/)
+  assert.match(apiSource, /\/manuscript\/jobs\/\$\{requireBusinessId\(jobId\)\}\/export/)
   assert.match(apiSource, /url:\s*'\/manuscript\/titles\/suggest'/)
 })
 

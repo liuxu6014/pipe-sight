@@ -21,9 +21,16 @@ class RuntimeEnvironmentService:
         :return: 是否为后端项目根目录
         """
         return (
-            (project_dir / 'app.py').exists()
-            and (project_dir / 'config' / 'env.py').exists()
-            and (project_dir / 'cli').is_dir()
+            (
+                (project_dir / 'app.py').exists()
+                and (project_dir / 'config' / 'env.py').exists()
+                and (project_dir / 'cli').is_dir()
+            )
+            or (
+                (project_dir / 'pyproject.toml').exists()
+                and (project_dir / 'src' / 'app' / '__init__.py').exists()
+                and (project_dir / 'cli').is_dir()
+            )
         )
 
     def get_backend_dir(self) -> str:

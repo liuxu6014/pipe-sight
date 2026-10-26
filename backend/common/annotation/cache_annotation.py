@@ -11,13 +11,14 @@ from fastapi.responses import JSONResponse, ORJSONResponse, Response, StreamingR
 from redis import asyncio as aioredis
 from typing_extensions import ParamSpec
 
-from common.constant import HttpStatusConstant
-from common.context import RequestContext
-from common.enums import HttpMethod, RedisInitKeyConfig
+from app.infrastructure.services.logging_support import logger
+from common.enums.cache import RedisInitKeyConfig
+from common.enums.http import HttpMethod
+from common.http.context import RequestContext
+from common.http.request_support import RequestSupport
+from common.http.response_headers import ResponseHeaderStore
+from common.http.status import HttpStatusConstant
 from exceptions.exception import LoginException
-from utils.api_annotation_util import ApiAnnotationUtil
-from utils.api_response_header_util import ApiResponseHeaderUtil
-from utils.log_util import logger
 
 P = ParamSpec('P')
 R = TypeVar('R')
@@ -222,7 +223,7 @@ class ApiCache(_ApiCacheSupport):
         self.namespace = namespace
         self.expire_seconds = expire_seconds
         self.vary_by_user = vary_by_user
-        self.methods = ApiAnnotationUtil.normalize_http_methods(methods, default_methods=(HttpMethod.GET,))
+        self.methods = RequestSupport.normalize_http_methods(methods, default_methods=(HttpMethod.GET,))
         self.cache_response_codes = (
             cache_response_codes if cache_response_codes is not None else {HttpStatusConstant.SUCCESS}
         )
@@ -237,7 +238,7 @@ class ApiCache(_ApiCacheSupport):
 
         @wraps(func)
         async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-            request, redis = ApiAnnotationUtil.resolve_request_redis(
+            request, redis = RequestSupport.resolve_request_redis(
                 func, '当前应用未初始化Redis连接，跳过接口缓存', *args, **kwargs
             )
             if request is None or redis is None:
@@ -252,7 +253,7 @@ class ApiCache(_ApiCacheSupport):
 
             result = await func(*args, **kwargs)
             await self._cache_response(redis, cache_key, result)
-            ApiResponseHeaderUtil.merge_headers(request, {'X-Api-Cache': 'MISS'})
+            ResponseHeaderStore.merge_headers(request, {'X-Api-Cache': 'MISS'})
 
             return result
 
@@ -466,7 +467,7 @@ class ApiCacheEvict(_ApiCacheSupport):
         @wraps(func)
         async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             result = await func(*args, **kwargs)
-            _, redis = ApiAnnotationUtil.resolve_request_redis(
+            _, redis = RequestSupport.resolve_request_redis(
                 func, '当前应用未初始化Redis连接，跳过接口缓存失效', *args, **kwargs
             )
             if redis is None:

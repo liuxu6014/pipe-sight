@@ -29,7 +29,7 @@ class CacheInfrastructureGateway:
 
         :return: 缓存初始化键枚举
         """
-        return import_module('common.enums').RedisInitKeyConfig
+        return import_module('common.enums.cache').RedisInitKeyConfig
 
     @staticmethod
     def get_redis_util() -> Any:

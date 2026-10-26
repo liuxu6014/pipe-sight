@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InsightHub 预警通知</title>
+</head>
+
+<body style="margin:0;padding:0;background-color:#050711;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,'PingFang SC','Microsoft YaHei',sans-serif;-webkit-font-smoothing:antialiased;">
+
+  <!-- Wrapper -->
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#050711;background-image:linear-gradient(180deg,#10172a 0%,#050711 42%,#080b16 100%);">
+    <tr>
+      <td align="center" style="padding:24px 16px;">
+
+        <!-- Main Container -->
+        <table width="640" cellpadding="0" cellspacing="0" border="0" style="background-color:#0b1220;border-radius:12px;overflow:hidden;box-shadow:0 18px 48px rgba(0,0,0,0.48);border:1px solid #263044;">
+
+          <!-- ============================================ -->
+          <!-- HEADER: 告警标题 + 元信息                      -->
+          <!-- ============================================ -->
+          <tr>
+            <td style="background:#101827;background-image:linear-gradient(135deg,#241126 0%,#0f1e33 46%,#0b2a32 100%);padding:34px 40px 32px;text-align:center;border-bottom:1px solid #2d374f;">
+              <!-- 告警图标 -->
+              <div style="margin-bottom:16px;">
+                <span style="display:inline-block;width:58px;height:58px;line-height:58px;border-radius:50%;background:rgba(239,68,68,0.18);border:1px solid rgba(248,113,113,0.42);box-shadow:0 0 26px rgba(239,68,68,0.18);font-size:28px;">&#9888;</span>
+              </div>
+              <!-- 告警标题 -->
+              <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:600;letter-spacing:0.5px;">
+                {{ alert.title }}
+              </h1>
+              <!-- 告警ID + 时间 -->
+              <div style="margin-top:12px;font-size:13px;color:rgba(255,255,255,0.7);">
+                <span style="display:inline-block;padding:3px 10px;background:rgba(5,10,22,0.72);border:1px solid rgba(148,163,184,0.24);border-radius:4px;font-family:Consolas,Monaco,'Courier New',monospace;">
+                  {{ alert.alert_id }}
+                </span>
+                <span style="margin-left:12px;">{{ alert.triggered_at.strftime('%Y-%m-%d %H:%M:%S') }}</span>
+              </div>
+            </td>
+          </tr>
+
+          <!-- ============================================ -->
+          <!-- ALERT BADGE: 告警类型 + 严重程度               -->
+          <!-- ============================================ -->
+          <tr>
+            <td style="padding:0 40px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:-16px;position:relative;">
+                <tr>
+                  <td align="center">
+                    {% if alert.severity == 'critical' %}
+                    <span style="display:inline-block;padding:8px 24px;background:#dc2626;background-image:linear-gradient(135deg,#f43f5e,#b91c1c);color:#ffffff;font-size:14px;font-weight:600;border-radius:24px;letter-spacing:1px;box-shadow:0 8px 20px rgba(220,38,38,0.34);">
+                      &#9679; 严重告警
+                    </span>
+                    {% elif alert.severity == 'warning' %}
+                    <span style="display:inline-block;padding:8px 24px;background:#d97706;background-image:linear-gradient(135deg,#f59e0b,#b45309);color:#ffffff;font-size:14px;font-weight:600;border-radius:24px;letter-spacing:1px;box-shadow:0 8px 20px rgba(245,158,11,0.3);">
+                      &#9679; 警告
+                    </span>
+                    {% else %}
+                    <span style="display:inline-block;padding:8px 24px;background:#2563eb;background-image:linear-gradient(135deg,#38bdf8,#2563eb);color:#ffffff;font-size:14px;font-weight:600;border-radius:24px;letter-spacing:1px;box-shadow:0 8px 20px rgba(59,130,246,0.3);">
+                      &#9679; 通知
+                    </span>
+                    {% endif %}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ============================================ -->
+          <!-- METRICS: 核心指标卡片                          -->
+          <!-- ============================================ -->
+          <tr>
+            <td style="padding:32px 40px 16px;">
+              <!-- Section Title -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="font-size:16px;font-weight:600;color:#f1f5f9;padding-bottom:16px;border-bottom:1px solid #27344a;">
+                    <span style="display:inline-block;width:4px;height:16px;background:#38bdf8;border-radius:2px;vertical-align:middle;margin-right:10px;"></span>
+                    系统状态概览
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:0 40px 24px;">
+              <!-- Metrics Grid (Table-based for email compatibility) -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <!-- 待处理任务 -->
+                  <td width="33%" style="padding:0 6px 12px 0;">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#191925;background-image:linear-gradient(145deg,#201926,#111827);border:1px solid #3a2635;border-radius:8px;">
+                      <tr>
+                        <td style="padding:20px;text-align:center;">
+                          <div style="font-size:32px;font-weight:700;color:#e53935;line-height:1.2;">
+                            {{ alert.pending_count }}
+                          </div>
+                          <div style="font-size:12px;color:#94a3b8;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;margin-top:6px;">
+                            待处理任务
+                          </div>
+                          {% if alert.pending_count > 500 %}
+                          <div style="margin-top:8px;font-size:11px;color:#fca5a5;background:rgba(239,68,68,0.14);border:1px solid rgba(248,113,113,0.22);padding:3px 8px;border-radius:4px;display:inline-block;">
+                            超出阈值
+                          </div>
+                          {% endif %}
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+
+                  <!-- 失败率 -->
+                  <td width="33%" style="padding:0 6px 12px 6px;">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#1a1a18;background-image:linear-gradient(145deg,#201b14,#111827);border:1px solid #3a2d1f;border-radius:8px;">
+                      <tr>
+                        <td style="padding:20px;text-align:center;">
+                          <div style="font-size:32px;font-weight:700;color:#f59e0b;line-height:1.2;">
+                            {{ "%.1f"|format(alert.failure_rate * 100) }}%
+                          </div>
+                          <div style="font-size:12px;color:#94a3b8;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;margin-top:6px;">
+                            失败率
+                          </div>
+                          {% if alert.failure_rate > 0.3 %}
+                          <div style="margin-top:8px;font-size:11px;color:#fbbf24;background:rgba(245,158,11,0.14);border:1px solid rgba(251,191,36,0.22);padding:3px 8px;border-radius:4px;display:inline-block;">
+                            需要关注
+                          </div>
+                          {% endif %}
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+
+                  <!-- 活跃任务 -->
+                  <td width="33%" style="padding:0 0 12px 6px;">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#101f1d;background-image:linear-gradient(145deg,#11251f,#111827);border:1px solid #1f3a35;border-radius:8px;">
+                      <tr>
+                        <td style="padding:20px;text-align:center;">
+                          <div style="font-size:32px;font-weight:700;color:#10b981;line-height:1.2;">
+                            {{ alert.active_task_count }}
+                          </div>
+                          <div style="font-size:12px;color:#94a3b8;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;margin-top:6px;">
+                            活跃任务
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <tr>
+                  <!-- 连续失败 -->
+                  <td width="33%" style="padding:0 6px 0 0;">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#1b1824;background-image:linear-gradient(145deg,#221725,#111827);border:1px solid #3a2635;border-radius:8px;">
+                      <tr>
+                        <td style="padding:20px;text-align:center;">
+                          <div style="font-size:32px;font-weight:700;color:#ef4444;line-height:1.2;">
+                            {{ alert.consecutive_failures }}
+                          </div>
+                          <div style="font-size:12px;color:#94a3b8;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;margin-top:6px;">
+                            连续失败
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+
+                  <!-- Worker数量 -->
+                  <td width="33%" style="padding:0 6px 0 6px;">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#171a2b;background-image:linear-gradient(145deg,#171d33,#111827);border:1px solid #2a3150;border-radius:8px;">
+                      <tr>
+                        <td style="padding:20px;text-align:center;">
+                          <div style="font-size:32px;font-weight:700;color:#6366f1;line-height:1.2;">
+                            {{ cluster_metrics|length if cluster_metrics else 1 }}
+                          </div>
+                          <div style="font-size:12px;color:#94a3b8;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;margin-top:6px;">
+                            在线 Worker
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+
+                  <!-- 平均响应时间 -->
+                  <td width="33%" style="padding:0 0 0 6px;">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#1b1730;background-image:linear-gradient(145deg,#22183b,#111827);border:1px solid #332956;border-radius:8px;">
+                      <tr>
+                        <td style="padding:20px;text-align:center;">
+                          <div style="font-size:32px;font-weight:700;color:#8b5cf6;line-height:1.2;">
+                            {{ "%.0f"|format(alert.avg_response_time) }}<span style="font-size:16px;">ms</span>
+                          </div>
+                          <div style="font-size:12px;color:#94a3b8;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;margin-top:6px;">
+                            平均响应
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ============================================ -->
+          <!-- WORKER STATUS: Worker状态表格                  -->
+          <!-- ============================================ -->
+          {% if cluster_metrics %}
+          <tr>
+            <td style="padding:8px 40px 16px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="font-size:16px;font-weight:600;color:#f1f5f9;padding-bottom:16px;border-bottom:1px solid #27344a;">
+                    <span style="display:inline-block;width:4px;height:16px;background:#2dd4bf;border-radius:2px;vertical-align:middle;margin-right:10px;"></span>
+                    Worker 节点状态
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:0 40px 24px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#111a2b;background-image:linear-gradient(145deg,#122131,#111827);border:1px solid #263a4a;border-radius:8px;overflow:hidden;">
+                <!-- Table Header -->
+                <tr style="background:#162235;">
+                  <td style="padding:12px 16px;font-size:12px;font-weight:600;color:#a7b7cc;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #263a4a;">
+                    Worker ID
+                  </td>
+                  <td style="padding:12px 16px;font-size:12px;font-weight:600;color:#a7b7cc;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #263a4a;text-align:center;">
+                    状态
+                  </td>
+                  <td style="padding:12px 16px;font-size:12px;font-weight:600;color:#a7b7cc;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #263a4a;text-align:right;">
+                    待处理
+                  </td>
+                  <td style="padding:12px 16px;font-size:12px;font-weight:600;color:#a7b7cc;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #263a4a;text-align:right;">
+                    失败数
+                  </td>
+                </tr>
+                <!-- Table Rows -->
+                {% for worker in cluster_metrics %}
+                <tr style="border-bottom:1px solid #233247;">
+                  <td style="padding:12px 16px;font-size:13px;color:#cbd5e1;font-family:Consolas,Monaco,'Courier New',monospace;">
+                    {{ worker.worker_id[:16] }}{% if worker.worker_id|length > 16 %}...{% endif %}
+                  </td>
+                  <td style="padding:12px 16px;text-align:center;">
+                    {% set failures = worker.consecutive_failures|default(0) %}
+                    {% set max_w = worker.max_workers|default(4) %}
+                    {% set active = worker.active_count|default(0) %}
+                    {% set util = (active / max_w * 100) if max_w > 0 else 0 %}
+                    {% if failures >= 3 %}
+                    <span style="display:inline-block;padding:4px 12px;background:rgba(239,68,68,0.14);color:#fca5a5;border:1px solid rgba(248,113,113,0.22);font-size:11px;font-weight:600;border-radius:12px;">
+                      异常
+                    </span>
+                    {% elif util > 85 %}
+                    <span style="display:inline-block;padding:4px 12px;background:rgba(245,158,11,0.14);color:#fbbf24;border:1px solid rgba(251,191,36,0.22);font-size:11px;font-weight:600;border-radius:12px;">
+                      警告
+                    </span>
+                    {% else %}
+                    <span style="display:inline-block;padding:4px 12px;background:rgba(16,185,129,0.14);color:#6ee7b7;border:1px solid rgba(52,211,153,0.22);font-size:11px;font-weight:600;border-radius:12px;">
+                      正常
+                    </span>
+                    {% endif %}
+                  </td>
+                  <td style="padding:12px 16px;font-size:14px;font-weight:600;color:#e5e7eb;text-align:right;">
+                    {{ worker.active_count|default(0) }}/{{ worker.max_workers|default(4) }}
+                  </td>
+                  <td style="padding:12px 16px;font-size:14px;font-weight:600;color:{% if worker.consecutive_failures|default(0) > 0 %}#f87171{% else %}#6ee7b7{% endif %};text-align:right;">
+                    {{ worker.consecutive_failures|default(0) }}
+                  </td>
+                </tr>
+                {% endfor %}
+              </table>
+            </td>
+          </tr>
+          {% endif %}
+
+          <!-- ============================================ -->
+          <!-- RECENT FAILURES: 最近失败记录                  -->
+          <!-- ============================================ -->
+          <tr>
+            <td style="padding:8px 40px 16px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="font-size:16px;font-weight:600;color:#f1f5f9;padding-bottom:16px;border-bottom:1px solid #27344a;">
+                    <span style="display:inline-block;width:4px;height:16px;background:#ef4444;border-radius:2px;vertical-align:middle;margin-right:10px;"></span>
+                    最近失败记录
+                    <span style="font-size:13px;color:#64748b;font-weight:400;margin-left:8px;">最新 {{ alert.failure_records|length }} 条</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:0 40px 24px;">
+              {% if alert.failure_records %}
+              {% for record in alert.failure_records[-5:] %}
+              <!-- Failure Card -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:16px;background:#171827;background-image:linear-gradient(145deg,#201824,#101827);border:1px solid #352635;border-left:4px solid #ef4444;border-radius:6px;">
+                <tr>
+                  <td style="padding:16px;">
+                    <!-- Failure Header -->
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td style="font-size:14px;font-weight:600;color:#f87171;">
+                          {{ record.error_type }}
+                        </td>
+                        <td align="right" style="font-size:12px;color:#64748b;white-space:nowrap;">
+                          {{ record.timestamp.strftime('%m-%d %H:%M') }} &middot; {{ record.domain }}
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- News Source -->
+                    <div style="font-size:13px;color:#cbd5e1;margin:10px 0 8px;">
+                      <span style="color:#94a3b8;">来源:</span>
+                      {{ record.news_title[:60] }}{% if record.news_title|length > 60 %}...{% endif %}
+                    </div>
+
+                    <!-- Error Message -->
+                    <div style="font-size:13px;color:#cbd5e1;background:#0a1020;border:1px solid #2a3148;padding:12px;border-radius:6px;font-family:Consolas,Monaco,'Courier New',monospace;line-height:1.5;">
+                      {{ record.error_message[:300] }}{% if record.error_message|length > 300 %}...{% endif %}
+                    </div>
+
+                    {% if record.stack_trace %}
+                    <!-- Stack Trace (collapsed) -->
+                    <details style="margin-top:12px;">
+                      <summary style="font-size:12px;color:#60a5fa;cursor:pointer;user-select:none;">
+                        &#9654; 查看详细堆栈信息
+                      </summary>
+                      <pre style="background:#050711;color:#cbd5e1;border:1px solid #2a3148;padding:16px;border-radius:6px;font-size:11px;line-height:1.6;overflow-x:auto;margin-top:8px;white-space:pre-wrap;word-wrap:break-word;">{{ record.stack_trace }}</pre>
+                    </details>
+                    {% endif %}
+                  </td>
+                </tr>
+              </table>
+              {% endfor %}
+              {% else %}
+              <!-- No Failures -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#101f1d;background-image:linear-gradient(145deg,#11251f,#111827);border:1px solid rgba(52,211,153,0.28);border-radius:8px;">
+                <tr>
+                  <td style="padding:24px;text-align:center;">
+                    <span style="font-size:24px;">&#10003;</span>
+                    <div style="font-size:14px;color:#6ee7b7;margin-top:8px;">暂无失败记录</div>
+                  </td>
+                </tr>
+              </table>
+              {% endif %}
+            </td>
+          </tr>
+
+          <!-- ============================================ -->
+          <!-- ACTION GUIDE: 建议操作                         -->
+          <!-- ============================================ -->
+          <tr>
+            <td style="padding:8px 40px 24px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#111a2b;background-image:linear-gradient(145deg,#111f35,#111827);border:1px solid #263a4a;border-radius:8px;">
+                <tr>
+                  <td style="padding:24px;">
+                    <div style="font-size:14px;font-weight:600;color:#67e8f9;margin-bottom:12px;">
+                      &#128161; 建议排查步骤
+                    </div>
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td style="padding:6px 0;font-size:13px;color:#cbd5e1;line-height:1.6;">
+                          1. 检查 Worker 节点运行状态和处理日志
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:6px 0;font-size:13px;color:#cbd5e1;line-height:1.6;">
+                          2. 确认 Worker 节点是否正常运行
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:6px 0;font-size:13px;color:#cbd5e1;line-height:1.6;">
+                          3. 检查新闻源 API 是否可访问
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:6px 0;font-size:13px;color:#cbd5e1;line-height:1.6;">
+                          4. 查看 Redis 和 Kafka 服务状态
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ============================================ -->
+          <!-- FOOTER: 页脚信息                               -->
+          <!-- ============================================ -->
+          <tr>
+            <td style="background:#080d19;padding:24px 40px;border-top:1px solid #27344a;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="font-size:12px;color:#64748b;line-height:1.8;">
+                    <div>此邮件由 <strong style="color:#94a3b8;">InsightHub 预警系统</strong> 自动发送，请勿直接回复。</div>
+                    <div>生成时间: {{ alert.triggered_at.strftime('%Y-%m-%d %H:%M:%S') }}</div>
+                    <div style="margin-top:8px;font-size:11px;color:#475569;">
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+        </table>
+        <!-- End Main Container -->
+
+        <!-- Bottom Spacing -->
+        <table width="640" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td style="padding:16px 0;text-align:center;font-size:11px;color:#94a3b8;">
+              InsightHub Monitoring System &copy; {{ alert.triggered_at.strftime('%Y') }}
+            </td>
+          </tr>
+        </table>
+
+      </td>
+    </tr>
+  </table>
+  <!-- End Wrapper -->
+
+</body>
+</html>

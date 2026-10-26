@@ -13,36 +13,24 @@
 
 <script setup>
 import SidebarItem from '../Sidebar/SidebarItem'
-import useAppStore from '@/store/modules/app'
 import useSettingsStore from '@/store/modules/settings'
 import usePermissionStore from '@/store/modules/permission'
+import { resolveActiveNavigation, splitNavigationMenus } from '@/utils/management-navigation'
 
 const route = useRoute()
-const appStore = useAppStore()
 const settingsStore = useSettingsStore()
 const permissionStore = usePermissionStore()
 
-const sidebarRouters = computed(() => permissionStore.sidebarRouters)
 const theme = computed(() => settingsStore.theme)
-const device = computed(() => appStore.device)
-const activeMenu = computed(() => {
-  const { meta, path } = route
-  if (meta.activeMenu) {
-    return meta.activeMenu
-  }
-  return path
-})
+const activeMenu = computed(() => resolveActiveNavigation(route, permissionStore.navigationRoutes))
 
 const visibleNumber = ref(5)
-const topMenus = computed(() => {
-  return permissionStore.sidebarRouters.filter((f) => !f.hidden).slice(0, visibleNumber.value)
-})
-const moreRoutes = computed(() => {
-  return permissionStore.sidebarRouters.filter((f) => !f.hidden).slice(visibleNumber.value, sidebarRouters.value.length - visibleNumber.value)
-})
+const menuPartition = computed(() => splitNavigationMenus(permissionStore.navigationRoutes, visibleNumber.value))
+const topMenus = computed(() => menuPartition.value.visible)
+const moreRoutes = computed(() => menuPartition.value.more)
 function setVisibleNumber() {
   const width = document.body.getBoundingClientRect().width / 3
-  visibleNumber.value = parseInt(width / 85)
+  visibleNumber.value = Math.max(1, Math.floor(width / 85))
 }
 
 onMounted(() => {

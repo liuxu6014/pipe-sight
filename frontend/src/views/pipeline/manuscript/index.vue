@@ -66,7 +66,7 @@
               v-model="referenceText"
               type="textarea"
               :rows="4"
-              placeholder="每行一条参考文献；留空时使用默认管网领域参考线索。"
+              placeholder="每行一条参考线索；提交后会随任务保存，正式引用仍需关联平台资料并人工核验。"
             />
           </el-form-item>
 
@@ -203,14 +203,35 @@ async function handleGenerate() {
   try {
     const res = await generateManuscript(requestPayload.value)
     selectedJob.value = res.data
-    selectedContent.value = res.data.content
+    selectedContent.value = ''
+    const finishedJob = await waitForJob(res.data.job_id || res.data.jobId)
     await loadJobs()
-    ElMessage.success('论文草稿已生成')
+    if (finishedJob?.status === 'completed') {
+      ElMessage.success('论文草稿已生成')
+    } else if (finishedJob?.status === 'failed') {
+      ElMessage.warning('论文生成失败，请查看任务状态后重试')
+    } else {
+      ElMessage.info('论文任务已进入后台队列，可在任务列表中查看进度')
+    }
   } catch (error) {
     ElMessage.warning('论文生成失败，请稍后重试')
   } finally {
     generating.value = false
   }
+}
+
+async function waitForJob(jobId) {
+  if (!jobId) return null
+  let latest = selectedJob.value
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const res = await getManuscriptJob(jobId)
+    latest = res.data
+    selectedJob.value = latest
+    selectedContent.value = latest.content || ''
+    if (['completed', 'failed', 'cancelled'].includes(latest.status)) return latest
+    await new Promise(resolve => window.setTimeout(resolve, 1000))
+  }
+  return latest
 }
 
 async function handleSuggestTitles() {
@@ -342,7 +363,7 @@ onMounted(loadJobs)
 .preview-toolbar small {
   margin-top: 4px;
   color: #7a8796;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .markdown-preview {

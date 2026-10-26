@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 
+from cli.output import SHELL_TEXT_FORMATTER
+from cli.runtime.nested_cli import NESTED_CLI_SUPPORT
 from cli.tui.actions.models import TuiActionResult, TuiActionSpec
 from cli.tui.copy import TUI_COPY
-from cli.utils import NESTED_CLI_SUPPORT, SHELL_TEXT_FORMATTER
 
 
 @dataclass(frozen=True)
