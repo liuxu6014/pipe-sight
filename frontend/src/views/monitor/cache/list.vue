@@ -236,10 +236,18 @@ function handleCacheValue(cacheKey) {
 }
 
 /** 清理全部缓存 */
-function handleClearCacheAll() {
-  clearCacheAll().then(response => {
+async function handleClearCacheAll() {
+  try {
+    await proxy.$modal.confirm('此操作将清理当前 Redis 库的全部缓存，包括会话及运行数据，并非仅当前选中分类；可能导致登录状态失效。确认继续清理全部缓存吗？');
+  } catch {
+    return;
+  }
+  try {
+    await clearCacheAll();
     proxy.$modal.msgSuccess("清理全部缓存成功");
-  });
+  } catch {
+    proxy.$modal.msgError('清理全部缓存失败，请检查网络和登录状态，核实结果后再决定是否重试。');
+  }
 }
 
 getCacheNames();

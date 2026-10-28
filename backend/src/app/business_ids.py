@@ -59,13 +59,24 @@ def wire_id(value):
     return None if value is None else str(parse_business_id(value))
 
 
+def generation_request_data(payload):
+    """保留配图选择的显式性；省略表示继承，显式 false 表示关闭。"""
+    if hasattr(payload, 'model_dump'):
+        data = payload.model_dump(by_alias=False)
+        if 'diagram' not in payload.model_fields_set:
+            data.pop('diagram', None)
+        return data
+    return dict(payload)
+
+
 def generation_request_fingerprint(request, materials):
     """One representation for raw scalar IDs, typed input and stored snapshots.
 
     Frozen/authorized materials resolve scalar IDs without reloading changed or
     deleted source bodies. Explicitly changing a supplied type still conflicts.
     """
-    canonical = deepcopy({key: value for key, value in request.items() if key not in {'request_id', 'requestId'}})
+    canonical = deepcopy({key: value for key, value in generation_request_data(request).items()
+                          if key not in {'request_id', 'requestId'}})
     kinds = {}
     for material in materials:
         identity = wire_id(material['id'])

@@ -89,13 +89,17 @@ async def test_apply_result_syncs_immutable_template_and_real_material_citations
     await env.app.ResearchReportService.apply_task_result(
         db, user_id=7, owner_name='应用者', job_id=job.id, expected_version=1,
         report_serializer=env.app.ResearchApplicationService.report_dict)
-    assert report.template_id == NEW_TEMPLATE and report.content == '任务结果'
+    assert report.template_id == NEW_TEMPLATE
+    assert report.content == '## 正文\n\n任务结果\n\n## 参考资料\n\n[1] 冻结标题；用户资料'
     version = await env.repo.ResearchDao.get_report_version(db, report.id, 2)
     assert version.model_snapshot == snapshot and job.config_snapshot == snapshot
     assert version.citations[0]['sourceId'] == '101'
     assert version.citations[0]['title'] == '冻结标题'
     assert version.citations[0]['source'] == {'filename': 'a.txt'}
-    assert version.sections == [{'id': 1, 'title': '正文', 'content': '任务结果'}]
+    assert version.sections == [
+        {'id': 1, 'title': '正文', 'content': '任务结果'},
+        {'id': 2, 'title': '参考资料', 'content': '[1] 冻结标题；用户资料'},
+    ]
     assert version.quality_issues == []
     assert (await env.repo.ResearchDao.get_report_version(db, report.id, 1)).model_snapshot == old['model_snapshot']
 
@@ -258,14 +262,15 @@ async def test_automatic_generation_saves_frozen_material_citations_not_template
     execution = importlib.import_module('app.research.services.execution')
     monkeypatch.setattr(execution, 'AsyncSessionLocal', lambda: AsyncMemory(Session(db.s.bind, expire_on_commit=False)))
     monkeypatch.setattr(execution.ResearchExecutionService, '_heartbeat', AsyncMock())
-    monkeypatch.setattr(execution.ResearchModelGenerationService, 'generate_content', AsyncMock(return_value='真实替身正文'))
+    monkeypatch.setattr(execution.ResearchModelGenerationService, 'generate_content', AsyncMock(return_value='真实替身正文[1]。'))
     await execution.ResearchExecutionService.process(job_id=result['jobId'], user_id=7, owner_name='用户')
     db.s.expire_all()
     report = await env.repo.ResearchDao.get_report(db, result['reportId'], 7)
     job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
     version = await env.repo.ResearchDao.get_report_version(db, report.id, report.version)
     assert job.status == 'completed' and version.source == 'generated'
-    assert version.sections == [{'id': 1, 'title': '正文', 'content': '真实替身正文'}]
+    assert version.sections[0] == {'id': 1, 'title': '正文', 'content': '真实替身正文[1]。'}
+    assert version.sections[1] == {'id': 2, 'title': '参考资料', 'content': '[1] 资料；用户资料'}
     assert all(section['title'] != '计划章节' for section in version.sections)
     assert version.citations[0]['sourceId'] == '101'
     assert version.citations[0]['source'] == {'filename': 'a.txt'}
@@ -389,6 +394,7 @@ async def test_job_conflict_uses_normalized_article_but_preserves_raw_provider_o
     await db.flush()
     report.content = content.normalize_generated_report(raw, [])['content']
     assert env.app.ResearchApplicationService.job_dict(job, report=report)['applyConflict'] is False
-    assert env.app.ResearchApplicationService.job_dict(job, report=report)['resultContent'] == raw
+    assert env.app.ResearchApplicationService.job_dict(job, report=report)['resultContent'] == report.content
+    assert job.result_content == raw
     report.content = '用户编辑后的不同正文'
     assert env.app.ResearchApplicationService.job_dict(job, report=report)['applyConflict'] is True

@@ -1,17 +1,18 @@
 <template>
-  <div class="ps-page ps-home-page ps-home-dashboard">
+  <div class="ps-page ps-home-page ps-home-dashboard ps-home-viewport">
     <section class="ps-home-search-panel" aria-label="首页资料检索">
       <form class="ps-home-search" role="search" @submit.prevent="submitSearch">
         <Search aria-hidden="true" />
         <input v-model.trim="keyword" maxlength="200" aria-label="搜索研究资料" placeholder="搜索资讯、论文、研究资料或我的报告" />
-        <button v-if="keyword" class="ps-home-search-clear" type="button" aria-label="清空搜索" @click="clearSearch"><Close /></button>
+        <el-button v-if="keyword" class="ps-ui-action ps-home-search-clear" aria-label="清空搜索" @click="clearSearch"><Close /></el-button>
         <el-button native-type="submit" type="primary" :disabled="!keyword">搜索</el-button>
       </form>
     </section>
 
     <section v-if="submittedKeyword" class="ps-panel ps-home-search-results" aria-label="首页搜索结果" :aria-busy="searchRequest.loading.value">
-      <div class="ps-section-head"><h2>搜索结果</h2><el-button text @click="clearSearch">收起结果</el-button></div>
+      <div class="ps-section-head"><h2>搜索结果</h2><el-button plain @click="clearSearch">收起结果</el-button></div>
       <p class="ps-home-result-status" role="status">{{ searchRequest.loading.value ? '正在搜索…' : searchRequest.loadError.value ? '搜索失败' : `“${submittedKeyword}” · 共 ${searchTotal} 条结果` }}</p>
+      <div class="ps-home-panel-content" tabindex="0" aria-label="首页搜索结果滚动区">
       <el-skeleton v-if="searchRequest.loading.value" :rows="4" animated />
       <PortalEmptyState v-else-if="searchRequest.loadError.value" compact title="搜索失败" :description="searchRequest.loadError.value" action-label="重试" @action="searchRequest.reload" />
       <ul v-else-if="searchResults.length" class="ps-home-result-list">
@@ -21,13 +22,14 @@
         </li>
       </ul>
       <PortalEmptyState v-else compact title="没有匹配结果" description="请缩短关键词或尝试其他技术名称。" />
+      </div>
       <div v-if="searchTotal > 0 && !searchRequest.loading.value && !searchRequest.loadError.value" class="ps-pagination" aria-label="首页搜索结果分页"><el-pagination v-model:current-page="searchPage" v-model:page-size="searchPageSize" :page-sizes="[10, 20, 50]" :total="Math.min(searchTotal, searchPageSize * 100)" :pager-count="5" layout="total, sizes, ->, prev, pager, next, jumper" background /></div>
     </section>
 
     <section class="ps-home-statistics" aria-label="可访问数据统计" :aria-busy="overview.loading.value">
       <div v-for="metric in metrics" :key="metric.key" class="ps-home-metric"><span class="ps-home-metric-label">{{ metric.label }}</span><div class="ps-home-metric-number"><strong class="ps-home-metric-value">{{ metric.value === null ? '—' : metric.value.toLocaleString() }}</strong><small v-if="metric.added !== null" class="ps-home-metric-added" :class="{ 'is-positive': metric.added > 0 }" :aria-label="`今日新增 ${metric.added} ${metric.unit}`" :title="`今日新增 ${metric.added} ${metric.unit}`">+{{ metric.added.toLocaleString() }}</small><small class="ps-home-metric-unit">{{ metric.unit }}</small></div></div>
     </section>
-    <p v-if="overview.loadError.value" class="ps-home-load-warning" role="alert">统计加载失败，不以零代替。<el-button text @click="overview.reload">重试</el-button></p>
+    <p v-if="overview.loadError.value" class="ps-home-load-warning" role="alert">统计加载失败，不以零代替。<el-button plain @click="overview.reload">重试</el-button></p>
 
     <section class="ps-home-modules" aria-label="四大功能">
       <button v-for="entry in modules" :key="entry.path" type="button" class="ps-home-module" @click="router.push(entry.path)">
@@ -38,7 +40,8 @@
 
     <section class="ps-panel ps-home-latest" aria-label="最新资讯与论文">
       <div class="ps-section-head"><h2>最新资讯与论文</h2><div class="ps-home-feed-tabs" role="group" aria-label="最新内容类型"><button v-for="tab in feedTabs" :key="tab.key" type="button" :aria-pressed="feedType === tab.key" @click="feedType = tab.key">{{ tab.label }}</button></div></div>
-      <p v-if="articles.loadError.value || papers.loadError.value" class="ps-home-load-warning" role="alert">{{ articles.loadError.value ? '资讯加载失败。' : '' }}{{ papers.loadError.value ? '论文加载失败。' : '' }}<el-button text @click="reloadLatest">重试</el-button></p>
+      <p v-if="articles.loadError.value || papers.loadError.value" class="ps-home-load-warning" role="alert">{{ articles.loadError.value ? '资讯加载失败。' : '' }}{{ papers.loadError.value ? '论文加载失败。' : '' }}<el-button plain @click="reloadLatest">重试</el-button></p>
+      <div class="ps-home-panel-content" tabindex="0" aria-label="最新资讯与论文滚动区">
       <el-skeleton v-if="articles.loading.value || papers.loading.value" :rows="6" animated />
       <ul v-else-if="latestItems.length" class="ps-home-latest-list">
         <li v-for="item in latestItems" :key="`${item.kind}-${item.id}`">
@@ -49,6 +52,7 @@
         </li>
       </ul>
       <PortalEmptyState v-else compact title="暂无可访问内容" description="仅展示已发布且当前账号允许阅读的内容。" />
+      </div>
     </section>
   </div>
 </template>

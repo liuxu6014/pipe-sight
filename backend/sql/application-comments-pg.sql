@@ -1,7 +1,7 @@
--- compact-v5中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；若依表字段不变。
+-- compact-v6中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；若依表字段不变。
 -- 27个业务created_at/updated_at为北京时间timestamp(0)无时区；其他运行时间字段保持原类型。
 -- 普通不透明令牌保留；系统幂等键内嵌ID、显式JSON引用及语义指纹按实体映射核验。
--- 27张基线表317字段，2张保留功能表23字段；共29张物理表340字段。
+-- 27张基线表320字段，2张保留功能表23字段；共29张物理表343字段。
 -- 仅COMMENT及存在性保护块；调用方管理事务，不修改字段、约束或业务数据。
 
 COMMENT ON TABLE public."news_articles" IS '网站与公众号新闻原文及中文译文；每篇最多关联一个类别，无人工审核流程';
@@ -165,6 +165,9 @@ COMMENT ON COLUMN public."digest_schedules"."selection_config" IS '选材条件J
 COMMENT ON COLUMN public."digest_schedules"."generation_config" IS '生成设置JSON对象；保存摘要长度和配图等参数，不重复整段材料正文；显式平台业务引用按实体映射，供应商模型标识、提示词及普通参数原样保留';
 COMMENT ON COLUMN public."digest_schedules"."is_enabled" IS '计划开关；true启用、false停用，启用前校验真实文本模型及资料条件';
 COMMENT ON COLUMN public."digest_schedules"."next_run_at" IS '下次触发的带时区时间点；启用时必填，原子认领后推进调度游标';
+COMMENT ON COLUMN public."digest_schedules"."last_run_at" IS '最近派发检查时间；北京时间Asia/Shanghai，timestamp(0)无时区，精度到秒，YYYY-MM-DD HH:mm:ss；历史为空不回填';
+COMMENT ON COLUMN public."digest_schedules"."last_status" IS '最近派发结果：queued入队、no_data无匹配、skipped节假日跳过、failed失败；历史为空；生成进度读取关联任务';
+COMMENT ON COLUMN public."digest_schedules"."last_error" IS '最近派发失败原因，脱敏后保存；成功或跳过时清空，不包含模型密钥或内部堆栈';
 COMMENT ON COLUMN public."digest_schedules"."created_at" IS '周期计划创建时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss';
 COMMENT ON COLUMN public."digest_schedules"."updated_at" IS '周期计划配置或调度游标最近更新时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss';
 

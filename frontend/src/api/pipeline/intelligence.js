@@ -6,11 +6,24 @@ export function getPipelinePortalOverview() {
   return request({ url: '/pipeline/portal/overview', method: 'get' })
 }
 
+export function proposePipelineReportRewrite(reportId, data) {
+  return request({ url: `/pipeline/research/reports/${requireBusinessId(reportId)}/rewrite`,
+    method: 'post', data, timeout: 150000 })
+}
+
 export function getPipelineDashboard() {
   return request({
     url: '/pipeline/dashboard',
     method: 'get'
   })
+}
+
+export function listPipelineAdminReports(params) {
+  return request({ url: '/pipeline/research/admin/reports', method: 'get', params })
+}
+
+export function getPipelineContentFilters() {
+  return request({ url: '/pipeline/intelligence/filters', method: 'get' })
 }
 
 export function listPipelineIntelligence(query) {
@@ -177,6 +190,14 @@ export function getPipelineKnowledgeDocument(documentId) {
   })
 }
 
+export function updatePipelineKnowledgeDocument(documentId, data) {
+  return request({
+    url: `/pipeline/knowledge/documents/${requireBusinessId(documentId)}`,
+    method: 'put',
+    data
+  })
+}
+
 export function downloadPipelineKnowledgeDocument(documentId, filename) {
   return downloadGet(`/pipeline/knowledge/documents/${requireBusinessId(documentId)}/download`, {}, filename || '资料文件')
 }
@@ -253,6 +274,10 @@ export function updatePipelineDigestSchedule(scheduleId, data) {
     method: 'put',
     data
   })
+}
+
+export function savePipelineDigestScheduleConfig(scheduleId, data) {
+  return request({ url: `/pipeline/research/digest-schedules/${requireBusinessId(scheduleId)}/config`, method: 'put', data })
 }
 
 export function runPipelineDigestSchedule(scheduleId) {

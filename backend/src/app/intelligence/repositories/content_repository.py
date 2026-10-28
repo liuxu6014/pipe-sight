@@ -29,6 +29,52 @@ def _category_identity(value: Any) -> int | None:
 
 class ContentDao:
     @staticmethod
+    async def filter_options(db: Any) -> dict[str, Any]:
+        """Public facet labels only, independent of the current result page."""
+        news_tags = (
+            (
+                await db.execute(
+                    select(PipelineCategory.name)
+                    .join(PipelineArticle, PipelineArticle.category_id == PipelineCategory.id)
+                    .distinct()
+                    .order_by(PipelineCategory.name)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        paper_facets = (
+            await db.execute(select(PipelinePaper.journal, func.substr(PipelinePaper.published_date, 1, 4)).distinct())
+        ).all()
+        referenced = select(PipelineArticle.category_id).union(select(PipelinePaper.category_id))
+        categories = (
+            (
+                await db.execute(
+                    select(PipelineCategory.name)
+                    .where(PipelineCategory.id.in_(referenced))
+                    .distinct()
+                    .order_by(PipelineCategory.name)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        # Classification enablement controls future processing, not whether
+        # users can filter historical articles by a configured category.
+        article_categories = (await db.execute(
+            select(PipelineCategory.name)
+            .where(PipelineCategory.applies_to.in_(['news', 'all']))
+            .order_by(PipelineCategory.sort_order, PipelineCategory.name, PipelineCategory.id)
+        )).scalars().all()
+        return {
+            'articleCategories': list(article_categories),
+            'newsTags': list(news_tags),
+            'journals': sorted({journal for journal, _ in paper_facets if journal and journal.strip()}),
+            'years': sorted({int(year) for _, year in paper_facets if year and str(year).isdigit()}, reverse=True),
+            'categories': list(categories),
+        }
+
+    @staticmethod
     def query(model: Any, **filters: Any):
         statement = select(model)
         is_article = model is PipelineArticle

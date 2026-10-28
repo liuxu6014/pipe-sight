@@ -86,6 +86,6 @@ def test_frozen_business_contract_matches_all_and_only_business_models() -> None
     assert set(frozen['model_ddl']) == set(frozen['catalog']) == set(BUSINESS_TABLES)
     assert model_ddl(Base.metadata) == frozen['model_ddl']
     assert str(CreateTable(Base.metadata.tables['papers']).compile(dialect=postgresql.dialect())) == before
-    assert sum(len(t['columns']) for t in frozen['catalog'].values()) == 193
+    assert sum(len(t['columns']) for t in frozen['catalog'].values()) == 196
     assert sum(len(t['foreign_keys']) for t in frozen['catalog'].values()) == 29
     assert not any(n.startswith('sys_') for n in frozen['model_ddl'])

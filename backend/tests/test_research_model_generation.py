@@ -32,6 +32,37 @@ no_external_network = refactor_no_external_network
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('raw', ['## 分析\n\n无法对应的结论[99]。', '## 分析\n\n没有引用的事实正文。'])
+async def test_invalid_manuscript_fails_without_overwriting_report(env, db, monkeypatch, raw):
+    seed(env, db)
+    monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
+    result = await queue(env, db)
+    execution, _ = execution_context(env, db, monkeypatch)
+    monkeypatch.setattr(execution.ResearchModelGenerationService, 'generate_content', AsyncMock(return_value=raw))
+    await execution.ResearchExecutionService.process(job_id=result['jobId'], user_id=7)
+    db.s.expire_all()
+    job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
+    report = await env.repo.ResearchDao.get_report(db, result['reportId'], 7)
+    assert job.status == 'failed' and '文稿检查未通过' in job.error
+    assert job.result_content == raw
+    assert report.content == '' and report.version == 1
+
+
+@pytest.mark.asyncio
+async def test_task_preserves_actionable_model_output_limit_error(env, db, monkeypatch):
+    seed(env, db)
+    monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
+    result = await queue(env, db)
+    execution, _ = execution_context(env, db, monkeypatch)
+    error = execution.ModelOutputLimitError(message='模型已达到输出上限，请缩短大纲')
+    monkeypatch.setattr(execution.ResearchModelGenerationService, 'generate_content', AsyncMock(side_effect=error))
+    await execution.ResearchExecutionService.process(job_id=result['jobId'], user_id=7)
+    db.s.expire_all()
+    job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
+    assert job.status == 'failed' and job.error == error.message
+
+
+@pytest.mark.asyncio
 async def test_duplicate_dispatch_does_not_invoke_model_without_claim(env, db, monkeypatch):
     execution, _ = execution_context(env, db, monkeypatch)
     monkeypatch.setattr(env.repo.ResearchDao, 'claim_research_job', AsyncMock(return_value=None))
@@ -114,11 +145,14 @@ async def test_new_generation_stores_canonical_citations_and_keeps_raw_provider_
     expected = '资料指出检测可行，仍需验证[1]。另一项结论[1]。'
     assert expected in report.content and expected == version.sections[0]['content']
     assert version.content == report.content and version.citations[0]['sourceId'] == '101'
-    assert '[1] 本地资料；2026-10-25' in report.content
+    assert '[1] 资料；用户资料' in report.content
+    assert '本地资料；2026-10-25' not in report.content  # Not present in the frozen source metadata.
     display = env.app.ResearchApplicationService.report_dict(report)
     assert display['content'] == report.content
     exported = env.app.ResearchReportService.export_snapshot(report, version)
     assert exported['content'] == report.content
+    task = env.app.ResearchApplicationService.job_dict(job, report=report)
+    assert task['resultContent'] == report.content and task['applyConflict'] is False
 
 
 @pytest.mark.asyncio
@@ -205,6 +239,23 @@ async def test_gateway_rejects_native_noncompatible_provider_before_network(env,
             capability='text_generate',
             prompt='x',
         )
+
+
+@pytest.mark.asyncio
+async def test_truncated_provider_output_is_not_accepted_as_a_deliverable(env, db, monkeypatch):
+    seed(env, db)
+    monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
+    result = await queue(env, db)
+    job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
+    real_client = httpx.AsyncClient
+    monkeypatch.setenv('OFFLINE_MODEL_KEY', 'offline-placeholder')
+    monkeypatch.setattr(env.gateway.httpx, 'AsyncClient', lambda **kwargs: real_client(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json={
+            'choices': [{'finish_reason': 'length', 'message': {'content': '未写完的正文'}}],
+            'usage': {'completion_tokens': 100},
+        })), **kwargs))
+    with raises(env, '输出上限'):
+        await env.gateway.ResearchModelGenerationService.generate_content(db, job.config_snapshot, job.materials, task_id=job.id)
 
 
 @pytest.mark.asyncio

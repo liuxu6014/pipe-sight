@@ -161,7 +161,8 @@ async def test_apply_then_edit_then_restore_retains_actual_persisted_metadata(en
     case.db.s.expire_all()
     report = await env.repo.ResearchDao.get_report(case.db, rows.report.id, case.owner)
     applied = await env.repo.ResearchDao.get_report_version(case.db, report.id, 2)
-    assert report.content == '任务生成正文' and report.template_id == rows.new_template.id
+    assert '任务生成正文' in report.content and report.template_id == rows.new_template.id
+    assert report.content.count('## 参考资料') == 1
     assert applied.model_snapshot == rows.snapshot
     assert applied.citations[0]['sourceId'] == str(rows.file.id)
     assert applied.citations[0]['source'] == {'filename': rows.file.filename}
@@ -205,7 +206,8 @@ async def test_update_dto_then_queued_export_freezes_real_history(env: Any, repo
     assert mime == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     with ZipFile(BytesIO(raw)) as archive:
         document_xml = archive.read('word/document.xml').decode()
-    assert '人工引用' in document_xml and '历史模板' in document_xml and '编辑正文' in document_xml
+    assert '人工引用' in document_xml and '编辑正文' in document_xml
+    assert '版本：' not in document_xml and '历史模板' not in document_xml
 
 
 @pytest.mark.asyncio

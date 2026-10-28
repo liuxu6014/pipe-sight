@@ -104,7 +104,7 @@ class ResearchApplicationService:
         normalized_result = job.result_content
         if job.result_content:
             try:
-                normalized_result = normalize_generated_report(job.result_content, job.materials)['content']
+                normalized_result = normalize_generated_report(job.result_content, job.materials, delivery=True)['content']
             except ValueError:
                 # Keep malformed raw output inspectable; never call it applied.
                 pass
@@ -132,7 +132,7 @@ class ResearchApplicationService:
             'attemptCount': job.attempts,
             'cancelRequested': False,
             'nextRetryAt': '',
-            'resultContent': job.result_content,
+            'resultContent': normalized_result,
             'applyConflict': apply_conflict,
             'createdAt': cls._datetime_text(job.created_at),
             'updatedAt': cls._datetime_text(job.updated_at),
@@ -276,6 +276,11 @@ class ResearchApplicationService:
         return await DigestScheduleService.list(db, user_id)
 
     @classmethod
+    async def update_digest_schedule(cls, db, user_id, schedule_id, payload):
+        return await DigestScheduleService.update(db, user_id=user_id, schedule_id=schedule_id,
+                                                 payload=payload, template_service=PipelineTemplateService)
+
+    @classmethod
     async def set_digest_schedule_enabled(
         cls, db: AsyncSession, user_id: int, schedule_id: str, enabled: bool
     ) -> dict[str, Any]:
@@ -341,6 +346,14 @@ class ResearchApplicationService:
             job_id=job_id,
             job_serializer=cls.job_dict,
         )
+
+    @classmethod
+    async def list_admin_reports(cls, db: AsyncSession) -> dict[str, Any]:
+        """Read-only management scope; the API requires both admin role and list permission."""
+        rows = await PipelineDao.list_admin_reports(db)
+        for row in rows:
+            await ResearchReportService._load_display_history(db, row)
+        return {'rows': [cls.report_dict(row) for row in rows], 'total': len(rows)}
 
     @classmethod
     async def list_reports(

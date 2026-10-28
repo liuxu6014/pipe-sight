@@ -81,6 +81,7 @@ class PipelineResearchJob(Base):
             'finished_at IS NULL OR started_at IS NULL OR finished_at >= started_at', name='ck_generation_tasks_times'
         ),
         Index('idx_generation_tasks_status', 'status', 'created_at'),
+        Index('idx_generation_tasks_schedule_id', 'schedule_id', 'id'),
         Index('idx_generation_tasks_report_id', 'report_id'),
         Index('idx_generation_tasks_lease', 'lease_expires_at', postgresql_where=text('lease_expires_at IS NOT NULL')),
     )
@@ -117,6 +118,7 @@ class PipelineDigestSchedule(Base):
             name='ck_digest_schedules_frequency',
         ),
         CheckConstraint('NOT is_enabled OR next_run_at IS NOT NULL', name='ck_digest_schedules_next_run_at'),
+        CheckConstraint("last_status IS NULL OR last_status IN ('queued','no_data','skipped','failed')", name='ck_digest_schedules_last_status'),
         CheckConstraint("jsonb_typeof(selection_config)='object'", name='ck_digest_schedules_selection_config').ddl_if(
             dialect='postgresql'
         ),
@@ -138,6 +140,9 @@ class PipelineDigestSchedule(Base):
     generation_config = Column(json_type, nullable=False, default=dict, server_default=text("'{}'"))
     is_enabled = Column(Boolean, nullable=False, default=True, server_default='true')
     next_run_at = Column(DateTime(timezone=True))
+    last_run_at = Column(BeijingAuditTime(), comment='最近派发检查时间，北京时间，精确到秒')
+    last_status = Column(String(16), comment='最近派发结果；生成状态从关联任务读取')
+    last_error = Column(Text, comment='最近派发失败原因，脱敏后保存')
     created_at = Column(BeijingAuditTime(), nullable=False, default=audit_now, server_default=server_now())
     updated_at = Column(
         BeijingAuditTime(),

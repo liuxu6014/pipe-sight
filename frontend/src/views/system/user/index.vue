@@ -392,6 +392,7 @@
     <el-dialog
       :title="upload.title"
       v-model="upload.open"
+      @close="resetUpload"
       width="400px"
       append-to-body
     >
@@ -404,6 +405,7 @@
         :disabled="upload.isUploading"
         :on-progress="handleFileUploadProgress"
         :on-success="handleFileSuccess"
+        :on-error="handleFileError"
         :on-change="handleFileChange"
         :on-remove="handleFileRemove"
         :auto-upload="false"
@@ -431,7 +433,7 @@
       </el-upload>
       <template #footer>
         <div class="dialog-footer">
-          <el-button type="primary" @click="submitFileForm">确 定</el-button>
+          <el-button type="primary" :loading="upload.isUploading" :disabled="upload.isUploading" @click="submitFileForm">确 定</el-button>
           <el-button @click="upload.open = false">取 消</el-button>
         </div>
       </template>
@@ -484,6 +486,7 @@ const upload = reactive({
   isUploading: false,
   // 是否更新已经存在的用户数据
   updateSupport: 0,
+  selectedFile: null,
   // 设置上传的请求头部
   headers: { Authorization: "Bearer " + getToken() },
   // 上传的地址
@@ -664,9 +667,22 @@ function handleSelectionChange(selection) {
 }
 /** 导入按钮操作 */
 function handleImport() {
+  resetUpload();
+  upload.updateSupport = false;
   upload.title = "用户导入";
   upload.open = true;
+}
+/** 中断本地上传并复位；不会回滚服务器已导入的数据。 */
+function resetUpload() {
+  proxy.$refs["uploadRef"]?.abort();
+  proxy.$refs["uploadRef"]?.clearFiles();
+  upload.isUploading = false;
   upload.selectedFile = null;
+}
+
+function handleFileError() {
+  resetUpload();
+  proxy.$modal.msgError('用户导入失败，结果可能包含已成功导入的数据。请先核实用户列表，再重新选择文件重试，避免重复导入。');
 }
 /** 下载模板操作 */
 function importTemplate() {
@@ -690,9 +706,12 @@ const handleFileRemove = (file, fileList) => {
 };
 /** 文件上传成功处理 */
 const handleFileSuccess = (response, file, fileList) => {
+  if (!response || response.code !== 200) {
+    handleFileError();
+    return;
+  }
   upload.open = false;
-  upload.isUploading = false;
-  proxy.$refs["uploadRef"].handleRemove(file);
+  resetUpload();
   proxy.$alert(
     "<div style='overflow: auto;overflow-x: hidden;max-height: 70vh;padding: 10px 20px 0;'>" +
       response.msg +
@@ -704,6 +723,7 @@ const handleFileSuccess = (response, file, fileList) => {
 };
 /** 提交上传文件 */
 function submitFileForm() {
+  if (upload.isUploading) return;
   const file = upload.selectedFile;
   if (
     !file ||
@@ -714,7 +734,12 @@ function submitFileForm() {
     proxy.$modal.msgError("请选择后缀为 “xls”或“xlsx”的文件。");
     return;
   }
-  proxy.$refs["uploadRef"].submit();
+  upload.isUploading = true;
+  try {
+    proxy.$refs["uploadRef"].submit();
+  } catch {
+    handleFileError();
+  }
 }
 /** 重置操作表单 */
 function reset() {

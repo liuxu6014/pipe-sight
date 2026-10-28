@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from sqlalchemy.exc import IntegrityError
 
-from app.business_ids import generation_request_fingerprint, parse_business_id, wire_id
+from app.business_ids import generation_request_data, generation_request_fingerprint, parse_business_id, wire_id
 from app.intelligence.services.templates import PipelineTemplateService
 from app.research.models.research_models import PipelineReport, PipelineResearchJob, utcnow
 from app.research.repositories.research_repository import ResearchDao
@@ -21,7 +21,7 @@ def report_type(value):
 
 
 def payload_data(payload):
-    return payload.model_dump(by_alias=False) if hasattr(payload, 'model_dump') else dict(payload)
+    return generation_request_data(payload)
 
 
 class ResearchJobService:
@@ -39,7 +39,16 @@ class ResearchJobService:
     @staticmethod
     async def _reused(db, existing, user_id, fingerprint, serializer):
         report = await ResearchDao.get_report(db, existing.report_id, user_id)
-        if not report or existing.config_snapshot.get('request_fingerprint') != fingerprint:
+        snapshot = existing.config_snapshot
+        expected = snapshot.get('request_fingerprint')
+        stored_request = snapshot.get('request') or {}
+        image_config = (snapshot.get('template') or {}).get('image_config') or {}
+        if stored_request.get('diagram') is False and image_config.get('enabled') is True:
+            # 旧快照把省略补成 false，但实际继承了开启配置。按实际执行语义
+            # 识别为继承，既保留原请求重放，也拒绝显式关闭复用开启任务。
+            inherited_request = {key: value for key, value in stored_request.items() if key != 'diagram'}
+            expected = generation_request_fingerprint(inherited_request, existing.materials)
+        if not report or expected != fingerprint:
             raise ServiceException(message='幂等键已被其他请求使用')
         return {**serializer(existing, report=report), 'reused': True}
 
@@ -89,15 +98,14 @@ class ResearchJobService:
         purpose = 'digest' if kind in {'daily', 'weekly', 'monthly'} else kind
         if template.purpose != purpose:
             raise ServiceException(message='模板用途与成果类型不匹配')
+        if purpose == 'digest':
+            PipelineTemplateService.validate_digest_cadence(template, kind)
+        image_config = PipelineTemplateService.effective_image_config(template.image_config, data)
         model = await template_service.validate_models(
-            db, template.model_id, template.image_model_id, template.image_config
+            db, template.model_id, template.image_model_id, image_config
         )
-        image_config = deepcopy(template.image_config or {})
-        if data.get('diagram') or (data.get('options') or {}).get('generateImages'):
-            image_config['enabled'] = True
         image_model = None
         if image_config.get('enabled'):
-            await template_service.validate_models(db, template.model_id, template.image_model_id, image_config)
             image_model = await ResearchDao.get_model(db, template.image_model_id)
             if not 1 <= int(image_config.get('count', 1)) <= 10:
                 raise ServiceException(message='配图数量须在 1 至 10 之间')
@@ -149,6 +157,7 @@ class ResearchJobService:
                 'name': template.name,
                 'prompt': prompt,
                 'purpose': template.purpose,
+                'digestCadence': PipelineTemplateService.digest_cadence(template),
                 'sections': deepcopy(template.sections),
                 'image_config': image_config,
                 'image_model_id': wire_id(template.image_model_id),

@@ -2,9 +2,11 @@ export const portalNavigation = [
   { label: '首页', path: '/portal', match: path => path === '/portal' },
   { label: '新闻资讯', path: '/portal/news', match: path => path.startsWith('/portal/news') },
   { label: '科研论文', path: '/portal/papers', match: path => path.startsWith('/portal/papers') },
-  { label: '科研报告', path: '/portal/research', match: path => path.startsWith('/portal/research') || path.startsWith('/portal/knowledge') },
+  { label: '科研报告', path: '/portal/research', match: path => path.startsWith('/portal/research') },
   { label: '情报简报', path: '/portal/digests', match: path => path.startsWith('/portal/digests') }
 ]
+
+export const isBasketPath = path => path === '/portal/basket' || /^\/portal\/knowledge(?:\/|$)/.test(path)
 
 export const topics = [
   { name: '管道本体应力监测', heat: 96, count: 38, trend: '+12%' },

@@ -1,5 +1,5 @@
 <template>
-  <div class="ps-page ps-personal-reports">
+  <div class="ps-page ps-personal-reports ps-list-page">
     <div class="ps-workspace-filter">
       <el-input class="ps-search-input" v-model.trim="query.q" clearable aria-label="搜索我的报告" placeholder="搜索报告名称或类型" />
       <el-button v-if="query.q || query.status !== 'all'" @click="query.q = ''; query.status = 'all'">清除筛选</el-button>
@@ -7,18 +7,20 @@
     <div class="ps-personal-status" role="group" aria-label="报告生成状态">
       <button v-for="tab in statusTabs" :key="tab.value" type="button" :aria-pressed="query.status === tab.value" @click="query.status = tab.value">{{ tab.label }}<span>{{ tab.count }}</span></button>
     </div>
-    <div v-if="loadError" class="ps-inline-state is-warning" role="alert"><span>部分报告记录未加载，以下仅显示已加载记录。</span><el-button text :loading="store.dataLoading" @click="store.hydrate(true)">重新加载</el-button></div>
+    <div v-if="loadError" class="ps-inline-state is-warning" role="alert"><span>部分报告记录未加载，以下仅显示已加载记录。</span><el-button plain :loading="store.dataLoading" @click="store.hydrate(true)">重新加载</el-button></div>
     <el-skeleton v-if="store.dataLoading && !store.dataLoaded" :rows="5" animated />
     <template v-else>
+      <div class="ps-list-scroll" tabindex="0" aria-label="个人报告记录">
       <section class="ps-personal-report-list" aria-label="我的报告列表">
         <article v-for="row in visibleRows" :key="row.key" class="ps-panel ps-personal-report-row">
           <div class="ps-personal-report-heading"><button type="button" @click="router.push(row.path)">{{ row.title }}</button><span class="ps-status-pill" :class="`is-${row.status}`">{{ row.statusLabel }}</span></div>
-          <div class="ps-personal-report-meta"><span>{{ row.typeLabel }}</span><span v-if="row.businessStatus">{{ row.businessStatus }}</span><span v-if="row.version">版本 {{ row.version }}</span><span v-if="row.words">{{ Number(row.words).toLocaleString() }} 字</span><time>{{ row.updatedAt || '更新时间未提供' }}</time></div>
+          <div class="ps-personal-report-meta"><span>{{ row.typeLabel }}</span><span v-if="row.businessStatus">{{ row.businessStatus }}</span><span v-if="row.words">{{ Number(row.words).toLocaleString() }} 字</span><time>{{ row.updatedAt || '更新时间未提供' }}</time></div>
           <el-progress v-if="row.status === 'active'" :percentage="row.progress" :stroke-width="6" />
-          <footer><small>{{ rowHint(row) }}</small><div><el-button v-if="row.taskPath" text @click="router.push(row.taskPath)">生成记录</el-button><el-button type="primary" plain @click="router.push(row.path)">{{ rowAction(row) }}</el-button></div></footer>
+          <footer><small>{{ rowHint(row) }}</small><div><el-button v-if="row.taskPath" plain @click="router.push(row.taskPath)">生成记录</el-button><el-button type="primary" plain @click="router.push(row.path)">{{ rowAction(row) }}</el-button></div></footer>
         </article>
       </section>
       <PortalEmptyState v-if="!visibleRows.length && !loadError" :title="query.q || query.status !== 'all' ? '没有匹配记录' : '还没有报告记录'" :description="query.q || query.status !== 'all' ? '请调整关键词或生成状态。' : '科研报告与情报简报的生成进度、失败记录和结果都在这里查看。'" />
+      </div>
     </template>
   </div>
 </template>

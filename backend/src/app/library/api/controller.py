@@ -71,7 +71,7 @@ async def upload_pipeline_knowledge_document(
         local_path=stored.file_name,
         tags=[item.strip() for item in tags.split(',') if item.strip()],
     )
-    return ResponseUtil.success(data=data, msg='已保存到资料库，解析状态单独更新')
+    return ResponseUtil.success(data=data, msg='已存在相同内容，已复用已有资料' if data.get('duplicate') else '已保存到资料库，解析状态单独更新')
 
 
 @controller.put('/knowledge/documents/{material_id}', summary='编辑资料正文')

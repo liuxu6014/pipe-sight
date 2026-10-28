@@ -53,6 +53,7 @@ PROTECTED_KEYS = [
 async def setup_template(env, db, *, model=True, image=False):
     template, material = seed(env, db, model=model, image=image)
     template.purpose = 'digest'
+    template.name = '通用简报模板'
     await db.commit()
     return template, material
 
@@ -96,14 +97,16 @@ class DispatchWindow:
             yield
 
 
-async def dispatch_fixture(env, db, monkeypatch, generation_config, *, candidates=None, selection_config=None):
+async def dispatch_fixture(env, db, monkeypatch, generation_config, *, candidates=None, selection_config=None, candidate_loader=None, frequency='daily'):
     now = datetime(2026, 10, 25, tzinfo=timezone.utc)
     row = env.models.PipelineDigestSchedule(
         id=501,
         user_id=7,
         template_id=201,
         name='Daily',
-        frequency='daily',
+        frequency=frequency,
+        weekday=6 if frequency == 'weekly' else None,
+        month_day=25 if frequency == 'monthly' else None,
         run_time=time(8),
         timezone='Asia/Shanghai',
         is_enabled=True,
@@ -115,7 +118,7 @@ async def dispatch_fixture(env, db, monkeypatch, generation_config, *, candidate
     await db.commit()
     monkeypatch.setattr(env.schedules, 'AsyncSessionLocal', lambda: DispatchWindow(db))
     monkeypatch.setattr(env.repo.ResearchDao, 'list_due_schedules', AsyncMock(return_value=[row]))
-    candidate_query = AsyncMock(return_value=candidates or [])
+    candidate_query = AsyncMock(side_effect=candidate_loader) if candidate_loader else AsyncMock(return_value=candidates or [])
     monkeypatch.setattr(env.repo.ResearchDao, 'digest_candidates', candidate_query)
     enqueue = AsyncMock(return_value={})
     monkeypatch.setattr(env.schedules.ResearchJobService, 'queue', enqueue)
@@ -268,18 +271,22 @@ async def test_dispatch_rechecks_configuration_before_enqueue(env, db, monkeypat
 
 
 @pytest.mark.asyncio
-async def test_dispatch_keeps_filtered_candidate_order_and_fifty_limit(env, db, monkeypatch):
+@pytest.mark.parametrize('requirements', [
+    'Original requirements',
+    '报告周期：2020-01-01 至 2020-01-02；Original requirements',
+])
+async def test_dispatch_keeps_filtered_candidate_order_and_fifty_limit(env, db, monkeypatch, requirements):
     await setup_template(env, db)
     candidates = [
         SimpleNamespace(id=i, title=f'Candidate {i}', content='Real body', content_zh=None) for i in range(1, 76)
     ]
     before = deepcopy([vars(item) for item in candidates])
     selection = {'source_ids': ['601'], 'category_ids': ['801'], 'keywords': ['管网'], 'limit': 50}
-    result, _, enqueue, query, _ = await dispatch_fixture(
+    result, row, enqueue, query, _ = await dispatch_fixture(
         env,
         db,
         monkeypatch,
-        {'citationCheck': False, 'requirements': 'Original requirements'},
+        {'citationCheck': False, 'requirements': requirements},
         candidates=candidates,
         selection_config=selection,
     )
@@ -287,7 +294,9 @@ async def test_dispatch_keeps_filtered_candidate_order_and_fifty_limit(env, db, 
     data = enqueue.await_args.kwargs['payload']
     assert data['selected_item_ids'] == [str(i) for i in range(1, 51)]
     assert 'materials' not in data and data['citation_check'] is False
-    assert data['requirements'] == 'Original requirements'
+    assert data['period'] == ['2026-10-24']
+    assert data['requirements'] == '报告周期：2026-10-24 至 2026-10-24；Original requirements'
+    assert row.generation_config['requirements'] == requirements
     assert data['selection_strategy']['candidate_count'] == 75
     assert query.await_args.args[-1] == selection
     assert [vars(item) for item in candidates] == before

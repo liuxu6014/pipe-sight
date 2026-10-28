@@ -7,6 +7,7 @@ from zipfile import ZipFile
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
+from docx.shared import Mm, Pt
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfgen import canvas
@@ -14,6 +15,64 @@ from reportlab.pdfgen import canvas
 from app.research.services.exporters import build_docx, build_pdf, safe_file_stem
 
 MINIMUM_PDF_BYTES = 1000
+
+
+def test_word_preserves_inline_emphasis_and_citation_superscript():
+    report = _report()
+    report.content = '## 分析\n\n**关键结论**与*限定说明*均需保留[1]。'
+    _, _, data = build_docx(report, is_draft=False)
+    paragraph = next(p for p in Document(BytesIO(data)).paragraphs if '关键结论' in p.text)
+    assert any(run.text == '关键结论' and run.bold for run in paragraph.runs)
+    assert any(run.text == '限定说明' and run.italic for run in paragraph.runs)
+    assert any(run.text == '[1]' and run.font.superscript for run in paragraph.runs)
+    assert '**' not in paragraph.text
+
+
+def test_word_uses_a4_and_semantic_body_heading_levels():
+    report = _report()
+    report.content = '## 研究背景\n\n实际正文。\n\n### 技术边界\n\n实际分析。'
+    _, _, data = build_docx(report, is_draft=False)
+    document = Document(BytesIO(data))
+    assert abs(document.sections[0].page_width - Mm(210)) < 1000
+    assert abs(document.sections[0].page_height - Mm(297)) < 1000
+    assert next(p for p in document.paragraphs if p.text == '研究背景').style.name == 'Heading 1'
+    assert next(p for p in document.paragraphs if p.text == '技术边界').style.name == 'Heading 2'
+    assert document.styles['Heading 1'].paragraph_format.space_before == Pt(12)
+    assert document.styles['Heading 1'].paragraph_format.keep_with_next
+    assert document.styles['Normal'].paragraph_format.line_spacing == 1.25
+
+
+def test_pdf_keeps_heading_with_body_not_a_blank_spacer(monkeypatch):
+    from app.research.services import exporters
+    captured = []
+    original = exporters.SimpleDocTemplate.build
+    def inspect(self, flowables, *args, **kwargs):
+        captured.extend(flowables)
+        return original(self, flowables, *args, **kwargs)
+    monkeypatch.setattr(exporters.SimpleDocTemplate, 'build', inspect)
+    report = _report()
+    report.content = '## 研究背景\n\n实际正文。'
+    build_pdf(report, is_draft=False)
+    heading_index = next(i for i, item in enumerate(captured) if getattr(item, 'text', '') == '研究背景')
+    assert captured[heading_index].style.keepWithNext
+    assert getattr(captured[heading_index + 1], 'text', '') == '实际正文。'
+
+
+def test_pdf_repeated_editor_blank_lines_do_not_create_extra_layout_gaps(monkeypatch):
+    from app.research.services import exporters
+    captured = []
+    original = exporters.SimpleDocTemplate.build
+    def inspect(self, flowables, *args, **kwargs):
+        captured.append([(type(item).__name__, getattr(item, 'height', None), getattr(item, 'text', ''))
+                         for item in flowables])
+        return original(self, flowables, *args, **kwargs)
+    monkeypatch.setattr(exporters.SimpleDocTemplate, 'build', inspect)
+    report = _report()
+    report.citations = []
+    for separator in ('\n\n', '\n\n\n\n\n\n'):
+        report.content = '## 研究内容\n\n第一段。' + separator + '第二段。'
+        build_pdf(report, is_draft=False)
+    assert captured[0] == captured[1]
 
 
 def _report() -> SimpleNamespace:
@@ -38,6 +97,13 @@ def test_docx_export_contains_report_snapshot() -> None:
     assert '研究结论' in document_xml
     assert '正文内容' in document_xml
     assert '公开资料' in document_xml
+
+
+def test_export_metadata_does_not_expose_internal_version_numbers() -> None:
+    from app.research.services.exporters import _metadata_line
+    report = _report()
+    assert '版本' not in _metadata_line(report)
+    assert 'V3' not in _metadata_line(report)
 
 
 def test_pdf_export_is_real_pdf_and_uses_safe_filename() -> None:

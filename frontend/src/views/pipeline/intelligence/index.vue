@@ -1,5 +1,5 @@
 <template>
-  <div class="pipeline-page intelligence-page">
+  <div class="pipeline-page intelligence-page ws-list-page">
     <section class="page-heading">
       <div>
         <h1>情报查询</h1>
@@ -27,10 +27,10 @@
 
     <el-alert v-if="loadError" type="warning" show-icon :closable="false" class="intelligence-load-error">
       <template #title>{{ loadError }}</template>
-      <template #default><button type="button" class="intelligence-retry" @click="getList">重新加载列表</button></template>
+      <template #default><el-button class="ps-ui-action intelligence-retry" @click="getList">重新加载列表</el-button></template>
     </el-alert>
-    <el-card v-else shadow="never" class="intelligence-list-card">
-      <div v-loading="loading" :aria-busy="loading" class="intelligence-list-region">
+    <el-card v-else shadow="never" class="intelligence-list-card ws-list-panel">
+      <div v-loading="loading" :aria-busy="loading" class="intelligence-list-region ws-list-scroll" tabindex="0" aria-label="情报列表滚动区">
         <ul v-if="rows.length" class="intelligence-list" aria-label="情报列表">
           <li v-for="row in rows" :key="row.id" class="intelligence-item">
             <h2 class="item-title"><button type="button" class="title-button" @click="openDetail(row)">{{ row.title }}</button></h2>
@@ -42,7 +42,7 @@
                 <span v-if="row.source" class="item-source">{{ row.source }}</span>
                 <time v-if="row.publish_time">{{ formatBusinessTime(row.publish_time) }}</time>
               </div>
-              <el-button link type="primary" :icon="View" @click="openDetail(row)">查看详情</el-button>
+              <el-button plain type="primary" :icon="View" @click="openDetail(row)">查看详情</el-button>
             </div>
           </li>
         </ul>

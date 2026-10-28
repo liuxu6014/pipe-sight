@@ -3,11 +3,12 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { formatReportDate, getReportStatusMeta } from '../src/utils/pipeline/reportPresentation.js'
 
-test('report editor omits quality review UI and keeps three functional inspector tabs', () => {
+test('report editor keeps source and export records without user-facing versions', () => {
   const source = readFileSync(new URL('../src/views/portal/pages/ReportEditorView.vue', import.meta.url), 'utf8')
   assert.doesNotMatch(source, /质量问题|ps-completeness|mapQualityIssues|locateIssue|qualityIssues/)
-  assert.match(source, /const rightTabs = \['引用来源', '版本记录', '导出记录'\]/)
-  assert.match(source, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/)
+  assert.match(source, /const rightTabs = \['引用来源', '导出记录'\]/)
+  assert.doesNotMatch(source.split('<script setup>')[0], /版本|report\.version/)
+  assert.match(source, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/)
 })
 
 test('formats a report date for the editorial masthead', () => {

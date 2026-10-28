@@ -104,11 +104,11 @@ function referenceLines(citations) {
 
 export function buildReportMarkdown({ title = '', sections = [], citations = [] } = {}) {
   const references = referenceLines(citations).join('\n')
-  const hasReferences = sections.some(section => sectionTitle(section.title) === '参考资料')
+  const hasReferences = sections.some(section => isReferenceSection(section.title))
   const blocks = sections.map(section => {
     const heading = sectionTitle(section.title)
     // An authored reference section is authoritative; never append a second copy.
-    const content = heading === '参考资料' && !String(section.content || '').trim() ? references : cleanReportCitationNotes(numberedCitations(section.content, citations), heading)
+    const content = isReferenceSection(heading) && !String(section.content || '').trim() ? references : cleanReportCitationNotes(numberedCitations(section.content, citations), heading)
     return `## ${heading}\n\n${content}`
   })
   if (!hasReferences && references) blocks.push(`## 参考资料\n\n${references}`)

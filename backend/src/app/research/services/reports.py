@@ -13,7 +13,9 @@ from app.research.models.research_models import utcnow
 from app.research.repositories.research_repository import ResearchDao
 from app.research.services.execution import ResearchExecutionService
 from app.research.services.exporters import build_file, safe_file_stem
-from app.research.services.report_content import normalize_generated_report, number_report_citations
+from app.research.services.report_content import (
+    normalize_generated_report, number_report_citations, validate_generated_article,
+)
 from app.research.services.report_revision import report_revision
 from exceptions.exception import ServiceException
 
@@ -120,7 +122,13 @@ class ResearchReportService:
         template_id = await cls._live_template_id(db, template_id)
         if template_id is None:
             raise ServiceException(message='任务快照关联模板已不存在，不能应用')
-        normalized = normalize_generated_report(job.result_content, job.materials)
+        normalized = normalize_generated_report(job.result_content, job.materials, delivery=True)
+        try:
+            # Older tasks may contain uncited prose; do not silently repair it,
+            # but reject broken markers and incomplete structures on application.
+            validate_generated_article(normalized['content'], job.materials, require_citations=False)
+        except ValueError as error:
+            raise ServiceException(message=str(error)) from None
         await ResearchExecutionService.save_version(db, report, 'before_apply', user_id, owner_name)
         report.content = normalized['content']
         report.template_id = template_id

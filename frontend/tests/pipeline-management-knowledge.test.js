@@ -18,7 +18,10 @@ test('connects management knowledge uploads to the real material lifecycle APIs'
   }
 
   assert.match(page, /permissionScope/)
-  assert.match(page, /MAX_FILE_SIZE = 100 \* 1024 \* 1024/)
+  assert.match(page, /MAX_FILE_SIZE = 16 \* 1024 \* 1024/)
+  assert.match(page, /accept="\.pdf,\.docx,\.md,\.txt"/)
+  assert.match(page, /data\.append\('permissionScope', 'private'\)/)
+  assert.doesNotMatch(page, /value="public"|uploadCategory|uploadTags|100MB/)
   assert.match(page, /ALLOWED_EXTENSIONS/)
   assert.match(page, /ElMessageBox\.confirm/)
   assert.doesNotMatch(page, /showUploadTodo|后续接 MinIO|将在生产版接入/)

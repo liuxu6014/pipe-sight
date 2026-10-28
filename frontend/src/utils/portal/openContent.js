@@ -11,3 +11,4 @@ function returnFromContentDetail(router, fallback) {
 
 export const returnFromPaperDetail = router => returnFromContentDetail(router, '/portal/papers')
 export const returnFromNewsDetail = router => returnFromContentDetail(router, '/portal/news')
+export const returnFromKnowledgeDetail = router => returnFromContentDetail(router, '/portal/basket')

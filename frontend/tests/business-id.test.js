@@ -102,6 +102,17 @@ test('entity wrappers preserve decimal paths and reject unsafe numbers before in
   }
 })
 
+test('catalog facet and administrator list paths are static routes, not entity IDs', async () => {
+  const source = readFileSync(new URL('../src/api/pipeline/request.js', import.meta.url), 'utf8').replace(/^import .*\n/gm, '').replace('export default async function pipelineRequest', 'return async function pipelineRequest')
+  const calls = []
+  const request = new Function('request', 'requireBusinessId', 'validateBusinessInput', 'normalizeBusinessData', 'normalizeBusinessTimes', source)(async options => { calls.push(options.url); return { data: {} } }, ids.requireBusinessId, ids.validateBusinessInput, ids.normalizeBusinessData, normalizeBusinessTimes)
+  await request({ url: '/pipeline/intelligence/filters' })
+  await request({ url: '/pipeline/research/admin/reports' })
+  assert.deepEqual(calls, ['/pipeline/intelligence/filters', '/pipeline/research/admin/reports'])
+  await assert.rejects(request({ url: '/pipeline/intelligence/old-uuid' }), /编号已升级/)
+  assert.equal(calls.length, 2)
+})
+
 test('nested editor references reject old IDs without treating local section or citation IDs as entity IDs', () => {
   const body = {
     content: '用户正文不能改写',

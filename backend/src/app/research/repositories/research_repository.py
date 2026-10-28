@@ -3,7 +3,8 @@
 from datetime import timedelta
 from uuid import uuid4
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.business_ids import parse_business_id
 from app.intelligence.models.ai_models import AiModels
@@ -61,6 +62,11 @@ class ResearchDao:
         return list(
             await db.scalars(select(Report).where(Report.user_id == user_id).order_by(Report.updated_at.desc()))
         )
+
+    @staticmethod
+    async def list_admin_reports(db: AsyncSession) -> list[Report]:
+        """Explicit read-only management query; personal and mutation queries stay owner scoped."""
+        return list(await db.scalars(select(Report).order_by(Report.updated_at.desc(), Report.id.desc())))
 
     @staticmethod
     async def get_research_job(db, job_id, user_id=None, *, lock=False):
@@ -146,12 +152,14 @@ class ResearchDao:
         return True
 
     @staticmethod
-    async def list_research_job_ids_for_dispatch(db, *, now, max_attempts=3):
+    async def list_research_job_ids_for_dispatch(db, *, now, max_attempts=3, schedule_ids=None):
+        query = (select(Job.id, Report.user_id).join(Report, Report.id == Job.report_id)
+                 .where(or_(Job.status == 'queued', (Job.status == 'running') & (Job.lease_expires_at <= now))))
+        if schedule_ids is not None:
+            query = query.where(Job.schedule_id.in_([parse_business_id(value) for value in schedule_ids]))
         rows = (
             await db.execute(
-                select(Job.id, Report.user_id)
-                .join(Report, Report.id == Job.report_id)
-                .where(or_(Job.status == 'queued', (Job.status == 'running') & (Job.lease_expires_at <= now)))
+                query
             )
         ).all()
         return [(row[0], row[1], '') for row in rows]
@@ -246,6 +254,18 @@ class ResearchDao:
         return list(await db.scalars(select(Schedule).where(Schedule.user_id == user_id)))
 
     @staticmethod
+    async def latest_schedule_jobs(db, user_id, schedule_ids):
+        if not schedule_ids:
+            return {}
+        latest = (select(func.max(Job.id).label('id')).join(Report, Report.id == Job.report_id)
+                  .join(Schedule, Schedule.id == Job.schedule_id)
+                  .where(Schedule.user_id == user_id, Report.user_id == user_id,
+                         Schedule.id.in_(schedule_ids)).group_by(Job.schedule_id).subquery())
+        pairs = (await db.execute(select(Job, Report).join(latest, latest.c.id == Job.id)
+                                 .join(Report, Report.id == Job.report_id))).all()
+        return {job.schedule_id: (job, report) for job, report in pairs}
+
+    @staticmethod
     async def lock_digest_schedule_for_update(db, schedule_id, user_id):
         schedule_id = parse_business_id(schedule_id)
         return await db.scalar(
@@ -256,12 +276,13 @@ class ResearchDao:
         )
 
     @staticmethod
-    async def list_due_schedules(db, now):
+    async def list_due_schedules(db, now, schedule_ids=None):
+        query = select(Schedule).where(Schedule.is_enabled.is_(True), Schedule.next_run_at <= now)
+        if schedule_ids is not None:
+            query = query.where(Schedule.id.in_([parse_business_id(value) for value in schedule_ids]))
         return list(
             await db.scalars(
-                select(Schedule)
-                .where(Schedule.is_enabled.is_(True), Schedule.next_run_at <= now)
-                .with_for_update(skip_locked=True)
+                query.with_for_update(skip_locked=True)
             )
         )
 
@@ -295,15 +316,15 @@ class ResearchDao:
                     select(PipelineCategory.id).where(PipelineCategory.name.in_(config['category_names']))
                 )
             )
-        keywords = config.get('keywords') or []
+        keywords = list(dict.fromkeys(term.strip() for term in (config.get('keywords') or []) if term.strip()))
         if keywords:
             query = query.where(
                 or_(
                     *(
                         or_(
-                            PipelineArticle.title.contains(keyword),
-                            PipelineArticle.content.contains(keyword),
-                            PipelineArticle.content_zh.contains(keyword),
+                            PipelineArticle.title.contains(keyword, autoescape=True),
+                            PipelineArticle.content.contains(keyword, autoescape=True),
+                            PipelineArticle.content_zh.contains(keyword, autoescape=True),
                         )
                         for keyword in keywords
                     )

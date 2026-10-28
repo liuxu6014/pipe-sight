@@ -20,12 +20,14 @@ from app.intelligence.schemas.pipeline import (
 )
 from app.research.digest_policy import DIGEST_SELECTION_LIMIT
 from app.research.repositories.research_repository import ResearchDao as PipelineDao
-from app.research.schemas.generation import ApplyGenerationResultModel
+from app.research.schemas.generation import ApplyGenerationResultModel, ReportRewriteModel
 from app.research.services.application import ResearchApplicationService
 from app.research.services.exports import ResearchReportExportService
 from app.research.services.reports import ResearchReportService
+from app.research.services.rewrite import ReportRewriteService
 from app.system.api.dependencies import CurrentUserDependency, CurrentUserModel, PreAuthDependency
 from common.aspect.db_seesion import DBSessionDependency
+from common.aspect.interface_auth import RoleInterfaceAuthDependency, UserInterfaceAuthDependency
 from common.http.responses import ResponseUtil
 from common.http.routing import APIRouterPro
 
@@ -225,6 +227,20 @@ async def create_pipeline_digest_schedule(
     return ResponseUtil.success(data=data, msg='自动计划已保存，Worker将在下次执行时间派发任务')
 
 
+@controller.put('/research/digest-schedules/{schedule_id}/config', summary='编辑周期简报自动计划')
+async def update_pipeline_digest_schedule_config(
+    request: Request,
+    schedule_id: BusinessId,
+    body: PipelineDigestScheduleCreateModel,
+    query_db: Annotated[AsyncSession, DBSessionDependency()],
+    current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
+) -> Response:
+    data = await ResearchApplicationService.update_digest_schedule(
+        query_db, current_user.user.user_id, schedule_id, body,
+    )
+    return ResponseUtil.success(data=data, msg='自动计划配置已保存，未立即执行')
+
+
 @controller.put('/research/digest-schedules/{schedule_id}', summary='启用或停用周期简报自动计划')
 async def toggle_pipeline_digest_schedule(
     request: Request,
@@ -268,6 +284,17 @@ async def delete_pipeline_digest_schedule(
     return ResponseUtil.success(msg='自动计划已删除')
 
 
+@controller.get(
+    '/research/admin/reports',
+    summary='管理员查询全部科研报告与日报周月报',
+    dependencies=[RoleInterfaceAuthDependency('admin'), UserInterfaceAuthDependency('pipeline:report:list')],
+)
+async def list_pipeline_admin_reports(
+    query_db: Annotated[AsyncSession, DBSessionDependency()],
+) -> Response:
+    return ResponseUtil.success(data=await ResearchApplicationService.list_admin_reports(query_db))
+
+
 @controller.get('/research/reports', summary='查询当前用户科研报告与日报周月报')
 async def list_pipeline_research_reports(
     request: Request,
@@ -295,6 +322,17 @@ async def get_pipeline_research_report(
         include_all=bool(current_user.user.admin),
     )
     return ResponseUtil.success(data=data)
+
+
+@controller.post('/research/reports/{report_id}/rewrite', summary='生成本人报告局部改写建议，不覆盖正文')
+async def propose_report_rewrite(
+    report_id: BusinessId,
+    body: ReportRewriteModel,
+    query_db: Annotated[AsyncSession, DBSessionDependency()],
+    current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
+) -> Response:
+    return ResponseUtil.success(data=await ReportRewriteService.propose(
+        query_db, user_id=current_user.user.user_id, report_id=report_id, payload=body))
 
 
 @controller.put('/research/reports/{report_id}', summary='自动保存或发布科研报告')

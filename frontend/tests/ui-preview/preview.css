@@ -1,4 +1,13 @@
 body { padding-bottom: 56px; }
+/* Only the isolated preview reserves space for its synthetic-data notice. */
+#app .ui-preview-management > .ps-workspace-surface { height: calc(100dvh - 56px); display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden; }
+.ui-preview-shell-toolbar { flex-shrink: 0; }
+#app .ps-portal .ps-portal-main:has(> :is(.ps-list-page, .ps-home-viewport)) { height: calc(100dvh - 56px); }
+@media (max-width: 760px) {
+  #app .ps-portal .ps-portal-main:has(> :is(.ps-list-page, .ps-home-viewport)) { height: calc(100dvh - 110px); }
+}
+/* Reserve the synthetic-environment banner outside viewport-height editors. */
+@media (min-width: 1051px) { #app .ps-portal .ps-workspace-surface > .ps-editor-page { height: calc(100dvh - 126px); } }
 .ui-preview-management.has-preview-sidebar { padding-left: 220px; }
 .ui-preview-sidebar { position: fixed; top: 0; bottom: 44px; left: 0; width: 220px; padding: 24px 16px; display: flex; flex-direction: column; gap: 20px; background: #fff; border-right: 1px solid #d9e2e9; }
 .ui-preview-management:not(.has-preview-sidebar) .ui-preview-sidebar { display: none; }

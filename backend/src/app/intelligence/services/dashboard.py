@@ -3,7 +3,7 @@
 from sqlalchemy import func, select
 
 from app.business_ids import wire_id
-from app.intelligence.models.collection import PipelineCrawlRun
+from app.intelligence.models.collection import PipelineCrawlRun, PipelineSource
 from app.intelligence.models.content import PipelineArticle, PipelineCategory, PipelinePaper
 from app.library.models.materials import PipelineMaterial
 
@@ -29,8 +29,11 @@ class IntelligenceDashboardService:
         for name, value in groups:
             totals[name] = totals.get(name, 0) + value
         runs = (
-            (await db.execute(select(PipelineCrawlRun).order_by(PipelineCrawlRun.created_at.desc()).limit(10)))
-            .scalars()
+            (await db.execute(
+                select(PipelineCrawlRun, PipelineSource.name)
+                .outerjoin(PipelineSource, PipelineSource.id == PipelineCrawlRun.source_id)
+                .order_by(PipelineCrawlRun.created_at.desc(), PipelineCrawlRun.id.desc()).limit(10)
+            ))
             .all()
         )
         return {
@@ -44,7 +47,15 @@ class IntelligenceDashboardService:
                 },
             ],
             'collect_status': [
-                {'name': wire_id(run.source_id), 'status': run.status, 'value': run.saved_count} for run in runs
+                {
+                    'id': wire_id(run.id),
+                    'name': source_name or '来源名称未提供',
+                    'status': run.status,
+                    'fetched_count': run.fetched_count,
+                    'saved_count': run.saved_count,
+                    'failed_count': run.failed_count,
+                }
+                for run, source_name in runs
             ],
             'hot_topics': [
                 {'name': name, 'count': value}

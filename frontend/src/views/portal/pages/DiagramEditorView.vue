@@ -1,7 +1,7 @@
 <template>
   <div class="ps-diagram-page">
     <header class="ps-diagram-topbar">
-      <div class="ps-editor-title"><button type="button" aria-label="返回报告" @click="router.back()"><ArrowLeft /></button><span><strong>报告配图</strong><small>图片由后台配置的生图模型生成</small></span></div>
+      <div class="ps-editor-title"><el-button class="ps-ui-action" aria-label="返回报告" @click="router.back()"><ArrowLeft /></el-button><span><strong>报告配图</strong><small>图片由后台配置的生图模型生成</small></span></div>
     </header>
     <main class="ps-image-assets-page"><ReportImageAssets :report-id="String(route.params.id)" /></main>
   </div>

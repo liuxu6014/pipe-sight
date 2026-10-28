@@ -1,5 +1,8 @@
 <template>
   <div class="app-container">
+    <el-alert v-if="loadError" :title="loadError" type="error" :closable="false" show-icon>
+      <el-button @click="getList">重试</el-button>
+    </el-alert>
     <el-row :gutter="10">
       <el-col :span="24" class="card-box">
         <el-card>
@@ -67,19 +70,48 @@
 <script setup name="Cache">
 import { getCache } from '@/api/monitor/cache';
 import * as echarts from 'echarts';
+import { ElLoading } from 'element-plus';
 
 const cache = ref([]);
 const commandstats = ref(null);
 const usedmemory = ref(null);
-const { proxy } = getCurrentInstance();
+const loadError = ref('');
+let loadingInstance;
+let commandstatsIntance;
+let usedmemoryInstance;
+let disposed = false;
+let requestId = 0;
 
-function getList() {
-  proxy.$modal.loading("正在加载缓存监控数据，请稍候！");
-  getCache().then(response => {
-    proxy.$modal.closeLoading();
+function closeLoading() {
+  loadingInstance?.close();
+  loadingInstance = undefined;
+}
+
+function resizeCharts() {
+  commandstatsIntance?.resize();
+  usedmemoryInstance?.resize();
+}
+
+function disposeCharts() {
+  window.removeEventListener('resize', resizeCharts);
+  commandstatsIntance?.dispose();
+  usedmemoryInstance?.dispose();
+  commandstatsIntance = undefined;
+  usedmemoryInstance = undefined;
+}
+
+async function getList() {
+  if (disposed || loadingInstance) return;
+  const currentRequest = ++requestId;
+  loadError.value = '';
+  loadingInstance = ElLoading.service({ lock: true, text: '正在加载缓存监控数据，请稍候！', background: 'rgba(0, 0, 0, 0.7)' });
+  try {
+    const response = await getCache();
+    if (disposed || currentRequest !== requestId) return;
     cache.value = response.data;
 
-    const commandstatsIntance = echarts.init(commandstats.value, "macarons");
+    disposeCharts();
+    commandstatsIntance = echarts.init(commandstats.value, "macarons");
     commandstatsIntance.setOption({
       tooltip: {
         trigger: "item",
@@ -98,7 +130,7 @@ function getList() {
         }
       ]
     });
-    const usedmemoryInstance = echarts.init(usedmemory.value, "macarons");
+    usedmemoryInstance = echarts.init(usedmemory.value, "macarons");
     usedmemoryInstance.setOption({
       tooltip: {
         formatter: "{b} <br/>{a} : " + cache.value.info.used_memory_human
@@ -121,12 +153,29 @@ function getList() {
         }
       ]
     })
-    window.addEventListener("resize", () => {
-      commandstatsIntance.resize();
-      usedmemoryInstance.resize();
-    });
-  })
+    window.addEventListener('resize', resizeCharts);
+  } catch {
+    if (!disposed && currentRequest === requestId) {
+      disposeCharts();
+      loadError.value = '缓存监控数据加载失败，请检查网络或联系管理员后重试。';
+    }
+  } finally {
+    if (currentRequest === requestId) closeLoading();
+  }
 }
 
-getList();
+function cleanup() {
+  disposed = true;
+  requestId++;
+  closeLoading();
+  disposeCharts();
+}
+onBeforeUnmount(cleanup);
+onDeactivated(cleanup);
+onActivated(() => {
+  if (!disposed) return;
+  disposed = false;
+  getList();
+});
+onMounted(getList);
 </script>

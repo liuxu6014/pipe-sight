@@ -12,6 +12,36 @@ from exceptions.exception import ServiceException
 
 class PipelineTemplateService:
     @staticmethod
+    def digest_cadence(row):
+        """旧表没有周期列：仅识别受控全名，不从用途或任意子串推断通用。"""
+        if row.purpose != 'digest':
+            return None
+        names = {
+            f'{prefix}{label}{suffix}': cadence
+            for prefix in ('', '科技情报', '管网科技情报')
+            for label, cadence in (('日报', 'daily'), ('周报', 'weekly'), ('月报', 'monthly'))
+            for suffix in ('', '模板')
+        }
+        names.update({'通用简报': 'all', '通用简报模板': 'all', '检测技术专题周报': 'weekly'})
+        return names.get(str(row.name or '').strip())
+
+    @classmethod
+    def validate_digest_cadence(cls, row, frequency):
+        if cls.digest_cadence(row) not in {frequency, 'all'}:
+            raise ServiceException(message='模板周期未知或与简报周期不匹配，请选择明确适用周期的模板')
+
+    @staticmethod
+    def effective_image_config(template_config, request):
+        config = deepcopy(template_config or {})
+        options = request.get('options') or {}
+        # 顶层显式选择优先；未提交才读取旧客户端选项，再回落模板默认。
+        if 'diagram' in request:
+            config['enabled'] = request['diagram']
+        elif 'generateImages' in options:
+            config['enabled'] = options['generateImages']
+        return config
+
+    @staticmethod
     def _dict(row):
         return {
             'id': wire_id(row.id),
@@ -20,6 +50,7 @@ class PipelineTemplateService:
             'purpose': row.purpose,
             'category': row.purpose,
             'reportType': row.purpose,
+            'digestCadence': PipelineTemplateService.digest_cadence(row),
             'description': row.description or '',
             'prompt': row.prompt,
             'modelId': wire_id(row.model_id),

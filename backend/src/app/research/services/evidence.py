@@ -65,6 +65,11 @@ class ResearchEvidenceService:
                             'source_id': wire_id(item.source_id),
                             'published_at': item.published_at.isoformat() if item.published_at else None,
                         }
+                        publisher = getattr(getattr(item, 'source', None), 'name', None)
+                        if publisher:
+                            source['publisher'] = publisher
+                        if getattr(item, 'author', None):
+                            source['authors'] = item.author
                         title = item.title
                     if not content.strip():
                         raise ServiceException(message='所选内容没有可用正文或论文摘要')

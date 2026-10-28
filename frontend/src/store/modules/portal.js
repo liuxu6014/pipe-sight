@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { displayId, normalizeBusinessData, requireBusinessId } from '@/utils/portal/businessId'
 import { formatBusinessTime } from '@/utils/portal/businessTime'
+import { buildLibraryItems } from '@/utils/portal/libraryItems'
 import { ElMessage } from 'element-plus'
 import {
   digestReports as fallbackDigests,
@@ -71,7 +72,7 @@ export function normalizePortalIntelligence(item) {
 
 export function normalizePortalPaper(item) {
   const row = normalizePortalIntelligence(item)
-  const publishedDate = item.publishedDate || item.published_date || ''
+  const publishedDate = item.publishedDate || item.published_date || row.publishTime || ''
   const publishedYear = publishedDate.slice(0, 4) || item.year || item.publication_year || item.publicationYear || String(row.publishTime || '').slice(0, 4)
   const { full_text, fullText, full_text_url, fullTextUrl, access, open_access_status, content, content_zh, contentZh, body, ...metadata } = row
   return {
@@ -96,7 +97,7 @@ function normalizeDocument(item) {
     ['公开', '全员可见', 'public'].includes(item.permission) ? 'public' : 'private'
   )
   const scanStatus = item.scanStatus || item.scan_status || 'clean'
-  const parseStatus = ({ ready: '已解析', indexed: '已解析', parsing: '解析中', queued: '待解析', planned: '待解析', failed: '解析失败' })[item.status] || item.status || '待解析'
+  const parseStatus = ({ ready: '已解析', indexed: '已解析', parsing: '解析中', queued: '待解析', planned: '待解析', failed: '解析失败', 等待解析: '待解析' })[item.status] || item.status || '待解析'
   const status = ({ pending: '待安全扫描', quarantined: '已隔离', failed: '扫描失败' })[scanStatus] || parseStatus
   return {
     ...item,
@@ -104,7 +105,7 @@ function normalizeDocument(item) {
     type: item.type || '内部文献',
     format: item.format || item.name?.split('.').pop()?.toUpperCase() || 'DOCX',
     pages: Number(item.pages || 0),
-    owner: item.owner || '平台知识库',
+    owner: item.owner || '',
     permissionScope,
     permission: permissionScope === 'public' ? '全员可见' : '仅自己可见',
     allowDownload: item.allow_download !== false && item.allowDownload !== false,
@@ -179,6 +180,7 @@ const usePortalStore = defineStore('portal-workspace', {
     newsItems: state => resolveRows(fallbackNews, state.liveIntelligence.filter(item => item.category !== 'paper').map(normalizePortalIntelligence)),
     paperItems: state => resolveRows(fallbackPapers, state.liveIntelligence.filter(item => item.category === 'paper').map(normalizePortalPaper)),
     knowledgeDocuments: state => resolveRows(fallbackDocuments, state.liveDocuments.map(normalizeDocument)),
+    libraryCount: state => buildLibraryItems(state.basket, resolveRows(fallbackDocuments, state.liveDocuments.map(normalizeDocument))).length,
     researchReports: state => resolveRows(fallbackReports, state.liveReports.filter(item => !['daily', 'weekly', 'monthly'].includes(item.type)).map(normalizeReport)),
     digestReports: state => resolveRows(fallbackDigests, state.liveReports.filter(item => ['daily', 'weekly', 'monthly'].includes(item.type)).map(normalizeDigestReport)),
     hotTopics: state => {
@@ -294,7 +296,7 @@ const usePortalStore = defineStore('portal-workspace', {
       savePipelineWorkspaceItem({ itemId: entry.id, itemType: this.resolveSavedItemType(entry.id), action: 'basket', title: entry.title, snapshot: entry }).catch(() => {
         if (epoch !== this.workspaceEpoch) return
         this.basket = this.basket.filter(current => current.id !== entry.id)
-        this.dataError = '资料篮保存失败，本次操作已撤销'
+        this.dataError = '资料库保存失败，本次操作已撤销'
         ElMessage.error(this.dataError)
       })
       return true
@@ -303,12 +305,16 @@ const usePortalStore = defineStore('portal-workspace', {
       try { id = requireBusinessId(id) } catch (error) { ElMessage.error(error.message); return false }
       const epoch = this.workspaceEpoch
       const removed = this.basket.find(item => item.id === id)
-      this.basket = this.basket.filter(item => item.id !== id)
-      deletePipelineWorkspaceItem('basket', id).catch(() => {
+      if (!removed) return false
+      return deletePipelineWorkspaceItem('basket', id).then(() => {
+        if (epoch !== this.workspaceEpoch) return false
+        this.basket = this.basket.filter(item => item.id !== id)
+        return true
+      }).catch(() => {
         if (epoch !== this.workspaceEpoch) return
-        if (removed && !this.basket.some(item => item.id === id)) this.basket.push(removed)
-        this.dataError = '移除资料失败，资料已恢复到资料篮'
+        this.dataError = '删除失败，资料仍保留在资料库，请稍后重试'
         ElMessage.error(this.dataError)
+        return false
       })
     },
     clearBasket() {

@@ -8,6 +8,7 @@ from pydantic.alias_generators import to_camel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.business_ids import parse_business_id
+from app.intelligence.repositories.content_repository import ContentDao
 from app.intelligence.schemas.pipeline import PipelineListModel, PipelineTemplateSaveModel
 from app.intelligence.services.application import IntelligenceApplicationService
 from app.intelligence.services.categories import CategoryService
@@ -117,6 +118,12 @@ async def search_research_materials(
         max_page_num=None,
     )
     return ResponseUtil.success(data=data)
+
+
+@controller.get('/intelligence/filters', summary='获取全量公开内容的筛选候选')
+async def content_filter_options(query_db: DB) -> Response:
+    # Only public category names, journals and years; no prompts, model config or private files.
+    return ResponseUtil.success(data=await ContentDao.filter_options(query_db))
 
 
 @controller.get('/intelligence/{item_id}', summary='获取情报详情')

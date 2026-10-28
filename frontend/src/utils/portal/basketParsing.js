@@ -6,18 +6,22 @@ const statusOf = doc => doc?.parseStatus || doc?.status
 export function useBasketParsing(store, active, api, timers = globalThis) {
   const error = ref('')
   const retrying = ref([])
+  const checkedMissing = ref(new Set())
   let timer, running = false, stopped = false, generation = 0
   const documents = computed(() => new Map(store.liveDocuments.map(doc => [String(doc.id), doc])))
   const pending = computed(() => store.basket.some(item => ['file', 'material'].includes(item.type) && pendingStates.has(statusOf(documents.value.get(String(item.id))))))
+  const files = computed(() => store.basket.filter(item => ['file', 'material'].includes(item.type)))
+  const needsRefresh = computed(() => pending.value || files.value.some(item => !documents.value.has(String(item.id)) && !checkedMissing.value.has(String(item.id))) || Boolean(files.value.length && (error.value || store.sectionErrors?.documents)))
   function label(id) {
     const status = statusOf(documents.value.get(String(id)))
+    if (!status && checkedMissing.value.has(String(id))) return '资料不存在或无权访问'
     if (pendingStates.has(status)) return '解析中'
     if (['ready', '已解析'].includes(status)) return '已解析，可用于生成'
     return ['failed', '解析失败'].includes(status) ? '解析失败' : ''
   }
   function clear() { if (timer !== undefined) timers.clearTimeout(timer); timer = undefined }
   function schedule() {
-    if (!stopped && active() && pending.value && timer === undefined) timer = timers.setTimeout(async () => {
+    if (!stopped && active() && needsRefresh.value && timer === undefined) timer = timers.setTimeout(async () => {
       timer = undefined
       await refresh()
     }, 3000)
@@ -31,6 +35,9 @@ export function useBasketParsing(store, active, api, timers = globalThis) {
       if (stopped || token !== generation || epoch !== store.workspaceEpoch) return
       if (!Array.isArray(response?.data?.rows)) throw new Error('无效资料状态')
       store.liveDocuments = response.data.rows
+      const returnedIds = new Set(response.data.rows.map(row => String(row.id)))
+      checkedMissing.value = new Set(files.value.filter(item => !returnedIds.has(String(item.id))).map(item => String(item.id)))
+      if (store.sectionErrors) store.sectionErrors.documents = ''
       error.value = ''
     } catch {
       if (!stopped && token === generation && epoch === store.workspaceEpoch) error.value = '资料状态更新失败，正在自动重试'
@@ -54,8 +61,8 @@ export function useBasketParsing(store, active, api, timers = globalThis) {
       schedule()
     }
   }
-  watch([pending, active], ([hasPending, enabled]) => { if (hasPending && enabled) schedule(); else clear() }, { immediate: true })
-  watch(() => store.workspaceEpoch, () => { generation++; clear(); retrying.value = []; error.value = ''; schedule() }, { flush: 'sync' })
+  watch([needsRefresh, active], ([needed, enabled]) => { if (needed && enabled) schedule(); else clear() }, { immediate: true })
+  watch(() => store.workspaceEpoch, () => { generation++; clear(); checkedMissing.value = new Set(); retrying.value = []; error.value = ''; schedule() }, { flush: 'sync' })
   onScopeDispose(() => { stopped = true; generation++; clear() })
   return { label, error, retrying, retry }
 }

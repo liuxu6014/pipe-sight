@@ -23,10 +23,10 @@ def _comment_sql(kind: str, table: str, column: str | None, comment: str) -> str
 def render_comment_sql() -> str:
     """Deterministic canonical SQL; optional/framework/catalog objects guarded."""
     lines = [
-        '-- compact-v5中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；若依表字段不变。',
+        '-- compact-v6中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；若依表字段不变。',
         '-- 27个业务created_at/updated_at为北京时间timestamp(0)无时区；其他运行时间字段保持原类型。',
         '-- 普通不透明令牌保留；系统幂等键内嵌ID、显式JSON引用及语义指纹按实体映射核验。',
-        '-- 27张基线表317字段，2张保留功能表23字段；共29张物理表340字段。',
+        '-- 27张基线表320字段，2张保留功能表23字段；共29张物理表343字段。',
         '-- 仅COMMENT及存在性保护块；调用方管理事务，不修改字段、约束或业务数据。',
         '',
     ]

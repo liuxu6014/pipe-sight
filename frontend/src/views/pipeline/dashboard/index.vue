@@ -2,9 +2,9 @@
   <div class="pipeline-page pipeline-dashboard">
     <section class="page-heading">
       <div>
-        <p class="eyebrow">管理端</p>
+
         <h1>管理首页</h1>
-        <p class="summary">查看当前业务状态，定位待处理事项。汇总不是运行健康或行业趋势结论。</p>
+
       </div>
       <div class="heading-actions">
         <el-button plain :icon="Monitor" @click="$router.push('/portal')">查看用户端</el-button>
@@ -15,7 +15,7 @@
 
     <el-alert v-if="dashboardError" type="warning" show-icon :closable="false" class="dashboard-load-error">
       <template #title>{{ dashboardError }}</template>
-      <template #default><button type="button" class="dashboard-retry" @click="loadDashboard">重新加载</button></template>
+      <template #default><el-button class="ps-ui-action dashboard-retry" @click="loadDashboard">重新加载</el-button></template>
     </el-alert>
 
     <template v-else>
@@ -44,15 +44,15 @@
           <template #header>
             <div class="card-header">
               <span>最近采集任务</span>
-              <el-tag type="info" effect="plain">任务进度，不代表数据审核通过</el-tag>
+              <el-tag type="info" effect="plain">实际采集数量</el-tag>
             </div>
           </template>
-          <div v-for="item in dashboard.collect_status" :key="item.name" class="status-row">
+          <div v-for="item in dashboard.collect_status" :key="item.id" class="status-row">
             <div class="status-copy">
               <strong>{{ item.name }}</strong>
               <el-tag :type="statusType(item.status)" effect="light">{{ statusText(item.status) }}</el-tag>
             </div>
-            <el-progress :percentage="item.value" :status="item.status === 'warning' ? 'warning' : undefined" />
+            <div class="collection-counts"><span>读取 {{ item.fetched_count ?? '—' }} 条</span><span>保存 {{ item.saved_count ?? '—' }} 条</span><span>失败 {{ item.failed_count ?? '—' }} 条</span></div>
           </div>
           <el-empty v-if="!dashboard.collect_status?.length" description="当前没有采集运行记录" :image-size="64" />
         </el-card>
@@ -97,11 +97,11 @@ const adminEntries = [
 const visibleAdminEntries = computed(() => adminEntries.filter(item => checkPermi([item.permission])))
 
 function statusType(status) {
-  return { running: 'primary', success: 'success', warning: 'warning', reviewing: 'warning', draft: 'info', planned: 'primary' }[status] || 'info'
+  return { queued: 'info', running: 'primary', stopping: 'warning', success: 'success', failed: 'danger', cancelled: 'info' }[status] || 'info'
 }
 
 function statusText(status) {
-  return { running: '运行中', success: '成功', warning: '需关注', reviewing: '审核中', draft: '草稿', planned: '规划中' }[status] || status
+  return { queued: '排队中', running: '运行中', stopping: '停止中', success: '成功', failed: '失败', cancelled: '已取消' }[status] || status
 }
 
 async function loadDashboard() {
@@ -256,6 +256,8 @@ onMounted(loadDashboard)
 .status-copy {
   margin-bottom: 10px;
 }
+
+.collection-counts { display: flex; flex-wrap: wrap; gap: 8px 20px; color: #526b7d; font-size: 13px; }
 
 .topic-row {
   flex-wrap: wrap;

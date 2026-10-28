@@ -50,8 +50,8 @@ export function researchEvidenceRow(detail, kind, { catalog = false } = {}) {
   return {
     id: String(detail.id), title: detail.name || detail.title || '题名未提供',
     itemType: material ? 'material' : paper ? 'paper' : 'article',
-    type: material ? '内部资料' : paper ? '论文' : '科技资讯',
-    meta: material ? `${detail.owner || '所有者未提供'} · ${detail.status || detail.parseStatus}`
+    type: material ? '内部资料' : paper ? '论文' : '新闻资讯',
+    meta: material ? [detail.format, detail.status || detail.parseStatus].filter(Boolean).join(' · ')
       : paper ? `${detail.journal || detail.source || '来源未提供'} · 仅使用论文摘要`
         : `${detail.source || '来源未提供'} · ${detail.publish_time || detail.publishTime || '日期未提供'}`,
     ready: catalog && !material ? false : !reason,

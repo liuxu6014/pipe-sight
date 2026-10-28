@@ -15,7 +15,7 @@ test('source management renders semantic list rows with inline actions instead o
   assert.doesNotMatch(descriptor.template.content, /<el-table/)
   for (const field of ['row.name', 'typeText(row.type)', 'sourceEnabled(row)', 'row.cron', 'row.lastRunAt']) assert.ok(descriptor.template.content.includes(field))
   for (const handler of ['openSourceDialog(row)', 'runSource(row)', 'toggleSource(row)']) assert.ok(descriptor.template.content.includes(handler))
-  assert.match(source, /:disabled="!sourceEnabled\(row\) \|\| Boolean\(runningSourceId\)"/)
+  assert.match(source, /:disabled="!sourceEnabled\(row\) \|\| Boolean\(runningSourceId\) \|\| !supportsSourceAdapter\(row\)"/)
   assert.match(source, /v-if="!loading && !rows.length" description="暂无数据源"/)
   assert.match(source, /:aria-busy="loading"/)
 })

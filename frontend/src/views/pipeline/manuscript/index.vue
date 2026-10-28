@@ -2,9 +2,9 @@
   <div class="pipeline-page manuscript-page">
     <section class="page-heading">
       <div>
-        <p class="eyebrow">后台管理 · 论文生成</p>
+
         <h1>管网科研论文生成</h1>
-        <p class="summary">基于项目描述、关键词、参考文献和自定义章节，生成可编辑的 Markdown 论文草稿。</p>
+
       </div>
       <div class="heading-actions">
         <el-button :icon="Refresh" :loading="loadingJobs" @click="loadJobs">刷新任务</el-button>
@@ -80,10 +80,18 @@
         <template #header>
           <div class="card-header">
             <span>生成任务</span>
-            <small>{{ jobs.length }} 项</small>
+            <small>共 {{ jobsTotal }} 项</small>
           </div>
         </template>
 
+        <div class="job-filters">
+          <el-input v-model.trim="jobKeyword" clearable placeholder="查询论文题目" aria-label="查询论文题目" @keyup.enter="searchJobs" @clear="searchJobs" />
+          <el-select v-model="jobStatus" clearable placeholder="全部状态" aria-label="任务状态" @change="searchJobs">
+            <el-option v-for="value in ['queued', 'running', 'completed', 'failed', 'cancelled']" :key="value" :label="statusText(value)" :value="value" />
+          </el-select>
+          <el-button @click="searchJobs">查询</el-button>
+        </div>
+        <el-alert v-if="jobsError" :title="jobsError" type="error" :closable="false" show-icon><template #default><el-button plain @click="loadJobs">重新加载</el-button></template></el-alert>
         <el-table v-loading="loadingJobs" :data="jobs" height="360" border @row-click="selectJob">
           <el-table-column prop="topic" label="题目" min-width="210" show-overflow-tooltip />
           <el-table-column prop="status" label="状态" width="95">
@@ -96,10 +104,20 @@
           </el-table-column>
           <el-table-column label="操作" width="96" fixed="right">
             <template #default="{ row }">
-              <el-button link type="primary" :icon="Download" @click.stop="handleExport(row)">导出</el-button>
+              <el-button plain type="primary" :icon="Download" @click.stop="handleExport(row)">导出</el-button>
             </template>
           </el-table-column>
         </el-table>
+        <el-pagination
+          v-model:current-page="pageNum"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 50]"
+          :total="jobsTotal"
+          layout="total, sizes, prev, pager, next"
+          class="jobs-pagination"
+          @current-change="loadJobs"
+          @size-change="searchJobs"
+        />
       </el-card>
     </section>
 
@@ -136,6 +154,13 @@ const loadingJobs = ref(false)
 const suggesting = ref(false)
 const exporting = ref(false)
 const jobs = ref([])
+const pageNum = ref(1)
+const pageSize = ref(20)
+const jobsTotal = ref(0)
+const jobKeyword = ref('')
+const jobStatus = ref('')
+const jobsError = ref('')
+let jobsRequest = 0
 const selectedJob = ref(null)
 const selectedContent = ref('')
 const suggestedTitles = ref([])
@@ -178,19 +203,31 @@ function splitLines(value) {
 }
 
 function statusText(status) {
-  return { completed: '已完成', running: '生成中', queued: '排队中', failed: '失败' }[status] || status
+  return { completed: '已完成', running: '生成中', queued: '排队中', failed: '失败', cancelled: '已取消' }[status] || status
+}
+
+async function searchJobs() {
+  pageNum.value = 1
+  await loadJobs()
 }
 
 async function loadJobs() {
+  const request = ++jobsRequest
   loadingJobs.value = true
+  jobsError.value = ''
   try {
-    const res = await listManuscriptJobs({ pageNum: 1, pageSize: 20 })
+    const res = await listManuscriptJobs({ pageNum: pageNum.value, pageSize: pageSize.value, keyword: jobKeyword.value || undefined, status: jobStatus.value || undefined })
+    if (request !== jobsRequest) return
     jobs.value = res.data.rows || []
+    jobsTotal.value = res.data.total
     if (!selectedJob.value && jobs.value.length) await selectJob(jobs.value[0])
   } catch (error) {
-    ElMessage.warning('暂时无法获取论文生成任务')
+    if (request !== jobsRequest) return
+    jobs.value = []
+    jobsTotal.value = 0
+    jobsError.value = '暂时无法获取论文生成任务，请重试'
   } finally {
-    loadingJobs.value = false
+    if (request === jobsRequest) loadingJobs.value = false
   }
 }
 
@@ -336,6 +373,11 @@ onMounted(loadJobs)
 .full-width {
   width: 100%;
 }
+
+.job-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.job-filters .el-input { flex: 1 1 160px; }
+.job-filters .el-select { width: 130px; }
+.jobs-pagination { margin-top: 16px; overflow-x: auto; }
 
 .preview-panel {
   background: #fff;

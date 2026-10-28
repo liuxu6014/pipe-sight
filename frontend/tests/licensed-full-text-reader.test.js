@@ -71,7 +71,7 @@ test('stored full text opens by default while summary remains manually selectabl
   const load = h.loadPaper()
   h.requests[0].resolve(response({ status: 'publisher_preview', html: '<p>Legacy full text</p>', source_url: 'https://mdpi-res.com/d_attachment/legacy.pdf' }))
   await load
-  assert.deepEqual(Array.from(h.tabs.value), ['摘要', 'AI解读'])
+  assert.deepEqual(Array.from(h.tabs.value), ['摘要'])
   assert.equal(h.activeTab.value, '摘要')
   assert.equal(h.opened.length, 0)
  } finally { h.stop() }
@@ -83,7 +83,7 @@ test('verified extracted publisher text adds a full-text tab while untrusted pre
   const load = h.loadPaper()
   h.requests[0].resolve(response({ status: 'publisher_preview', html: '<p>Legacy full text</p>', source_url: 'https://mdpi-res.com/d_attachment/legacy.pdf' }))
   await load
-  assert.deepEqual(Array.from(h.tabs.value), ['摘要', 'AI解读'])
+  assert.deepEqual(Array.from(h.tabs.value), ['摘要'])
   assert.equal(h.activeTab.value, '摘要')
   assert.equal(h.opened.length, 0)
  } finally { h.stop() }
@@ -112,7 +112,7 @@ test('unavailable full text keeps summary distinct and does not invent a DOI lin
     const load = h.loadPaper()
     h.requests[0].resolve(response({ status: 'unavailable' }))
     await load
-    assert.deepEqual(Array.from(h.tabs.value), ['摘要', 'AI解读'])
+    assert.deepEqual(Array.from(h.tabs.value), ['摘要'])
     assert.equal(h.activeTab.value, '摘要')
     assert.equal(h.doiUrl.value, '')
   } finally { h.stop() }
@@ -124,7 +124,7 @@ test('licensed source enables reading even when the outer record has no canonica
   const load = h.loadPaper()
   h.requests[0].resolve(response({ status: 'publisher_preview', html: '<p>Legacy full text</p>', source_url: 'https://mdpi-res.com/d_attachment/legacy.pdf' }))
   await load
-  assert.deepEqual(Array.from(h.tabs.value), ['摘要', 'AI解读'])
+  assert.deepEqual(Array.from(h.tabs.value), ['摘要'])
   assert.equal(h.activeTab.value, '摘要')
   assert.equal(h.opened.length, 0)
  } finally { h.stop() }
@@ -152,7 +152,7 @@ test('reader template uses an isolated titled srcdoc iframe and attribution link
  assert.deepEqual(compiled.errors, [])
  assert.doesNotMatch(descriptor.template.content, /iframe|srcdoc|full_text|获取全文|全文预览/)
  assert.doesNotMatch(descriptor.template.content, /平台仅展示|论文来源页面|关联科技资讯/)
- assert.match(descriptor.template.content, /关联新闻资讯/)
+ assert.match(descriptor.template.content, /其他新闻资讯/)
  assert.match(descriptor.template.content, /rel="noopener noreferrer"/)
  assert.match(descriptor.template.content, /aria-label="返回"[^>]*@click="returnFromPaperDetail\(router\)"/)
 })

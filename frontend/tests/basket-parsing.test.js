@@ -80,3 +80,36 @@ test('temporary polling failure remains visible and retries without losing data'
     assert.equal(env.timers.size, 1)
   } finally { env.scope.stop() }
 })
+
+test('an initially unavailable document list recovers without losing basket selections', async () => {
+  let calls = 0
+  const env = setup(async () => {
+    if (++calls === 1) throw Error('offline')
+    return { data: { rows: [{ id: '49', status: 'ready' }] } }
+  })
+  try {
+    env.store.liveDocuments = []
+    env.store.sectionErrors = { documents: 'unavailable' }
+    await nextTick()
+    assert.equal(env.timers.size, 1)
+    await env.tick()
+    assert.match(env.state.error.value, /自动重试/)
+    await env.tick()
+    assert.equal(env.state.label('49'), '已解析，可用于生成')
+    assert.equal(env.store.basket.length, 1)
+    assert.equal(env.store.sectionErrors.documents, '')
+    assert.equal(env.timers.size, 0)
+  } finally { env.scope.stop() }
+})
+
+test('a missing basket document is verified once and is not polled forever', async () => {
+  const env = setup(async () => ({ data: { rows: [] } }))
+  try {
+    env.store.liveDocuments = []
+    await nextTick()
+    await env.tick()
+    assert.equal(env.state.label('49'), '资料不存在或无权访问')
+    assert.equal(env.timers.size, 0)
+    assert.equal(env.store.basket.length, 1)
+  } finally { env.scope.stop() }
+})

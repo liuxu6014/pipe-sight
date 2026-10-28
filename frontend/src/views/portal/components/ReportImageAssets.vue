@@ -1,6 +1,6 @@
 <template>
   <section class="ps-report-images" aria-label="报告生成配图" :aria-busy="loading">
-    <div class="ps-image-assets-heading"><h3>生成配图</h3><el-button text :loading="loading" @click="load">刷新配图</el-button></div>
+    <div class="ps-image-assets-heading"><h3>生成配图</h3><el-button plain :loading="loading" @click="load">刷新配图</el-button></div>
     <el-alert v-if="loadError" :title="loadError" type="warning" :closable="false" show-icon />
     <el-alert v-if="actionError" :title="actionError" type="error" :closable="false" show-icon />
     <p v-if="loading && !images.length" role="status">正在加载配图资源…</p>
@@ -10,10 +10,10 @@
       <template v-if="image.status === 'completed'">
         <img v-if="image.imageUrl && !image.imageError" :src="image.imageUrl" :alt="`报告配图 ${image.position || index + 1}`" @error="image.imageError = '图片无法解码，请重新加载图片'" />
         <p v-else-if="image.imageLoading" role="status">正在读取图片…</p>
-        <p v-if="image.imageError" role="alert">{{ image.imageError }} <el-button text @click="reloadImage(image)">重新加载图片</el-button></p>
+        <p v-if="image.imageError" role="alert">{{ image.imageError }} <el-button plain @click="reloadImage(image)">重新加载图片</el-button></p>
         <a v-if="image.imageUrl && !image.imageError" :href="image.imageUrl" :download="`${image.id}.${image.extension}`">下载图片</a>
       </template>
-      <p v-else-if="image.status === 'failed'" role="alert">{{ image.error || '配图生成失败，请检查后台图片模型配置。' }} <el-button text type="warning" :loading="image.retrying" @click="retry(image)">重试此图</el-button></p>
+      <p v-else-if="image.status === 'failed'" role="alert">{{ image.error || '配图生成失败，请检查后台图片模型配置。' }} <el-button plain type="warning" :loading="image.retrying" @click="retry(image)">重试此图</el-button></p>
       <p v-else role="status">配图{{ imageStatusLabel(image.status) }}，状态将自动刷新。</p>
     </figure>
   </section>

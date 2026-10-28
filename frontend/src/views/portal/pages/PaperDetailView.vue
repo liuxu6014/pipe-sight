@@ -5,14 +5,14 @@
     <PortalEmptyState v-else-if="!paper" title="论文不存在" description="该论文记录可能已移除，或当前账号没有访问权限。" action-label="返回论文资料" @action="router.push('/portal/papers')" />
     <template v-else>
     <section class="ps-paper-detail-hero ps-detail-header">
-      <div class="ps-detail-title-row"><el-button class="ps-detail-back-button" text :icon="Back" aria-label="返回" title="返回" @click="returnFromPaperDetail(router)" /><h1>{{ paper.titleZh }}</h1></div>
+      <div class="ps-detail-title-row"><el-button class="ps-detail-back-button" plain :icon="Back" aria-label="返回" title="返回" @click="returnFromPaperDetail(router)" /><h1>{{ paper.titleZh }}</h1></div>
       <p v-if="originalTitle" class="ps-paper-original-title">{{ originalTitle }}</p>
       <p v-if="paper.authors?.length" class="ps-paper-detail-authors"><span>作者</span>{{ paper.authors.join(' · ') }}</p>
       <p v-if="paperInstitutions.length" class="ps-paper-detail-institutions"><span>机构</span>{{ paperInstitutions.join('；') }}</p>
       <div class="ps-detail-info-row">
       <div class="ps-paper-detail-meta"><span>{{ paper.journal }}</span><span>{{ paper.publishedDate || paper.year }}</span><a v-if="doiUrl" :href="doiUrl" class="ps-paper-doi-link" target="_blank" rel="noopener noreferrer">DOI {{ paper.doi }}</a><span v-else-if="paper.doi && paper.doi !== '待补充'">DOI {{ paper.doi }}</span><a v-if="!doiUrl && sourceUrl" :href="sourceUrl" class="ps-paper-doi-link" target="_blank" rel="noopener noreferrer">{{ sourceUrl }}</a><span v-if="paper.citations != null">被引 {{ paper.citations }} 次</span></div>
       <div class="ps-article-actions">
-        <el-button type="primary" :loading="busy(paper)" :disabled="busy(paper)" @click="add"><Collection />{{ inBasket(paper) ? '取消加入资料篮' : '加入资料篮' }}</el-button>
+        <el-button type="primary" :loading="busy(paper)" :disabled="busy(paper)" @click="add"><Collection />{{ inBasket(paper) ? '取消加入资料库' : '加入资料库' }}</el-button>
       </div>
       </div>
     </section>
@@ -22,7 +22,7 @@
         <section v-if="activeTab === '摘要'" class="ps-paper-section"><p>{{ paper.abstract || '摘要未提供' }}</p><h3 v-if="paper.keywords?.length">关键词</h3><div class="ps-tag-row"><span v-for="tag in paper.keywords" :key="tag" class="ps-tag">{{ tag }}</span></div></section>
         <section v-else-if="activeTab === 'AI解读'" class="ps-paper-section"><h2>AI 解读</h2><div v-if="aiInterpretation.length" class="ps-insight-list"><article v-for="(item, index) in aiInterpretation" :key="`${item.title}-${index}`"><span>{{ String(index + 1).padStart(2, '0') }}</span><div><strong>{{ item.title }}</strong><p>{{ item.content }}</p></div></article></div><p v-else class="ps-inspector-empty">暂无 AI 解读，当前仅展示论文元数据与摘要。</p></section>
       </article>
-      <aside class="ps-reading-aside"><section class="ps-panel"><h3>关联新闻资讯</h3><button v-for="item in newsItems.slice(0, 3)" :key="item.id" type="button" class="ps-related-item" @click="openPortalContent(router, `/portal/news/${item.id}`)"><strong>{{ item.title }}</strong><small>{{ item.source }}</small></button></section><section class="ps-panel"><h3>相似论文</h3><button v-for="item in relatedPapers" :key="item.id" type="button" class="ps-related-item" @click="openPortalContent(router, `/portal/papers/${item.id}`)"><strong>{{ item.titleZh }}</strong><small>{{ item.journal }} · {{ item.year }}</small></button></section></aside>
+      <aside class="ps-reading-aside"><section v-if="newsItems.length" class="ps-panel"><h3>其他新闻资讯</h3><button v-for="item in newsItems.slice(0, 3)" :key="item.id" type="button" class="ps-related-item" @click="openPortalContent(router, `/portal/news/${item.id}`)"><strong>{{ item.title }}</strong><small>{{ item.source }}</small></button></section><section v-if="relatedPapers.length" class="ps-panel"><h3>其他论文</h3><button v-for="item in relatedPapers" :key="item.id" type="button" class="ps-related-item" @click="openPortalContent(router, `/portal/papers/${item.id}`)"><strong>{{ item.titleZh }}</strong><small>{{ item.journal }} · {{ item.year }}</small></button></section></aside>
     </div>
     </template>
   </div>
@@ -57,7 +57,7 @@ const originalTitle = computed(() => {
 const paperInstitutions = computed(() => [...new Set((paper.value?.institutions || [])
   .map(value => String(value || '').trim())
   .filter(value => value && !['来源数据库', '机构待补充', '未提供', '待补充'].includes(value)))])
-const tabs = computed(() => ['摘要', 'AI解读'])
+const tabs = computed(() => aiInterpretation.value.length ? ['摘要', 'AI解读'] : ['摘要'])
 const sourceUrl = computed(() => {
  try { const url = new URL(paper.value?.sourceUrl || paper.value?.url || ''); return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password ? url.href : '' } catch { return '' }
 })
@@ -91,9 +91,9 @@ async function add() {
   if (!paper.value) return
   try {
     const result = await toggleBasket(paper.value, 'paper')
-    if (result === 'saved') ElMessage.success('已加入资料篮')
-    else if (result === 'removed') ElMessage.success('已取消加入资料篮')
-  } catch (error) { ElMessage.error(error?.msg || '资料篮更新失败，请重试') }
+    if (result === 'saved') ElMessage.success('已加入资料库')
+    else if (result === 'removed') ElMessage.success('已取消加入资料库')
+  } catch (error) { ElMessage.error(error?.msg || '资料库更新失败，请重试') }
 }
 let detailRequest = 0
 async function loadPaper() {

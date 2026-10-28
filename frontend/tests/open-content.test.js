@@ -3,7 +3,20 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { parse } from '@vue/compiler-sfc'
 import { baseParse } from '@vue/compiler-dom'
-import { openPortalContent, returnFromPaperDetail, returnFromNewsDetail } from '../src/utils/portal/openContent.js'
+import { openPortalContent, returnFromPaperDetail, returnFromNewsDetail, returnFromKnowledgeDetail } from '../src/utils/portal/openContent.js'
+
+test('uploaded document returns to the originating portal page and falls back to the basket', () => {
+  for (const back of ['/portal/basket?page=2', '/portal/research/reports/33', '/portal/knowledge']) {
+    const calls = []
+    returnFromKnowledgeDetail({ options: { history: { state: { back } } }, back: () => calls.push('back'), push: path => calls.push(path) })
+    assert.deepEqual(calls, ['back'])
+  }
+  for (const back of [null, '/login', 'https://example.com/portal/basket']) {
+    const calls = []
+    returnFromKnowledgeDetail({ options: { history: { state: { back } } }, back: () => calls.push('back'), push: path => calls.push(path) })
+    assert.deepEqual(calls, ['/portal/basket'])
+  }
+})
 
 test('news, paper details and other navigation all stay in place', async () => {
   const opened = [], pushed = []

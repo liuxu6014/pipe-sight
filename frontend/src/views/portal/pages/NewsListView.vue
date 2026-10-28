@@ -1,14 +1,16 @@
 <template>
-  <div class="ps-page">
+  <div class="ps-page ps-list-page">
     <div class="ps-toolbar">
-      <div class="ps-search-inline"><Search /><input v-model.trim="keyword" aria-label="搜索科技资讯" placeholder="搜索标题、摘要或正文" @keydown.enter="reload" /><button v-if="keyword" type="button" aria-label="清空资讯关键词" @click="keyword = ''">清空</button></div>
+      <div class="ps-search-inline"><Search /><input v-model.trim="keyword" aria-label="搜索新闻资讯" placeholder="搜索标题、摘要或正文" @keydown.enter="reload" /><el-button class="ps-ui-action" v-if="keyword" aria-label="清空资讯关键词" @click="keyword = ''">清空</el-button></div>
       <el-select v-model="sourceType" aria-label="资讯来源" style="width: 150px"><el-option label="全部来源" value="全部" /><el-option label="新闻网站" value="新闻网站" /><el-option label="微信公众号" value="微信公众号" /></el-select>
       <el-select v-model="activeTags" multiple :multiple-limit="20" clearable filterable allow-create default-first-option collapse-tags collapse-tags-tooltip placeholder="全部标签" aria-label="资讯标签" style="width: 200px"><el-option v-for="tag in tags" :key="tag" :label="tag" :value="tag" /></el-select>
       <el-button @click="resetFilters">重置筛选</el-button>
       <div class="ps-view-switch"><button type="button" aria-label="列表视图" :aria-pressed="viewMode === 'list'" :class="{ 'is-active': viewMode === 'list' }" @click="viewMode = 'list'"><List /></button><button type="button" aria-label="卡片视图" :aria-pressed="viewMode === 'card'" :class="{ 'is-active': viewMode === 'card' }" @click="viewMode = 'card'"><Grid /></button></div>
     </div>
-    <div class="ps-news-content">
-      <section v-loading="loading" :aria-busy="loading" :class="['ps-news-list', { 'is-card': viewMode === 'card' }]">
+    <SavedSearchBar kind="news" :query="query" @apply="applySavedSearch" />
+    <div class="ps-news-content ps-list-stack">
+      <section v-loading="loading" :aria-busy="loading" class="ps-list-stack">
+        <div :class="['ps-news-list', 'ps-list-scroll', { 'is-card': viewMode === 'card' }]" tabindex="0" aria-label="新闻资讯列表">
         <article v-for="item in newsItems" :key="item.id" class="ps-news-card">
           <div class="ps-news-card-top"><span class="ps-source-badge">{{ item.sourceType }}</span><time>{{ newsDate(item.time) }}</time></div>
           <div class="ps-news-card-main">
@@ -32,10 +34,11 @@
           <p>{{ cleanSummary(item.summary) }}</p>
           <div class="ps-tag-row"><button v-for="tag in item.tags" :key="tag" type="button" class="ps-tag" :aria-pressed="activeTags.includes(tag)" @click="toggleTag(tag)">{{ tag }}</button></div>
           </div></div>
-          <div class="ps-news-card-footer"><span>{{ item.source }} · {{ item.category }}</span><div><el-button type="primary" plain :loading="busy(item)" :disabled="busy(item)" @click="addToBasket(item)">{{ inBasket(item) ? '取消加入资料篮' : '加入资料篮' }}</el-button></div></div>
+          <div class="ps-news-card-footer"><span>{{ item.source }} · {{ item.category }}</span><div><el-button type="primary" plain :loading="busy(item)" :disabled="busy(item)" @click="addToBasket(item)">{{ inBasket(item) ? '取消加入资料库' : '加入资料库' }}</el-button></div></div>
         </article>
         <PortalEmptyState v-if="loadError && !loading" title="资讯加载失败" :description="loadError" action-label="重新加载" @action="reload" />
         <PortalEmptyState v-else-if="!newsItems.length && !loading" title="没有匹配的资讯" description="请调整标签、来源或搜索关键词。" action-label="重置筛选" @action="resetFilters" />
+        </div>
         <div v-if="total > 0 && !loading && !loadError" class="ps-pagination" aria-label="资讯列表分页">
           <el-pagination
             v-model:current-page="currentPage"
@@ -53,18 +56,21 @@
 </template>
 
 <script setup>
+import SavedSearchBar from '../components/SavedSearchBar.vue'
+import { applySavedSearchQuery } from '@/utils/portal/savedSearches'
 import { computed, toRefs, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Grid, List, Search } from '@element-plus/icons-vue'
 import PortalEmptyState from '../components/PortalEmptyState.vue'
 import usePortalStore from '@/store/modules/portal'
-import { deletePipelineWorkspaceItem, listPipelineIntelligence, savePipelineWorkspaceItem } from '@/api/pipeline/intelligence'
+import { getPipelineContentFilters, deletePipelineWorkspaceItem, listPipelineIntelligence, savePipelineWorkspaceItem } from '@/api/pipeline/intelligence'
 import { normalizePortalIntelligence } from '@/store/modules/portal'
 import { useListQuery, useListRequest, useListWorkspace, validPage } from '@/utils/portal/listQuery'
 import { cleanSummary, newsDate } from '@/utils/portal/discovery'
 
 const portalStore = usePortalStore()
 const query = useListQuery({ q: '', source: '全部', category: '全部', tag: [], view: 'list', page: 1, size: 10 })
+function applySavedSearch(filters) { if (!applySavedSearchQuery(query, filters, 'news')) reload() }
 const { q: keyword, source: sourceType, tag: activeTags, view: viewMode, page: currentPage, size: pageSize } = toRefs(query)
 // Old category links referred to tags; migrate them into the single visible filter.
 watch(() => [query.category, query.tag], () => {
@@ -91,16 +97,17 @@ const newsItems = computed(() => (data.value?.rows || []).map(item => ({
 })))
 const total = computed(() => Number(data.value?.total || 0))
 watch(data, value => { if (value) currentPage.value = validPage(total.value, pageSize.value, currentPage.value) })
-const tags = computed(() => [...new Set([...newsItems.value.flatMap(item => item.tags || []), ...activeTags.value])])
+const facets = useListRequest(() => ({}), getPipelineContentFilters)
+const tags = computed(() => [...new Set([...(facets.data.value?.newsTags || []), ...activeTags.value])])
 function toggleTag(tag) {
   activeTags.value = activeTags.value.includes(tag) ? activeTags.value.filter(value => value !== tag) : [...activeTags.value, tag].slice(0, 20)
 }
 async function addToBasket(item) {
   try {
     const result = await toggleBasket(item, 'article')
-    if (result === 'saved') ElMessage.success('已加入资料篮')
-    else if (result === 'removed') ElMessage.success('已取消加入资料篮')
-  } catch (error) { ElMessage.error(error?.msg || '资料篮更新失败，请重试') }
+    if (result === 'saved') ElMessage.success('已加入资料库')
+    else if (result === 'removed') ElMessage.success('已取消加入资料库')
+  } catch (error) { ElMessage.error(error?.msg || '资料库更新失败，请重试') }
 }
 function resetFilters() {
   const unchanged = !keyword.value && sourceType.value === '全部' && !activeTags.value.length && currentPage.value === 1
@@ -114,6 +121,8 @@ function resetFilters() {
 .ps-toolbar { min-height: 0; padding: 6px 12px; row-gap: 6px; margin-bottom: 10px; }
 .ps-toolbar > .ps-search-inline { flex: 1 1 100%; }
 .ps-toolbar > .el-select { flex: 1 1 150px; }
+.ps-search-inline > button { flex-shrink: 0; padding: 4px 8px; border: 0; border-radius: 4px; background: transparent; color: var(--ps-muted); white-space: nowrap; cursor: pointer; }
+.ps-search-inline > button:hover { color: var(--ps-blue); background: var(--ps-blue-soft); }
 @media (min-width: 1051px) {
   .ps-toolbar { flex-wrap: nowrap; }
   .ps-toolbar > .ps-search-inline { flex: 1 1 280px; min-width: 180px; }

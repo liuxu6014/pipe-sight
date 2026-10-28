@@ -6,13 +6,14 @@ import * as businessIds from '../src/utils/portal/businessId.js'
 import * as vue from 'vue'
 import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 import * as contract from '../src/utils/pipeline/compactContract.js'
+import * as sourceAdapters from '../src/utils/pipeline/sourceAdapters.js'
 
 const read = path => readFileSync(new URL('../src/' + path, import.meta.url), 'utf8')
 function page(path, dependencies, exports) {
   const scope = vue.effectScope(), timers = new Map(), messages = []
   let sequence = 0, leave = () => {}
   const context = vm.createContext({
-    ...vue, ...contract, defineOptions() {}, onMounted() {}, onBeforeUnmount(fn) { leave = fn },
+    ...vue, ...contract, ...sourceAdapters, defineOptions() {}, onMounted() {}, onBeforeUnmount(fn) { leave = fn },
     checkPermi: () => true, checkRole: () => true,
     setTimeout(fn) { timers.set(++sequence, fn); return sequence }, clearTimeout(id) { timers.delete(id) },
     ElMessage: Object.fromEntries(['success', 'info', 'warning', 'error'].map(level => [level, text => messages.push({ level, text })])),

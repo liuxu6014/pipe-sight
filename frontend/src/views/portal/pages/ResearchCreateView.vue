@@ -1,16 +1,16 @@
 <template>
   <div class="ps-page ps-create-page ps-research-create-page">
     <header class="ps-create-context">
-      <button class="ps-create-back" type="button" aria-label="返回科研工作台" title="返回科研工作台" @click="router.push('/portal/research')">
+      <el-button class="ps-ui-action ps-create-back" aria-label="返回科研工作台" title="返回科研工作台" @click="router.push('/portal/research')">
         <Back />
-      </button>
+      </el-button>
       <div class="ps-create-heading">
         <h1>新建报告</h1>
       </div>
     </header>
     <div v-if="sourceTaskLoading || sourceTaskError" class="ps-inline-state is-warning" role="status">
       <span>{{ sourceTaskLoading ? '正在载入原任务，尚未确认选材范围…' : sourceTaskError }}</span>
-      <el-button v-if="sourceTaskError" text @click="loadSourceTask(String(route.query.sourceTask))">重试载入原任务</el-button>
+      <el-button v-if="sourceTaskError" plain @click="loadSourceTask(String(route.query.sourceTask))">重试载入原任务</el-button>
     </div>
     <el-alert v-if="templateUpgradeNotice" :title="templateUpgradeNotice" type="warning" :closable="false" />
     <el-steps :active="activeStep" finish-status="success" align-center class="ps-create-steps"><el-step title="类型与模板" /><el-step title="选择资料" /><el-step title="任务参数" /><el-step title="确认大纲" /></el-steps>
@@ -19,13 +19,17 @@
         <span>部分资料暂不可用，请取消勾选或重试。</span>
         <el-button :loading="verifying" :disabled="submitting" @click="verifySelected(true)">重试</el-button>
       </div>
-      <div v-if="activeStep === 0" class="ps-step-content">
+      <div v-if="activeStep === 0" class="ps-step-content" tabindex="0" aria-label="类型与模板设置滚动区">
         <div v-if="templatesLoading" class="ps-inspector-empty">正在加载已发布模板…</div>
         <PortalEmptyState v-else-if="templatesError || !reportTemplates.length" title="暂无可用报告模板" :description="templatesError || '请先在管理端配置并启用科研报告模板。'" action-label="重新加载" @action="loadTemplates" />
         <div v-else class="ps-template-choice"><button v-for="template in reportTemplates" :key="template.id" type="button" :class="{ 'is-selected': form.template === template.id }" @click="form.template = template.id"><i :style="{ background: template.color }"></i><Check v-if="form.template === template.id" /><strong>{{ template.name }}</strong><p>{{ template.description }}</p></button></div>
+        <details v-if="selectedTemplate" class="ps-template-structure">
+          <summary>查看模板结构<span>{{ selectedTemplatePreview.sections.length }} 章<template v-if="selectedTemplatePreview.words"> · 约 {{ selectedTemplatePreview.words.toLocaleString() }} 字</template></span></summary>
+          <div><p class="ps-template-model-state">{{ selectedTemplatePreview.modelLabel }}</p><ol v-if="selectedTemplatePreview.sections.length"><li v-for="section in selectedTemplatePreview.sections" :key="section.number"><div><strong>{{ section.title }}</strong><span>{{ section.words ? `约 ${section.words.toLocaleString()} 字` : '篇幅待设置' }}</span></div><p v-if="section.description">{{ section.description }}</p></li></ol><p v-else>此模板尚未设置章节，请联系管理员补充。</p><small>这是章节与篇幅配置预览，不是已生成的正文；后续可在确认大纲时调整。</small></div>
+        </details>
         <div class="ps-form-grid ps-template-options">
           <label>输出语言<el-select v-model="form.language"><el-option label="简体中文" value="zh" /><el-option label="中英双语（暂未开放）" value="bilingual" disabled /></el-select></label>
-          <label>预计篇幅<el-select v-model="form.length"><el-option label="标准（8,000-12,000字）" value="standard" /><el-option label="详细（暂未开放）" value="long" disabled /></el-select></label>
+          <label>预计篇幅<el-select v-model="form.length"><el-option :label="totalWords > 0 ? `按大纲规划（约 ${totalWords.toLocaleString()} 字）` : '按确认的大纲规划'" value="standard" /><el-option label="详细（暂未开放）" value="long" disabled /></el-select></label>
         </div>
       </div>
       <div v-else-if="activeStep === 1" class="ps-step-content ps-material-step">
@@ -38,14 +42,14 @@
               <span class="ps-material-selected-count" role="status">已选 {{ selectedIds.length }} 条</span>
             </div>
             <div class="ps-tabs-line"><button v-for="tab in materialTabs" :key="tab" type="button" :class="{ 'is-active': materialTab === tab }" @click="materialTab = tab">{{ tab }}</button></div>
-            <div class="ps-research-material-scroll">
+            <div class="ps-research-material-scroll" tabindex="0" aria-label="研究资料滚动区">
             <p v-if="parsingRefreshError" class="ps-inspector-empty" role="status">{{ parsingRefreshError }}</p>
             <p v-if="materialLoading" class="ps-inspector-empty" role="status">加载中…</p>
             <div v-else-if="materialError" class="ps-inline-state is-warning" role="alert"><span>{{ materialError }}</span><el-button @click="loadMaterials">重试</el-button></div>
             <div v-for="item in availableMaterials" :key="item.id" class="ps-material-option" :class="{ 'is-selected': selectedIds.includes(item.id) }">
               <el-checkbox :model-value="selectedIds.includes(item.id)" :aria-label="`选择研究资料：${item.title}`" :disabled="submitting || (item.state === 'unavailable' && !selectedIds.includes(item.id))" @change="toggleMaterial(item.id, $event)" />
               <span><strong>{{ item.title }}</strong><small>{{ item.state === 'unavailable' && item.reason !== materialParseLabel(item.detail) ? item.reason : materialDescription(item) }}</small></span>
-              <span v-if="item.itemType === 'material' && materialParseLabel(item.detail)" class="ps-material-parse-status"><span role="status">{{ materialParseLabel(item.detail) }}</span><el-button v-if="materialParseLabel(item.detail) === '解析失败' && item.detail?.canManage !== false" text type="primary" :loading="retryingMaterialIds.includes(item.id)" :disabled="submitting" :aria-label="`重试解析：${item.title}`" @click="retryMaterial(item)">重试</el-button></span>
+              <span v-if="item.itemType === 'material' && materialParseLabel(item.detail)" class="ps-material-parse-status"><span role="status">{{ materialParseLabel(item.detail) }}</span><el-button v-if="materialParseLabel(item.detail) === '解析失败' && item.detail?.canManage !== false" plain type="primary" :loading="retryingMaterialIds.includes(item.id)" :disabled="submitting" :aria-label="`重试解析：${item.title}`" @click="retryMaterial(item)">重试</el-button></span>
             </div>
             <p v-if="!materialLoading && !materialError && !availableMaterials.length" class="ps-inspector-empty">暂无资料</p>
             </div>
@@ -53,7 +57,7 @@
         </div>
       </div>
       <div v-else-if="activeStep === 2" class="ps-step-content"><div class="ps-form-grid ps-form-grid-wide"><label>任务名称<el-input v-model="form.name" aria-required="true" placeholder="例如：管道本体应力监测科研需求报告" /></label><label>研究方向<el-input v-model="form.direction" aria-required="true" placeholder="例如：管道应力监测" /></label><label>项目名称 / 需求名称<el-input v-model="form.project" placeholder="请输入正式项目名称" /></label><label>业务场景<el-select v-model="form.scenario"><el-option label="科研项目立项" value="科研项目立项" /><el-option label="技术方案论证" value="技术方案论证" /><el-option label="成果总结" value="成果总结" /></el-select></label><label>研究起止时间<el-date-picker v-model="form.period" type="daterange" start-placeholder="开始日期" end-placeholder="结束日期" /></label><label>关键词<el-select v-model="form.keywords" multiple allow-create filterable default-first-option placeholder="输入后回车添加"><el-option v-for="item in ['应力监测', '磁各向异性', '完整性管理']" :key="item" :label="item" :value="item" /></el-select></label><label class="ps-field-full">生成要求<el-input v-model="form.requirements" type="textarea" :rows="5" placeholder="描述关注问题、技术边界、必须引用的标准和期望结论……" /></label></div><div class="ps-option-row"><el-checkbox v-model="form.diagram">生成配图（需后台配置生图模型）</el-checkbox><el-checkbox v-model="form.publicSupplement" disabled>公开资料补充（暂未开放，仅使用已选资料）</el-checkbox><el-checkbox v-model="form.citationCheck">提交前执行引用完整性检查</el-checkbox></div></div>
-      <div v-else class="ps-step-content"><div class="ps-outline-editor"><div v-for="(section, index) in outline" :key="section.id" class="ps-outline-row"><span class="ps-outline-index">{{ index + 1 }}</span><el-input v-model="section.title" :aria-label="`第 ${index + 1} 章标题`" /><el-input-number v-model="section.words" :aria-label="`第 ${index + 1} 章目标字数`" :step="500" :min="500" :max="8000" /><span class="ps-outline-controls"><el-button text :disabled="index === 0" :aria-label="`上移${section.title}`" @click="moveOutline(index, -1)"><ArrowUp /></el-button><el-button text :disabled="index === outline.length - 1" :aria-label="`下移${section.title}`" @click="moveOutline(index, 1)"><ArrowDown /></el-button><el-button text type="danger" :disabled="outline.length <= 1" :aria-label="`删除${section.title}`" @click="removeOutline(section.id)"><Delete /></el-button></span></div><el-button class="ps-block-action" @click="addOutline"><Plus />新增章节</el-button></div><div class="ps-submit-review"><div><span>报告类型</span><strong>{{ selectedTemplate?.name }}</strong></div><div><span>已选资料</span><strong>{{ selectedIds.length }} 条</strong></div><div><span>预计篇幅</span><strong>{{ totalWords.toLocaleString() }} 字</strong></div><div><span>生成配图</span><strong>{{ form.diagram ? '是' : '否' }}</strong></div></div></div>
+      <div v-else class="ps-step-content"><div class="ps-outline-editor"><div v-for="(section, index) in outline" :key="section.id" class="ps-outline-row"><span class="ps-outline-index">{{ index + 1 }}</span><el-input v-model="section.title" :aria-label="`第 ${index + 1} 章标题`" /><el-input-number v-model="section.words" :aria-label="`第 ${index + 1} 章目标字数`" :step="100" :min="1" :max="8000" /><span class="ps-outline-controls"><el-button plain :disabled="index === 0" :aria-label="`上移${section.title}`" @click="moveOutline(index, -1)"><ArrowUp /></el-button><el-button plain :disabled="index === outline.length - 1" :aria-label="`下移${section.title}`" @click="moveOutline(index, 1)"><ArrowDown /></el-button><el-button plain type="danger" :disabled="outline.length <= 1" :aria-label="`删除${section.title}`" @click="removeOutline(section.id)"><Delete /></el-button></span></div><el-button class="ps-block-action" @click="addOutline"><Plus />新增章节</el-button></div><div class="ps-submit-review"><div><span>报告类型</span><strong>{{ selectedTemplate?.name }}</strong></div><div><span>已选资料</span><strong>{{ selectedIds.length }} 条</strong></div><div><span>预计篇幅</span><strong>{{ totalWords.toLocaleString() }} 字</strong></div><div><span>生成配图</span><strong>{{ form.diagram ? '是' : '否' }}</strong></div></div></div>
       <div v-if="activeStep === 1 && !materialError" class="ps-pagination ps-material-pagination" aria-label="研究资料列表分页">
         <el-pagination v-model:current-page="materialPage" v-model:page-size="materialPageSize" :page-sizes="[10, 20, 50]" :total="materialTotal" :pager-count="5" :disabled="materialLoading || submitting" layout="total, sizes, ->, prev, pager, next, jumper" background />
       </div>
@@ -79,6 +83,7 @@
 </template>
 
 <script setup>
+import { templatePreview } from '@/utils/portal/researchWorkspace'
 import { displayId, decimalId, requireBusinessId, ID_UPGRADE_NOTICE } from '@/utils/portal/businessId'
 import { templateGenerationError } from '@/utils/pipeline/compactContract'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
@@ -258,6 +263,7 @@ const selectableMaterialPageIds = computed(() => availableMaterials.value
 const currentMaterialPageSelected = computed(() => selectableMaterialPageIds.value.length > 0
   && selectableMaterialPageIds.value.every(id => selectedIds.value.includes(id)))
 const selectedTemplate = computed(() => reportTemplates.value.find(item => item.id === form.template || item.templateKey === form.template))
+const selectedTemplatePreview = computed(() => templatePreview(selectedTemplate.value))
 const totalWords = computed(() => outline.value.reduce((sum, item) => sum + item.words, 0))
 const nextStepBlocked = computed(() => activeStep.value === 0 ? !selectedTemplate.value || templatesLoading.value
   : activeStep.value === 1 ? uploading.value || !selectedIds.value.length || verifying.value || Boolean(selectionProblems.value.length) || sourceTaskLoading.value || Boolean(sourceTaskError.value)
@@ -425,7 +431,7 @@ onMounted(async () => {
   const selection = resolveBasketSelection(portalStore.basket, route.query.selected)
   setSelection(selection.items)
   if (selection.upgraded) ElMessage.warning(ID_UPGRADE_NOTICE)
-  else if (selection.missing) ElMessage.warning(`${selection.missing} 条选材已不在当前资料篮中，请重新选择`)
+  else if (selection.missing) ElMessage.warning(`${selection.missing} 条选材已不在当前资料库中，请重新选择`)
   if (route.query.sourceTask) await loadSourceTask(String(route.query.sourceTask))
 })
 watch(() => route.query.sourceTask, taskId => { if (taskId) void loadSourceTask(String(taskId)) })
@@ -478,6 +484,15 @@ async function loadSourceTask(taskId) {
 .ps-create-back:hover { border-color: var(--ps-blue); background: var(--ps-blue-soft); }
 .ps-create-back:hover svg { transform: none; }
 .ps-template-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ps-template-structure { margin: 16px 0; border: 1px solid var(--ps-line); border-radius: 8px; background: #fff; }
+.ps-template-structure > summary { padding: 12px 16px; cursor: pointer; font-weight: 600; color: var(--ps-ink); }
+.ps-template-structure > summary > span { margin-left: 12px; font-weight: 400; color: var(--ps-muted); font-size: 13px; }
+.ps-template-structure > div { padding: 0 16px 16px; }
+.ps-template-structure ol { margin: 12px 0; padding-left: 24px; }
+.ps-template-structure li { padding: 10px 0; border-top: 1px solid var(--ps-line-soft); }
+.ps-template-structure li > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+.ps-template-structure li p { margin: 6px 0 0; line-height: 1.6; color: var(--ps-muted); }
+.ps-template-structure li span, .ps-template-structure small, .ps-template-model-state { color: var(--ps-muted); font-size: 13px; }
 .ps-research-create-page .ps-material-picker { grid-template-columns: minmax(0, 1fr); }
 .ps-research-create-page .ps-material-source { min-height: 0; padding: 0; border: 0; }
 .ps-research-create-page .ps-material-step { display: flex; flex-direction: column; overflow: hidden; }

@@ -1,7 +1,7 @@
 """Beijing, seconds-only audit storage with UTC-aware internal datetime values.
 
-Only created_at/updated_at use this type. Lease, publication and schedule instants
-retain their original timezone-aware database types.
+created_at/updated_at and digest dispatch summaries use this type. Lease,
+publication and next-schedule instants retain their timezone-aware types.
 """
 
 from __future__ import annotations

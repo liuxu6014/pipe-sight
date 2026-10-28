@@ -1,5 +1,5 @@
 <template>
-  <div class="pipeline-page pipeline-report-page">
+  <div class="pipeline-page pipeline-report-page ws-list-page">
     <section class="page-heading">
       <div><h1>{{ reportKind === 'digest' ? '简报管理' : '报告管理' }}</h1></div>
       <div class="heading-actions"><el-button plain :icon="DocumentAdd" @click="openCreate(reportKind === 'digest' ? '科技情报日报' : '科研需求报告')">进入用户端编制</el-button><el-button type="primary" :icon="Refresh" :loading="loading" @click="loadReports">刷新列表</el-button></div>
@@ -13,20 +13,19 @@
       </div>
     </el-card>
     <el-alert v-if="reportError" type="warning" show-icon :closable="false" class="report-load-error">
-      <template #title>{{ reportError }}</template><template #default><button type="button" class="report-retry" @click="loadReports">重新加载</button></template>
+      <template #title>{{ reportError }}</template><template #default><el-button class="ps-ui-action report-retry" @click="loadReports">重新加载</el-button></template>
     </el-alert>
-    <el-card v-else shadow="never" class="table-card report-review-table">
-      <el-table v-loading="loading" :data="filteredRows" row-key="id" border empty-text="当前条件下暂无成果">
+    <el-card v-else shadow="never" class="table-card report-review-table ws-list-panel">
+      <el-table v-loading="loading" :data="filteredRows" row-key="id" border height="100%" empty-text="当前条件下暂无成果">
         <el-table-column prop="title" label="成果名称" :min-width="reportKind === 'digest' ? 200 : 260" show-overflow-tooltip />
         <el-table-column prop="type" label="材料类型" :width="reportKind === 'digest' ? 90 : 160" show-overflow-tooltip />
         <el-table-column prop="owner" label="作者" :width="reportKind === 'digest' ? 80 : 140" show-overflow-tooltip />
         <el-table-column v-if="reportKind === 'digest'" prop="period" label="覆盖周期" min-width="140" />
-        <el-table-column prop="version" label="版本" :width="reportKind === 'digest' ? 65 : 100" />
         <el-table-column prop="status" label="业务状态" :width="reportKind === 'digest' ? 105 : 120"><template #default="{ row }"><el-tag :type="getReportStatusMeta(row.status).type" effect="light">{{ getReportStatusMeta(row.status).label }}</el-tag></template></el-table-column>
         <el-table-column prop="updated_at" label="更新时间" width="180" />
         <el-table-column label="操作" :width="reportKind === 'digest' ? 210 : 250" :fixed="reportKind === 'digest' ? false : 'right'"><template #default="{ row }">
-          <el-button link type="primary" :icon="Edit" @click="openReport(row)">查看 / 核对</el-button>
-          <el-button v-hasPermi="['pipeline:report:export']" link type="primary" :icon="Download" :loading="downloadingReportId === row.id" @click="handleExportReport(row)">导出</el-button>
+          <el-button plain type="primary" :icon="Edit" @click="openReport(row)">查看 / 核对</el-button>
+          <el-button v-hasPermi="['pipeline:report:export']" plain type="primary" :icon="Download" :loading="downloadingReportId === row.id" @click="handleExportReport(row)">导出</el-button>
         </template></el-table-column>
       </el-table>
     </el-card>
@@ -38,7 +37,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { DocumentAdd, Download, Edit, Refresh } from '@element-plus/icons-vue'
-import { exportPipelineReport, listPipelineReports } from '@/api/pipeline/intelligence'
+import { exportPipelineReport, listPipelineAdminReports } from '@/api/pipeline/intelligence'
 import { getReportStatusMeta } from '@/utils/pipeline/reportPresentation'
 import { getPortalReportPath, isDigestType } from '@/views/portal/utils/routing'
 
@@ -64,7 +63,7 @@ async function loadReports() {
   loading.value = true
   reportError.value = ''
   try {
-    const res = await listPipelineReports()
+    const res = await listPipelineAdminReports()
     rows.value = res.data.rows
   } catch (error) {
     rows.value = []

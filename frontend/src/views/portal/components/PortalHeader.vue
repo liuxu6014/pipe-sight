@@ -33,10 +33,10 @@
           <span>数据同步异常</span>
         </button>
 
-        <button class="ps-basket-button" type="button" :aria-label="`资料篮，${store.basketCount} 条已选资料`" @click="router.push('/portal/basket')">
+        <button class="ps-basket-button" type="button" :aria-label="`资料库，${store.libraryCount} 条资料`" @click="router.push('/portal/basket')">
           <Collection />
-          <span>资料篮</span>
-          <b>{{ store.basketCount }}</b>
+          <span>资料库</span>
+          <b>{{ store.libraryCount }}</b>
         </button>
 
         <div class="ps-user-account-actions">

@@ -19,6 +19,15 @@ db = refactor_db
 no_external_network = refactor_no_external_network
 
 
+def test_existing_detection_weekly_template_has_explicit_cadence(env):
+    from app.intelligence.services.templates import PipelineTemplateService
+    weekly = NS(purpose='digest', name='检测技术专题周报')
+    assert PipelineTemplateService.digest_cadence(weekly) == 'weekly'
+    PipelineTemplateService.validate_digest_cadence(weekly, 'weekly')
+    with raises(env, '周期'):
+        PipelineTemplateService.validate_digest_cadence(weekly, 'monthly')
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('kind', ['article', 'research', 'daily', 'weekly', 'monthly'])
 async def test_all_generation_types_reject_overlimit_before_repository_work(env, kind):
@@ -86,6 +95,32 @@ def canonical_content(env, monkeypatch):
     monkeypatch.setitem(sys.modules, content.__name__, content)
     monkeypatch.setitem(sys.modules, sources.__name__, sources)
     return ContentBase, Source, Category, Article
+
+
+def test_digest_keywords_match_any_term_and_treat_wildcards_literally(env, monkeypatch):
+    base, source, category, article = canonical_content(env, monkeypatch)
+    engine = create_engine('sqlite:///:memory:')
+    base.metadata.create_all(engine)
+    try:
+        with Session(engine) as session:
+            session.add(source(id=1, type='website'))
+            session.add_all([
+                article(id=1, source_id=1, title='管道检测', content='正常正文', published_at=datetime(2026, 10, 18)),
+                article(id=2, source_id=1, title='其他标题', content_zh='腐蚀防护', published_at=datetime(2026, 10, 18)),
+                article(id=3, source_id=1, title='浓度100%', content='特殊符号', published_at=datetime(2026, 10, 18)),
+            ])
+            session.commit()
+            def matched(words):
+                query = env.repo.ResearchDao.candidate_query(datetime(2026, 10, 18), datetime(2026, 10, 19), {'keywords': words})
+                return {row.id for row in session.scalars(query)}
+            assert matched([]) == {1, 2, 3}
+            assert matched(['不存在', '管道', '腐蚀']) == {1, 2}
+            assert matched([' 管道 ', '管道', ' ']) == {1}
+            assert matched(['不存在']) == set()
+            assert matched(['%']) == {3}
+            assert matched(['_']) == set()
+    finally:
+        engine.dispose()
 
 
 @pytest.mark.asyncio

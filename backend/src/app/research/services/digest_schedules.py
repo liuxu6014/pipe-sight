@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from calendar import monthrange
 from copy import deepcopy
 from datetime import date, datetime, time, timedelta, timezone
@@ -12,6 +13,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 
 from app.business_ids import parse_business_id, wire_id
+from app.business_time import format_business_time
 from app.infrastructure.services.logging_support import logger
 from app.intelligence.services.templates import PipelineTemplateService
 from app.research.digest_policy import DIGEST_SELECTION_LIMIT
@@ -123,6 +125,37 @@ class DigestScheduleService:
     """让周期简报从页面选项变成可审计、可恢复的后台计划。"""
 
     @staticmethod
+    def _selection_config(value: Any, *, keywords: Any = None, options: Any = None) -> dict[str, Any]:
+        """Normalize saved and legacy filters without losing partial page criteria."""
+        if value is not None and not isinstance(value, dict):
+            raise ServiceException(message='选材配置必须为对象')
+        config = deepcopy(value or {})
+        nested = config.get('options', {})
+        if not isinstance(nested, dict) or (options is not None and not isinstance(options, dict)):
+            raise ServiceException(message='选材选项必须为对象')
+        defaults = {**(options or {}), **nested}
+        if 'keywords' not in config and keywords is not None:
+            config['keywords'] = deepcopy(keywords)
+        for field, option in (('category_names', 'directions'), ('source_types', 'sources')):
+            if field not in config and option in defaults:
+                config[field] = deepcopy(defaults[option])
+        for field, maximum in (('keywords', 20), ('category_names', 10), ('source_types', 2)):
+            if field not in config:
+                continue
+            terms = config[field]
+            if not isinstance(terms, list) or any(not isinstance(term, str) for term in terms):
+                raise ServiceException(message=f'选材 {field} 必须为文本数组')
+            if len(terms) > maximum or any(len(term) > 200 for term in terms):
+                raise ServiceException(message=f'选材 {field} 数量或长度超出限制')
+            config[field] = list(dict.fromkeys(term.strip() for term in terms if term.strip()))
+        if 'source_types' in config:
+            source_map = {'新闻网站': 'website', '微信公众号': 'wechat', 'news': 'website'}
+            config['source_types'] = list(dict.fromkeys(source_map.get(term, term) for term in config['source_types']))
+            if not config['source_types'] or set(config['source_types']) - {'website', 'wechat'}:
+                raise ServiceException(message='来源范围须选择新闻网站或微信公众号')
+        return config
+
+    @staticmethod
     def _local_now() -> datetime:
         """用业务时区计算日历；数据库业务时间使用 UTC timestamptz。"""
         return datetime.now(LOCAL_ZONE)
@@ -181,13 +214,14 @@ class DigestScheduleService:
         template_id: Any,
         generation_config: dict[str, Any],
         template_service: Any,
+        frequency: str | None = None,
     ) -> Any:
         template = await template_service.get_published(db, template_id)
         if not template or template.purpose != 'digest':
             raise ServiceException(message='请选择已启用的简报模板')
-        image_config = deepcopy(template.image_config or {})
-        if generation_config.get('diagram') or (generation_config.get('options') or {}).get('generateImages'):
-            image_config['enabled'] = True
+        if frequency is not None:
+            PipelineTemplateService.validate_digest_cadence(template, frequency)
+        image_config = PipelineTemplateService.effective_image_config(template.image_config, generation_config)
         await template_service.validate_models(db, template.model_id, template.image_model_id, image_config)
         return template
 
@@ -318,12 +352,24 @@ class DigestScheduleService:
         return value.strftime('%Y-%m-%d %H:%M:%S') if value else ''
 
     @classmethod
-    def serialize(cls, row: Any) -> dict[str, Any]:
+    def serialize(cls, row: Any, *, latest_job=None, report=None) -> dict[str, Any]:
+        last_run = getattr(row, 'last_run_at', None)
+        state = getattr(row, 'last_status', None)
+        error = cls.safe_error(getattr(row, 'last_error', None))
+        # 派发与任务入队同事务：非 queued 摘要优先，不能被旧成果覆盖。
+        job_current = latest_job is not None and state in (None, 'queued')
+        job = latest_job if job_current else None
+        if job:
+            state = job.status
+            last_run = last_run or job.started_at or job.created_at
+            error = cls.safe_error(job.error)
+        has_result = bool(job and job.status == 'completed' and report and (report.content or '').strip())
         return {
             'id': wire_id(row.id),
             'scheduleId': wire_id(row.id),
             'name': row.name,
             'reportType': row.frequency,
+            'digestCadence': row.frequency,
             'templateId': wire_id(row.template_id),
             'scheduleTime': row.run_time.isoformat(),
             'scheduleWeekday': row.weekday,
@@ -333,7 +379,23 @@ class DigestScheduleService:
             'nextRunTime': row.next_run_at.isoformat() if row.next_run_at else '',
             'config': row.selection_config,
             'generationConfig': row.generation_config,
+            'lastStatus': state or 'never',
+            'lastRunTime': format_business_time(last_run),
+            'lastError': error,
+            'matchedCount': len(job.materials or []) if job else (0 if state == 'no_data' else None),
+            'latestTaskId': wire_id(job.id) if job else '',
+            'latestReportId': wire_id(report.id) if has_result else '',
+            'hasResult': has_result,
+            'canDelete': latest_job is None,
         }
+
+    @staticmethod
+    def safe_error(message):
+        text = str(message or '')
+        text = re.sub(r'(?i)\bBearer\s+\S+|\bsk-[a-zA-Z0-9_-]+', '[已隐藏密钥]', text)
+        text = re.sub(r'(?i)((?:api[_-]?key|token|password|secret)\s*[=:]\s*)[^\s,;]+', r'\1[已隐藏]', text)
+        text = re.sub(r'(https?://)[^\s/@]+:[^\s/@]+@', r'\1[已隐藏]@', text)
+        return text[:2000]
 
     @classmethod
     def next_run(cls, row: Any, reference: datetime) -> datetime:
@@ -353,7 +415,7 @@ class DigestScheduleService:
         )
 
     @classmethod
-    async def create(
+    async def _prepare(
         cls,
         db: Any,
         *,
@@ -383,6 +445,7 @@ class DigestScheduleService:
         frequency = data.get('frequency') or data.get('report_type')
         if frequency not in {'daily', 'weekly', 'monthly'}:
             raise ServiceException(message='计划频率不合法')
+        PipelineTemplateService.validate_digest_cadence(template, frequency)
         weekday = data.get('weekday', data.get('schedule_weekday', 0)) if frequency == 'weekly' else None
         month_day = data.get('month_day', data.get('schedule_month_day', 1)) if frequency == 'monthly' else None
         if (weekday is not None and not 0 <= weekday <= MAX_WEEKDAY) or (
@@ -404,17 +467,15 @@ class DigestScheduleService:
             month_day=month_day,
             run_time=run_time,
             timezone=zone,
-            selection_config=deepcopy(data.get('selection_config'))
-            or {
-                'keywords': data.get('keywords', []),
-                'options': data.get('options', {}),
-                'holiday_policy': data.get('holiday_policy', 'run'),
-                'holiday_dates': data.get('holiday_dates', []),
-            },
+            selection_config=cls._selection_config(
+                data.get('selection_config'), keywords=data.get('keywords', []), options=data.get('options', {})
+            ),
             generation_config=generation,
             is_enabled=enabled,
         )
-        options = dict(data.get('options') or {})
+        for field in ('options', 'holiday_policy', 'holiday_dates'):
+            if field in data:
+                row.selection_config.setdefault(field, deepcopy(data[field]))
         # 只规范已定义的实体引用，不递归猜测提示词、正文、章节 ID 或 token。
         for config in (row.selection_config,):
             for field in ('source_ids', 'category_ids', 'selected_item_ids'):
@@ -425,21 +486,39 @@ class DigestScheduleService:
                     config[field] = wire_id(config[field])
             if 'materials' in config:
                 config['materials'] = [{**item, 'id': wire_id(item['id'])} for item in config['materials']]
-        if not data.get('selection_config'):
-            row.selection_config['source_types'] = [
-                {'新闻网站': 'website', '微信公众号': 'wechat'}.get(value, value)
-                for value in options.get('sources', [])
-            ]
-            row.selection_config['category_names'] = options.get('directions', [])
+        return row
+
+    @classmethod
+    async def create(cls, db, *, user_id, owner_name, payload, template_service):
+        row = await cls._prepare(db, user_id=user_id, owner_name=owner_name, payload=payload,
+                                 template_service=template_service)
+        enabled = row.is_enabled
         row.next_run_at = cls.next_run(row, research_models.utcnow()) if enabled else None
         await ResearchDao.add_digest_schedule(db, row)
         await db.commit()
         return cls.serialize(row)
 
     @classmethod
+    async def update(cls, db, *, user_id, schedule_id, payload, template_service):
+        row = await ResearchDao.lock_digest_schedule_for_update(db, schedule_id, user_id)
+        if not row:
+            raise ServiceException(message='自动计划不存在或无权访问')
+        # Validate a detached candidate before changing the locked persistent row.
+        candidate = await cls._prepare(db, user_id=user_id, owner_name='', payload=payload,
+                                       template_service=template_service)
+        for field in ('name', 'template_id', 'frequency', 'weekday', 'month_day', 'run_time', 'timezone',
+                      'selection_config', 'generation_config', 'is_enabled'):
+            setattr(row, field, getattr(candidate, field))
+        row.next_run_at = cls.next_run(row, research_models.utcnow()) if row.is_enabled else None
+        await db.commit()
+        return cls.serialize(row)
+
+    @classmethod
     async def list(cls, db: Any, user_id: int) -> dict[str, Any]:
         rows = await ResearchDao.list_digest_schedules(db, user_id)
-        return {'rows': [cls.serialize(row) for row in rows], 'total': len(rows)}
+        history = await ResearchDao.latest_schedule_jobs(db, user_id, [row.id for row in rows])
+        return {'rows': [cls.serialize(row, latest_job=history.get(row.id, (None,None))[0],
+            report=history.get(row.id, (None,None))[1]) for row in rows], 'total': len(rows)}
 
     @classmethod
     async def set_enabled(
@@ -456,7 +535,9 @@ class DigestScheduleService:
             raise ServiceException(message='计划启停值必须为布尔值')
         if enabled:
             generation = cls._generation_config(row.generation_config if row.generation_config is not None else {})
-            await cls._validate_enabled_template(db, row.template_id, generation, PipelineTemplateService)
+            await cls._validate_enabled_template(
+                db, row.template_id, generation, PipelineTemplateService, frequency=row.frequency
+            )
         row.is_enabled = enabled
         row.next_run_at = cls.next_run(row, research_models.utcnow()) if enabled else None
         await db.commit()
@@ -468,7 +549,9 @@ class DigestScheduleService:
         if not row or not row.is_enabled:
             raise ServiceException(message='计划不存在、无权访问或已停用')
         generation = cls._generation_config(row.generation_config if row.generation_config is not None else {})
-        await cls._validate_enabled_template(db, row.template_id, generation, PipelineTemplateService)
+        await cls._validate_enabled_template(
+            db, row.template_id, generation, PipelineTemplateService, frequency=row.frequency
+        )
         row.next_run_at = research_models.utcnow()
         await db.commit()
         return cls.serialize(row)
@@ -494,15 +577,18 @@ class DigestScheduleService:
         stage_labels: Any,
         job_serializer: Any,
         template_service: Any,
+        schedule_ids=None,
     ) -> dict[str, int]:
         result = {'found': 0, 'queued': 0, 'no_data': 0, 'skipped': 0, 'failed': 0}
         if AsyncSessionLocal is None:
             return result
         # 同一事务内锁计划、选材、入队、推进游标，避免提前 commit 释放认领。
         async with AsyncSessionLocal() as db:
-            schedules = await ResearchDao.list_due_schedules(db, research_models.utcnow())
+            scope = {'schedule_ids': schedule_ids} if schedule_ids is not None else {}
+            schedules = await ResearchDao.list_due_schedules(db, research_models.utcnow(), **scope)
             result['found'] = len(schedules)
             for row in schedules:
+                checked_at = research_models.utcnow().replace(microsecond=0)
                 try:
                     async with db.begin_nested():
                         generation = cls._generation_config(
@@ -510,11 +596,16 @@ class DigestScheduleService:
                         )
                         run_at = ResearchDao.aware(row.next_run_at)
                         local = run_at.astimezone(ZoneInfo(row.timezone))
-                        config = row.selection_config or {}
+                        config = cls._selection_config(
+                            row.selection_config, keywords=generation.get('keywords'), options=generation.get('options')
+                        )
                         if cls._holiday_policy(config) == 'skip' and local.date() in cls._holiday_dates(config):
                             result['skipped'] += 1
+                            status = 'skipped'
                         else:
-                            await cls._validate_enabled_template(db, row.template_id, generation, template_service)
+                            await cls._validate_enabled_template(
+                                db, row.template_id, generation, template_service, frequency=row.frequency
+                            )
                             period = cls._period_for_run(local, row.frequency)
                             start = datetime.fromisoformat(period[0]).replace(tzinfo=ZoneInfo(row.timezone))
                             end = datetime.fromisoformat(period[-1]).replace(tzinfo=ZoneInfo(row.timezone)) + timedelta(
@@ -533,9 +624,12 @@ class DigestScheduleService:
                                 raise ServiceException(message='自动选材上限须为 1 至 50')
                             if not unique:
                                 result['no_data'] += 1
+                                status = 'no_data'
                             else:
                                 data = {
                                     **generation,
+                                    'requirements': cls._requirements_for_period(generation, period),
+                                    'keywords': deepcopy(config.get('keywords', generation.get('keywords', []))),
                                     'title': f'{row.name} {period[0]}',
                                     'report_type': row.frequency,
                                     'template_id': wire_id(row.template_id),
@@ -560,10 +654,25 @@ class DigestScheduleService:
                                     commit=False,
                                 )
                                 result['queued'] += 1
+                                status = 'queued'
                         row.next_run_at = cls.next_run(row, run_at)
-                except Exception:
+                        row.last_run_at, row.last_status, row.last_error = checked_at, status, None
+                except Exception as exc:
                     result['failed'] += 1
-                    # 保留游标便于配置修复后重跑；错误通过调度日志记录，不添加旧列。
+                    # 保存摘要，但保留原游标；保存点回滚不抹掉失败原因。
+                    row.last_run_at, row.last_status = checked_at, 'failed'
+                    row.last_error = cls.safe_error(getattr(exc, 'message', None)) or f'计划派发异常（{type(exc).__name__}），请联系管理员检查任务日志。'
                     logger.exception('周期简报派发失败；计划游标未推进')
             await db.commit()
         return result
+
+    @staticmethod
+    def _requirements_for_period(generation: dict, period: list[str]) -> str:
+        """重建旧 UI 自动拼接的周期条款，保留用户其余要求及选材偏好。"""
+        text = generation.get('requirements', '')
+        current = f'报告周期：{period[0]} 至 {period[-1]}'
+        # 仅替换已知 UI 周期条款，不删除自由要求中的历史事实日期。
+        pattern = r'报告周期\s*[:：][^；;\n]*'
+        if re.search(pattern, text):
+            return re.sub(pattern, lambda _: current, text)
+        return current + (f'；{text}' if text else '')

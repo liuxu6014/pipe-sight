@@ -1,5 +1,5 @@
 <template>
-  <div class="ps-page">
+  <div class="ps-page ps-list-page ps-search-list-page">
     <PortalPageHeader title="全局搜索">
       <template #actions><el-button @click="clearFilters">清除筛选</el-button></template>
     </PortalPageHeader>
@@ -11,6 +11,7 @@
       <el-button native-type="submit" type="primary">{{ searchMode === 'semantic' ? '语义搜索' : '搜索' }}</el-button>
     </form>
 
+    <SavedSearchBar v-if="searchMode === 'keyword'" kind="search" :query="query" @apply="applySavedSearch" />
     <section v-if="searchMode === 'semantic'" class="ps-semantic-pending ps-panel" role="status"><Search /><h2>语义搜索待接入</h2><p>你输入的问题已保留。接入向量模型并建立资料索引后，系统将按内容含义匹配研究线索，而不仅依赖字面关键词。</p><p>当前未执行语义检索，不展示模拟结果。你可以先切换到关键词搜索。</p><el-button type="primary" @click="useKeywordSearch">用当前输入进行关键词搜索</el-button></section>
     <div v-else class="ps-search-summary" role="status" aria-live="polite">{{ loading ? '正在搜索…' : loadError ? '搜索失败，请重新加载' : `找到 ${total} 条与“${queryKeyword || '全部内容'}”相关的结果 · 当前页 ${filteredResults.length} 条` }}<p>当前条件：{{ filterSummary }}</p><small v-if="draftKeyword !== queryKeyword">输入内容尚未搜索，请点击“搜索”或按回车。</small></div>
     <el-alert
@@ -24,15 +25,16 @@
     <div v-if="searchMode !== 'semantic'" class="ps-search-layout">
       <aside class="ps-filter-panel">
         <h3><Filter />筛选条件</h3>
-        <label><span>时间范围 <el-tooltip content="资讯按来源发布时间，内部资料和报告按更新时间，论文按平台发布时间过滤。" placement="top"><InfoFilled /></el-tooltip></span><el-select v-model="dateRange"><el-option label="全部时间" value="all" /><el-option label="近一周" value="week" /><el-option label="近一年" value="year" /></el-select></label>
+        <label><span>时间范围 <el-tooltip content="资讯和论文按来源发表时间，内部资料和报告按更新时间过滤。" placement="top"><el-icon class="ps-filter-help" aria-label="时间筛选说明"><InfoFilled /></el-icon></el-tooltip></span><el-select v-model="dateRange"><el-option label="全部时间" value="all" /><el-option label="近一周" value="week" /><el-option label="近一年" value="year" /></el-select></label>
         <label>内容来源<el-select v-model="source"><el-option label="全部来源" value="all" /><el-option label="公开来源" value="public" /><el-option label="内部资料" value="internal" /></el-select></label>
-        <label>技术方向<el-checkbox-group v-model="directions" class="ps-check-list"><el-checkbox v-for="item in ['检测技术', '应力监测', '完整性管理', '腐蚀防护']" :key="item" :value="item">{{ item }}</el-checkbox></el-checkbox-group></label>
+        <label v-if="directionOptions.length">文章类别<el-checkbox-group v-model="directions" class="ps-check-list"><el-checkbox v-for="item in directionOptions" :key="item" :value="item">{{ item }}</el-checkbox></el-checkbox-group></label>
       </aside>
 
-      <section v-loading="loading" :aria-busy="loading" class="ps-results-panel">
+      <section v-loading="loading" :aria-busy="loading" class="ps-results-panel ps-list-stack">
         <div class="ps-tabs-line" aria-label="按内容类型筛选">
           <button v-for="tab in tabs" :key="tab.value" type="button" :aria-pressed="activeType === tab.value" :class="{ 'is-active': activeType === tab.value }" @click="activeType = tab.value">{{ tab.label }} <span v-if="!loading && !loadError">{{ countByType(tab.value) }}</span></button>
         </div>
+        <div class="ps-list-scroll" tabindex="0" aria-label="搜索结果列表">
         <div v-if="filteredResults.length" class="ps-result-list">
           <article v-for="result in filteredResults" :key="`${result.type}-${result.id}`" class="ps-result-card">
             <div class="ps-result-type">{{ result.typeLabel }}</div>
@@ -43,11 +45,12 @@
               <p><template v-for="(part, index) in result.summaryParts" :key="`summary-${index}`"><mark v-if="part.match" class="ps-search-highlight">{{ part.text }}</mark><span v-else>{{ part.text }}</span></template></p>
               <div class="ps-meta-row"><span>{{ result.meta }}</span><span v-for="tag in result.tags" :key="tag" class="ps-tag">{{ tag }}</span></div>
             </div>
-            <div class="ps-result-actions"><el-tooltip :content="inBasket(result) ? '从资料篮移除，不删除原资料' : result.type === 'document' ? '请进入资料详情核验安全、解析和 AI 授权状态后选材' : '保存为科研编制选材'" placement="top"><span><el-button type="primary" plain :loading="busy(result)" :disabled="busy(result)" @click="add(result)">{{ inBasket(result) ? '取消加入资料篮' : result.type === 'document' ? '查看后选材' : '加入资料篮' }}</el-button></span></el-tooltip></div>
+            <div class="ps-result-actions"><el-tooltip :content="inBasket(result) ? '从资料库移除，不删除原资料' : result.type === 'document' ? '请进入资料详情核验安全、解析和 AI 授权状态后选材' : '保存为科研编制选材'" placement="top"><span><el-button type="primary" plain :loading="busy(result)" :disabled="busy(result)" @click="add(result)">{{ inBasket(result) ? '取消加入资料库' : result.type === 'document' ? '查看后选材' : '加入资料库' }}</el-button></span></el-tooltip></div>
           </article>
         </div>
         <PortalEmptyState v-else-if="loadError && !loading" title="搜索失败" :description="loadError" action-label="重新加载" @action="reload" />
         <PortalEmptyState v-else-if="!loading" title="没有找到匹配结果" description="请减少筛选条件或尝试同义关键词。" action-label="清除筛选" @action="clearFilters" />
+        </div>
         <div v-if="total > 0 && !loading && !loadError" class="ps-pagination" aria-label="搜索结果分页">
           <el-pagination
             v-model:current-page="currentPage"
@@ -66,6 +69,8 @@
 </template>
 
 <script setup>
+import SavedSearchBar from '../components/SavedSearchBar.vue'
+import { applySavedSearchQuery } from '@/utils/portal/savedSearches'
 import { computed, ref, toRefs, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -73,14 +78,17 @@ import { Filter, InfoFilled, Search } from '@element-plus/icons-vue'
 import PortalPageHeader from '../components/PortalPageHeader.vue'
 import PortalEmptyState from '../components/PortalEmptyState.vue'
 import usePortalStore from '@/store/modules/portal'
-import { deletePipelineWorkspaceItem, savePipelineWorkspaceItem, searchPipelineIntelligence } from '@/api/pipeline/intelligence'
+import { getPipelineContentFilters, deletePipelineWorkspaceItem, savePipelineWorkspaceItem, searchPipelineIntelligence } from '@/api/pipeline/intelligence'
 import { useListQuery, useListRequest, useListWorkspace, validPage } from '@/utils/portal/listQuery'
 import { openPortalContent } from '@/utils/portal/openContent'
 
 const router = useRouter()
 const portalStore = usePortalStore()
+const facets = useListRequest(() => ({}), getPipelineContentFilters)
+const directionOptions = computed(() => [...new Set([...(facets.data.value?.categories || []), ...directions.value])])
 const maxPageNum = 100
 const query = useListQuery({ q: '', mode: 'keyword', type: 'all', date: 'all', source: 'all', directions: [], page: 1, size: 10 }, { maxPage: maxPageNum })
+function applySavedSearch(filters) { if (!applySavedSearchQuery(query, filters, 'search')) reload() }
 const { q: queryKeyword, type: activeType, date: dateRange, source, directions, page: currentPage, size: pageSize } = toRefs(query)
 const searchMode = computed({ get: () => query.mode === 'semantic' ? 'semantic' : 'keyword', set: value => { query.mode = value === 'semantic' ? 'semantic' : 'keyword' } })
 const draftKeyword = ref(queryKeyword.value)
@@ -147,9 +155,9 @@ async function add(result) {
   if (result.type === 'document' && !inBasket(result)) return openResult(result)
   try {
     const outcome = await toggleBasket(result, result.type === 'news' ? 'article' : result.type)
-    if (outcome === 'saved') ElMessage.success('已加入资料篮')
-    else if (outcome === 'removed') ElMessage.success('已取消加入资料篮')
-  } catch (error) { ElMessage.error(error?.msg || '资料篮更新失败，请重试') }
+    if (outcome === 'saved') ElMessage.success('已加入资料库')
+    else if (outcome === 'removed') ElMessage.success('已取消加入资料库')
+  } catch (error) { ElMessage.error(error?.msg || '资料库更新失败，请重试') }
 }
 function clearFilters() {
   const unchanged = !queryKeyword.value && activeType.value === 'all' && dateRange.value === 'all' && source.value === 'all' && !directions.value.length && currentPage.value === 1
@@ -160,5 +168,7 @@ function clearFilters() {
 
 <style scoped>
 .ps-search-layout { grid-template-columns: 218px minmax(0, 1fr); }
+.ps-filter-help { width: 14px; height: 14px; vertical-align: middle; color: var(--ps-muted); }
+.ps-filter-help :deep(svg) { width: 14px; height: 14px; }
 @media (max-width: 960px) { .ps-search-layout { grid-template-columns: minmax(0, 1fr); } }
 </style>

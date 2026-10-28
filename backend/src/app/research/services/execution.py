@@ -7,8 +7,10 @@ from typing import Any
 from app.business_ids import parse_business_id, wire_id
 from app.research.models.research_models import PipelineReportVersion, utcnow
 from app.research.repositories.research_repository import ResearchDao
-from app.research.services.model_generation import ResearchModelGenerationService
-from app.research.services.report_content import normalize_generated_report
+from app.research.services.model_generation import ModelOutputLimitError, ResearchModelGenerationService
+from app.research.services.report_content import (
+    ManuscriptValidationError, normalize_generated_report, validate_generated_article,
+)
 from config.database import AsyncSessionLocal
 
 HEARTBEAT_INTERVAL_SECONDS = 20
@@ -48,7 +50,8 @@ class ResearchExecutionService:
                     await model_db.commit()
                     raise
                 await model_db.commit()
-            article = normalize_generated_report(content, materials)
+            article = normalize_generated_report(content, materials, delivery=True)
+            validate_generated_article(article['content'], materials)
             async with AsyncSessionLocal() as result_db:
                 job = await ResearchDao.lock_running_research_job(result_db, job_id, user_id, token)
                 if not job:
@@ -62,8 +65,23 @@ class ResearchExecutionService:
                     report.template_id = parse_business_id(snapshot['template']['id'])
                     report.version += 1
                     report.updated_at = utcnow()
+                    result_snapshot = deepcopy(snapshot)
+                    request = snapshot.get('request') or {}
+                    # 规范化只调整正文/引用格式，未执行引用完整性或事实质量检查。
+                    # 绑定具体成果版本；后续编辑不能把旧状态当成本版检查结果。
+                    result_snapshot['checks'] = {
+                        'documentIntegrity': {'status': 'passed', 'factsVerified': False},
+                        'citation': {
+                            'requested': request.get('citation_check', request.get('citationCheck', True)),
+                            'status': 'not_run', 'reason': 'normalization_only',
+                            'normalization': 'completed', 'version': report.version,
+                        },
+                        'quality': {'status': 'not_run', 'version': report.version},
+                    }
+                    # 请求/模型仍保持冻结；将真实执行元数据同步到任务和成果版本。
+                    job.config_snapshot = deepcopy(result_snapshot)
                     await cls.save_version(
-                        result_db, report, 'generated', user_id, owner_name, snapshot,
+                        result_db, report, 'generated', user_id, owner_name, result_snapshot,
                         sections=article['sections'], citations=cls.material_citations(materials), quality_issues=[],
                     )
                 job.status, job.progress, job.finished_at = 'completed', 100, utcnow()
@@ -76,16 +94,20 @@ class ResearchExecutionService:
                 await result_db.commit()
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception as error:
             async with AsyncSessionLocal() as error_db:
                 job = await ResearchDao.lock_running_research_job(error_db, job_id, user_id, token)
                 if job:
                     # 不自动重发可能已经计费的未知结果；明确重试由用户决定。
                     job.status, job.error, job.finished_at = (
                         'failed',
-                        '生成未完成，请检查模型配置或稍后明确重试',
+                        (str(error) if isinstance(error, ManuscriptValidationError)
+                         else error.message if isinstance(error, ModelOutputLimitError)
+                         else '生成未完成，请检查模型配置或稍后明确重试'),
                         utcnow(),
                     )
+                    if isinstance(error, ManuscriptValidationError):
+                        job.result_content = content
                     job.execution_token = job.lease_expires_at = None
                     await error_db.commit()
         finally:

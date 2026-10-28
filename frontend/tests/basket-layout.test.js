@@ -11,7 +11,7 @@ const template = parse(source).descriptor.template.content
 async function renderBasket(items, visible = items) {
   const Stub = { setup: (_, { slots }) => () => h('div', slots.default?.()) }
   const app = createSSRApp({
-    setup: () => ({ mode: 'basket', keyword: '', statusFilter: '', visibleItems: visible, pagedItems: visible.slice(0, 10), currentPage: 1, pageSize: 10, sectionError: '', pageConfig: { title: '资料篮' },
+    setup: () => ({ mode: 'basket', keyword: '', statusFilter: '', visibleItems: visible, pagedItems: visible.slice(0, 10), currentPage: 1, pageSize: 10, sectionError: '', pageConfig: { title: '资料库' },
       portalStore: { basketCount: items.length, dataLoaded: true, dataLoading: false },
       basketSelection: { selectedItems: { value: [] }, selectedIds: { value: [] }, allVisible: { value: false }, indeterminate: { value: false }, toggleVisible() {}, toggle() {} },
       basketParsing: { label: () => '', error: { value: '' }, retrying: { value: [] } },
@@ -27,7 +27,7 @@ test('empty basket retains upload entry without selection controls', async () =>
   const html = await renderBasket([])
   assert.match(html, /暂无资料/)
   assert.match(html, /上传资料/)
-  assert.match(html, /搜索资料篮/)
+  assert.match(html, /搜索资料库/)
   assert.doesNotMatch(html, /浏览资讯|全选当前结果|本次编制选材/)
   assert.equal((html.match(/ps-basket-panel/g) || []).length, 1)
 })
@@ -35,7 +35,7 @@ test('empty basket retains upload entry without selection controls', async () =>
 test('populated and filtered baskets keep toolbar and selection within the same panel', async () => {
   const items = [{ id: 'a', title: '资料 A', type: '资讯' }, { id: 'b', title: '资料 B', type: '论文' }]
   const html = await renderBasket(items)
-  assert.match(html, /搜索资料篮/)
+  assert.match(html, /搜索资料库/)
   assert.match(html, /新建报告/)
   assert.match(html, /全选当前结果/)
   assert.match(html, /资料 A/)

@@ -151,6 +151,7 @@ async def test_report_history_and_resource_serializers_use_decimal_ids(env, db):
 async def test_schedule_snapshots_normalize_only_typed_entity_references(env, db):
     template, _ = seed(env, db, model=False)
     template.purpose = 'digest'
+    template.name = '通用简报模板'
     await db.commit()
     data = {
         'name': '周期',

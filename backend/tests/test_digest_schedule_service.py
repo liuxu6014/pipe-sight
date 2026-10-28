@@ -13,6 +13,66 @@ db = refactor_db
 no_external_network = refactor_no_external_network
 
 
+@pytest.mark.asyncio
+async def test_scoped_dispatch_queries_ignore_other_due_plans_and_queued_jobs(env, db):
+    from datetime import timedelta
+    template, _ = seed(env, db)
+    template.purpose, template.name = 'digest', '日报模板'
+    await db.commit()
+    service = env.schedules.DigestScheduleService
+    rows = []
+    for name in ['指定计划', '其他计划']:
+        result = await service.create(db, user_id=7, owner_name='用户',
+            template_service=env.template.PipelineTemplateService,
+            payload={'name': name, 'report_type': 'daily', 'template_id': '201', 'enabled': False})
+        row = next(item for item in await env.repo.ResearchDao.list_digest_schedules(db, 7) if str(item.id) == result['id'])
+        row.is_enabled = True
+        row.next_run_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+        rows.append(row)
+    await db.commit()
+    now = datetime.now(timezone.utc)
+    selected = await env.repo.ResearchDao.list_due_schedules(db, now, schedule_ids=[rows[0].id])
+    assert [item.id for item in selected] == [rows[0].id]
+    assert await env.repo.ResearchDao.list_due_schedules(db, now, schedule_ids=[]) == []
+    assert await env.repo.ResearchDao.list_research_job_ids_for_dispatch(db, now=now, schedule_ids=[rows[0].id]) == []
+    report = env.models.PipelineReport(id=901, user_id=7, title='隔离测试', type='daily', template_id=template.id)
+    db.add(report)
+    await db.commit()
+    for ident, schedule_id in [(902, rows[0].id), (903, rows[1].id), (904, None)]:
+        db.add(env.models.PipelineResearchJob(id=ident, report_id=report.id, schedule_id=schedule_id,
+            request_id=f'scope-{ident}', status='queued', config_snapshot={}, materials=[]))
+    await db.commit()
+    assert await env.repo.ResearchDao.list_research_job_ids_for_dispatch(db, now=now, schedule_ids=[rows[0].id]) == [(902, 7, '')]
+    assert await env.repo.ResearchDao.list_research_job_ids_for_dispatch(db, now=now, schedule_ids=[]) == []
+
+
+@pytest.mark.asyncio
+async def test_independent_schedule_edit_preserves_identity_and_never_enqueues(env, db, monkeypatch):
+    from unittest.mock import AsyncMock
+    template, _ = seed(env, db)
+    template.purpose, template.name = 'digest', '日报模板'
+    await db.commit()
+    service = env.schedules.DigestScheduleService
+    original = await service.create(db, user_id=7, owner_name='用户', template_service=env.template.PipelineTemplateService,
+        payload={'name': '单独计划', 'report_type': 'daily', 'template_id': '201', 'enabled': False})
+    enqueue = AsyncMock()
+    monkeypatch.setattr(env.schedules.ResearchJobService, 'queue', enqueue)
+    changed = await service.update(db, user_id=7, schedule_id=original['id'],
+        payload={'name': '已编辑', 'report_type': 'daily', 'template_id': '201', 'enabled': False,
+                 'schedule_time': '14:15', 'keywords': ['腐蚀'],
+                 'options': {'sources': ['新闻网站'], 'directions': ['检测']}},
+        template_service=env.template.PipelineTemplateService)
+    assert changed['id'] == original['id'] and changed['name'] == '已编辑'
+    assert changed['scheduleTime'] == '14:15:00' and changed['nextRunTime'] == ''
+    assert changed['config']['keywords'] == ['腐蚀']
+    assert changed['config']['category_names'] == ['检测']
+    assert len(await env.repo.ResearchDao.list_digest_schedules(db, 7)) == 1
+    enqueue.assert_not_awaited()
+    with raises(env, '无权'):
+        await service.update(db, user_id=8, schedule_id=original['id'], payload={},
+                             template_service=env.template.PipelineTemplateService)
+
+
 @pytest.mark.parametrize(
     'frequency,expected',
     [('daily', datetime(2026, 10, 4, 8)), ('weekly', datetime(2026, 10, 5, 8)), ('monthly', datetime(2026, 11, 1, 8))],
@@ -86,6 +146,7 @@ def test_period_is_complete_previous_digest_window(env):
 async def test_create_persists_canonical_fields_and_legacy_selection_options(env, db, monkeypatch):
     template, _ = seed(env, db)
     template.purpose = 'digest'
+    template.name = '周报模板'
     await db.commit()
     now = datetime(2026, 10, 3, 1, tzinfo=timezone.utc)
     monkeypatch.setattr(env.models, 'utcnow', lambda: now)
@@ -125,8 +186,9 @@ async def test_create_persists_canonical_fields_and_legacy_selection_options(env
 async def test_create_rejects_invalid_calendar_fields(env, db, frequency, field, value):
     template, _ = seed(env, db)
     template.purpose = 'digest'
+    template.name = {'weekly': '周报模板', 'monthly': '月报模板'}[frequency]
     await db.commit()
-    with pytest.raises(env.exc):
+    with raises(env, '执行星期或日期不合法'):
         await env.schedules.DigestScheduleService.create(
             db,
             user_id=7,
@@ -140,6 +202,7 @@ async def test_create_rejects_invalid_calendar_fields(env, db, frequency, field,
 async def test_schedule_is_private_and_disable_clears_cursor(env, db):
     template, _ = seed(env, db)
     template.purpose = 'digest'
+    template.name = '日报模板'
     await db.commit()
     row = await env.schedules.DigestScheduleService.create(
         db,
@@ -152,3 +215,25 @@ async def test_schedule_is_private_and_disable_clears_cursor(env, db):
         await env.schedules.DigestScheduleService.set_enabled(db, 8, row['id'], False)
     result = await env.schedules.DigestScheduleService.set_enabled(db, 7, row['id'], False)
     assert not result['enabled'] and result['nextRunTime'] == ''
+
+
+@pytest.mark.asyncio
+async def test_partial_selection_config_keeps_page_keyword_category_and_source_filters(env, db):
+    template, _ = seed(env, db)
+    template.purpose = 'digest'
+    template.name = '日报模板'
+    await db.commit()
+    await env.schedules.DigestScheduleService.create(
+        db, user_id=7, owner_name='用户', template_service=env.template.PipelineTemplateService,
+        payload={
+            'name': '筛选计划', 'report_type': 'daily', 'template_id': '201',
+            'keywords': [' 管道 ', '腐蚀', '管道'],
+            'options': {'sources': ['微信公众号'], 'directions': ['后台类别']},
+            'selection_config': {'limit': 5},
+        },
+    )
+    row = (await env.repo.ResearchDao.list_digest_schedules(db, 7))[0]
+    assert row.selection_config['keywords'] == ['管道', '腐蚀']
+    assert row.selection_config['category_names'] == ['后台类别']
+    assert row.selection_config['source_types'] == ['wechat']
+    assert row.selection_config['limit'] == 5

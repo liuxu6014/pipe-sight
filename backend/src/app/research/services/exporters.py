@@ -12,7 +12,7 @@ from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from docx.shared import Inches, Pt, RGBColor
+from docx.shared import Inches, Mm, Pt, RGBColor
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -109,20 +109,36 @@ def _has_reference_section(content: str) -> bool:
 
 def _docx_body(document: Any, text: str, *, reference: bool = False, style: str | None = None) -> None:
     paragraph = document.add_paragraph(style=style)
-    text = _plain_inline(text if reference else clean_report_citations(text))
+    text = text if reference else clean_report_citations(text)
+    text = _INLINE_LINK_RE.sub(r'\1（\2）', text).replace('`', '').strip()
     if not reference and not style:
         paragraph.paragraph_format.first_line_indent = Pt(22)
         indent = paragraph._p.get_or_add_pPr().find(qn('w:ind'))
         indent.set(qn('w:firstLineChars'), '200')
+    def add_text(value: str, *, bold=False, italic=False):
+        offset = 0
+        for match in ([] if reference else _CITATION_RE.finditer(value)):
+            run = paragraph.add_run(value[offset:match.start()] + '\u2060')
+            run.bold, run.italic = bold, italic
+            run = paragraph.add_run(match[0])
+            run.font.superscript = True
+            run.bold, run.italic = bold, italic
+            paragraph.add_run('\u2060')
+            offset = match.end()
+        run = paragraph.add_run(value[offset:])
+        run.bold, run.italic = bold, italic
+
     offset = 0
-    for match in ([] if reference else _CITATION_RE.finditer(text)):
-        # WORD JOINER is zero-width and prevents an isolated superscript line.
-        paragraph.add_run(text[offset:match.start()] + '\u2060')
-        run = paragraph.add_run(match.group(0))
-        run.font.superscript = True
-        paragraph.add_run('\u2060')
+    for match in re.finditer(r'\*\*(.+?)\*\*|(?<!\*)\*([^*]+)\*(?!\*)', text):
+        add_text(text[offset:match.start()])
+        add_text(match[1] or match[2], bold=match[1] is not None, italic=match[2] is not None)
         offset = match.end()
-    paragraph.add_run(text[offset:])
+    add_text(text[offset:])
+    if reference:
+        paragraph.paragraph_format.line_spacing = 1.15
+        paragraph.paragraph_format.space_after = Pt(4)
+        for run in paragraph.runs:
+            run.font.size = Pt(9.5)
 
 
 def safe_file_stem(title: str, *, is_draft: bool) -> str:
@@ -165,7 +181,6 @@ def _citation_lines(report: Any) -> list[str]:
 
 
 def _metadata_line(report: Any) -> str:
-    version = int(getattr(report, 'version_no', 1) or 1)
     owner = str(getattr(report, 'owner_name', '') or '').strip()
     report_type = {
         'research-demand': '科研需求报告',
@@ -177,12 +192,8 @@ def _metadata_line(report: Any) -> str:
     }.get(str(getattr(report, 'report_type', '') or ''), '')
     metadata = dict(getattr(report, 'metadata', None) or {})
     parts = [f'类型：{report_type}'] if report_type else []
-    parts.append(f'版本：V{version}.0')
     if owner:
         parts.append(f'负责人：{owner}')
-    template_version = str(metadata.get('templateVersion') or '').strip()
-    if template_version:
-        parts.append(f'模板：{template_version}')
     period = metadata.get('period')
     if isinstance(period, (list, tuple)) and period:
         parts.append(f'周期：{" 至 ".join(str(item) for item in period)}')
@@ -216,6 +227,8 @@ def build_docx(report: Any, *, is_draft: bool) -> tuple[str, str, bytes]:
     """返回文件名、媒体类型和 DOCX 二进制内容。"""
     document = Document()
     section = document.sections[0]
+    section.page_width = Mm(210)
+    section.page_height = Mm(297)
     section.top_margin = Inches(0.75)
     section.bottom_margin = Inches(0.75)
     section.left_margin = Inches(0.85)
@@ -225,7 +238,8 @@ def build_docx(report: Any, *, is_draft: bool) -> tuple[str, str, bytes]:
     normal.font.name = 'Songti SC'
     normal.font.size = Pt(11)
     normal.element.get_or_add_rPr().rFonts.set(qn('w:eastAsia'), 'Songti SC')
-    normal.paragraph_format.line_spacing = 1.5
+    normal.paragraph_format.line_spacing = 1.25
+    normal.paragraph_format.space_after = Pt(6)
     for name in ['Title', 'Subtitle', 'Heading 1', 'Heading 2', 'Heading 3', 'Heading 4', 'Heading 5', 'Heading 6']:
         style = document.styles[name]
         style.font.color.rgb = RGBColor(0, 0, 0)
@@ -236,13 +250,21 @@ def build_docx(report: Any, *, is_draft: bool) -> tuple[str, str, bytes]:
             fonts.attrib.pop(qn(f'w:{attribute}'), None)
         for border in style.element.xpath('./w:pPr/w:pBdr'):
             border.getparent().remove(border)
+        if name.startswith('Heading '):
+            style.paragraph_format.space_before = Pt(12)
+            style.paragraph_format.space_after = Pt(6)
+            style.paragraph_format.keep_with_next = True
 
     title = str(getattr(report, 'title', '') or '科研报告')
     document.core_properties.title = title
     document.core_properties.author = str(getattr(report, 'owner_name', '') or 'PipeSight')
-    document.add_heading(title, 0)
-    metadata = document.add_paragraph(_metadata_line(report))
-    metadata.style = document.styles['Subtitle']
+    document.styles['Title'].font.size = Pt(20)
+    title_paragraph = document.add_heading(title, 0)
+    title_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    metadata_text = _metadata_line(report)
+    if metadata_text:
+        metadata = document.add_paragraph(metadata_text)
+        metadata.style = document.styles['Subtitle']
 
     content = _report_body(report)
     reference = False
@@ -255,7 +277,7 @@ def build_docx(report: Any, *, is_draft: bool) -> tuple[str, str, bytes]:
             reference = heading.group(2).strip().casefold() in REFERENCE_TITLES
             if len(heading.group(1)) == 1 and heading.group(2).strip() == title:
                 continue
-            document.add_heading(_plain_inline(heading.group(2)), min(len(heading.group(1)), 6))
+            document.add_heading(_plain_inline(heading.group(2)), min(max(len(heading.group(1)) - 1, 1), 6))
             continue
         if not reference and _SUBHEADING_RE.match(line):
             document.add_heading(_plain_inline(line), 3)
@@ -314,6 +336,7 @@ def build_pdf(report: Any, *, is_draft: bool) -> tuple[str, str, bytes]:
             leading=max(15, 23 - level),
             spaceBefore=8,
             spaceAfter=4,
+            keepWithNext=True,
         )
         for level in range(1, 7)
     }
@@ -321,7 +344,8 @@ def build_pdf(report: Any, *, is_draft: bool) -> tuple[str, str, bytes]:
         'PipeSightBody', parent=styles['BodyText'], fontName=font_name, fontSize=10.5, leading=18, spaceAfter=6,
         firstLineIndent=21, wordWrap='CJK'
     )
-    reference_style = ParagraphStyle('PipeSightReference', parent=body_style, firstLineIndent=0)
+    reference_style = ParagraphStyle('PipeSightReference', parent=body_style, firstLineIndent=0,
+                                     fontSize=9.5, leading=14, spaceAfter=4)
     bullet_style = ParagraphStyle(
         'PipeSightBullet', parent=body_style, leftIndent=14, firstLineIndent=-10, bulletIndent=0
     )
@@ -338,15 +362,18 @@ def build_pdf(report: Any, *, is_draft: bool) -> tuple[str, str, bytes]:
         author=str(getattr(report, 'owner_name', '') or 'PipeSight'),
     )
     story: list[Any] = [Paragraph(_pdf_inline(title), title_style), Spacer(1, 5 * mm)]
-    story.append(Paragraph(_pdf_inline(_metadata_line(report)), metadata_style))
-    story.append(Spacer(1, 5 * mm))
+    metadata_text = _metadata_line(report)
+    if metadata_text:
+        story.append(Paragraph(_pdf_inline(metadata_text), metadata_style))
+        story.append(Spacer(1, 5 * mm))
 
     content = _report_body(report)
     reference = False
     for raw_line in content.splitlines():
         line = raw_line.strip()
         if not line:
-            story.append(Spacer(1, 3 * mm))
+            # Semantic paragraphs already have spaceAfter. Browser-edited content
+            # may contain several blank lines; don't multiply them into layout gaps.
             continue
         heading = _HEADING_RE.match(line)
         if heading:

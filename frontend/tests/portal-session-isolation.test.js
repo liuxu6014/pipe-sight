@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import { formatBusinessTime } from '../src/utils/portal/businessTime.js'
 import * as businessIds from '../src/utils/portal/businessId.js'
+import { buildLibraryItems } from '../src/utils/portal/libraryItems.js'
 
 const settled = () => new Promise(resolve => setImmediate(resolve))
 function deferred() {
@@ -21,7 +22,7 @@ function portalStore() {
   const read = () => { const request = deferred(); requests.push(request); return request.promise }
   const write = () => { const request = deferred(); mutations.push(request); return request.promise }
   const context = vm.createContext({
-    ...businessIds, formatBusinessTime,
+    ...businessIds, formatBusinessTime, buildLibraryItems,
     fallbackDigests: [], fallbackDocuments: [], fallbackNews: [], fallbackPapers: [], recentTasks: [], fallbackReports: [], fallbackTopics: [],
     getPipelineDashboard: read, getPipelineWorkspace: read, listPipelineIntelligence: read,
     listPipelineKnowledgeDocuments: read, listPipelineReports: read, listPipelineResearchJobs: read, listPipelineResearchReports: read,
@@ -90,6 +91,25 @@ test('failed old-session basket removal cannot restore an item into the new sess
   await settled()
   assert.equal(store.basket.length, 0)
   assert.equal(store.dataError, '')
+})
+
+test('basket deletion keeps the item until the server confirms success', async () => {
+  const { store, mutations } = portalStore()
+  store.basket = [{ id: '2003', title: 'Document' }]
+  const pending = store.removeFromBasket('2003')
+  assert.equal(store.basket.length, 1)
+  mutations[0].resolve({})
+  assert.equal(await pending, true)
+  assert.equal(store.basket.length, 0)
+})
+
+test('failed basket deletion returns false and leaves the item intact', async () => {
+  const { store, mutations } = portalStore()
+  store.basket = [{ id: '2003', title: 'Document' }]
+  const pending = store.removeFromBasket('2003')
+  mutations[0].reject(new Error('unavailable'))
+  assert.equal(await pending, false)
+  assert.equal(store.basket.length, 1)
 })
 
 test('a late basket-add failure cannot remove a new-session item with the same ID', async () => {

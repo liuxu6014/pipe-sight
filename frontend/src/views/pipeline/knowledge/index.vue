@@ -1,10 +1,10 @@
 <template>
-  <div class="pipeline-page pipeline-knowledge-page">
+  <div class="pipeline-page pipeline-knowledge-page ws-list-page">
     <section class="page-heading">
       <div>
-        <p class="eyebrow">管理员</p>
+
         <h1>资料库管理</h1>
-        <p class="summary">统一管理授权资料的上传、解析、权限范围和报告引用，所有操作直接使用当前知识库服务。</p>
+
       </div>
       <div class="heading-actions">
         <el-button :icon="Refresh" :loading="loading" @click="loadDocuments">刷新</el-button>
@@ -21,7 +21,7 @@
       class="knowledge-alert"
     >
       <template #default>
-        <el-button text type="primary" @click="loadDocuments">重新加载</el-button>
+        <el-button plain type="primary" @click="loadDocuments">重新加载</el-button>
       </template>
     </el-alert>
 
@@ -30,15 +30,15 @@
         <template #header>资料状态</template>
         <dl>
           <div><dt>资料总数</dt><dd>{{ documents.length }}</dd></div>
-          <div><dt>已解析</dt><dd>{{ statusCount('已解析') }}</dd></div>
+          <div><dt>已解析</dt><dd>{{ statusCount('ready') }}</dd></div>
           <div><dt>处理中</dt><dd>{{ processingCount }}</dd></div>
-          <div><dt>解析失败</dt><dd class="is-danger">{{ statusCount('解析失败') }}</dd></div>
+          <div><dt>解析失败</dt><dd class="is-danger">{{ statusCount('failed') }}</dd></div>
         </dl>
         <p>以每份文件的安全检查与解析结果为准。可搜索 PDF、DOCX、MD、TXT 按现有解析流程处理；扫描材料及旧版 DOC 不视为已支持。</p>
       </el-card>
     </div>
 
-    <el-card v-loading="loading" shadow="never" class="panel-card knowledge-table-card">
+    <el-card v-loading="loading" shadow="never" class="panel-card knowledge-table-card ws-list-panel">
       <template #header>
         <div class="card-header knowledge-table-head">
           <div>
@@ -49,19 +49,17 @@
             <el-input v-model="keyword" :prefix-icon="Search" clearable placeholder="搜索名称、摘要或标签" />
             <el-select v-model="statusFilter" aria-label="解析状态筛选">
               <el-option label="全部状态" value="all" />
-              <el-option label="已解析" value="已解析" />
-              <el-option label="解析中" value="解析中" />
-              <el-option label="待解析" value="待解析" />
-              <el-option label="解析失败" value="解析失败" />
-              <el-option label="待安全扫描" value="待安全扫描" />
-              <el-option label="已隔离" value="已隔离" />
-              <el-option label="扫描失败" value="扫描失败" />
+              <el-option label="已解析" value="ready" />
+              <el-option label="解析中" value="parsing" />
+              <el-option label="等待解析" value="queued" />
+              <el-option label="解析失败" value="failed" />
             </el-select>
           </div>
         </div>
       </template>
 
       <el-table
+        height="100%"
         :data="pagedDocuments"
         row-key="id"
         border
@@ -87,22 +85,22 @@
         </el-table-column>
         <el-table-column label="解析状态" width="130">
           <template #default="{ row }">
-            <el-tooltip :content="row.parseMessage || row.status" placement="top">
-              <el-tag :type="statusTag(row.status)" effect="light">{{ row.status }}</el-tag>
+            <el-tooltip :content="row.parseMessage || statusText(row.parseStatus)" placement="top">
+              <el-tag :type="statusTag(row.parseStatus)" effect="light">{{ statusText(row.parseStatus) }}</el-tag>
             </el-tooltip>
           </template>
         </el-table-column>
         <el-table-column prop="updatedAt" label="更新时间" width="170" />
         <el-table-column label="操作" width="210" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" :disabled="row.allowDownload === false" :icon="Download" @click="downloadDocument(row)">下载</el-button>
+            <el-button plain type="primary" :disabled="row.allowDownload === false" :icon="Download" @click="downloadDocument(row)">下载</el-button>
             <el-button
-              v-if="row.canManage !== false && row.status !== '已解析'"
-              link
+              v-if="row.canManage !== false && row.parseStatus !== 'ready'"
+              plain
               :loading="isReparsing(row.id)"
               @click="reparseDocument(row)"
             >重新解析</el-button>
-            <el-button v-if="row.canManage !== false" link type="danger" :icon="Delete" @click="removeDocument(row)">删除</el-button>
+            <el-button v-if="row.canManage !== false" plain type="danger" :icon="Delete" @click="removeDocument(row)">删除</el-button>
           </template>
         </el-table-column>
         <template #empty>
@@ -127,28 +125,13 @@
 
     <el-dialog v-model="uploadVisible" title="上传知识库资料" width="min(620px, calc(100vw - 24px))" @closed="resetUpload">
       <el-form label-position="top">
-        <div class="upload-config-grid">
-          <el-form-item label="资料类型">
-            <el-select v-model="uploadCategory">
-              <el-option v-for="item in categoryOptions" :key="item" :label="item" :value="item" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="访问范围">
-              <el-select v-model="uploadPermission">
-                <el-option label="仅自己可见" value="private" />
-                <el-option label="公开资料" value="public" />
-              </el-select>
-          </el-form-item>
-        </div>
-        <el-form-item label="资料标签">
-          <el-input v-model="uploadTags" maxlength="300" placeholder="多个标签使用逗号分隔，例如：应力监测,现场验证" />
-        </el-form-item>
+        <el-form-item label="访问范围"><span>仅自己可见（私有资料）</span></el-form-item>
         <el-upload
           v-model:file-list="uploadFiles"
           drag
           multiple
           action="#"
-          accept=".pdf,.doc,.docx,.md,.txt"
+          accept=".pdf,.docx,.md,.txt"
           :auto-upload="false"
           :limit="10"
           :disabled="uploading"
@@ -158,7 +141,7 @@
           <el-icon class="upload-icon"><UploadFilled /></el-icon>
           <div class="el-upload__text">拖拽文件到此处，或<em>点击选择</em></div>
           <template #tip>
-            <div class="el-upload__tip">支持 PDF、DOC、DOCX、MD、TXT；单个文件不超过 100MB，单次最多 10 份。</div>
+            <div class="el-upload__tip">支持可搜索 PDF、DOCX、MD、TXT；单个文件不超过 16MB，单次最多 10 份。扫描 PDF 与旧版 DOC 暂不支持解析。</div>
           </template>
         </el-upload>
         <el-progress
@@ -192,9 +175,8 @@ import {
 
 defineOptions({ name: 'PipelineKnowledge' })
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024
-const ALLOWED_EXTENSIONS = new Set(['pdf', 'doc', 'docx', 'md', 'txt'])
-const categoryOptions = ['内部文献', '英文报告', '论文', '历史项目', '模板', '会议纪要', '其他']
+const MAX_FILE_SIZE = 16 * 1024 * 1024
+const ALLOWED_EXTENSIONS = new Set(['pdf', 'docx', 'md', 'txt'])
 const loading = ref(false)
 const loadError = ref('')
 const documents = ref([])
@@ -204,20 +186,17 @@ const pageNum = ref(1)
 const pageSize = ref(10)
 const uploadVisible = ref(false)
 const uploadFiles = ref([])
-const uploadCategory = ref('内部文献')
-const uploadPermission = ref('private')
-const uploadTags = ref('')
 const uploading = ref(false)
 const completedUploads = ref(0)
 const reparsingIds = ref(new Set())
 
 const hasFilters = computed(() => Boolean(keyword.value || statusFilter.value !== 'all'))
-const processingCount = computed(() => documents.value.filter(item => ['解析中', '待解析', '待安全扫描'].includes(item.status)).length)
+const processingCount = computed(() => documents.value.filter(item => ['parsing', 'queued'].includes(item.parseStatus)).length)
 const filteredDocuments = computed(() => {
   const query = keyword.value.trim().toLocaleLowerCase('zh-CN')
   return documents.value.filter(item => {
     const text = [item.name, item.summary, item.owner, ...safeTags(item)].filter(Boolean).join(' ').toLocaleLowerCase('zh-CN')
-    return (statusFilter.value === 'all' || item.status === statusFilter.value) && (!query || text.includes(query))
+    return (statusFilter.value === 'all' || item.parseStatus === statusFilter.value) && (!query || text.includes(query))
   })
 })
 const pagedDocuments = computed(() => {
@@ -226,8 +205,9 @@ const pagedDocuments = computed(() => {
 })
 
 function safeTags(document) { return Array.isArray(document?.tags) ? document.tags : [] }
-function statusCount(status) { return documents.value.filter(item => item.status === status).length }
-function statusTag(status) { return ({ 已解析: 'success', 解析中: 'warning', 待解析: 'info', 待安全扫描: 'warning', 解析失败: 'danger', 已隔离: 'danger', 扫描失败: 'danger' })[status] || 'info' }
+function statusCount(status) { return documents.value.filter(item => item.parseStatus === status).length }
+function statusTag(status) { return ({ ready: 'success', parsing: 'warning', queued: 'info', failed: 'danger' })[status] || 'info' }
+function statusText(status) { return ({ ready: '已解析', parsing: '解析中', queued: '等待解析', failed: '解析失败' })[status] || status || '状态未提供' }
 function isReparsing(id) { return reparsingIds.value.has(id) }
 function extensionOf(name = '') { return name.includes('.') ? name.split('.').pop().toLowerCase() : '' }
 function formatFileSize(bytes) {
@@ -237,9 +217,9 @@ function formatFileSize(bytes) {
   return `${(size / 1024 / 1024).toFixed(size < 10 * 1024 * 1024 ? 1 : 0)} MB`
 }
 function validateUploadFile(file) {
-  if (!ALLOWED_EXTENSIONS.has(extensionOf(file.name))) return '仅支持 PDF、DOC、DOCX、MD、TXT 文件'
+  if (!ALLOWED_EXTENSIONS.has(extensionOf(file.name))) return '仅支持可搜索 PDF、DOCX、MD、TXT 文件'
   if (!file.size) return '文件内容为空'
-  if (file.size > MAX_FILE_SIZE) return '单个文件不能超过 100MB'
+  if (file.size > MAX_FILE_SIZE) return '单个文件不能超过 16MB'
   return ''
 }
 
@@ -264,7 +244,6 @@ function resetUpload() {
   if (uploading.value) return
   uploadFiles.value = []
   completedUploads.value = 0
-  uploadTags.value = ''
 }
 function handleUploadExceed() { ElMessage.warning('单次最多上传 10 份资料') }
 function handleFileChange(uploadFile, currentFiles) {
@@ -292,9 +271,7 @@ async function finishUpload() {
     try {
       const data = new FormData()
       data.append('file', item.raw)
-      data.append('category', uploadCategory.value)
-      data.append('permissionScope', uploadPermission.value)
-      data.append('tags', uploadTags.value.trim())
+      data.append('permissionScope', 'private')
       await uploadPipelineKnowledgeDocument(data)
       completedUploads.value += 1
     } catch (error) {
@@ -306,7 +283,6 @@ async function finishUpload() {
     if (!failures.length) {
       uploadVisible.value = false
       uploadFiles.value = []
-      uploadTags.value = ''
       ElMessage.success('资料上传完成，解析状态已同步到列表')
     } else {
       uploadFiles.value = validFiles.filter(item => failures.includes(item.name))
@@ -349,8 +325,8 @@ async function removeDocument(document) {
 }
 
 function downloadDocument(document) {
-  if (!document.allowDownload) return ElMessage.warning('当前资料禁止下载')
-  downloadPipelineKnowledgeDocument(document.id, document.name).catch(() => {})
+  if (document.allowDownload === false) return ElMessage.warning('当前资料禁止下载')
+  return downloadPipelineKnowledgeDocument(document.id, document.name).catch(() => {})
 }
 
 watch([keyword, statusFilter, pageSize], () => { pageNum.value = 1 })
@@ -358,6 +334,15 @@ onMounted(loadDocuments)
 </script>
 
 <style scoped>
+.ws-list-page .knowledge-status-card :deep(.el-card__header) { padding: 8px 12px; }
+.ws-list-page .knowledge-status-card :deep(.el-card__body) { padding: 10px 12px; }
+.ws-list-page .knowledge-status-card dl { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.ws-list-page .knowledge-status-card dl div { padding: 8px 12px; }
+.ws-list-page .knowledge-status-card dd { font-size: 20px; }
+.ws-list-page .knowledge-status-card p { margin: 8px 0 0; font-size: 12px; }
+@media (max-width: 760px) {
+  .ws-list-page .knowledge-status-card dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .heading-actions,
 .card-header,
 .knowledge-pagination {

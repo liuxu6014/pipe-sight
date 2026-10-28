@@ -2064,7 +2064,7 @@ body:has(.ps-portal) {
 .ps-basket-list > div > span:nth-child(2) { min-width: 0; display: flex; flex-direction: column; }
 .ps-basket-list strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .ps-basket-list small { margin-top: 3px; color: var(--ps-muted); font-size: 13px; }
-.ps-basket-list button { width: 28px; height: 28px; border: 0; border-radius: 6px; display: grid; place-items: center; background: transparent; color: var(--ps-muted); cursor: pointer; }
+.ps-basket-list button:not(.el-button) { width: 28px; height: 28px; border: 0; border-radius: 6px; display: grid; place-items: center; background: transparent; color: var(--ps-muted); cursor: pointer; }
 .ps-basket-list button svg { width: 14px; }
 .ps-basket-list .ps-empty-state { min-height: 230px; }
 

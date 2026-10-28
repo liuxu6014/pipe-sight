@@ -28,7 +28,7 @@ async def test_dashboard_totals_merge_categories_and_preserve_collection_status(
             side_effect=[
                 rows([('安全', 4), ('检测', 2)]),
                 rows([('安全', 3)]),
-                rows([SimpleNamespace(source_id=1001, status='running', saved_count=5)]),
+                rows([(SimpleNamespace(id=12, source_id=1001, status='running', fetched_count=8, saved_count=5, failed_count=1), '科技来源')]),
                 count(12),
                 count(4),
                 count(8),
@@ -38,7 +38,10 @@ async def test_dashboard_totals_merge_categories_and_preserve_collection_status(
     result = await IntelligenceDashboardService.summary(db, date_formatter=str)
     assert [metric['value'] for metric in result['metrics']] == [12, 4, 8]
     assert result['hot_topics'] == [{'name': '安全', 'count': 7}, {'name': '检测', 'count': 2}]
-    assert result['collect_status'] == [{'name': '1001', 'status': 'running', 'value': 5}]
+    assert result['collect_status'] == [{
+        'id': '12', 'name': '科技来源', 'status': 'running',
+        'fetched_count': 8, 'saved_count': 5, 'failed_count': 1,
+    }]
     assert 'pending_reviews' not in result
     for call in db.execute.await_args_list:
         sql = str(call.args[0].compile(compile_kwargs={'literal_binds': True}))

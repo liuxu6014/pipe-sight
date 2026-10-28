@@ -7,7 +7,7 @@ export default async function pipelineRequest(options) {
   // version numbers are decimal too. UUID request/execution tokens stay in bodies.
   const parts = options.url.split('/')
   for (let index = 0; index < parts.length; index++) {
-    if (['intelligence', 'sources', 'categories', 'templates', 'jobs', 'tasks', 'reports', 'runs', 'digest-schedules', 'documents', 'assets', 'exports'].includes(parts[index]) && parts[index + 1] && !['list', 'published', 'materials', 'digest-candidates', 'items', 'runs'].includes(parts[index + 1])) {
+    if (['intelligence', 'sources', 'categories', 'templates', 'jobs', 'tasks', 'reports', 'runs', 'digest-schedules', 'documents', 'assets', 'exports'].includes(parts[index]) && parts[index + 1] && !['list', 'filters', 'published', 'materials', 'digest-candidates', 'items', 'runs'].includes(parts[index + 1])) {
       parts[index + 1] = requireBusinessId(decodeURIComponent(parts[index + 1]))
     }
     if (parts[index] === 'items' && parts[index + 2]) parts[index + 2] = requireBusinessId(decodeURIComponent(parts[index + 2]))

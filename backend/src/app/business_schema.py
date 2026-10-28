@@ -33,7 +33,7 @@ BUSINESS_TABLES = (
     'reports',
     'templates',
 )
-FROZEN_PATH = Path(__file__).resolve().parents[2] / 'data/schema/business-v5.json'
+FROZEN_PATH = Path(__file__).resolve().parents[2] / 'data/schema/business-v6.json'
 
 
 def quote_identifier(value: str) -> str:
@@ -260,7 +260,7 @@ def canonical_catalog(value: dict) -> dict:
 
 def load_frozen(version: str | None = None) -> dict:
     """Runtime target may advance; a historical migration pins its own version."""
-    if version is not None and version not in {'v4', 'v5'}:
+    if version is not None and version not in {'v4', 'v5', 'v6'}:
         raise ValueError('Unsupported frozen business schema version')
     path = FROZEN_PATH if version is None else FROZEN_PATH.with_name(f'business-{version}.json')
     return json.loads(path.read_text(encoding='utf-8'))

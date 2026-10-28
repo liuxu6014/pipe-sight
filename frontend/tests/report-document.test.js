@@ -5,6 +5,16 @@ import vm from 'node:vm'
 import { computed, effectScope, ref, watch } from 'vue'
 import { buildReportMarkdown, cleanReportCitationNotes } from '../src/utils/portal/reportDocument.js'
 
+for (const heading of ['参考文献', 'References', 'references', '2. 参考资料']) {
+  test(`saving authored ${heading} does not append duplicate references`, () => {
+    const output = buildReportMarkdown({ title: '报告', sections: [
+      { title: '分析', content: '事实[1]。' }, { title: heading, content: '[1] 原始来源' },
+    ], citations: [{ id: 1, title: '原始来源' }] })
+    assert.equal((output.match(/^## (?:参考资料|参考文献|references)$/gim) || []).length, 1)
+    assert.equal((output.match(/\[1\] 原始来源/g) || []).length, 1)
+  })
+}
+
 // Model the heading/body boundary used by the backend Markdown reader.
 function reload(content) {
   return content.split(/^## /m).slice(1).map((chunk, index) => {

@@ -113,7 +113,7 @@ def test_export_render_metadata_reads_explicit_renderer_dto(env):
         metadata={'templateVersion': 'V2.0', 'period': ['2026-01-01', '2026-03-31']},
     )
     assert exporter._metadata_line(snapshot) == (
-        '类型：科研需求报告　版本：V4.0　负责人：测试用户　模板：V2.0　周期：2026-01-01 至 2026-03-31'
+        '类型：科研需求报告　负责人：测试用户　周期：2026-01-01 至 2026-03-31'
     )
 
 

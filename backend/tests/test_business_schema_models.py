@@ -16,7 +16,7 @@ from config.database import Base
 
 register_sqlalchemy_models()
 BUSINESS_TABLES = {*BUSINESS_ID_TABLES, 'ai_models', 'basket_items', 'report_versions'}
-BUSINESS_COLUMN_COUNT = 193
+BUSINESS_COLUMN_COUNT = 196
 MISSING_DEFAULT_COUNT = 33
 MISSING_DEFAULTS = {
     'ai_models': ('parameters', 'created_at', 'updated_at'),
@@ -54,6 +54,7 @@ CATALOG_INDEX_NAMES = {
         'idx_generation_tasks_lease',
         'idx_generation_tasks_report_id',
         'idx_generation_tasks_status',
+        'idx_generation_tasks_schedule_id',
         'uk_generation_tasks_request_id',
         'uk_generation_tasks_id_report_id',
     },
@@ -83,7 +84,7 @@ def no_external_connections(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_exact_193_column_types_nullability_and_names_are_preserved() -> None:
-    contract = load_contract('v5')
+    contract = load_contract()
     tables = {row['name']: row for row in [*contract['tables'], *contract['optional_table_definitions']]}
     count = 0
     for name in BUSINESS_TABLES:

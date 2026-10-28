@@ -392,6 +392,27 @@ async def test_parse_cas_preserves_user_edits(env, db):
 
 
 @pytest.mark.asyncio
+async def test_material_editor_persists_revision_without_replacing_source_file(env, db):
+    _, material = seed(env, db)
+    await db.commit()
+    original_text, original_key, original_filename = material.extracted_text, material.storage_key, material.filename
+    result = await env.materials.MaterialApiService.edit(
+        db, 7, '101', expected_version=1, edited_text='人工修订的研究资料正文', name='修订资料.txt'
+    )
+    assert result['name'] == '修订资料.txt' and result['versionNo'] == 2
+    assert result['content'] == '人工修订的研究资料正文'
+    reread = await env.materials.MaterialApiService.get_material(db, 7, '101')
+    assert reread['editedText'] == result['content'] and reread['summary']
+    assert material.extracted_text == original_text and material.storage_key == original_key
+    assert material.filename == original_filename
+    with raises(env, '版本已变化'):
+        await env.materials.MaterialApiService.edit(db, 7, '101', expected_version=1, edited_text='过期修改')
+    with raises(env, '无权访问'):
+        await env.materials.MaterialApiService.edit(db, 8, '101', expected_version=2, edited_text='其他用户')
+    assert material.edited_text == '人工修订的研究资料正文' and material.version == 2
+
+
+@pytest.mark.asyncio
 async def test_report_read_scope_is_consistent_without_granting_writes(env, db, monkeypatch):
     seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
@@ -551,7 +572,7 @@ async def test_execution_uses_frozen_input_and_retains_conflict_result(env, db, 
                 report.content = '编辑中的正文'
                 report.version += 1
                 await edit_db.commit()
-        return '离线替身结果，未调用真实模型'
+        return '离线替身结果，未调用真实模型[1]。'
 
     monkeypatch.setattr(execution.ResearchModelGenerationService, 'generate_content', offline_model)
     await execution.ResearchExecutionService.process(job_id=result['jobId'], user_id=7)
@@ -559,7 +580,8 @@ async def test_execution_uses_frozen_input_and_retains_conflict_result(env, db, 
     job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
     report = await env.repo.ResearchDao.get_report(db, result['reportId'], 7)
     assert job.status == 'completed' and job.result_content.startswith('离线替身')
-    assert report.content == ('编辑中的正文' if conflict else job.result_content)
+    from app.research.services.report_content import normalize_generated_report
+    assert report.content == ('编辑中的正文' if conflict else normalize_generated_report(job.result_content, job.materials, delivery=True)['content'])
     if conflict:
         await env.app.ResearchReportService.apply_task_result(
             db,
@@ -569,7 +591,8 @@ async def test_execution_uses_frozen_input_and_retains_conflict_result(env, db, 
             expected_version=report.version,
             report_serializer=env.app.ResearchApplicationService.report_dict,
         )
-        assert report.content == job.result_content and report.version == 3
+        assert report.content == normalize_generated_report(job.result_content, job.materials, delivery=True)['content']
+        assert report.version == 3
 
 
 @pytest.mark.asyncio

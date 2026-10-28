@@ -1,37 +1,38 @@
 <template>
-  <div class="ps-page ps-paper-library">
-    <div class="ps-toolbar ps-paper-toolbar"><div class="ps-search-inline"><Search /><input v-model.trim="keyword" aria-label="搜索论文资料" placeholder="搜索题名、作者或摘要" @keydown.enter="reload" /><button v-if="keyword" type="button" aria-label="清空论文关键词" @click="keyword = ''">清空</button></div><el-select v-model="year" filterable allow-create default-first-option aria-label="发表年份，可输入年份" style="width: 160px" @change="yearRange = []"><el-option label="全部年份" value="all" /><el-option v-for="item in yearOptions" :key="item" :label="String(item)" :value="String(item)" /></el-select>
+  <div class="ps-page ps-paper-library ps-list-page">
+    <div class="ps-toolbar ps-paper-toolbar"><div class="ps-search-inline"><Search /><input v-model.trim="keyword" aria-label="搜索论文资料" placeholder="搜索题名、作者或摘要" @keydown.enter="reload" /><el-button class="ps-ui-action" v-if="keyword" aria-label="清空论文关键词" @click="keyword = ''">清空</el-button></div><el-select v-model="year" filterable allow-create default-first-option aria-label="发表年份，可输入年份" style="width: 160px" @change="yearRange = []"><el-option label="全部年份" value="all" /><el-option v-for="item in yearOptions" :key="item" :label="String(item)" :value="String(item)" /></el-select>
       <el-popover trigger="click" placement="bottom-end" :width="360" popper-class="ps-paper-filter-popover">
         <template #reference><el-button :icon="Filter" :type="yearRange.length || journals.length ? 'primary' : 'default'" plain>更多筛选{{ yearRange.length || journals.length ? ' · 已设置' : '' }}</el-button></template>
-        <div class="ps-filter-panel ps-paper-advanced"><h3>高级筛选</h3><label>年份范围<el-date-picker v-model="yearRange" type="yearrange" value-format="YYYY" start-placeholder="起始年" end-placeholder="结束年" aria-label="论文发表年份范围" style="width: 100%" @change="changeYearRange" /></label><label>期刊 / 会议<el-select v-model="journals" multiple filterable allow-create default-first-option aria-label="期刊或会议名称，可输入" placeholder="输入名称或选择当前页期刊"><el-option v-for="item in journalOptions" :key="item" :label="item" :value="item" /></el-select></label><p>可输入期刊名称查询已入库记录。未选择年份时包含日期缺失记录。</p><el-button @click="yearRange = []; journals = []">清除高级筛选</el-button></div>
+        <div class="ps-filter-panel ps-paper-advanced"><h3>高级筛选</h3><label>年份范围<el-date-picker v-model="yearRange" type="yearrange" value-format="YYYY" start-placeholder="起始年" end-placeholder="结束年" aria-label="论文发表年份范围" style="width: 100%" @change="changeYearRange" /></label><label>期刊 / 会议<el-select v-model="journals" multiple filterable allow-create default-first-option aria-label="期刊或会议名称，可输入" placeholder="输入名称或选择期刊"><el-option v-for="item in journalOptions" :key="item" :label="item" :value="item" /></el-select></label><p>可输入期刊名称查询已入库记录。未选择年份时包含日期缺失记录。</p><el-button @click="yearRange = []; journals = []">清除高级筛选</el-button></div>
       </el-popover>
       <el-button @click="resetFilters">重置筛选</el-button></div>
-    <div class="ps-content-with-filter">
-      <section v-loading="loading" :aria-busy="loading" class="ps-paper-list">
+    <SavedSearchBar kind="paper" :query="query" @apply="applySavedSearch" />
+    <div class="ps-content-with-filter ps-list-stack">
+      <section v-loading="loading" :aria-busy="loading" class="ps-list-stack">
+        <div class="ps-paper-list ps-list-scroll" tabindex="0" aria-label="论文列表">
         <article v-for="paper in filteredPapers" :key="paper.id" class="ps-paper-card">
           <div class="ps-paper-main">
             <div class="ps-paper-heading">
             <router-link class="ps-paper-title" :to="`/portal/papers/${paper.id}`">{{ paper.titleZh }}</router-link>
+            <el-button type="primary" plain :loading="busy(paper)" :disabled="busy(paper)" @click="add(paper)">{{ inBasket(paper) ? '取消加入资料库' : '加入资料库' }}</el-button>
             </div>
             <div v-if="paper.title && paper.title.trim() !== paper.titleZh?.trim()" class="ps-paper-en-title">{{ paper.title }}</div>
             <div class="ps-paper-authors">{{ paper.authors.join(' · ') }}<span>{{ paper.institutions.join('；') }}</span></div>
             <div class="ps-paper-meta" aria-label="论文概览">
               <span class="ps-paper-journal-name">{{ paper.journal }}</span>
               <span>发表时间 {{ paper.publishedDate || paper.year || '未提供' }}</span>
-              <span>被引次数 {{ paper.citationCount }}</span>
+              <span v-if="paper.citationCount !== '未提供'">被引次数 {{ paper.citationCount }}</span>
               <a v-if="doiUrl(paper)" class="ps-paper-doi" :href="doiUrl(paper)" target="_blank" rel="noopener noreferrer">DOI: {{ paper.doi }}</a>
               <span v-else-if="paper.doi" class="ps-paper-doi">DOI: {{ paper.doi }}</span>
             </div>
           </div>
-          <div class="ps-paper-footer">
+          <div v-if="paper.keywords.length" class="ps-paper-footer">
           <div v-if="paper.keywords.length" class="ps-tag-row"><span v-for="tag in paper.keywords" :key="tag" class="ps-tag">{{ tag }}</span></div>
-          <div class="ps-paper-actions">
-            <el-button type="primary" plain :loading="busy(paper)" :disabled="busy(paper)" @click="add(paper)">{{ inBasket(paper) ? '取消加入资料篮' : '加入资料篮' }}</el-button>
-          </div>
           </div>
         </article>
         <PortalEmptyState v-if="loadError && !loading" title="论文加载失败" :description="loadError" action-label="重新加载" @action="reload" />
         <PortalEmptyState v-else-if="!filteredPapers.length && !loading" title="没有匹配的论文" description="尝试放宽年份或期刊筛选。" action-label="重置筛选" @action="resetFilters" />
+        </div>
         <div v-if="total > 0 && !loading && !loadError" class="ps-pagination" aria-label="论文列表分页">
           <el-pagination
             v-model:current-page="currentPage"
@@ -49,12 +50,14 @@
 </template>
 
 <script setup>
+import SavedSearchBar from '../components/SavedSearchBar.vue'
+import { applySavedSearchQuery } from '@/utils/portal/savedSearches'
 import { computed, toRefs, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Filter, Search } from '@element-plus/icons-vue'
 import PortalEmptyState from '../components/PortalEmptyState.vue'
 import usePortalStore from '@/store/modules/portal'
-import { listPipelineIntelligence, savePipelineWorkspaceItem, deletePipelineWorkspaceItem } from '@/api/pipeline/intelligence'
+import { getPipelineContentFilters, listPipelineIntelligence, savePipelineWorkspaceItem, deletePipelineWorkspaceItem } from '@/api/pipeline/intelligence'
 import { normalizePortalPaper } from '@/store/modules/portal'
 import { useListQuery, useListRequest, useListWorkspace, validPage } from '@/utils/portal/listQuery'
 import { cleanSummary } from '@/utils/portal/discovery'
@@ -62,10 +65,12 @@ import { cleanSummary } from '@/utils/portal/discovery'
 const portalStore = usePortalStore()
 const currentYear = new Date().getFullYear()
 const query = useListQuery({ q: '', year: 'all', years: [], journals: [], page: 1, size: 10 })
+function applySavedSearch(filters) { if (!applySavedSearchQuery(query, filters, 'paper')) reload() }
 const { q: keyword, year, years: yearRange, journals, page: currentPage, size: pageSize } = toRefs(query)
 const { inBasket, busy, toggleBasket } = useListWorkspace(portalStore, { save: savePipelineWorkspaceItem, remove: deletePipelineWorkspaceItem })
-const journalOptions = computed(() => [...new Set([...(data.value?.rows || []).map(item => item.journal).filter(Boolean), ...journals.value])])
-const yearOptions = computed(() => [...new Set([currentYear, ...filteredPapers.value.map(item => item.year).filter(value => Number.isInteger(value)), ...(year.value === 'all' ? [] : [Number(year.value)])])].sort((a, b) => b - a))
+const facets = useListRequest(() => ({}), getPipelineContentFilters)
+const journalOptions = computed(() => [...new Set([...(facets.data.value?.journals || []), ...journals.value])])
+const yearOptions = computed(() => [...new Set([currentYear, ...(facets.data.value?.years || []), ...(year.value === 'all' ? [] : [Number(year.value)])])].sort((a, b) => b - a))
 const selectedYearRange = computed(() => {
   if (year.value !== 'all') {
     const selected = Number(year.value)
@@ -108,9 +113,9 @@ function resetFilters() {
 async function add(paper) {
   try {
     const result = await toggleBasket(paper, 'paper')
-    if (result === 'saved') ElMessage.success('已加入资料篮')
-    else if (result === 'removed') ElMessage.success('已取消加入资料篮')
-  } catch (error) { ElMessage.error(error?.msg || '资料篮更新失败，请重试') }
+    if (result === 'saved') ElMessage.success('已加入资料库')
+    else if (result === 'removed') ElMessage.success('已取消加入资料库')
+  } catch (error) { ElMessage.error(error?.msg || '资料库更新失败，请重试') }
 }
 function doiUrl(paper) {
   const doi = String(paper?.doi || '').trim().replace(/^doi:\s*/i, '').replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '')
@@ -120,6 +125,8 @@ function doiUrl(paper) {
 </script>
 
 <style scoped>
+.ps-search-inline > button { flex-shrink: 0; padding: 4px 8px; border: 0; border-radius: 4px; background: transparent; color: var(--ps-muted); white-space: nowrap; cursor: pointer; }
+.ps-search-inline > button:hover { color: var(--ps-blue); background: var(--ps-blue-soft); }
 .ps-paper-library .ps-paper-card { display: block; padding: 18px 20px; border-radius: 10px; }
 .ps-paper-heading { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 8px; }
 .ps-paper-heading .ps-paper-title { flex: 1; min-width: 0; margin: 0; font-size: 17px; font-weight: 600; line-height: 1.45; text-align: left; overflow-wrap: anywhere; text-decoration: none; }

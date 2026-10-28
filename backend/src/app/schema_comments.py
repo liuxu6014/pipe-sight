@@ -1,6 +1,6 @@
-"""compact-v5中文注释数据；数值引用语义映射与不透明字符串分别说明。
+"""compact-v6中文注释数据；数值引用语义映射与不透明字符串分别说明。
 
-27张基线表317字段，2张保留功能表23字段；共29表340字段。
+27张基线表320字段，2张保留功能表23字段；共29表343字段。
 12张业务表共享BIGINT序列，若依基础表及其字段保持不变。
 """
 
@@ -201,6 +201,9 @@ COLUMN_COMMENTS = {
         "generation_config": "生成设置JSON对象；保存摘要长度和配图等参数，不重复整段材料正文；显式平台业务引用按实体映射，供应商模型标识、提示词及普通参数原样保留",
         "is_enabled": "计划开关；true启用、false停用，启用前校验真实文本模型及资料条件",
         "next_run_at": "下次触发的带时区时间点；启用时必填，原子认领后推进调度游标",
+        "last_run_at": "最近派发检查时间；北京时间Asia/Shanghai，timestamp(0)无时区，精度到秒，YYYY-MM-DD HH:mm:ss；历史为空不回填",
+        "last_status": "最近派发结果：queued入队、no_data无匹配、skipped节假日跳过、failed失败；历史为空；生成进度读取关联任务",
+        "last_error": "最近派发失败原因，脱敏后保存；成功或跳过时清空，不包含模型密钥或内部堆栈",
         "created_at": "周期计划创建时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss",
         "updated_at": "周期计划配置或调度游标最近更新时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss"
     },

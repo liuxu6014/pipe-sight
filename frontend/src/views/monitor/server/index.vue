@@ -1,5 +1,8 @@
 <template>
   <div class="app-container">
+    <el-alert v-if="loadError" :title="loadError" type="error" :closable="false" show-icon>
+      <el-button @click="getList">重试</el-button>
+    </el-alert>
     <el-row :gutter="10">
       <el-col :span="12" class="card-box">
         <el-card>
@@ -167,17 +170,46 @@
 
 <script setup>
 import { getServer } from '@/api/monitor/server'
+import { ElLoading } from 'element-plus'
 
 const server = ref([]);
-const { proxy } = getCurrentInstance();
+const loadError = ref('');
+let loadingInstance;
+let disposed = false;
+let requestId = 0;
 
-function getList() {
-  proxy.$modal.loading("正在加载服务监控数据，请稍候！");
-  getServer().then(response => {
-    server.value = response.data;
-    proxy.$modal.closeLoading();
-  });
+function closeLoading() {
+  loadingInstance?.close();
+  loadingInstance = undefined;
 }
 
+async function getList() {
+  if (disposed || loadingInstance) return;
+  const currentRequest = ++requestId;
+  loadError.value = '';
+  loadingInstance = ElLoading.service({ lock: true, text: '正在加载服务监控数据，请稍候！', background: 'rgba(0, 0, 0, 0.7)' });
+  try {
+    const response = await getServer();
+    if (disposed || currentRequest !== requestId) return;
+    server.value = response.data;
+  } catch {
+    if (!disposed && currentRequest === requestId) loadError.value = '服务监控数据加载失败，请检查网络或联系管理员后重试。';
+  } finally {
+    if (currentRequest === requestId) closeLoading();
+  }
+}
+
+function cleanup() {
+  disposed = true;
+  requestId++;
+  closeLoading();
+}
+onBeforeUnmount(cleanup);
+onDeactivated(cleanup);
+onActivated(() => {
+  if (!disposed) return;
+  disposed = false;
+  getList();
+});
 getList();
 </script>

@@ -27,16 +27,17 @@ async function mount(name, { query = {}, api = {}, basket = [], timers = {} } = 
   const forbidden = () => { mutations++; throw new Error('This test must never generate, upload or schedule') }
   const dependencies = {
     ...vue, useRoute, useRouter, ...businessIds, ...businessTimes, ...evidence, templateGenerationError, resolveBasketSelection,
-    usePortalStore: () => store, PortalPageHeader: {}, PortalEmptyState: {},
+    usePortalStore: () => store, PortalPageHeader: {}, PortalEmptyState: {}, DigestScheduleDialog: {},
     ElMessage: Object.fromEntries(['success', 'warning', 'error'].map(level => [level, text => messages.push({ level, text })])),
     ...Object.fromEntries(['ArrowLeft', 'Check', 'Close', 'Delete', 'Plus', 'Rank', 'Search', 'UploadFilled', 'Refresh', 'Warning'].map(icon => [icon, {}])),
     getPipelineIntelligenceDetail: async id => ({ data: article(id) }),
     getPipelineKnowledgeDocument: async id => ({ data: material(id) }),
     getPipelineResearchJob: async () => ({ data: {} }),
+    getPipelineContentFilters: async () => ({ data: { articleCategories: ['后台类别'] } }),
     searchPipelineIntelligence: async () => ({ data: { rows: [], total: 0 } }),
     searchPipelineDigestCandidates: params => (api.searchPipelineIntelligence || (async () => ({ data: { rows: [], total: 0 } })))(params),
     searchPipelineResearchMaterials: async () => ({ data: { rows: [], total: 0 } }),
-    listPipelineTemplates: async () => ({ data: { rows: [{ templateKey: '100', modelId: 1, modelConfigured: true, name: '已发布模板', reportType: name === 'DigestCreateView' ? 'daily' : 'research-demand', version: 'V4', sections: [{ id: 1, title: '实际章节', words: 1000 }] }] } }),
+    listPipelineTemplates: async () => ({ data: { rows: [{ templateKey: '100', modelId: 1, modelConfigured: true, name: '已发布模板', reportType: name === 'DigestCreateView' ? 'daily' : 'research-demand', digestCadence: name === 'DigestCreateView' ? 'daily' : null, version: 'V4', sections: [{ id: 1, title: '实际章节', words: 1000 }] }] } }),
     createPipelineResearchJob: forbidden, createPipelineDigestSchedule: forbidden, uploadPipelineKnowledgeDocument: forbidden, reparsePipelineKnowledgeDocument: forbidden,
     ...api, ...timers
   }
@@ -63,6 +64,43 @@ async function mount(name, { query = {}, api = {}, basket = [], timers = {} } = 
   return { get page() { return page }, store, router, messages, get mutations() { return mutations }, close: () => app.unmount() }
 }
 
+test('digest starts unfiltered and uses administrator category labels', async () => {
+  const calls = []
+  const ctx = await mount('DigestCreateView', { api: { searchPipelineDigestCandidates: async params => { calls.push(params); return { data: { rows: [], total: 0 } } } } })
+  try {
+    assert.deepEqual(ctx.page.form.keywords, [])
+    assert.deepEqual(ctx.page.form.directions, [])
+    assert.deepEqual(ctx.page.categoryOptions.value, ['后台类别'])
+    assert.deepEqual(calls[0].keywords, [])
+    ctx.page.updateKeywords([' 管道 ', '不存在', '管道', ' '])
+    await settle()
+    assert.deepEqual(calls.at(-1).keywords, ['管道', '不存在'])
+    assert.deepEqual(ctx.page.form.keywords, ['管道', '不存在'])
+    ctx.page.updateKeywords(undefined)
+    await settle()
+    assert.deepEqual(calls.at(-1).keywords, [])
+    assert.equal(ctx.mutations, 0)
+  } finally { ctx.close() }
+})
+
+test('digest writing outline follows the selected template instead of invented category columns', async () => {
+  const ctx = await mount('DigestCreateView', { api: {
+    listPipelineTemplates: async () => ({ data: { rows: [{ id: '100', name: '日报', digestCadence: 'daily', modelId: 1, modelConfigured: true,
+      sections: [{ title: '行业进展', words: 500, required: true }, { title: '业务影响', words: 400, required: true },
+        { title: '热点研判', words: 300, required: false }, { title: '来源清单', words: 100, required: true }] }] } })
+  } })
+  try {
+    ctx.page.form.directions = ['后台类别']
+    ctx.page.form.hotAnalysis = false
+    await settle()
+    assert.deepEqual(ctx.page.columnSuggestions.value, ['行业进展', '业务影响'])
+    ctx.page.form.hotAnalysis = true
+    await settle()
+    assert.deepEqual(ctx.page.columnSuggestions.value, ['行业进展', '业务影响', '热点研判'])
+    assert.equal(ctx.mutations, 0)
+  } finally { ctx.close() }
+})
+
 test('NULL model templates stay selectable and research submission makes no generation request', async () => {
   const ctx = await mount('ResearchCreateView', { api: {
     listPipelineTemplates: async () => ({ data: { rows: [{ id: '101', name: '待配置模板', purpose: 'research', modelId: null, modelConfigured: false, sections: [] }] } })
@@ -78,7 +116,7 @@ test('NULL model templates stay selectable and research submission makes no gene
 
 test('one canonical digest template is selectable for daily weekly monthly and missing models prevent enqueue and schedule', async () => {
   const ctx = await mount('DigestCreateView', { api: {
-    listPipelineTemplates: async () => ({ data: { rows: [{ id: '503', name: '简报模板', purpose: 'digest', reportType: 'digest', modelId: null, modelConfigured: false }] } })
+    listPipelineTemplates: async () => ({ data: { rows: [{ id: '503', name: '简报模板', purpose: 'digest', reportType: 'digest', digestCadence: 'all', modelId: null, modelConfigured: false }] } })
   } })
   try {
     for (const type of ['日报', '周报', '月报']) {
@@ -661,33 +699,21 @@ test('precise dates reject year-only, month-only, invalid dates and handle Shang
   assert.equal(evidence.digestCandidate(article('paper', { category: 'paper' }), scope), false)
 })
 
-test('digest automatic frequency and report type stay linked in both directions', async () => {
+test('digest independent plan dialog does not couple plan configuration to manual generation', async () => {
   const ctx = await mount('DigestCreateView')
   try {
-    for (const [frequency, type, label] of [
-      ['daily', '日报', '每天执行时间'],
-      ['weekly', '周报', '每周一执行时间'],
-      ['monthly', '月报', '每月1日执行时间']
+    for (const [frequency, type] of [
+      ['daily', '日报'], ['weekly', '周报'], ['monthly', '月报']
     ]) {
-      ctx.page.scheduleFrequency.value = frequency
+      ctx.page.form.type = type
       await vue.nextTick()
       assert.equal(ctx.page.form.type, type)
       assert.equal(ctx.page.currentTypeConfig.value.reportType, frequency)
-      assert.equal(ctx.page.scheduleTimeLabel.value, label)
     }
-    ctx.page.form.type = '日报'
-    await vue.nextTick()
-    assert.equal(ctx.page.scheduleFrequency.value, 'daily')
-    ctx.page.scheduleFrequency.value = 'invalid'
-    assert.equal(ctx.page.form.type, '日报')
-    ctx.page.form.scheduleWeekday = 4
-    ctx.page.scheduleFrequency.value = 'weekly'
-    assert.equal(ctx.page.scheduleTimeLabel.value, '每周五执行时间')
-    ctx.page.form.scheduleMonthDay = 31
-    ctx.page.scheduleFrequency.value = 'monthly'
-    assert.equal(ctx.page.scheduleTimeLabel.value, '每月31日执行时间')
-    ctx.page.scheduleFrequency.value = 'weekly'
-    assert.equal(ctx.page.form.scheduleWeekday, 4)
+    ctx.page.planDialog.value = true
+    assert.equal(ctx.page.form.type, '月报')
+    assert.equal(Object.hasOwn(ctx.page.form, 'schedule'), false)
+    assert.equal(ctx.mutations, 0)
   } finally { ctx.close() }
 })
 
@@ -808,7 +834,8 @@ test('digest preserves cross-page explicit selections and builds only those IDs 
 
 test('digest scope changes invalidate old pages and selections; a late old response cannot publish', async () => {
   const old = later()
-  const ctx = await mount('DigestCreateView', { api: { searchPipelineIntelligence: params => params.keywords.includes('完整性管理') ? old.promise : Promise.resolve({ data: { rows: [{ id: '125' }], total: 1 } }) } })
+  let calls = 0
+  const ctx = await mount('DigestCreateView', { api: { searchPipelineIntelligence: () => ++calls === 1 ? old.promise : Promise.resolve({ data: { rows: [{ id: '125' }], total: 1 } }) } })
   try {
     ctx.page.form.date = new Date(2026, 9, 13)
     ctx.page.form.keywords = ['新关键词']
@@ -919,7 +946,7 @@ test('both generation forms select the real large decimal template ID without ha
   for (const name of names) {
     const id = '9007199254740993'
     const ctx = await mount(name, { api: {
-      listPipelineTemplates: async () => ({ data: { rows: [{ id, name: '真实模板编号', purpose: name === 'DigestCreateView' ? 'digest' : 'research', modelId: null, modelConfigured: false, sections: [] }] } })
+      listPipelineTemplates: async () => ({ data: { rows: [{ id, name: '真实模板编号', purpose: name === 'DigestCreateView' ? 'digest' : 'research', digestCadence: name === 'DigestCreateView' ? 'daily' : null, modelId: null, modelConfigured: false, sections: [] }] } })
     } })
     try {
       assert.equal(ctx.page.form.template, id)

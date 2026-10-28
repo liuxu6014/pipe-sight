@@ -15,9 +15,9 @@ const router = createRouter({ history: createWebHistory(), routes: [
   { path: '/portal', component: Portal, children: [
     { path: '', component: page('HomeView') },
     { path: 'news', component: page('NewsListView') },
-    { path: 'news/:id', component: page('NewsDetailView') },
+    { path: 'news/:itemId', component: page('NewsDetailView') },
     { path: 'papers', component: page('PaperListView') },
-    { path: 'papers/:id', component: page('PaperDetailView') },
+    { path: 'papers/:itemId', component: page('PaperDetailView') },
     { path: 'research', component: page('ResearchWorkbenchView') },
     { path: 'research/create', component: page('ResearchCreateView') },
     { path: 'research/tasks/:id', component: page('ResearchTaskView') },
@@ -25,14 +25,18 @@ const router = createRouter({ history: createWebHistory(), routes: [
     { path: 'digests', component: page('DigestListView') },
     { path: 'digests/create', component: page('DigestCreateView') },
     { path: 'digests/:id', component: page('DigestEditorView') },
-    { path: 'knowledge', component: page('KnowledgeView') },
+    { path: 'knowledge', redirect: to => ({ path: '/portal/basket', query: to.query }) },
     { path: 'search', component: page('SearchView') },
-    { path: 'basket', component: page('MyWorkspaceView'), props: { mode: 'basket' } },
+    { path: 'basket', component: page('KnowledgeView') },
     { path: 'me/basket', redirect: '/portal/basket' },
     { path: 'me/:section', component: page('MyWorkspaceView'), props: route => ({ mode: route.params.section }) }
   ] },
   { path: '/management', component: () => import('../../src/views/pipeline/dashboard/index.vue') },
   { path: '/management/sources', component: () => import('../../src/views/pipeline/source/index.vue') },
+  { path: '/management/intelligence', component: () => import('../../src/views/pipeline/intelligence/index.vue') },
+  { path: '/management/tasks', component: () => import('../../src/views/pipeline/task/index.vue') },
+  { path: '/management/knowledge', component: () => import('../../src/views/pipeline/knowledge/index.vue') },
+  { path: '/management/reports', component: () => import('../../src/views/pipeline/report/index.vue') },
   { path: '/management/templates', component: () => import('../../src/views/pipeline/template/index.vue') }
 ] })
 const sidebarOpen = ref(true)
@@ -50,5 +54,5 @@ const Root = { render: () => {
 ]) } }
 const app = createApp(Root).use(createPinia()).use(router).use(ElementPlus)
 const user = useUserStore()
-user.name = 'preview-only'; user.nickName = '预览用户'; user.roles = ['admin']; user.permissions = ['*:*:*']
+user.id = '900007'; user.name = 'preview-only'; user.nickName = '预览用户'; user.roles = ['admin']; user.permissions = ['*:*:*']
 app.mount('#app')

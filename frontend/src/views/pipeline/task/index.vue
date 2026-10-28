@@ -1,9 +1,9 @@
 <template>
- <div class="pipeline-page">
-  <section class="page-heading"><div><p class="eyebrow">后台管理 · 数据采集</p><h1>采集任务监控</h1><p class="summary">来源开关控制后续采集；停止本次运行后，持续刷新至进程确认退出。</p></div><el-button v-if="canTaskList" type="primary" :icon="Refresh" :loading="loading" @click="loadTasks">刷新任务</el-button></section>
-  <el-alert v-if="taskError" :title="taskError" type="warning" :closable="false" show-icon><template #default><el-button text @click="loadTasks">重新加载</el-button></template></el-alert>
-  <el-card shadow="never" class="table-card">
-   <el-table v-loading="loading" :data="rows" border>
+ <div class="pipeline-page ws-list-page">
+  <section class="page-heading"><div><h1>采集任务监控</h1></div><el-button v-if="canTaskList" type="primary" :icon="Refresh" :loading="loading" @click="loadTasks">刷新任务</el-button></section>
+  <el-alert v-if="taskError" :title="taskError" type="warning" :closable="false" show-icon><template #default><el-button plain @click="loadTasks">重新加载</el-button></template></el-alert>
+  <el-card shadow="never" class="table-card ws-list-panel">
+   <el-table v-loading="loading" :data="rows" border height="100%">
     <el-table-column prop="name" label="任务名称" min-width="180" />
     <el-table-column prop="source" label="来源" min-width="140" />
     <el-table-column label="来源开关" width="110"><template #default="{ row }">{{ sourceEnabled(row) ? '启用' : '停用' }}</template></el-table-column>
@@ -12,20 +12,20 @@
     <el-table-column label="最新消息" min-width="220"><template #default="{ row }">{{ row.error || row.latestMessage || row.latest_message || '—' }}</template></el-table-column>
     <el-table-column label="下次采集" width="180"><template #default="{ row }">{{ formatBusinessTime(row.nextRunAt || row.next_run_at || row.next_run_time) || '仅手动 / 未启用' }}</template></el-table-column>
     <el-table-column label="操作" width="280" fixed="right"><template #default="{ row }">
-     <el-button v-if="canTaskRun" link type="primary" :disabled="!sourceEnabled(row) || active(row.status) || Boolean(actionId)" @click="handleRunTask(row)">立即采集</el-button>
-     <el-button v-if="canTaskRun && ['queued','running','stopping'].includes(row.status)" link type="warning" :disabled="row.status === 'stopping' || Boolean(actionId)" @click="handleStop(row)">{{ row.status === 'stopping' ? '正在停止' : row.status === 'queued' ? '取消排队' : '停止本次' }}</el-button>
-     <el-button v-if="canTaskRun && row.status === 'failed'" link type="warning" :disabled="!sourceEnabled(row) || Boolean(actionId)" @click="handleRetry(row)">失败重试</el-button>
-     <el-button link type="primary" :icon="Document" @click="showTaskLog(row)">详情</el-button>
+     <el-button v-if="canTaskRun" plain type="primary" :disabled="!sourceEnabled(row) || active(row.status) || Boolean(actionId)" @click="handleRunTask(row)">立即采集</el-button>
+     <el-button v-if="canTaskRun && ['queued','running','stopping'].includes(row.status)" plain type="warning" :disabled="row.status === 'stopping' || Boolean(actionId)" @click="handleStop(row)">{{ row.status === 'stopping' ? '正在停止' : row.status === 'queued' ? '取消排队' : '停止本次' }}</el-button>
+     <el-button v-if="canTaskRun && row.status === 'failed'" plain type="warning" :disabled="!sourceEnabled(row) || Boolean(actionId)" @click="handleRetry(row)">失败重试</el-button>
+     <el-button plain type="primary" :icon="Document" @click="showTaskLog(row)">详情</el-button>
     </template></el-table-column>
    </el-table>
   </el-card>
   <el-dialog v-model="detailVisible" title="采集运行详情" width="680px">
    <el-skeleton v-if="detailLoading" :rows="5" animated />
-   <el-alert v-else-if="detailError" :title="detailError" type="warning" :closable="false"><template #default><el-button text @click="loadDetail">重新加载详情</el-button></template></el-alert>
+   <el-alert v-else-if="detailError" :title="detailError" type="warning" :closable="false"><template #default><el-button plain @click="loadDetail">重新加载详情</el-button></template></el-alert>
    <el-descriptions v-else-if="detail" :column="2" border>
     <el-descriptions-item label="运行编号">{{ detail.id || detail.runId || detail.run_id }}</el-descriptions-item>
     <el-descriptions-item label="来源">{{ detail.sourceName || detail.source_name || detail.sourceId || detail.source_id }}</el-descriptions-item>
-    <el-descriptions-item label="重试父运行"><el-button v-if="detail.parentId || detail.parent_id" link type="primary" @click="openParentRun(detail.parentId || detail.parent_id)">{{ detail.parentId || detail.parent_id }}</el-button><span v-else>无（原始运行）</span></el-descriptions-item>
+    <el-descriptions-item label="重试父运行"><el-button v-if="detail.parentId || detail.parent_id" plain type="primary" @click="openParentRun(detail.parentId || detail.parent_id)">{{ detail.parentId || detail.parent_id }}</el-button><span v-else>无（原始运行）</span></el-descriptions-item>
     <el-descriptions-item label="触发方式">{{ triggerText(detail.triggerType || detail.trigger_type) }}</el-descriptions-item>
     <el-descriptions-item label="运行状态">{{ collectionStatusText(detail.status) }}</el-descriptions-item>
     <el-descriptions-item label="读取 / 保存 / 失败">{{ detail.fetchedCount ?? detail.fetched_count }} / {{ detail.savedCount ?? detail.saved_count }} / {{ detail.failedCount ?? detail.failed_count }}</el-descriptions-item>

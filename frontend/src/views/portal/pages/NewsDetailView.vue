@@ -6,19 +6,19 @@
     <div v-else class="ps-reading-layout">
       <article class="ps-article">
         <header class="ps-article-head ps-detail-header">
-          <div class="ps-detail-title-row"><el-button class="ps-detail-back-button" text :icon="Back" aria-label="返回" title="返回" @click="returnFromNewsDetail(router)" /><h1><a v-if="articleUrl" :href="articleUrl" target="_blank" rel="noopener noreferrer" title="打开原文（新窗口）">{{ article.title }}</a><template v-else>{{ article.title }}</template></h1></div>
+          <div class="ps-detail-title-row"><el-button class="ps-detail-back-button" plain :icon="Back" aria-label="返回" title="返回" @click="returnFromNewsDetail(router)" /><h1><a v-if="articleUrl" :href="articleUrl" target="_blank" rel="noopener noreferrer" title="打开原文（新窗口）">{{ article.title }}</a><template v-else>{{ article.title }}</template></h1></div>
           <div class="ps-detail-info-row">
           <div class="ps-article-meta">
             <span class="ps-article-source">{{ article.source }}</span><time>{{ newsDate(article.time) }}</time>
             <div class="ps-article-flags"><span>{{ article.sourceType }}</span></div>
           </div>
-          <div class="ps-article-actions"><el-button :loading="busy(article)" :disabled="busy(article)" @click="addToBasket"><Collection />{{ inBasket(article) ? '取消加入资料篮' : '加入资料篮' }}</el-button></div>
+          <div class="ps-article-actions"><el-button :loading="busy(article)" :disabled="busy(article)" @click="addToBasket"><Collection />{{ inBasket(article) ? '取消加入资料库' : '加入资料库' }}</el-button></div>
           </div>
           <div v-if="article.tags.length" class="ps-article-head-bottom">
           <div class="ps-tag-row"><span v-for="tag in article.tags" :key="tag" class="ps-tag">{{ tag }}</span></div>
           </div>
         </header>
-        <section id="article-summary" class="ps-ai-summary" role="button" tabindex="0" aria-label="复制文章摘要，双击或按回车、空格键" title="双击复制摘要" @dblclick="copySummary" @keydown.enter.prevent="copySummary" @keydown.space.prevent="copySummary"><p>{{ summaryText }}</p></section>
+        <section v-if="showSummary" id="article-summary" class="ps-ai-summary" role="button" tabindex="0" aria-label="复制文章摘要，双击或按回车、空格键" title="双击复制摘要" @dblclick="copySummary" @keydown.enter.prevent="copySummary" @keydown.space.prevent="copySummary"><p>{{ summaryText }}</p></section>
         <div v-if="articleAnalysis.length" class="ps-impact-grid"><section v-for="item in articleAnalysis" :id="item.id" :key="item.id"><span>{{ item.label }}</span><strong>{{ item.value }}</strong></section></div>
         <div class="ps-article-body">
           <template v-if="article.body_blocks?.length">
@@ -31,9 +31,9 @@
         </div>
       </article>
       <aside class="ps-reading-aside">
-        <section class="ps-panel ps-article-toc"><h3>文章目录</h3><a href="#article-summary">内容摘要</a><a v-for="item in articleAnalysis" :key="item.id" :href="'#' + item.id">{{ item.label }}</a></section>
-        <section class="ps-panel"><h3>相关资讯</h3><button v-for="item in relatedNews" :key="item.id" type="button" class="ps-related-item" @click="openPortalContent(router, `/portal/news/${item.id}`)"><strong>{{ item.title }}</strong><small>{{ item.source }} · {{ item.time.slice(5, 10) }}</small></button></section>
-        <section class="ps-panel"><h3>相关论文</h3><button v-for="paper in paperItems.slice(0, 2)" :key="paper.id" type="button" class="ps-related-item" @click="openPortalContent(router, `/portal/papers/${paper.id}`)"><strong>{{ paper.titleZh }}</strong><small>{{ paper.journal }} · {{ paper.year }}</small></button></section>
+        <section v-if="articleAnalysis.length" class="ps-panel ps-article-toc"><h3>文章目录</h3><a v-if="showSummary" href="#article-summary">内容摘要</a><a v-for="item in articleAnalysis" :key="item.id" :href="'#' + item.id">{{ item.label }}</a></section>
+        <section v-if="relatedNews.length" class="ps-panel"><h3>其他资讯</h3><button v-for="item in relatedNews" :key="item.id" type="button" class="ps-related-item" @click="openPortalContent(router, `/portal/news/${item.id}`)"><strong>{{ item.title }}</strong><small>{{ item.source }}<template v-if="item.time"> · {{ newsDate(item.time) }}</template></small></button></section>
+        <section v-if="paperItems.length" class="ps-panel"><h3>其他论文</h3><button v-for="paper in paperItems.slice(0, 2)" :key="paper.id" type="button" class="ps-related-item" @click="openPortalContent(router, `/portal/papers/${paper.id}`)"><strong>{{ paper.titleZh }}</strong><small>{{ paper.journal }} · {{ paper.year }}</small></button></section>
       </aside>
     </div>
   </div>
@@ -61,6 +61,11 @@ const detailError = ref('')
 const detailLoading = ref(true)
 const article = computed(() => detailError.value ? null : liveArticle.value)
 const summaryText = computed(() => (article.value?.summary || '').replace(/^导读摘要（据公开资料整理）\s*[:：]\s*/, ''))
+const showSummary = computed(() => {
+  const normalize = value => String(value || '').replace(/\s+/g, '')
+  const body = article.value?.body_blocks?.filter(block => block.type === 'paragraph').map(block => block.text).join('') || article.value?.body?.join('') || ''
+  return Boolean(summaryText.value && !normalize(body).startsWith(normalize(summaryText.value)))
+})
 const articleUrl = computed(() => {
   const value = article.value?.sourceUrl || article.value?.source_url || article.value?.originalUrl || article.value?.original_url || article.value?.url || article.value?.link
   if (!value) return ''
@@ -104,9 +109,9 @@ async function addToBasket() {
   if (!article.value) return
   try {
     const result = await toggleBasket(article.value, 'article')
-    if (result === 'saved') ElMessage.success('已加入资料篮')
-    else if (result === 'removed') ElMessage.success('已取消加入资料篮')
-  } catch (error) { ElMessage.error(error?.msg || '资料篮更新失败，请重试') }
+    if (result === 'saved') ElMessage.success('已加入资料库')
+    else if (result === 'removed') ElMessage.success('已取消加入资料库')
+  } catch (error) { ElMessage.error(error?.msg || '资料库更新失败，请重试') }
 }
 async function copySummary() {
   const text = `${article.value.title}\n\n${summaryText.value}\n\n来源：${article.value.source} ${article.value.time}`

@@ -7,6 +7,19 @@ import { validateBusinessInput } from '../src/utils/portal/businessId.js'
 import { buildReportMarkdown, cleanReportCitationNotes } from '../src/utils/portal/reportDocument.js'
 
 const settled = () => new Promise(resolve => setImmediate(resolve))
+test('report: manual save after autosave succeeds without a duplicate write or false failure', async () => {
+  let calls = 0
+  const view = editor('ReportEditorView', 'report', async () => { calls++; return { data: {} } })
+  try {
+    view.state.markSaving()
+    view.trigger()
+    await view.state.wait()
+    await view.state.saveVersion()
+    assert.equal(calls, 1)
+    assert.deepEqual(view.messages, [])
+    assert.equal(view.state.saveState.value, 'saved')
+  } finally { view.close() }
+})
 function deferred() {
   let resolve, reject
   const promise = new Promise((yes, no) => { resolve = yes; reject = no })
@@ -108,16 +121,17 @@ for (const [page, entity] of [['ReportEditorView', 'report'], ['DigestEditorView
     } finally { view.close() }
   })
 
-  test(`${page}: manual version saving preserves newer edits and prevents duplicate submissions`, async () => {
+  test(`${page}: manual saving preserves newer edits and does not request a named version`, async () => {
     const response = deferred()
     const payloads = []
     const view = editor(page, entity, (_id, payload) => { payloads.push(payload); return response.promise })
     try {
+      view.state.markSaving()
       const first = view.state.saveVersion()
       const duplicate = view.state.saveVersion()
       await settled()
       assert.equal(payloads.length, 1)
-      assert.equal(payloads[0].saveVersion, true)
+      assert.equal(payloads[0].saveVersion, undefined)
       view.state.entity.value.title = 'Edited during manual save'
       view.state.sections.value[0].content = 'Edited during manual save'
       view.state.markSaving()
@@ -141,9 +155,9 @@ for (const [page, entity] of [['ReportEditorView', 'report'], ['DigestEditorView
   })
 }
 
-test('administrator report inspection cannot autosave or create a version for another owner', async () => {
+for (const [page, entity] of [['ReportEditorView', 'report'], ['DigestEditorView', 'digest']]) test(`${page}: administrator inspection cannot autosave or create a version for another owner`, async () => {
   let calls = 0
-  const view = editor('ReportEditorView', 'report', async () => { calls++; return { data: {} } })
+  const view = editor(page, entity, async () => { calls++; return { data: {} } })
   try {
     view.state.entity.value.readOnly = true
     view.state.markSaving()

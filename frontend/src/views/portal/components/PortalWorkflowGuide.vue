@@ -10,7 +10,7 @@
     <details :key="route.path" ref="help" class="ps-workflow-help" @keydown.esc="help.open = false">
       <summary><QuestionFilled /><span>使用帮助</span></summary>
       <div class="ps-workflow-popover">
-        <header><strong>{{ workflow.title }} · 页面使用流程</strong><button type="button" aria-label="关闭使用帮助" @click="help.open = false"><Close /></button></header>
+        <header><strong>{{ workflow.title }} · 页面使用流程</strong><el-button class="ps-ui-action" aria-label="关闭使用帮助" @click="help.open = false"><Close /></el-button></header>
         <ol><li v-for="step in workflow.steps" :key="step">{{ step }}</li></ol>
         <p>加载失败请重试当前操作；生成完成不等于复核通过，资料与成果始终按当前授权访问。</p>
       </div>

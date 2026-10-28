@@ -31,7 +31,7 @@ EXPORT_RECOVERY_INTERVAL_SECONDS = 5
 EXPORT_WORKER_ID = f'task-worker-export-{uuid4().hex[:12]}'
 
 
-async def recover_research_jobs() -> dict[str, int]:
+async def recover_research_jobs(*, schedule_ids=None) -> dict[str, int]:
     """扫描持久队列并派发科研任务，领取和租约由数据库行锁最终裁决。"""
     if AsyncSessionLocal is None:
         return {'found': 0, 'dispatched': 0}
@@ -42,6 +42,7 @@ async def recover_research_jobs() -> dict[str, int]:
             db,
             now=now,
             max_attempts=RESEARCH_MAX_ATTEMPTS,
+            **({'schedule_ids': schedule_ids} if schedule_ids is not None else {}),
         )
 
     dispatched = 0
@@ -112,12 +113,13 @@ async def recover_report_exports() -> dict[str, int]:
     return {'found': len(export_ids), 'dispatched': dispatched}
 
 
-async def dispatch_digest_schedules() -> dict[str, int]:
+async def dispatch_digest_schedules(*, schedule_ids=None) -> dict[str, int]:
     """派发到期的日报、周报和月报计划；计划本身由数据库租约去重。"""
     result = await DigestScheduleService.dispatch_due(
         stage_labels=ResearchApplicationService.stage_labels,
         job_serializer=ResearchApplicationService.job_dict,
         template_service=PipelineTemplateService,
+        **({'schedule_ids': schedule_ids} if schedule_ids is not None else {}),
     )
     if result['found']:
         logger.info(
@@ -156,17 +158,20 @@ async def stop_recovery_tasks() -> None:
     await stop_material_parse_tasks()
 
 
-async def run_persistent_recovery_loop(stop_event: asyncio.Event | None = None) -> None:
+async def run_persistent_recovery_loop(stop_event: asyncio.Event | None = None, *, schedule_ids=None) -> None:
     """在独立进程中持续恢复科研任务、报告导出和资料解析任务。"""
     stop_event = stop_event or asyncio.Event()
     logger.info('科研任务、报告导出与资料解析独立 Worker 已启动。')
     try:
         while not stop_event.is_set():
             try:
-                await recover_research_jobs()
-                await recover_report_exports()
-                await dispatch_digest_schedules()
-                await recover_material_parses()
+                scope = {'schedule_ids': schedule_ids} if schedule_ids is not None else {}
+                await recover_research_jobs(**scope)
+                if schedule_ids is None:
+                    await recover_report_exports()
+                await dispatch_digest_schedules(**scope)
+                if schedule_ids is None:
+                    await recover_material_parses()
             except asyncio.CancelledError:
                 raise
             except Exception:
