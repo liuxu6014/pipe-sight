@@ -1,6 +1,7 @@
 """模板配置；旧发布接口只显式适配启停，不保留审批实体。"""
 
 from copy import deepcopy
+from typing import Any
 
 from app.business_ids import parse_business_id, wire_id
 from app.business_time import format_business_time
@@ -12,7 +13,7 @@ from exceptions.exception import ServiceException
 
 class PipelineTemplateService:
     @staticmethod
-    def digest_cadence(row):
+    def digest_cadence(row) -> str | None:
         """旧表没有周期列：仅识别受控全名，不从用途或任意子串推断通用。"""
         if row.purpose != 'digest':
             return None
@@ -26,12 +27,12 @@ class PipelineTemplateService:
         return names.get(str(row.name or '').strip())
 
     @classmethod
-    def validate_digest_cadence(cls, row, frequency):
+    def validate_digest_cadence(cls, row, frequency) -> None:
         if cls.digest_cadence(row) not in {frequency, 'all'}:
             raise ServiceException(message='模板周期未知或与简报周期不匹配，请选择明确适用周期的模板')
 
     @staticmethod
-    def effective_image_config(template_config, request):
+    def effective_image_config(template_config, request) -> dict:
         config = deepcopy(template_config or {})
         options = request.get('options') or {}
         # 顶层显式选择优先；未提交才读取旧客户端选项，再回落模板默认。
@@ -42,7 +43,7 @@ class PipelineTemplateService:
         return config
 
     @staticmethod
-    def _dict(row):
+    def _dict(row) -> dict:
         return {
             'id': wire_id(row.id),
             'templateKey': wire_id(row.id),
@@ -64,12 +65,12 @@ class PipelineTemplateService:
         }
 
     @staticmethod
-    async def ensure_default_templates(db):
+    async def ensure_default_templates(db) -> None:
         # 默认模板由迁移映射；运行时不自动创建模板或模型配置。
         return None
 
     @classmethod
-    async def list_templates(cls, db, category=None, published_only=False):
+    async def list_templates(cls, db, category=None, published_only=False) -> dict:
         purpose = {'project': 'research'}.get(category, category)
         rows = await ResearchDao.list_templates(db, purpose)
         rows = [row for row in rows if not published_only or row.is_enabled]
@@ -97,14 +98,14 @@ class PipelineTemplateService:
         return {'rows': result, 'total': len(rows)}
 
     @staticmethod
-    async def get_published(db, template_key):
+    async def get_published(db, template_key) -> PipelineTemplateVersion | None:
         if template_key is None:
             return None
         row = await ResearchDao.get_template(db, parse_business_id(template_key))
         return row if row and row.is_enabled else None
 
     @staticmethod
-    async def validate_models(db, model_id, image_model_id=None, image_config=None):
+    async def validate_models(db, model_id, image_model_id=None, image_config=None) -> Any:
         model = await ResearchDao.get_model(db, model_id) if model_id is not None else None
         if not model or not model.is_enabled or 'text_generate' not in (model.capabilities or []):
             raise ServiceException(message='请先配置启用且具备 text_generate 能力的正文模型')
@@ -119,7 +120,7 @@ class PipelineTemplateService:
         return model
 
     @classmethod
-    async def save_draft(cls, db, *, template_key, payload, operator_id, operator_name):
+    async def save_draft(cls, db, *, template_key, payload, operator_id, operator_name) -> dict:
         purpose = payload.get('purpose') or {'project': 'research'}.get(
             payload.get('category'), payload.get('category')
         )
@@ -159,7 +160,7 @@ class PipelineTemplateService:
         return cls._dict(row)
 
     @classmethod
-    async def publish(cls, db, template_key, **_):
+    async def publish(cls, db, template_key, **_) -> dict:
         row = await ResearchDao.get_template(db, parse_business_id(template_key))
         if not row:
             raise ServiceException(message='模板不存在')
@@ -168,7 +169,7 @@ class PipelineTemplateService:
         return cls._dict(row)
 
     @classmethod
-    async def retire(cls, db, template_key):
+    async def retire(cls, db, template_key) -> dict:
         row = await ResearchDao.get_template(db, parse_business_id(template_key))
         if not row:
             raise ServiceException(message='模板不存在')

@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from datetime import datetime, time, timezone
 from pathlib import Path
 from types import SimpleNamespace as NS
+from typing import NoReturn
 from unittest.mock import AsyncMock
 
 import pytest
@@ -24,10 +25,10 @@ def raises(env, message):
 
 
 @pytest.fixture(autouse=True)
-def no_external_network(monkeypatch):
+def no_external_network(monkeypatch) -> None:
     import socket
 
-    def blocked(*args, **kwargs):
+    def blocked(*args, **kwargs) -> NoReturn:
         raise AssertionError('offline test attempted external network')
 
     monkeypatch.setattr(socket.socket, 'connect', blocked)
@@ -109,12 +110,7 @@ def env():
         table.c.id.type = BigInteger().with_variant(Integer(), 'sqlite')
     yield NS(**locals())
     for key in list(sys.modules):
-        if key not in before and (
-            key.startswith('app.')
-            or key.startswith('config.')
-            or key.startswith('common.')
-            or key.startswith('exceptions.')
-        ):
+        if key not in before and (key.startswith(('app.', 'config.', 'common.', 'exceptions.'))):
             del sys.modules[key]
     for key, value in before.items():
         sys.modules[key] = value
@@ -130,7 +126,7 @@ def env():
 class AsyncMemory:
     """将真实同步 SQLite Session 包装成服务需要的异步接口。"""
 
-    def __init__(self, session):
+    def __init__(self, session) -> None:
         self.s = session
 
     async def scalar(self, *a, **k):
@@ -145,22 +141,22 @@ class AsyncMemory:
     async def get(self, *a, **k):
         return self.s.get(*a, **k)
 
-    def add(self, item):
+    def add(self, item) -> None:
         self.s.add(item)
 
-    async def flush(self):
+    async def flush(self) -> None:
         self.s.flush()
 
-    async def commit(self):
+    async def commit(self) -> None:
         self.s.commit()
 
-    async def rollback(self):
+    async def rollback(self) -> None:
         self.s.rollback()
 
-    async def refresh(self, item):
+    async def refresh(self, item) -> None:
         self.s.refresh(item)
 
-    async def delete(self, item):
+    async def delete(self, item) -> None:
         self.s.delete(item)
 
     async def __aenter__(self):
@@ -177,7 +173,7 @@ def db(env):
     engine = create_engine('sqlite:///:memory:')
 
     @event.listens_for(engine, 'connect')
-    def foreign_keys(conn, _):
+    def foreign_keys(conn, _) -> None:
         conn.execute('PRAGMA foreign_keys=ON')
 
     env.Base.metadata.create_all(engine)
@@ -269,15 +265,37 @@ async def queue(env, db, data=None, user_id=7):
     )
 
 
-def test_exact_columns_and_composite_fk(env):
-    assert set(env.models.PipelineReport.__table__.c.keys()) == set(
-        'id user_id title type template_id content version created_at updated_at'.split()
-    )
+def test_exact_columns_and_composite_fk(env) -> None:
+    assert set(env.models.PipelineReport.__table__.c.keys()) == {
+        'id',
+        'user_id',
+        'title',
+        'type',
+        'template_id',
+        'content',
+        'version',
+        'created_at',
+        'updated_at',
+    }
     job = env.models.PipelineResearchJob.__table__
     assert 'user_id' not in job.c and 'materials' in job.c
-    assert set(env.material.PipelineMaterial.__table__.c.keys()) == set(
-        'id user_id name filename storage_key mime_type size hash extracted_text edited_text version status error created_at updated_at'.split()
-    )
+    assert set(env.material.PipelineMaterial.__table__.c.keys()) == {
+        'id',
+        'user_id',
+        'name',
+        'filename',
+        'storage_key',
+        'mime_type',
+        'size',
+        'hash',
+        'extracted_text',
+        'edited_text',
+        'version',
+        'status',
+        'error',
+        'created_at',
+        'updated_at',
+    }
     assert env.configuration.PipelineTemplateVersion.__table__.c.model_id.nullable
     asset = env.models.PipelineReportAsset.__table__
     assert asset.name == 'report_assets' and 'format' not in asset.c and 'user_id' not in asset.c
@@ -289,7 +307,7 @@ def test_exact_columns_and_composite_fk(env):
     )
 
 
-def test_business_user_foreign_keys_reference_original_ruoyi_table_with_canonical_id(env):
+def test_business_user_foreign_keys_reference_original_ruoyi_table_with_canonical_id(env) -> None:
     for table_name, column_name, ondelete in (
         ('knowledge_files', 'user_id', 'RESTRICT'),
         ('reports', 'user_id', 'RESTRICT'),
@@ -307,7 +325,7 @@ def test_business_user_foreign_keys_reference_original_ruoyi_table_with_canonica
 
 
 @pytest.mark.asyncio
-async def test_no_model_browse_and_selection_but_submit_fails(env, db):
+async def test_no_model_browse_and_selection_but_submit_fails(env, db) -> None:
     seed(env, db, model=False)
     result = await env.template.PipelineTemplateService.list_templates(db)
     assert result['total'] == 1 and result['rows'][0]['modelId'] is None
@@ -318,7 +336,7 @@ async def test_no_model_browse_and_selection_but_submit_fails(env, db):
 
 
 @pytest.mark.asyncio
-async def test_freeze_idempotency_and_cross_user_rejection(env, db, monkeypatch):
+async def test_freeze_idempotency_and_cross_user_rejection(env, db, monkeypatch) -> None:
     _, file = seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     result = await queue(env, db)
@@ -337,7 +355,7 @@ async def test_freeze_idempotency_and_cross_user_rejection(env, db, monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_empty_edit_does_not_fallback_and_over_limit_fails(env, db, monkeypatch):
+async def test_empty_edit_does_not_fallback_and_over_limit_fails(env, db, monkeypatch) -> None:
     _, file = seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     file.edited_text = ''
@@ -349,7 +367,7 @@ async def test_empty_edit_does_not_fallback_and_over_limit_fails(env, db, monkey
 
 
 @pytest.mark.asyncio
-async def test_context_budget_and_duplicate_rejection(env, db, monkeypatch):
+async def test_context_budget_and_duplicate_rejection(env, db, monkeypatch) -> None:
     seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     with raises(env, '重复'):
@@ -362,7 +380,7 @@ async def test_context_budget_and_duplicate_rejection(env, db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_image_input_is_not_image_generation(env, db, monkeypatch):
+async def test_image_input_is_not_image_generation(env, db, monkeypatch) -> None:
     template, _ = seed(env, db, image=True)
     model = await db.get(env.ai.AiModels, 2)
     model.capabilities = ['image_input']
@@ -373,7 +391,7 @@ async def test_image_input_is_not_image_generation(env, db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_parse_cas_preserves_user_edits(env, db):
+async def test_parse_cas_preserves_user_edits(env, db) -> None:
     _, file = seed(env, db)
     file.status = 'queued'
     file.edited_text = '我的编辑'
@@ -392,7 +410,7 @@ async def test_parse_cas_preserves_user_edits(env, db):
 
 
 @pytest.mark.asyncio
-async def test_material_editor_persists_revision_without_replacing_source_file(env, db):
+async def test_material_editor_persists_revision_without_replacing_source_file(env, db) -> None:
     _, material = seed(env, db)
     await db.commit()
     original_text, original_key, original_filename = material.extracted_text, material.storage_key, material.filename
@@ -413,7 +431,7 @@ async def test_material_editor_persists_revision_without_replacing_source_file(e
 
 
 @pytest.mark.asyncio
-async def test_report_read_scope_is_consistent_without_granting_writes(env, db, monkeypatch):
+async def test_report_read_scope_is_consistent_without_granting_writes(env, db, monkeypatch) -> None:
     seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     result = await queue(env, db)
@@ -436,8 +454,13 @@ async def test_report_read_scope_is_consistent_without_granting_writes(env, db, 
     assert (await service.get_report_version(db, 8, report_id, 1, include_all=True))['versionNo'] == 1
     assert (await service.list_report_exports(db, 8, report_id, include_all=True))['total'] == 0
     with raises(env, '无权访问'):
-        await service.update_report(db, user_id=8, owner_name='other', report_id=report_id,
-                                    payload=NS(expected_version=1, content='unauthorized'))
+        await service.update_report(
+            db,
+            user_id=8,
+            owner_name='other',
+            report_id=report_id,
+            payload=NS(expected_version=1, content='unauthorized'),
+        )
     with raises(env, '无权访问'):
         await service.restore_report_version(db, user_id=8, owner_name='other', report_id=report_id, version_no=1)
     with raises(env, '无权访问'):
@@ -445,7 +468,7 @@ async def test_report_read_scope_is_consistent_without_granting_writes(env, db, 
 
 
 @pytest.mark.asyncio
-async def test_save_restore_and_optimistic_lock(env, db, monkeypatch):
+async def test_save_restore_and_optimistic_lock(env, db, monkeypatch) -> None:
     seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     result = await queue(env, db)
@@ -467,7 +490,7 @@ async def test_save_restore_and_optimistic_lock(env, db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_token_fencing_and_cancel_preserve_report(env, db, monkeypatch):
+async def test_token_fencing_and_cancel_preserve_report(env, db, monkeypatch) -> None:
     seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     result = await queue(env, db)
@@ -480,7 +503,7 @@ async def test_token_fencing_and_cancel_preserve_report(env, db, monkeypatch):
     assert await env.repo.ResearchDao.get_report(db, result['reportId'], 7)
 
 
-def test_short_month_and_timezone(env):
+def test_short_month_and_timezone(env) -> None:
     row = env.models.PipelineDigestSchedule(
         frequency='monthly', month_day=31, weekday=None, timezone='Asia/Shanghai', run_time=time(8), selection_config={}
     )
@@ -496,14 +519,14 @@ def test_short_month_and_timezone(env):
     ) == datetime(2026, 3, 1, 0, 0, 30, tzinfo=timezone.utc)
 
 
-def test_legacy_model_dto_does_not_infer_image_generation(env):
+def test_legacy_model_dto_does_not_infer_image_generation(env) -> None:
     dto = env.ai_schema.AiModelModel(modelId=3, modelName='文本', modelCode='x', modelType='text', supportImages='Y')
     assert dto.id == 3 and dto.capabilities == ['text_generate', 'image_input']
     assert 'image_generate' not in dto.capabilities
 
 
 @pytest.mark.asyncio
-async def test_model_crud_uses_new_columns_and_hides_credentials(env, db):
+async def test_model_crud_uses_new_columns_and_hides_credentials(env, db) -> None:
     dto = env.ai_schema.AiModelModel(
         name='图片',
         provider='openai-compatible',
@@ -521,7 +544,7 @@ async def test_model_crud_uses_new_columns_and_hides_credentials(env, db):
 
 
 @pytest.mark.asyncio
-async def test_gateway_missing_credential_fails_before_network(env, db, monkeypatch):
+async def test_gateway_missing_credential_fails_before_network(env, db, monkeypatch) -> None:
     seed(env, db)
     monkeypatch.delenv('OFFLINE_MODEL_KEY', raising=False)
     with raises(env, '凭证'):
@@ -540,7 +563,7 @@ async def test_gateway_missing_credential_fails_before_network(env, db, monkeypa
 
 
 @pytest.mark.asyncio
-async def test_template_without_model_can_be_saved(env, db):
+async def test_template_without_model_can_be_saved(env, db) -> None:
     row = await env.template.PipelineTemplateService.save_draft(
         db,
         template_key=None,
@@ -553,7 +576,7 @@ async def test_template_without_model_can_be_saved(env, db):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('conflict', [False, True])
-async def test_execution_uses_frozen_input_and_retains_conflict_result(env, db, monkeypatch, conflict):
+async def test_execution_uses_frozen_input_and_retains_conflict_result(env, db, monkeypatch, conflict) -> None:
     seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     result = await queue(env, db)
@@ -564,7 +587,7 @@ async def test_execution_uses_frozen_input_and_retains_conflict_result(env, db, 
 
     monkeypatch.setattr(execution, 'AsyncSessionLocal', factory)
 
-    async def offline_model(model_db, snapshot, materials, **kwargs):
+    async def offline_model(model_db, snapshot, materials, **kwargs) -> str:
         assert materials[0]['content'] == '原提取文本'
         if conflict:
             async with factory() as edit_db:
@@ -581,7 +604,12 @@ async def test_execution_uses_frozen_input_and_retains_conflict_result(env, db, 
     report = await env.repo.ResearchDao.get_report(db, result['reportId'], 7)
     assert job.status == 'completed' and job.result_content.startswith('离线替身')
     from app.research.services.report_content import normalize_generated_report
-    assert report.content == ('编辑中的正文' if conflict else normalize_generated_report(job.result_content, job.materials, delivery=True)['content'])
+
+    assert report.content == (
+        '编辑中的正文'
+        if conflict
+        else normalize_generated_report(job.result_content, job.materials, delivery=True)['content']
+    )
     if conflict:
         await env.app.ResearchReportService.apply_task_result(
             db,
@@ -596,7 +624,7 @@ async def test_execution_uses_frozen_input_and_retains_conflict_result(env, db, 
 
 
 @pytest.mark.asyncio
-async def test_image_queue_and_export_download_permissions(env, db, monkeypatch):
+async def test_image_queue_and_export_download_permissions(env, db, monkeypatch) -> None:
     template, _ = seed(env, db, image=True)
     template.image_config = {'enabled': True, 'count': 2, 'prompt': '真实管道示意图'}
     db.s.commit()
@@ -618,7 +646,7 @@ async def test_image_queue_and_export_download_permissions(env, db, monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_asset_task_report_mismatch_is_rejected(env, db, monkeypatch):
+async def test_asset_task_report_mismatch_is_rejected(env, db, monkeypatch) -> None:
     from sqlalchemy.exc import IntegrityError
 
     seed(env, db)
@@ -641,7 +669,7 @@ async def test_asset_task_report_mismatch_is_rejected(env, db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_model_pagination_and_edit_aliases(env, db):
+async def test_model_pagination_and_edit_aliases(env, db) -> None:
     seed(env, db)
     page = await env.ai_service.AiModelService.get_ai_model_list_services(
         db, env.ai_schema.AiModelPageQueryModel(), is_page=True
@@ -654,7 +682,7 @@ async def test_model_pagination_and_edit_aliases(env, db):
 
 
 @pytest.mark.asyncio
-async def test_parser_ready_and_file_type_detection(env, tmp_path):
+async def test_parser_ready_and_file_type_detection(env, tmp_path) -> None:
     path = tmp_path / 'example.txt'
     path.write_text('有效的真实文本', encoding='utf-8')
     status, _, text, _ = env.materials.MaterialFileService.parse(str(path), 'example.txt', requested_at='offline')
@@ -666,7 +694,7 @@ async def test_parser_ready_and_file_type_detection(env, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_image_gateway_decodes_actual_image_with_offline_transport(env, db, monkeypatch):
+async def test_image_gateway_decodes_actual_image_with_offline_transport(env, db, monkeypatch) -> None:
     import base64
     from io import BytesIO
 
@@ -711,7 +739,7 @@ async def test_image_gateway_decodes_actual_image_with_offline_transport(env, db
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('failed', [False, True])
-async def test_model_call_audit_usage_and_safe_failure(env, db, monkeypatch, failed):
+async def test_model_call_audit_usage_and_safe_failure(env, db, monkeypatch, failed) -> None:
     import httpx
 
     seed(env, db)
@@ -756,7 +784,7 @@ async def test_model_call_audit_usage_and_safe_failure(env, db, monkeypatch, fai
 
 
 @pytest.mark.asyncio
-async def test_paper_snapshot_only_contains_abstract(env, db, monkeypatch):
+async def test_paper_snapshot_only_contains_abstract(env, db, monkeypatch) -> None:
     paper = NS(
         id=501,
         title='原题',
@@ -782,7 +810,7 @@ async def test_paper_snapshot_only_contains_abstract(env, db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_private_material_cannot_be_selected_by_other_user(env, db, monkeypatch):
+async def test_private_material_cannot_be_selected_by_other_user(env, db, monkeypatch) -> None:
     seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     with raises(env, '无权'):

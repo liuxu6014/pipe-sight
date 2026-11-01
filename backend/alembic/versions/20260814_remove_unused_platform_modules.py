@@ -71,8 +71,7 @@ def _upgrade_offline() -> None:
             op.execute(f'ALTER TABLE {table_name} DROP COLUMN IF EXISTS {column_name}')
         op.execute('SET FOREIGN_KEY_CHECKS = 1')
     op.execute(
-        'DELETE FROM sys_role_menu WHERE menu_id IN '
-        f'(SELECT menu_id FROM sys_menu WHERE {REMOVED_MENU_PREDICATE})'
+        f'DELETE FROM sys_role_menu WHERE menu_id IN (SELECT menu_id FROM sys_menu WHERE {REMOVED_MENU_PREDICATE})'
     )
     op.execute(f'DELETE FROM sys_menu WHERE {REMOVED_MENU_PREDICATE}')
 
@@ -86,8 +85,7 @@ def upgrade() -> None:
     table_names = set(inspector.get_table_names())
     if 'sys_role_menu' in table_names and 'sys_menu' in table_names:
         op.execute(
-            'DELETE FROM sys_role_menu WHERE menu_id IN '
-            f'(SELECT menu_id FROM sys_menu WHERE {REMOVED_MENU_PREDICATE})'
+            f'DELETE FROM sys_role_menu WHERE menu_id IN (SELECT menu_id FROM sys_menu WHERE {REMOVED_MENU_PREDICATE})'
         )
     if 'sys_menu' in table_names:
         op.execute(f'DELETE FROM sys_menu WHERE {REMOVED_MENU_PREDICATE}')

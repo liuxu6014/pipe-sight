@@ -424,9 +424,7 @@ def test_sqlite_generation_request_id_is_globally_unique(sqlite_schema: Engine) 
                     id=identity, username=f'offline-{identity}', nickname='Offline', sex='0', status='0', del_flag='0'
                 )
             )
-            connection.execute(
-                reports.insert().values(id=identity, user_id=identity, title='Offline', type='research')
-            )
+            connection.execute(reports.insert().values(id=identity, user_id=identity, title='Offline', type='research'))
         connection.execute(tasks.insert().values(id=3, report_id=1, request_id='same-request'))
         with pytest.raises(IntegrityError), connection.begin_nested():
             connection.execute(tasks.insert().values(id=4, report_id=2, request_id='same-request'))
@@ -434,5 +432,6 @@ def test_sqlite_generation_request_id_is_globally_unique(sqlite_schema: Engine) 
         # must reject a second user's task, not an unrelated integrity error.
         connection.execute(tasks.insert().values(id=4, report_id=2, request_id='different-request'))
         assert connection.execute(select(tasks.c.id, tasks.c.request_id).order_by(tasks.c.id)).all() == [
-            (3, 'same-request'), (4, 'different-request')
+            (3, 'same-request'),
+            (4, 'different-request'),
         ]

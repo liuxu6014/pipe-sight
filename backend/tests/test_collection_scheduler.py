@@ -4,6 +4,7 @@ import asyncio
 import importlib
 from datetime import timedelta
 from types import SimpleNamespace
+from typing import NoReturn
 
 import pytest
 from intelligence import test_collection_rollout as collection_support
@@ -13,21 +14,21 @@ env = collection_support.env
 
 
 class FakeScheduler:
-    def __init__(self):
+    def __init__(self) -> None:
         self.jobs, self.removed = [], []
 
-    def add_job(self, func, trigger, **kwargs):
+    def add_job(self, func, trigger, **kwargs) -> None:
         self.jobs.append({'func': func, 'trigger': trigger, **kwargs})
 
     def get_jobs(self):
         return [SimpleNamespace(id='_pipesight_collection_old-source'), SimpleNamespace(id='unrelated-wakeup')]
 
-    def remove_job(self, job_id):
+    def remove_job(self, job_id) -> None:
         self.removed.append(job_id)
 
 
 @pytest.mark.asyncio
-async def test_registers_generic_wakeups_without_bootstrap_or_database(env):
+async def test_registers_generic_wakeups_without_bootstrap_or_database(env) -> None:
     scheduler_module = importlib.import_module('app.intelligence.tasks.collection_scheduler')
     scheduler = FakeScheduler()
     result = await scheduler_module.register_real_collection_schedules(scheduler)
@@ -42,7 +43,7 @@ async def test_registers_generic_wakeups_without_bootstrap_or_database(env):
 
 
 @pytest.mark.asyncio
-async def test_scheduled_cursor_enqueues_once_and_does_not_collect_in_scanner(env, monkeypatch):
+async def test_scheduled_cursor_enqueues_once_and_does_not_collect_in_scanner(env, monkeypatch) -> None:
     e = env
     scheduler = importlib.import_module('app.intelligence.tasks.collection_scheduler')
     s = await source(e, cron='* * * * *', timezone='UTC')
@@ -53,7 +54,10 @@ async def test_scheduled_cursor_enqueues_once_and_does_not_collect_in_scanner(en
         return await original(db, source_id, **kwargs, clock=lambda: NOW + timedelta(minutes=1))
 
     monkeypatch.setattr(e.service, 'schedule_due_source', due)
-    sessions = lambda: AsyncMemorySession(e.engine)
+
+    def sessions():
+        return AsyncMemorySession(e.engine)
+
     first = await scheduler.scan_due_sources(sessions=sessions, registry=e.registry)
     assert first[0]['status'] == 'queued' and first[0]['sourceId'] == s['id']
     assert await scheduler.scan_due_sources(sessions=sessions, registry=e.registry) == []
@@ -61,7 +65,7 @@ async def test_scheduled_cursor_enqueues_once_and_does_not_collect_in_scanner(en
 
 
 @pytest.mark.asyncio
-async def test_scheduled_round_skips_source_with_active_run_and_advances_cursor(env):
+async def test_scheduled_round_skips_source_with_active_run_and_advances_cursor(env) -> None:
     e = env
     s = await source(e, cron='* * * * *', timezone='UTC')
     r = await enqueue(e, s['id'])
@@ -73,20 +77,23 @@ async def test_scheduled_round_skips_source_with_active_run_and_advances_cursor(
 
 
 @pytest.mark.asyncio
-async def test_worker_reentry_does_not_run_same_source_twice(env):
+async def test_worker_reentry_does_not_run_same_source_twice(env) -> None:
     e = env
     scheduler = importlib.import_module('app.intelligence.tasks.collection_scheduler')
     s = await source(e)
     r = await enqueue(e, s['id'])
     started, release = asyncio.Event(), asyncio.Event()
 
-    async def blocked():
+    async def blocked() -> NoReturn:
         started.set()
         await release.wait()
         raise e.collection.TransientCollectionError('endpoint unavailable')
 
     e.state.batches = [blocked]
-    sessions = lambda: AsyncMemorySession(e.engine)
+
+    def sessions():
+        return AsyncMemorySession(e.engine)
+
     task = asyncio.create_task(scheduler.run_queued_collection(r['id'], sessions=sessions, registry=e.registry))
     await asyncio.wait_for(started.wait(), timeout=1)
     second = await scheduler.run_queued_collection(r['id'], sessions=sessions, registry=e.registry)
@@ -99,7 +106,7 @@ async def test_worker_reentry_does_not_run_same_source_twice(env):
 
 
 @pytest.mark.asyncio
-async def test_queued_worker_respects_source_disabled_before_claim(env):
+async def test_queued_worker_respects_source_disabled_before_claim(env) -> None:
     e = env
     scheduler = importlib.import_module('app.intelligence.tasks.collection_scheduler')
     s = await source(e)
@@ -118,7 +125,7 @@ async def test_queued_worker_respects_source_disabled_before_claim(env):
 
 
 @pytest.mark.asyncio
-async def test_worker_marks_adapter_preflight_failure_terminal(env):
+async def test_worker_marks_adapter_preflight_failure_terminal(env) -> None:
     e = env
     scheduler = importlib.import_module('app.intelligence.tasks.collection_scheduler')
     s = await source(e)
@@ -136,7 +143,7 @@ async def test_worker_marks_adapter_preflight_failure_terminal(env):
 
 
 @pytest.mark.asyncio
-async def test_recovery_fences_expired_execution_and_keeps_stopping_unconfirmed(env, monkeypatch):
+async def test_recovery_fences_expired_execution_and_keeps_stopping_unconfirmed(env, monkeypatch) -> None:
     e = env
     scheduler = importlib.import_module('app.intelligence.tasks.collection_scheduler')
     s, s2 = await source(e), await source(e)

@@ -22,7 +22,7 @@ def upgrade() -> None:
     exists = connection.execute(
         sa.text(
             'SELECT menu_id FROM sys_menu '
-            'WHERE menu_id = :menu_id OR (parent_id = 2006 AND menu_type = \'F\' AND perms = :perms) '
+            "WHERE menu_id = :menu_id OR (parent_id = 2006 AND menu_type = 'F' AND perms = :perms) "
             'LIMIT 1'
         ),
         {'menu_id': MENU_ID, 'perms': PERMISSION},

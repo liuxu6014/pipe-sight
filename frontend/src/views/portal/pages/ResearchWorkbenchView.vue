@@ -39,6 +39,7 @@ import usePortalStore from '@/store/modules/portal'
 import { buildPersonalReports } from '@/utils/portal/personalReports'
 import useUserStore from '@/store/modules/user'
 import { sortResearchReports } from '../utils/reportList'
+import { isDigestType } from '../utils/routing'
 import { createResearchRefresh, reportRowActions } from '@/utils/portal/researchWorkspace'
 import { listPipelineResearchJobs, listPipelineResearchReports } from '@/api/pipeline/intelligence'
 
@@ -68,7 +69,7 @@ function handleVisibility() {
   if (document.hidden) { clearTimeout(refreshTimer); refresher.invalidate() }
   else void refreshWorkspace()
 }
-const researchReports = computed(() => buildPersonalReports({ reports: [...portalStore.researchReports, ...portalStore.digestReports], tasks: portalStore.tasks, userId: userStore.id }))
+const researchReports = computed(() => buildPersonalReports({ reports: portalStore.researchReports, tasks: portalStore.tasks.filter(task => !isDigestType(task.reportType || task.type)), userId: userStore.id }))
 const keyword = ref(String(route.query.q || ''))
 const normalizeStatus = value => value === 'completed' ? 'generated' : ['active', 'generated', 'failed', 'cancelled', 'unavailable'].includes(value) ? value : ''
 const status = ref(normalizeStatus(route.query.status))

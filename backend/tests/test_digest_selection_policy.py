@@ -19,8 +19,9 @@ db = refactor_db
 no_external_network = refactor_no_external_network
 
 
-def test_existing_detection_weekly_template_has_explicit_cadence(env):
+def test_existing_detection_weekly_template_has_explicit_cadence(env) -> None:
     from app.intelligence.services.templates import PipelineTemplateService
+
     weekly = NS(purpose='digest', name='检测技术专题周报')
     assert PipelineTemplateService.digest_cadence(weekly) == 'weekly'
     PipelineTemplateService.validate_digest_cadence(weekly, 'weekly')
@@ -30,14 +31,14 @@ def test_existing_detection_weekly_template_has_explicit_cadence(env):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('kind', ['article', 'research', 'daily', 'weekly', 'monthly'])
-async def test_all_generation_types_reject_overlimit_before_repository_work(env, kind):
+async def test_all_generation_types_reject_overlimit_before_repository_work(env, kind) -> None:
     data = payload(report_type=kind, selected_item_ids=[str(i) for i in range(51)])
     with raises(env, '50'):
         await env.app.ResearchApplicationService.queue_job(object(), user_id=7, owner_name='用户', payload=data)
 
 
 @pytest.mark.asyncio
-async def test_manual_selection_does_not_drop_same_titles_or_apply_automatic_top_n(env, db, monkeypatch):
+async def test_manual_selection_does_not_drop_same_titles_or_apply_automatic_top_n(env, db, monkeypatch) -> None:
     evidence = __import__('app.research.services.evidence', fromlist=['ResearchEvidenceService'])
     articles = {
         i: NS(
@@ -97,22 +98,34 @@ def canonical_content(env, monkeypatch):
     return ContentBase, Source, Category, Article
 
 
-def test_digest_keywords_match_any_term_and_treat_wildcards_literally(env, monkeypatch):
-    base, source, category, article = canonical_content(env, monkeypatch)
+def test_digest_keywords_match_any_term_and_treat_wildcards_literally(env, monkeypatch) -> None:
+    base, source, _category, article = canonical_content(env, monkeypatch)
     engine = create_engine('sqlite:///:memory:')
     base.metadata.create_all(engine)
     try:
         with Session(engine) as session:
             session.add(source(id=1, type='website'))
-            session.add_all([
-                article(id=1, source_id=1, title='管道检测', content='正常正文', published_at=datetime(2026, 10, 18)),
-                article(id=2, source_id=1, title='其他标题', content_zh='腐蚀防护', published_at=datetime(2026, 10, 18)),
-                article(id=3, source_id=1, title='浓度100%', content='特殊符号', published_at=datetime(2026, 10, 18)),
-            ])
+            session.add_all(
+                [
+                    article(
+                        id=1, source_id=1, title='管道检测', content='正常正文', published_at=datetime(2026, 10, 18)
+                    ),
+                    article(
+                        id=2, source_id=1, title='其他标题', content_zh='腐蚀防护', published_at=datetime(2026, 10, 18)
+                    ),
+                    article(
+                        id=3, source_id=1, title='浓度100%', content='特殊符号', published_at=datetime(2026, 10, 18)
+                    ),
+                ]
+            )
             session.commit()
+
             def matched(words):
-                query = env.repo.ResearchDao.candidate_query(datetime(2026, 10, 18), datetime(2026, 10, 19), {'keywords': words})
+                query = env.repo.ResearchDao.candidate_query(
+                    datetime(2026, 10, 18), datetime(2026, 10, 19), {'keywords': words}
+                )
                 return {row.id for row in session.scalars(query)}
+
             assert matched([]) == {1, 2, 3}
             assert matched(['不存在', '管道', '腐蚀']) == {1, 2}
             assert matched([' 管道 ', '管道', ' ']) == {1}
@@ -124,12 +137,12 @@ def test_digest_keywords_match_any_term_and_treat_wildcards_literally(env, monke
 
 
 @pytest.mark.asyncio
-async def test_ten_thousand_candidates_filter_and_deduplicate_before_paging(env, monkeypatch):
+async def test_ten_thousand_candidates_filter_and_deduplicate_before_paging(env, monkeypatch) -> None:
     base, source, category, article = canonical_content(env, monkeypatch)
     engine = create_engine('sqlite:///:memory:')
 
     @event.listens_for(engine, 'connect')
-    def regexp(conn, _):
+    def regexp(conn, _) -> None:
         conn.create_function(
             'regexp_replace', 4, lambda value, pattern, replacement, flags: re.sub(pattern, replacement, value or '')
         )
@@ -138,7 +151,7 @@ async def test_ten_thousand_candidates_filter_and_deduplicate_before_paging(env,
     statements = []
 
     @event.listens_for(engine, 'before_cursor_execute')
-    def trace(conn, cursor, statement, params, context, many):
+    def trace(conn, cursor, statement, params, context, many) -> None:
         if statement.lstrip().startswith('SELECT'):
             statements.append(statement)
 

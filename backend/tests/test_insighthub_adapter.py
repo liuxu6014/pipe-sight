@@ -52,9 +52,7 @@ async def test_insighthub_result_mapping_uses_prompt_trace_as_completion(
         async def close(self) -> None:
             return None
 
-    adapter = InsightHubAdapter(
-        InsightHubSettings(insighthub_enabled=True, insighthub_db_password='test-password')
-    )
+    adapter = InsightHubAdapter(InsightHubSettings(insighthub_enabled=True, insighthub_db_password='test-password'))
 
     async def connect() -> FakeConnection:
         return FakeConnection()
@@ -63,7 +61,7 @@ async def test_insighthub_result_mapping_uses_prompt_trace_as_completion(
     result = await adapter.fetch_processing_results(['article-1'])
 
     assert result['article-1']['status'] == 'completed'
-    assert result['article-1']['result']['classify'] == 20  # noqa: PLR2004
+    assert result['article-1']['result']['classify'] == 20
 
 
 @pytest.mark.asyncio
@@ -72,14 +70,20 @@ async def test_insighthub_result_mapping_recognizes_worker_rejection(
 ) -> None:
     class FakeConnection:
         async def fetch(self, *_args: object, **_kwargs: object) -> list[dict[str, object]]:
-            return [{'uuid': 'article-1', 'news_id': 7, 'prompt_trace_id': None, 'del_flag': '0', 'processing_status': 'rejected'}]
+            return [
+                {
+                    'uuid': 'article-1',
+                    'news_id': 7,
+                    'prompt_trace_id': None,
+                    'del_flag': '0',
+                    'processing_status': 'rejected',
+                }
+            ]
 
         async def close(self) -> None:
             return None
 
-    adapter = InsightHubAdapter(
-        InsightHubSettings(insighthub_enabled=True, insighthub_db_password='test-password')
-    )
+    adapter = InsightHubAdapter(InsightHubSettings(insighthub_enabled=True, insighthub_db_password='test-password'))
 
     async def connect() -> FakeConnection:
         return FakeConnection()
@@ -111,9 +115,7 @@ async def test_insighthub_result_mapping_recognizes_worker_failure(
         async def close(self) -> None:
             return None
 
-    adapter = InsightHubAdapter(
-        InsightHubSettings(insighthub_enabled=True, insighthub_db_password='test-password')
-    )
+    adapter = InsightHubAdapter(InsightHubSettings(insighthub_enabled=True, insighthub_db_password='test-password'))
 
     async def connect() -> FakeConnection:
         return FakeConnection()
@@ -147,9 +149,7 @@ async def test_insighthub_result_mapping_exposes_dead_letter_but_keeps_failed_co
         async def close(self) -> None:
             return None
 
-    adapter = InsightHubAdapter(
-        InsightHubSettings(insighthub_enabled=True, insighthub_db_password='test-password')
-    )
+    adapter = InsightHubAdapter(InsightHubSettings(insighthub_enabled=True, insighthub_db_password='test-password'))
 
     async def connect() -> FakeConnection:
         return FakeConnection()
@@ -197,9 +197,7 @@ async def test_insighthub_retry_clears_previous_worker_filter_audit(
             return None
 
     connection = FakeConnection()
-    adapter = InsightHubAdapter(
-        InsightHubSettings(insighthub_enabled=True, insighthub_db_password='test-password')
-    )
+    adapter = InsightHubAdapter(InsightHubSettings(insighthub_enabled=True, insighthub_db_password='test-password'))
 
     async def connect() -> FakeConnection:
         return connection
@@ -282,9 +280,7 @@ async def test_insighthub_resubmits_completed_record_as_new_inbox_row(
             return None
 
     connection = FakeConnection()
-    adapter = InsightHubAdapter(
-        InsightHubSettings(insighthub_enabled=True, insighthub_db_password='test-password')
-    )
+    adapter = InsightHubAdapter(InsightHubSettings(insighthub_enabled=True, insighthub_db_password='test-password'))
 
     async def connect() -> FakeConnection:
         return connection

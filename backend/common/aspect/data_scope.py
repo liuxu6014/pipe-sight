@@ -25,9 +25,7 @@ class GetDataScope:
     def __call__(self, request: Request) -> ColumnElement:
         RouteDependencyGuard.check_exclude_routes(request, err_msg='当前路由不在认证规则内，不可使用GetDataScope依赖项')
         current_user = RequestContext.get_current_user()
-        if current_user.user.admin or any(
-            role.data_scope == self.DATA_SCOPE_ALL for role in current_user.user.role
-        ):
+        if current_user.user.admin or any(role.data_scope == self.DATA_SCOPE_ALL for role in current_user.user.role):
             return or_(True)
         if self.user_alias and hasattr(self.query_alias, self.user_alias):
             return getattr(self.query_alias, self.user_alias) == current_user.user.user_id

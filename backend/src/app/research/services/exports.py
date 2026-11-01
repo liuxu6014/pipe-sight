@@ -27,14 +27,14 @@ class ResearchReportExportService:
     }
 
     @classmethod
-    def _extension(cls, mime):
+    def _extension(cls, mime) -> str:
         for ext, value in cls._media_types.items():
             if mime == value:
                 return ext
         raise ServiceException(message='不支持的资源类型')
 
     @classmethod
-    def _record_dict(cls, row):
+    def _record_dict(cls, row) -> dict:
         ext = cls._extension(row.mime_type)
         return {
             'id': wire_id(row.id),
@@ -52,7 +52,7 @@ class ResearchReportExportService:
         }
 
     @classmethod
-    async def create(cls, db, *, user_id, report_id, file_format, allow_draft=False):
+    async def create(cls, db, *, user_id, report_id, file_format, allow_draft=False) -> dict:
         if file_format not in {'docx', 'pdf'}:
             raise ServiceException(message='仅支持 DOCX/PDF 导出')
         report, _ = await ResearchReportService._get_export_report(db, user_id, report_id, allow_draft=allow_draft)
@@ -70,13 +70,13 @@ class ResearchReportExportService:
         return cls._record_dict(row)
 
     @classmethod
-    async def list(cls, db, *, user_id, report_id, include_all=False):
+    async def list(cls, db, *, user_id, report_id, include_all=False) -> dict:
         await ResearchReportService._owned(db, user_id, report_id, include_all=include_all)
         rows = await ResearchDao.list_assets(db, report_id, 'export')
         return {'rows': [cls._record_dict(row) for row in rows], 'total': len(rows)}
 
     @classmethod
-    async def queue_images(cls, db, job, report):
+    async def queue_images(cls, db, job, report) -> None:
         config = job.config_snapshot['template'].get('image_config') or {}
         if not config.get('enabled'):
             return
@@ -84,7 +84,7 @@ class ResearchReportExportService:
         if not model:
             raise ServiceException(message='图片模型未配置')
         count = int(config.get('count', 1))
-        if not 1 <= count <= 10:
+        if not 1 <= count <= 10:  # noqa: PLR2004
             raise ServiceException(message='配图数量须在 1 至 10 之间')
         for index in range(count):
             row = PipelineReportAsset(
@@ -103,7 +103,7 @@ class ResearchReportExportService:
             await ResearchDao.add_report_export(db, row)
 
     @classmethod
-    async def process(cls, export_id, worker_id='asset-worker'):
+    async def process(cls, export_id, worker_id='asset-worker') -> None:
         export_id = parse_business_id(export_id)
         # 资源表没有租约列。使用行锁跨外部调用：进程退出回滚 queued；
         # 锁竞争 SKIP LOCKED；按稳定资源 ID 寻找落盘文件避免重复收费。
@@ -138,7 +138,7 @@ class ResearchReportExportService:
                             build_file, SimpleNamespace(**row.config_snapshot['report']), ext, is_draft=False
                         )
                         if mime != row.mime_type:
-                            raise ValueError('MIME mismatch')
+                            raise ValueError('MIME mismatch') from None
                     await asyncio.to_thread(ReportExportStorage.write, key, content)
                 row.storage_key = key
                 row.status, row.error = 'completed', None
@@ -150,7 +150,7 @@ class ResearchReportExportService:
             await db.commit()
 
     @classmethod
-    async def retry(cls, db, user_id, asset_id):
+    async def retry(cls, db, user_id, asset_id) -> dict:
         row = await ResearchDao.get_asset(db, asset_id, user_id, lock=True)
         if not row:
             raise ServiceException(message='资源不存在或无权访问')
@@ -170,7 +170,7 @@ class ResearchReportExportService:
         return cls._record_dict(row)
 
     @classmethod
-    async def download(cls, db, *, user_id, export_id):
+    async def download(cls, db, *, user_id, export_id) -> tuple[str, str, bytes]:
         row = await ResearchDao.get_asset(db, export_id, user_id)
         if not row or row.status != 'completed' or not row.storage_key:
             raise ServiceException(message='资源不存在、尚未完成或无权访问')

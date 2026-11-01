@@ -29,10 +29,16 @@ def read_publisher_pdf_preview(doi: Any) -> dict[str, Any]:
             return unavailable
         url = record['pdf_url']
         parsed = urlsplit(url)
-        if (parsed.scheme != 'https' or parsed.netloc not in {'mdpi-res.com', 'yqcy.pipechina.com.cn'}
-                or not parsed.path.endswith('.pdf') or parsed.query or parsed.fragment
-                or not isinstance(record['pages'], int) or record['pages'] <= 0
-                or not re.fullmatch(r'[0-9a-f]{64}', record['sha256'])):
+        if (
+            parsed.scheme != 'https'
+            or parsed.netloc not in {'mdpi-res.com', 'yqcy.pipechina.com.cn'}
+            or not parsed.path.endswith('.pdf')
+            or parsed.query
+            or parsed.fragment
+            or not isinstance(record['pages'], int)
+            or record['pages'] <= 0
+            or not re.fullmatch(r'[0-9a-f]{64}', record['sha256'])
+        ):
             return unavailable
         key = 'paper-' + hashlib.sha256(doi.strip().lower().encode()).hexdigest()[:24]
         if record.get('asset_key') != key or record['pages'] > MAX_PUBLISHER_PAGES:
@@ -52,13 +58,22 @@ def read_publisher_pdf_preview(doi: Any) -> dict[str, Any]:
         if len(raw) > MAX_HTML_BYTES or hashlib.sha256(raw).hexdigest() != record.get('text_sha256'):
             return unavailable
         document = raw.decode('utf-8')
-        return {'status': 'publisher_preview', 'reader_kind': 'extracted_text', 'format': 'html', 'source_format': 'pdf', 'source_url': url, 'pages': record['pages'], 'text_characters': record.get('text_characters', 0), 'html': CSP_PREFIX + document}
+        return {
+            'status': 'publisher_preview',
+            'reader_kind': 'extracted_text',
+            'format': 'html',
+            'source_format': 'pdf',
+            'source_url': url,
+            'pages': record['pages'],
+            'text_characters': record.get('text_characters', 0),
+            'html': CSP_PREFIX + document,
+        }
     except (OSError, ValueError, UnicodeError, RuntimeError, KeyError, TypeError, AttributeError):
         return unavailable
 
+
 ALLOWED_LICENSES = frozenset(
-    f'https://creativecommons.org/licenses/by/{version}/'
-    for version in ('1.0', '2.0', '2.5', '3.0', '4.0')
+    f'https://creativecommons.org/licenses/by/{version}/' for version in ('1.0', '2.0', '2.5', '3.0', '4.0')
 ) | {'https://creativecommons.org/publicdomain/zero/1.0/'}
 # Precede even a collector-supplied head: subsequent policies cannot relax this one.
 CSP_PREFIX = (
@@ -80,10 +95,14 @@ def read_licensed_full_text(metadata: Any) -> dict[str, Any]:
     license_url = metadata.get('license_url')
     source_url = metadata.get('source_url')
     if (
-        not isinstance(key, str) or not re.fullmatch(r'PMC[0-9]+', key)
-        or not isinstance(digest, str) or not re.fullmatch(r'[0-9a-fA-F]{64}', digest)
-        or not isinstance(license_url, str) or license_url not in ALLOWED_LICENSES
-        or source_url != f'https://europepmc.org/articles/{key}' or metadata.get('format') != 'html'
+        not isinstance(key, str)
+        or not re.fullmatch(r'PMC[0-9]+', key)
+        or not isinstance(digest, str)
+        or not re.fullmatch(r'[0-9a-fA-F]{64}', digest)
+        or not isinstance(license_url, str)
+        or license_url not in ALLOWED_LICENSES
+        or source_url != f'https://europepmc.org/articles/{key}'
+        or metadata.get('format') != 'html'
     ):
         return unavailable
     # Never consume a path or filename from metadata, including extra fields.

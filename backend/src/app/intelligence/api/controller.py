@@ -27,7 +27,7 @@ BusinessId = Annotated[int, BeforeValidator(parse_business_id)]
 
 
 @controller.get('/dashboard', dependencies=ADMIN)
-async def dashboard(query_db: DB):
+async def dashboard(query_db: DB) -> Response:
     return ResponseUtil.success(data=await IntelligenceApplicationService.dashboard_summary(query_db))
 
 
@@ -176,40 +176,40 @@ class CategorySave(BaseModel):
 
 
 @controller.get('/categories', dependencies=ADMIN)
-async def list_categories(query_db: DB):
+async def list_categories(query_db: DB) -> Response:
     return ResponseUtil.success(data=await CategoryService.list(query_db))
 
 
 @controller.post('/categories', dependencies=ADMIN)
-async def create_category(payload: CategorySave, query_db: DB):
+async def create_category(payload: CategorySave, query_db: DB) -> Response:
     return ResponseUtil.success(data=await CategoryService.save(query_db, payload.model_dump()))
 
 
 @controller.put('/categories/{identity}', dependencies=ADMIN)
-async def update_category(identity: BusinessId, payload: CategorySave, query_db: DB):
+async def update_category(identity: BusinessId, payload: CategorySave, query_db: DB) -> Response:
     return ResponseUtil.success(data=await CategoryService.save(query_db, payload.model_dump(), identity))
 
 
 @controller.delete('/categories/{identity}', dependencies=ADMIN)
-async def delete_category(identity: BusinessId, query_db: DB):
+async def delete_category(identity: BusinessId, query_db: DB) -> Response:
     await CategoryService.remove(query_db, identity)
     return ResponseUtil.success(msg='类别已删除')
 
 
 @controller.get('/templates/published')
-async def published_templates(query_db: DB, category: str | None = None):
+async def published_templates(query_db: DB, category: str | None = None) -> Response:
     return ResponseUtil.success(
         data=await PipelineTemplateService.list_templates(query_db, category=category, published_only=True)
     )
 
 
 @controller.get('/templates', dependencies=ADMIN)
-async def templates(query_db: DB, category: str | None = None):
+async def templates(query_db: DB, category: str | None = None) -> Response:
     return ResponseUtil.success(data=await PipelineTemplateService.list_templates(query_db, category=category))
 
 
 @controller.post('/templates', dependencies=ADMIN)
-async def create_template(payload: PipelineTemplateSaveModel, query_db: DB):
+async def create_template(payload: PipelineTemplateSaveModel, query_db: DB) -> Response:
     return ResponseUtil.success(
         data=await PipelineTemplateService.save_draft(
             query_db, template_key=None, payload=payload.model_dump(), operator_id=None, operator_name=''
@@ -218,7 +218,7 @@ async def create_template(payload: PipelineTemplateSaveModel, query_db: DB):
 
 
 @controller.put('/templates/{identity}', dependencies=ADMIN)
-async def update_template(identity: BusinessId, payload: PipelineTemplateSaveModel, query_db: DB):
+async def update_template(identity: BusinessId, payload: PipelineTemplateSaveModel, query_db: DB) -> Response:
     return ResponseUtil.success(
         data=await PipelineTemplateService.save_draft(
             query_db, template_key=identity, payload=payload.model_dump(), operator_id=None, operator_name=''
@@ -227,5 +227,5 @@ async def update_template(identity: BusinessId, payload: PipelineTemplateSaveMod
 
 
 @controller.delete('/templates/{identity}', dependencies=ADMIN)
-async def disable_template(identity: BusinessId, query_db: DB):
+async def disable_template(identity: BusinessId, query_db: DB) -> Response:
     return ResponseUtil.success(data=await PipelineTemplateService.retire(query_db, identity))

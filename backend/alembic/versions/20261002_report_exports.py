@@ -38,7 +38,9 @@ def _create_table() -> None:
         ),
         sa.CheckConstraint('report_version_no >= 1', name='ck_report_exports_report_version_no'),
         sa.CheckConstraint('file_size >= 0', name='ck_report_exports_file_size'),
-        sa.ForeignKeyConstraint(['report_id'], ['reports.report_id'], name='fk_report_exports_report', ondelete='CASCADE'),
+        sa.ForeignKeyConstraint(
+            ['report_id'], ['reports.report_id'], name='fk_report_exports_report', ondelete='CASCADE'
+        ),
         sa.ForeignKeyConstraint(['user_id'], ['sys_user.user_id'], name='fk_report_exports_user', ondelete='RESTRICT'),
         sa.PrimaryKeyConstraint('export_id'),
         comment='报告导出任务和文件审计表',

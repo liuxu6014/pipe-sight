@@ -41,7 +41,16 @@ async def test_collection_run_only_audit_display_fields_change(env: Any) -> None
 
 def test_category_audit_fields_use_beijing_seconds(env: Any) -> None:
     categories = importlib.import_module('app.intelligence.services.categories')
-    row = SimpleNamespace(id=999, name='类别', prompt='真实配置', is_enabled=False, model_id=None,
-                           sort_order=0, applies_to='all', created_at=UTC_TIME, updated_at=UTC_TIME)
+    row = SimpleNamespace(
+        id=999,
+        name='类别',
+        prompt='真实配置',
+        is_enabled=False,
+        model_id=None,
+        sort_order=0,
+        applies_to='all',
+        created_at=UTC_TIME,
+        updated_at=UTC_TIME,
+    )
     result = categories.CategoryService.public(row)
     assert result['createdAt'] == result['updatedAt'] == BEIJING_TEXT

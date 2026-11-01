@@ -33,7 +33,7 @@ no_external_network = refactor_no_external_network
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('raw', ['## 分析\n\n无法对应的结论[99]。', '## 分析\n\n没有引用的事实正文。'])
-async def test_invalid_manuscript_fails_without_overwriting_report(env, db, monkeypatch, raw):
+async def test_invalid_manuscript_fails_without_overwriting_report(env, db, monkeypatch, raw) -> None:
     seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     result = await queue(env, db)
@@ -49,7 +49,7 @@ async def test_invalid_manuscript_fails_without_overwriting_report(env, db, monk
 
 
 @pytest.mark.asyncio
-async def test_task_preserves_actionable_model_output_limit_error(env, db, monkeypatch):
+async def test_task_preserves_actionable_model_output_limit_error(env, db, monkeypatch) -> None:
     seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     result = await queue(env, db)
@@ -63,7 +63,7 @@ async def test_task_preserves_actionable_model_output_limit_error(env, db, monke
 
 
 @pytest.mark.asyncio
-async def test_duplicate_dispatch_does_not_invoke_model_without_claim(env, db, monkeypatch):
+async def test_duplicate_dispatch_does_not_invoke_model_without_claim(env, db, monkeypatch) -> None:
     execution, _ = execution_context(env, db, monkeypatch)
     monkeypatch.setattr(env.repo.ResearchDao, 'claim_research_job', AsyncMock(return_value=None))
     generate = AsyncMock(side_effect=AssertionError('unclaimed job must not call provider'))
@@ -73,13 +73,13 @@ async def test_duplicate_dispatch_does_not_invoke_model_without_claim(env, db, m
 
 
 @pytest.mark.asyncio
-async def test_lost_execution_token_prevents_result_write(env, db, monkeypatch):
+async def test_lost_execution_token_prevents_result_write(env, db, monkeypatch) -> None:
     seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     result = await queue(env, db)
     execution, factory = execution_context(env, db, monkeypatch)
 
-    async def cancel_during_generation(model_db, *args, **kwargs):
+    async def cancel_during_generation(model_db, *args, **kwargs) -> str:
         async with factory() as cancel_db:
             await env.app.ResearchApplicationService.cancel_job(cancel_db, 7, result['jobId'])
         return '已失效的离线结果'
@@ -93,7 +93,7 @@ async def test_lost_execution_token_prevents_result_write(env, db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_heartbeat_uses_execution_token_and_stops_when_fenced(env, db, monkeypatch):
+async def test_heartbeat_uses_execution_token_and_stops_when_fenced(env, db, monkeypatch) -> None:
     execution, _ = execution_context(env, db, monkeypatch)
     touch = AsyncMock(return_value=False)
     monkeypatch.setattr(execution, 'HEARTBEAT_INTERVAL_SECONDS', 0)
@@ -103,7 +103,7 @@ async def test_heartbeat_uses_execution_token_and_stops_when_fenced(env, db, mon
 
 
 @pytest.mark.asyncio
-async def test_model_error_is_failed_and_never_becomes_deterministic_success(env, db, monkeypatch):
+async def test_model_error_is_failed_and_never_becomes_deterministic_success(env, db, monkeypatch) -> None:
     seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     result = await queue(env, db)
@@ -121,20 +121,22 @@ async def test_model_error_is_failed_and_never_becomes_deterministic_success(env
 
 
 @pytest.mark.asyncio
-async def test_missing_model_blocks_submission(env, db):
+async def test_missing_model_blocks_submission(env, db) -> None:
     seed(env, db, model=False)
     with raises(env, 'text_generate'):
         await queue(env, db)
 
 
 @pytest.mark.asyncio
-async def test_new_generation_stores_canonical_citations_and_keeps_raw_provider_output(env, db, monkeypatch):
+async def test_new_generation_stores_canonical_citations_and_keeps_raw_provider_output(env, db, monkeypatch) -> None:
     seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     result = await queue(env, db)
     execution, _ = execution_context(env, db, monkeypatch)
-    raw = ('## 研究内容\n\n[file:101]资料指出检测可行[file:101]（用户资料，2026-10-25），仍需验证。'
-           '另一项结论[file:101]。\n\n## 参考资料\n\n[file:101] 本地资料；2026-10-25')
+    raw = (
+        '## 研究内容\n\n[file:101]资料指出检测可行[file:101]（用户资料，2026-10-25），仍需验证。'
+        '另一项结论[file:101]。\n\n## 参考资料\n\n[file:101] 本地资料；2026-10-25'
+    )
     monkeypatch.setattr(execution.ResearchModelGenerationService, 'generate_content', AsyncMock(return_value=raw))
     await execution.ResearchExecutionService.process(job_id=result['jobId'], user_id=7)
     db.s.expire_all()
@@ -160,7 +162,7 @@ async def test_new_generation_stores_canonical_citations_and_keeps_raw_provider_
 @pytest.mark.parametrize('state', ['missing', 'disabled', 'wrong_capability', 'unsupported_provider'])
 async def test_retry_rejects_unavailable_snapshot_model_without_changing_failed_task(
     env, db, monkeypatch, capability, model_id, state
-):
+) -> None:
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     template, _ = seed(env, db, image=True)
     template.image_config = {'enabled': True}
@@ -196,7 +198,7 @@ async def test_retry_rejects_unavailable_snapshot_model_without_changing_failed_
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('image_enabled', [False, True])
-async def test_retry_with_enabled_snapshot_models_creates_new_attempt(env, db, monkeypatch, image_enabled):
+async def test_retry_with_enabled_snapshot_models_creates_new_attempt(env, db, monkeypatch, image_enabled) -> None:
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     template, _ = seed(env, db, image=image_enabled)
     template.image_config = {'enabled': image_enabled}
@@ -214,7 +216,7 @@ async def test_retry_with_enabled_snapshot_models_creates_new_attempt(env, db, m
 
 
 @pytest.mark.asyncio
-async def test_cancel_never_changes_completed_task(env, db, monkeypatch):
+async def test_cancel_never_changes_completed_task(env, db, monkeypatch) -> None:
     seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     result = await queue(env, db)
@@ -227,7 +229,7 @@ async def test_cancel_never_changes_completed_task(env, db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_gateway_rejects_native_noncompatible_provider_before_network(env, db):
+async def test_gateway_rejects_native_noncompatible_provider_before_network(env, db) -> None:
     seed(env, db)
     model = await db.get(env.ai.AiModels, 1)
     model.provider = 'anthropic'
@@ -242,24 +244,37 @@ async def test_gateway_rejects_native_noncompatible_provider_before_network(env,
 
 
 @pytest.mark.asyncio
-async def test_truncated_provider_output_is_not_accepted_as_a_deliverable(env, db, monkeypatch):
+async def test_truncated_provider_output_is_not_accepted_as_a_deliverable(env, db, monkeypatch) -> None:
     seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     result = await queue(env, db)
     job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
     real_client = httpx.AsyncClient
     monkeypatch.setenv('OFFLINE_MODEL_KEY', 'offline-placeholder')
-    monkeypatch.setattr(env.gateway.httpx, 'AsyncClient', lambda **kwargs: real_client(
-        transport=httpx.MockTransport(lambda request: httpx.Response(200, json={
-            'choices': [{'finish_reason': 'length', 'message': {'content': '未写完的正文'}}],
-            'usage': {'completion_tokens': 100},
-        })), **kwargs))
+    monkeypatch.setattr(
+        env.gateway.httpx,
+        'AsyncClient',
+        lambda **kwargs: real_client(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(
+                    200,
+                    json={
+                        'choices': [{'finish_reason': 'length', 'message': {'content': '未写完的正文'}}],
+                        'usage': {'completion_tokens': 100},
+                    },
+                )
+            ),
+            **kwargs,
+        ),
+    )
     with raises(env, '输出上限'):
-        await env.gateway.ResearchModelGenerationService.generate_content(db, job.config_snapshot, job.materials, task_id=job.id)
+        await env.gateway.ResearchModelGenerationService.generate_content(
+            db, job.config_snapshot, job.materials, task_id=job.id
+        )
 
 
 @pytest.mark.asyncio
-async def test_gateway_uses_frozen_template_prompt_and_returns_provider_content(env, db, monkeypatch):
+async def test_gateway_uses_frozen_template_prompt_and_returns_provider_content(env, db, monkeypatch) -> None:
     seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     result = await queue(env, db)
@@ -295,7 +310,7 @@ async def test_gateway_uses_frozen_template_prompt_and_returns_provider_content(
 
 
 @pytest.mark.asyncio
-async def test_edit_and_export_do_not_depend_on_review_or_publication(env, db, monkeypatch):
+async def test_edit_and_export_do_not_depend_on_review_or_publication(env, db, monkeypatch) -> None:
     seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     result = await queue(env, db)
@@ -315,7 +330,9 @@ async def test_edit_and_export_do_not_depend_on_review_or_publication(env, db, m
 @pytest.mark.asyncio
 @pytest.mark.parametrize('original_form', ['scalar', 'typed'])
 @pytest.mark.parametrize('replay_form', ['scalar', 'typed', 'snapshot'])
-async def test_idempotent_reference_forms_replay_after_source_deleted(env, db, monkeypatch, original_form, replay_form):
+async def test_idempotent_reference_forms_replay_after_source_deleted(
+    env, db, monkeypatch, original_form, replay_form
+) -> None:
     _, material = seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     scalar = payload()
@@ -348,7 +365,7 @@ async def test_idempotent_reference_forms_replay_after_source_deleted(env, db, m
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('change', ['type', 'title', 'owner'])
-async def test_replay_still_rejects_changed_semantics_or_owner_without_resolving(env, db, monkeypatch, change):
+async def test_replay_still_rejects_changed_semantics_or_owner_without_resolving(env, db, monkeypatch, change) -> None:
     seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     await queue(env, db)
@@ -367,7 +384,7 @@ async def test_replay_still_rejects_changed_semantics_or_owner_without_resolving
 
 
 @pytest.mark.asyncio
-async def test_request_id_race_recomputes_fingerprint_with_winners_frozen_materials(env, db, monkeypatch):
+async def test_request_id_race_recomputes_fingerprint_with_winners_frozen_materials(env, db, monkeypatch) -> None:
     _, material = seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     original = await queue(env, db, payload(materials=[{'type': 'file', 'id': '101'}], selected_item_ids=[]))

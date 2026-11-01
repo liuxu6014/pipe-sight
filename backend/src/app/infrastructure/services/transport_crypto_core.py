@@ -339,6 +339,7 @@ class TransportSecurityUtil:
             logger.warning('传输层加密请求检测到重放，kid={}, nonce={}', kid, nonce)
             raise ValueError('检测到重复请求，请勿重放加密报文')
 
+
 # 传输层加解密核心能力
 class TransportCryptoUtil:
     """
@@ -622,7 +623,9 @@ class TransportCryptoMonitorUtil:
         cls._record_encrypted_request_local(kid)
 
     @classmethod
-    async def record_required_rejected(cls, redis: aioredis.Redis | None = None, method: str = '', path: str = '') -> None:
+    async def record_required_rejected(
+        cls, redis: aioredis.Redis | None = None, method: str = '', path: str = ''
+    ) -> None:
         """
         记录强制加密接口被明文访问的拒绝事件
 

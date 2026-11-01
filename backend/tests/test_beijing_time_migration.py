@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
 from types import SimpleNamespace as NS
+from typing import NoReturn
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -24,7 +25,7 @@ from app.business_schema import BUSINESS_TABLES, load_frozen
 
 
 class Savepoint:
-    def __init__(self, connection):
+    def __init__(self, connection) -> None:
         self.connection = connection
 
     def __enter__(self):
@@ -41,7 +42,7 @@ class Savepoint:
 
 
 class OfflineConnection:
-    def __init__(self):
+    def __init__(self) -> None:
         self.engine = NS(url=make_url('postgresql+asyncpg://offline@127.0.0.1:19432/pipesight_beijing_initial'))
         self.dialect = NS(name='postgresql')
         self.outer = True
@@ -54,10 +55,10 @@ class OfflineConnection:
     def begin_nested(self):
         return Savepoint(self)
 
-    def commit(self):
+    def commit(self) -> None:
         pytest.fail('The migration must never commit its caller-owned transaction')
 
-    def rollback(self):
+    def rollback(self) -> None:
         pytest.fail('The migration must never roll back its caller-owned transaction')
 
     def exec_driver_sql(self, statement):
@@ -70,8 +71,8 @@ class OfflineConnection:
 
 
 @pytest.fixture(autouse=True)
-def forbid_connections(monkeypatch):
-    def forbidden(*args, **kwargs):
+def forbid_connections(monkeypatch) -> None:
+    def forbidden(*args, **kwargs) -> NoReturn:
         raise AssertionError('This test suite never opens a socket or database')
 
     monkeypatch.setattr(socket.socket, 'connect', forbidden)
@@ -174,7 +175,7 @@ def scenario(tmp_path, monkeypatch):
     )
 
 
-def test_scope_is_only_27_audit_columns_on_15_business_tables(scenario):
+def test_scope_is_only_27_audit_columns_on_15_business_tables(scenario) -> None:
     selected = migration.validate_conversion_scope(scenario.previous, scenario.target)
     assert set(selected) == set(BUSINESS_TABLES)
     assert sum(map(len, selected.values())) == 27
@@ -183,7 +184,7 @@ def test_scope_is_only_27_audit_columns_on_15_business_tables(scenario):
     assert selected['model_calls'] == selected['basket_items'] == selected['report_versions'] == ['created_at']
 
 
-def test_success_pins_both_contract_versions_and_never_commits_or_touches_protected_ddl(scenario):
+def test_success_pins_both_contract_versions_and_never_commits_or_touches_protected_ddl(scenario) -> None:
     result = scenario.run()
     assert scenario.loaded == ['v4', 'v5']
     assert result['business_data'] == 'exact_expected_projection' and result['audit_columns'] == 27
@@ -207,7 +208,7 @@ def test_success_pins_both_contract_versions_and_never_commits_or_touches_protec
 
 
 @pytest.mark.parametrize('drift', ['nullable', 'name', 'non_audit_type', 'foreign_keys', 'checks', 'inventory'])
-def test_unrelated_frozen_scope_drift_is_rejected(scenario, drift):
+def test_unrelated_frozen_scope_drift_is_rejected(scenario, drift) -> None:
     target = deepcopy(scenario.target)
     table = target['catalog']['reports']
     if drift == 'nullable':
@@ -230,7 +231,7 @@ def test_unrelated_frozen_scope_drift_is_rejected(scenario, drift):
     'defect',
     ['missing_rows', 'changed_null', 'protected_rows', 'protected_schema', 'owners', 'objects', 'target_schema'],
 )
-def test_post_conversion_invariant_failure_rolls_back_savepoint(scenario, defect):
+def test_post_conversion_invariant_failure_rolls_back_savepoint(scenario, defect) -> None:
     state = scenario.state
     if defect == 'missing_rows':
         state.actual['reports'][0] -= 1
@@ -253,7 +254,7 @@ def test_post_conversion_invariant_failure_rolls_back_savepoint(scenario, defect
 
 
 @pytest.mark.parametrize('defect', ['backup_checksum', 'backup_rows', 'source_schema'])
-def test_source_or_backup_drift_rejected_before_first_ddl(scenario, defect):
+def test_source_or_backup_drift_rejected_before_first_ddl(scenario, defect) -> None:
     if defect == 'backup_checksum':
         (scenario.root / 'database-before.dump').write_bytes(b'tampered')
     elif defect == 'backup_rows':
@@ -266,7 +267,7 @@ def test_source_or_backup_drift_rejected_before_first_ddl(scenario, defect):
     assert not any(sql.startswith(('ALTER ', 'COMMENT ')) for sql in scenario.connection.statements)
 
 
-def test_ddl_exception_rolls_back_the_savepoint_not_the_caller(scenario):
+def test_ddl_exception_rolls_back_the_savepoint_not_the_caller(scenario) -> None:
     scenario.connection.fail_sql = 'TYPE timestamp(0)'
     with pytest.raises(RuntimeError, match='injected'):
         scenario.run()
@@ -276,21 +277,21 @@ def test_ddl_exception_rolls_back_the_savepoint_not_the_caller(scenario):
 @pytest.mark.parametrize(
     'url', ['postgresql://offline@remote.invalid:19432/test', 'postgresql://offline@127.0.0.1:5432/test']
 )
-def test_remote_or_wrong_port_is_rejected_before_sql(scenario, url):
+def test_remote_or_wrong_port_is_rejected_before_sql(scenario, url) -> None:
     scenario.connection.engine.url = make_url(url)
     with pytest.raises(RuntimeError, match='allow_live'):
         scenario.run()
     assert scenario.connection.statements == []
 
 
-def test_source_database_name_requires_explicit_live_authorization_even_on_local_rehearsal_port(scenario):
+def test_source_database_name_requires_explicit_live_authorization_even_on_local_rehearsal_port(scenario) -> None:
     scenario.connection.engine.url = make_url('postgresql://offline@127.0.0.1:19432/pipesight')
-    with pytest.raises(RuntimeError, match='[Ll]ive|allow_live|source|源'):
+    with pytest.raises(RuntimeError, match=r'[Ll]ive|allow_live|source|源'):
         scenario.run()
     assert scenario.connection.statements == []
 
 
-def test_projection_sql_retains_nulls_all_other_columns_and_unchanged_instants():
+def test_projection_sql_retains_nulls_all_other_columns_and_unchanged_instants() -> None:
     captured = []
 
     def execute(sql):
@@ -318,7 +319,7 @@ def test_projection_sql_retains_nulls_all_other_columns_and_unchanged_instants()
         ('2024-02-29T15:59:59.000001+00:00', '2024-02-29 23:59:59'),
     ],
 )
-def test_independent_wall_clock_projection_examples_floor_not_round(instant, expected):
+def test_independent_wall_clock_projection_examples_floor_not_round(instant, expected) -> None:
     # Independent expectation only: SQL shape above, actual PG evaluation is separate.
     value = datetime.fromisoformat(instant)
     projected = value.astimezone(ZoneInfo('Asia/Shanghai')).replace(tzinfo=None, microsecond=0)
@@ -326,7 +327,7 @@ def test_independent_wall_clock_projection_examples_floor_not_round(instant, exp
     assert projected.replace(tzinfo=ZoneInfo('Asia/Shanghai')).astimezone(timezone.utc) <= value
 
 
-def test_historical_consistency_migration_stays_pinned_to_v4_without_mutable_orm_import():
+def test_historical_consistency_migration_stays_pinned_to_v4_without_mutable_orm_import() -> None:
     def frozen_calls(path, function):
         # co_firstlineno can point at a different function if a peer saves source
         # after import. Parse the current file, not linecache/inspect offsets.
@@ -354,7 +355,7 @@ def test_historical_consistency_migration_stays_pinned_to_v4_without_mutable_orm
     assert frozen_calls(path, 'migrate_beijing_audit_time') == ['v4', 'v5']
 
 
-def test_actual_frozen_v5_is_exact_narrow_conversion_with_explicit_beijing_defaults_and_check():
+def test_actual_frozen_v5_is_exact_narrow_conversion_with_explicit_beijing_defaults_and_check() -> None:
     previous, target = load_frozen('v4'), load_frozen('v5')
     selected = migration.validate_conversion_scope(previous, target)
     assert sum(map(len, selected.values())) == 27
@@ -379,6 +380,6 @@ def test_actual_frozen_v5_is_exact_narrow_conversion_with_explicit_beijing_defau
     assert normalized.replace("(created_at AT TIME ZONE 'Asia/Shanghai')", 'created_at') == old_check
 
 
-def test_alembic_downgrade_cannot_invent_discarded_subseconds():
+def test_alembic_downgrade_cannot_invent_discarded_subseconds() -> None:
     revision = Path(migration.__file__).parents[2] / 'alembic/versions/20261025_beijing_audit_time.py'
     assert 'discarded sub-second precision cannot be reconstructed' in revision.read_text()

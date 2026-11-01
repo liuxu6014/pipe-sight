@@ -10,8 +10,8 @@ from app.library.models.materials import PipelineMaterial
 
 class IntelligenceDashboardService:
     @staticmethod
-    async def summary(db, *, date_formatter):
-        async def count(model, *conditions):
+    async def summary(db, *, date_formatter) -> dict:
+        async def count(model, *conditions) -> int:
             return (await db.execute(select(func.count()).select_from(model).where(*conditions))).scalar_one()
 
         groups = []
@@ -29,13 +29,13 @@ class IntelligenceDashboardService:
         for name, value in groups:
             totals[name] = totals.get(name, 0) + value
         runs = (
-            (await db.execute(
+            await db.execute(
                 select(PipelineCrawlRun, PipelineSource.name)
                 .outerjoin(PipelineSource, PipelineSource.id == PipelineCrawlRun.source_id)
-                .order_by(PipelineCrawlRun.created_at.desc(), PipelineCrawlRun.id.desc()).limit(10)
-            ))
-            .all()
-        )
+                .order_by(PipelineCrawlRun.created_at.desc(), PipelineCrawlRun.id.desc())
+                .limit(10)
+            )
+        ).all()
         return {
             'metrics': [
                 {'label': '新闻资讯', 'value': await count(PipelineArticle), 'unit': '条'},

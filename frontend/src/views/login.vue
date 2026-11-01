@@ -430,7 +430,7 @@ onBeforeUnmount(() => {
 
 .calm-photo-hero {
   position: relative;
-  height: clamp(270px, 43vh, 430px);
+  height: clamp(300px, 52vh, 660px);
   overflow: hidden;
 }
 

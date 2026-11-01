@@ -6,6 +6,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from time import monotonic
+from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
 from app.business_ids import parse_business_id, wire_id
@@ -45,20 +46,20 @@ class Adapter:
 
 
 class AdapterRegistry:
-    def __init__(self):
+    def __init__(self) -> None:
         self.adapters = {}
 
-    def register(self, name, adapter):
+    def register(self, name, adapter) -> None:
         if not name or name in self.adapters:
             raise ConfigurationError('适配器标识为空或已注册')
         self.adapters[name] = adapter
 
-    def get(self, name):
+    def get(self, name) -> Adapter:
         if name not in self.adapters:
             raise ConfigurationError('适配器未注册；须由后台安装受控实现')
         return self.adapters[name]
 
-    def validate(self, snapshot):
+    def validate(self, snapshot) -> Adapter:
         adapter = self.get(snapshot['adapter'])
         if snapshot['type'] not in adapter.source_types:
             raise ConfigurationError('适配器与来源类型不匹配')
@@ -87,14 +88,14 @@ class AdapterRegistry:
         return adapter
 
 
-def validate_config(config):
+def validate_config(config) -> None:
     if not isinstance(config, dict):
         raise ConfigurationError('config 必须是对象')
     if set(config) & {'adapter', 'cron', 'timezone'}:
         raise ConfigurationError('config 不得重复 adapter/cron/timezone')
 
     # Credentials are resolved privately by an adapter; snapshots carry refs only.
-    def check(value):
+    def check(value) -> None:
         if isinstance(value, dict):
             for key, child in value.items():
                 normalized = key.lower().replace('-', '_')
@@ -140,24 +141,24 @@ ADAPTERS = AdapterRegistry()
 register_builtin_adapters(ADAPTERS)
 
 
-def classification_session_factory(db):
+def classification_session_factory(db) -> Any:
     """Dedicated sessions: the collector's source/run locks never reach a model call."""
-    from sqlalchemy.ext.asyncio import async_sessionmaker
+    from sqlalchemy.ext.asyncio import async_sessionmaker  # noqa: PLC0415
 
     return async_sessionmaker(bind=db.bind, expire_on_commit=False, autoflush=False)
 
 
 class PipelineCollectionService:
     @classmethod
-    async def prepare_records(cls, db, records, snapshot):
+    async def prepare_records(cls, db, records, snapshot) -> tuple[list, list]:
         # The outer execute loop keeps heartbeats alive and cancels this task on stop.
         translated = await CollectionTranslationService.translate(classification_session_factory(db), snapshot, records)
         classifications = await cls.classify_records(db, translated, 'paper' if snapshot['type'] == 'paper' else 'news')
         return translated, classifications
 
     @staticmethod
-    async def classify_records(db, records, kind):
-        from app.intelligence.services.categories import CategoryService
+    async def classify_records(db, records, kind) -> list[tuple]:
+        from app.intelligence.services.categories import CategoryService  # noqa: PLC0415
 
         results = []
         sessions = classification_session_factory(db)
@@ -190,7 +191,7 @@ class PipelineCollectionService:
         return results
 
     @classmethod
-    async def execute(cls, db, run_id, *, registry=ADAPTERS, clock=None, lease_seconds=90, pulse_seconds=5):
+    async def execute(cls, db, run_id, *, registry=ADAPTERS, clock=None, lease_seconds=90, pulse_seconds=5) -> dict:
         run_id = parse_business_id(run_id)
         clock = clock or (lambda: datetime.now(timezone.utc))
         if not 0 < pulse_seconds < lease_seconds / 2:
@@ -240,13 +241,13 @@ class PipelineCollectionService:
                 if (
                     not isinstance(batch, CollectionBatch)
                     or not isinstance(batch.records, list)
-                    or len(batch.records) > 500
+                    or len(batch.records) > 500  # noqa: PLR2004
                 ):
                     raise ConfigurationError('适配器批次无效或超过 500 条')
                 if not isinstance(batch.checkpoint, dict):
                     raise ConfigurationError('checkpoint 必须为对象')
                 # Checkpoints are bounded cursors, never copies of article bodies.
-                if len(json.dumps(batch.checkpoint).encode()) > 8192 or set(batch.checkpoint) - {
+                if len(json.dumps(batch.checkpoint).encode()) > 8192 or set(batch.checkpoint) - {  # noqa: PLR2004
                     'cursor',
                     'page',
                     'last_id',
@@ -329,7 +330,7 @@ class PipelineCollectionService:
             await db.rollback()
             return {'id': wire_id(run_id), 'status': 'fenced'}
         if result.status == 'failed':
-            from app.intelligence.services.sources import IntelligenceSourceService
+            from app.intelligence.services.sources import IntelligenceSourceService  # noqa: PLC0415
 
             await IntelligenceSourceService.retry_collection_run(
                 db, run_id, automatic=True, registry=registry, clock=clock

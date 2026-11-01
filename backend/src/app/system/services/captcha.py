@@ -5,6 +5,8 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
+FONT_PATH = Path(__file__).resolve().parents[4] / 'assets' / 'font' / 'Arial.ttf'
+
 
 class CaptchaService:
     """
@@ -20,9 +22,8 @@ class CaptchaService:
         draw = ImageDraw.Draw(image)
 
         # 设置字体
-        font_path = Path(__file__).resolve().parents[4] / 'assets' / 'font' / 'Arial.ttf'
         try:
-            font = ImageFont.truetype(font_path, size=30)
+            font = ImageFont.truetype(FONT_PATH, size=30)
         except OSError:
             # Keep captcha generation available in minimal deployments where the
             # optional bundled font is not present in the image.

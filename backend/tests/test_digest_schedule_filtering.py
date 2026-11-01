@@ -23,7 +23,7 @@ no_external_network = offline_network
 @pytest.mark.parametrize('has_match', [True, False])
 async def test_dispatch_uses_only_matching_period_source_category_and_any_keyword(
     env, db, monkeypatch, frequency, shape, has_match
-):
+) -> None:
     await setup_template(env, db)
     base, source, category, article = canonical_content(env, monkeypatch)
     engine = create_engine('sqlite:///:memory:')
@@ -54,16 +54,29 @@ async def test_dispatch_uses_only_matching_period_source_category_and_any_keywor
                 (7, '管道空正文', '', 1, 801, when),
                 (8, '管道检测', '重复标题正文', 1, 801, when),
             ]:
-                session.add(article(id=ident, title=title, content=body, source_id=source_id,
-                                    category_id=category_id, published_at=published))
+                session.add(
+                    article(
+                        id=ident,
+                        title=title,
+                        content=body,
+                        source_id=source_id,
+                        category_id=category_id,
+                        published_at=published,
+                    )
+                )
             session.commit()
 
             async def select_real_content(unused_db, start, end, config):
                 return await real_candidates(AsyncMemory(session), start, end, config)
 
-            result, row, enqueue, query, _ = await dispatch_fixture(
-                env, db, monkeypatch, generation, selection_config=selection,
-                candidate_loader=select_real_content, frequency=frequency,
+            result, _row, enqueue, query, _ = await dispatch_fixture(
+                env,
+                db,
+                monkeypatch,
+                generation,
+                selection_config=selection,
+                candidate_loader=select_real_content,
+                frequency=frequency,
             )
             assert result['failed'] == 0
             assert query.await_args.args[-1]['keywords'] == words
@@ -80,21 +93,31 @@ async def test_dispatch_uses_only_matching_period_source_category_and_any_keywor
         engine.dispose()
 
 
-@pytest.mark.parametrize('config', [
-    {'keywords': '管道'}, {'category_names': '后台类别'},
-    {'source_types': ['未知来源']}, {'source_types': []},
-    {'keywords': ['词'] * 21}, {'options': {'directions': '后台类别'}},
-])
-def test_invalid_saved_filters_fail_closed_instead_of_selecting_everything(env, config):
+@pytest.mark.parametrize(
+    'config',
+    [
+        {'keywords': '管道'},
+        {'category_names': '后台类别'},
+        {'source_types': ['未知来源']},
+        {'source_types': []},
+        {'keywords': ['词'] * 21},
+        {'options': {'directions': '后台类别'}},
+    ],
+)
+def test_invalid_saved_filters_fail_closed_instead_of_selecting_everything(env, config) -> None:
     with pytest.raises(env.exc):
         env.schedules.DigestScheduleService._selection_config(config)
 
 
 @pytest.mark.asyncio
-async def test_dispatch_with_invalid_saved_filters_never_queries_or_enqueues(env, db, monkeypatch):
+async def test_dispatch_with_invalid_saved_filters_never_queries_or_enqueues(env, db, monkeypatch) -> None:
     await setup_template(env, db)
     result, row, enqueue, query, before = await dispatch_fixture(
-        env, db, monkeypatch, {}, selection_config={'keywords': '管道', 'limit': 50},
+        env,
+        db,
+        monkeypatch,
+        {},
+        selection_config={'keywords': '管道', 'limit': 50},
     )
     assert result['failed'] == 1 and result['queued'] == 0
     query.assert_not_awaited()

@@ -4,8 +4,8 @@ from sqlalchemy import ColumnElement, delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.services.pagination import PaginationService
-from app.intelligence.schemas.ai_model import AiModelModel, AiModelPageQueryModel
 from app.intelligence.models.ai_models import AiModels
+from app.intelligence.schemas.ai_model import AiModelModel, AiModelPageQueryModel
 from common.http.schemas import PageModel
 
 
@@ -83,7 +83,9 @@ class AiModelDao:
         :return:
         """
         persistence_fields = set(AiModels.__table__.columns.keys())
-        await db.execute(update(AiModels), [{key: value for key, value in ai_model.items() if key in persistence_fields}])
+        await db.execute(
+            update(AiModels), [{key: value for key, value in ai_model.items() if key in persistence_fields}]
+        )
 
     @classmethod
     async def delete_ai_model_dao(cls, db: AsyncSession, ai_model: AiModelModel) -> None:

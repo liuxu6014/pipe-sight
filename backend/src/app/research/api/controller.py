@@ -236,7 +236,10 @@ async def update_pipeline_digest_schedule_config(
     current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
 ) -> Response:
     data = await ResearchApplicationService.update_digest_schedule(
-        query_db, current_user.user.user_id, schedule_id, body,
+        query_db,
+        current_user.user.user_id,
+        schedule_id,
+        body,
     )
     return ResponseUtil.success(data=data, msg='自动计划配置已保存，未立即执行')
 
@@ -331,8 +334,11 @@ async def propose_report_rewrite(
     query_db: Annotated[AsyncSession, DBSessionDependency()],
     current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
 ) -> Response:
-    return ResponseUtil.success(data=await ReportRewriteService.propose(
-        query_db, user_id=current_user.user.user_id, report_id=report_id, payload=body))
+    return ResponseUtil.success(
+        data=await ReportRewriteService.propose(
+            query_db, user_id=current_user.user.user_id, report_id=report_id, payload=body
+        )
+    )
 
 
 @controller.put('/research/reports/{report_id}', summary='自动保存或发布科研报告')
@@ -388,7 +394,9 @@ async def list_pipeline_research_report_versions(
     query_db: Annotated[AsyncSession, DBSessionDependency()],
     current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
 ) -> Response:
-    data = await ResearchApplicationService.list_report_versions(query_db, current_user.user.user_id, report_id, include_all=bool(current_user.user.admin))
+    data = await ResearchApplicationService.list_report_versions(
+        query_db, current_user.user.user_id, report_id, include_all=bool(current_user.user.admin)
+    )
     return ResponseUtil.success(data=data)
 
 
@@ -484,7 +492,9 @@ async def list_pipeline_research_report_exports(
     query_db: Annotated[AsyncSession, DBSessionDependency()],
     current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
 ) -> Response:
-    data = await ResearchApplicationService.list_report_exports(query_db, current_user.user.user_id, report_id, include_all=bool(current_user.user.admin))
+    data = await ResearchApplicationService.list_report_exports(
+        query_db, current_user.user.user_id, report_id, include_all=bool(current_user.user.admin)
+    )
     return ResponseUtil.success(data=data)
 
 

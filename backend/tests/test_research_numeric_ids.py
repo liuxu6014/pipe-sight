@@ -19,7 +19,7 @@ no_external_network = refactor_network
 LARGE_ID = 9007199254740993
 
 
-def test_research_primary_keys_share_sequence_and_all_foreign_keys_are_bigint(env):
+def test_research_primary_keys_share_sequence_and_all_foreign_keys_are_bigint(env) -> None:
     for name in ('reports', 'generation_tasks', 'digest_schedules', 'report_assets', 'knowledge_files'):
         table = env.Base.metadata.tables[name]
         assert isinstance(table.c.id.type, BigInteger)
@@ -35,7 +35,7 @@ def test_research_primary_keys_share_sequence_and_all_foreign_keys_are_bigint(en
 @pytest.mark.parametrize(
     'invalid', ['report-old-uuid', '', '1.0', '1e3', '１２', 0, -1, True, 1.5, '9223372036854775808']
 )
-def test_http_id_fields_reject_legacy_or_lossy_identifiers(env, invalid):
+def test_http_id_fields_reject_legacy_or_lossy_identifiers(env, invalid) -> None:
     schema = importlib.import_module('app.intelligence.schemas.pipeline')
     with pytest.raises(ValidationError):
         TypeAdapter(schema.BusinessId).validate_python(invalid)
@@ -47,7 +47,7 @@ def test_http_id_fields_reject_legacy_or_lossy_identifiers(env, invalid):
         )
 
 
-def test_http_dtos_preserve_bigint_precision_and_wire_strings(env):
+def test_http_dtos_preserve_bigint_precision_and_wire_strings(env) -> None:
     schema = importlib.import_module('app.intelligence.schemas.pipeline')
     dto = schema.PipelineResearchJobCreateModel(
         **payload(template_id=str(LARGE_ID), report_id=str(LARGE_ID + 1), selected_item_ids=[str(LARGE_ID + 2)])
@@ -60,7 +60,7 @@ def test_http_dtos_preserve_bigint_precision_and_wire_strings(env):
 
 
 @pytest.mark.asyncio
-async def test_repository_parses_before_sql_and_rejects_uuid_without_query(env, db, monkeypatch):
+async def test_repository_parses_before_sql_and_rejects_uuid_without_query(env, db, monkeypatch) -> None:
     _, material = seed(env, db)
     material.id = LARGE_ID
     await db.commit()
@@ -84,7 +84,7 @@ async def test_repository_parses_before_sql_and_rejects_uuid_without_query(env, 
 
 
 @pytest.mark.asyncio
-async def test_generated_relationships_are_int_and_snapshots_are_decimal_strings(env, db, monkeypatch):
+async def test_generated_relationships_are_int_and_snapshots_are_decimal_strings(env, db, monkeypatch) -> None:
     template, material = seed(env, db, image=True)
     template.image_config = {'enabled': True, 'prompt': '123 / doc-old-uuid 保留正文'}
     material.id = LARGE_ID
@@ -121,7 +121,7 @@ async def test_generated_relationships_are_int_and_snapshots_are_decimal_strings
 
 
 @pytest.mark.asyncio
-async def test_report_history_and_resource_serializers_use_decimal_ids(env, db):
+async def test_report_history_and_resource_serializers_use_decimal_ids(env, db) -> None:
     seed(env, db)
     report = env.models.PipelineReport(
         id=LARGE_ID,
@@ -148,7 +148,7 @@ async def test_report_history_and_resource_serializers_use_decimal_ids(env, db):
 
 
 @pytest.mark.asyncio
-async def test_schedule_snapshots_normalize_only_typed_entity_references(env, db):
+async def test_schedule_snapshots_normalize_only_typed_entity_references(env, db) -> None:
     template, _ = seed(env, db, model=False)
     template.purpose = 'digest'
     template.name = '通用简报模板'
@@ -176,7 +176,7 @@ async def test_schedule_snapshots_normalize_only_typed_entity_references(env, db
     assert not row.is_enabled and row.next_run_at is None
 
 
-def test_manuscript_ids_use_the_same_strict_wire_protocol(env):
+def test_manuscript_ids_use_the_same_strict_wire_protocol(env) -> None:
     schema = importlib.import_module('app.research.schemas.manuscript')
     dto = schema.ManuscriptGenerateModel(topic='题目', templateId=str(LARGE_ID), selectedItemIds=['101'])
     assert dto.template_id == LARGE_ID

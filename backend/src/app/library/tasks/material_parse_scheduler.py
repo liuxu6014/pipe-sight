@@ -15,7 +15,7 @@ _material_tasks = {}
 MAX_ATTEMPTS = 3
 
 
-async def process_material_parse(material_id, worker_id='material-worker'):
+async def process_material_parse(material_id, worker_id='material-worker') -> None:
     async with AsyncSessionLocal() as db:
         row = await MaterialDao.claim_material_parse(db, material_id)
         if not row:
@@ -42,7 +42,7 @@ async def process_material_parse(material_id, worker_id='material-worker'):
         )
 
 
-async def recover_material_parses():
+async def recover_material_parses() -> dict:
     if AsyncSessionLocal is None:
         return {'found': 0, 'dispatched': 0}
     async with AsyncSessionLocal() as db:
@@ -65,7 +65,7 @@ async def recover_material_parses():
     return {'found': len(ids), 'dispatched': dispatched}
 
 
-async def stop_material_parse_tasks():
+async def stop_material_parse_tasks() -> None:
     tasks = list(_material_tasks.values())
     for task in tasks:
         task.cancel()

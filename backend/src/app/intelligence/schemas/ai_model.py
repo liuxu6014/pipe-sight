@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
 from pydantic.alias_generators import to_camel
+from typing_extensions import Self
 
 from app.business_time import format_business_time
 
@@ -43,7 +44,7 @@ class AiModelModel(BaseModel):
         return format_business_time(value)
 
     @model_validator(mode='after')
-    def adapt(self):
+    def adapt(self) -> Self:
         self.id = self.id if self.id is not None else self.model_id
         self.name = self.name if self.name is not None else self.model_name
         self.code = self.code if self.code is not None else self.model_code
@@ -59,10 +60,10 @@ class AiModelModel(BaseModel):
             self.capabilities = [*self.capabilities, 'image_input']
         return self
 
-    def get_model_code(self):
+    def get_model_code(self) -> str | None:
         return self.code
 
-    def get_base_url(self):
+    def get_base_url(self) -> str | None:
         return self.base_url
 
 

@@ -90,10 +90,9 @@ def _execute_schema_file(filename: str) -> None:
                         continue
                     table_columns = {item['name'] for item in inspector.get_columns(table_name)}
                     parts = [column.strip() for column in columns_sql.split(',')]
-                    if (
-                        all(re.fullmatch(r'[`"]?\w+[`"]?(?:\s+(?:ASC|DESC))?', part, re.IGNORECASE) for part in parts)
-                        and any(part.split()[0].strip('`"') not in table_columns for part in parts)
-                    ):
+                    if all(
+                        re.fullmatch(r'[`"]?\w+[`"]?(?:\s+(?:ASC|DESC))?', part, re.IGNORECASE) for part in parts
+                    ) and any(part.split()[0].strip('`"') not in table_columns for part in parts):
                         continue
                     if op.get_bind().dialect.name == 'mysql':
                         statement = re.sub(r'IF NOT EXISTS\s+', '', statement, count=1, flags=re.IGNORECASE)
@@ -111,9 +110,7 @@ def _normalize_sys_job_primary_key() -> None:
     primary_key = inspector.get_pk_constraint('sys_job')
     if primary_key.get('constrained_columns') == ['job_id']:
         return
-    duplicate = connection.execute(
-        text('SELECT 1 FROM sys_job GROUP BY job_id HAVING COUNT(*) > 1 LIMIT 1')
-    ).first()
+    duplicate = connection.execute(text('SELECT 1 FROM sys_job GROUP BY job_id HAVING COUNT(*) > 1 LIMIT 1')).first()
     if duplicate:
         raise RuntimeError('sys_job.job_id contains duplicates and cannot become the single primary key')
     if connection.dialect.name == 'mysql':

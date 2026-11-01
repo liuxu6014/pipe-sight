@@ -61,11 +61,17 @@ class ContentDao:
         )
         # Classification enablement controls future processing, not whether
         # users can filter historical articles by a configured category.
-        article_categories = (await db.execute(
-            select(PipelineCategory.name)
-            .where(PipelineCategory.applies_to.in_(['news', 'all']))
-            .order_by(PipelineCategory.sort_order, PipelineCategory.name, PipelineCategory.id)
-        )).scalars().all()
+        article_categories = (
+            (
+                await db.execute(
+                    select(PipelineCategory.name)
+                    .where(PipelineCategory.applies_to.in_(['news', 'all']))
+                    .order_by(PipelineCategory.sort_order, PipelineCategory.name, PipelineCategory.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
         return {
             'articleCategories': list(article_categories),
             'newsTags': list(news_tags),
@@ -75,7 +81,7 @@ class ContentDao:
         }
 
     @staticmethod
-    def query(model: Any, **filters: Any):
+    def query(model: Any, **filters: Any) -> Any:
         statement = select(model)
         is_article = model is PipelineArticle
         is_paper = model is PipelinePaper
@@ -161,7 +167,7 @@ class ContentDao:
         return statement, date, values
 
     @classmethod
-    async def _list(cls, db: Any, model: Any, **filters: Any):
+    async def _list(cls, db: Any, model: Any, **filters: Any) -> list[Any]:
         statement, date, values = cls.query(model, **filters)
         keyword = (filters.get('keyword') or '').strip()
         rank = (
@@ -202,7 +208,7 @@ class ContentDao:
             # Match numeric ID ordering used by the cross-type cursor.
             statement = statement.where(
                 or_(
-                    rank < score if not isinstance(rank, int) else (rank < score),
+                    rank < score,
                     and_(
                         rank == score,
                         or_(
@@ -236,52 +242,52 @@ class ContentDao:
         )
 
     @classmethod
-    async def _count(cls, db: Any, model: Any, **filters: Any):
+    async def _count(cls, db: Any, model: Any, **filters: Any) -> int:
         statement, _, _ = cls.query(model, **filters)
         return (await db.execute(select(func.count()).select_from(statement.subquery()))).scalar_one()
 
     @classmethod
-    async def list_articles(cls, db: Any, **filters: Any):
+    async def list_articles(cls, db: Any, **filters: Any) -> list[Any]:
         return await cls._list(db, PipelineArticle, **filters)
 
     @classmethod
-    async def count_articles(cls, db: Any, **filters: Any):
+    async def count_articles(cls, db: Any, **filters: Any) -> int:
         return await cls._count(db, PipelineArticle, **filters)
 
     @classmethod
-    async def list_papers(cls, db: Any, **filters: Any):
+    async def list_papers(cls, db: Any, **filters: Any) -> list[Any]:
         return await cls._list(db, PipelinePaper, **filters)
 
     @classmethod
-    async def count_papers(cls, db: Any, **filters: Any):
+    async def count_papers(cls, db: Any, **filters: Any) -> int:
         return await cls._count(db, PipelinePaper, **filters)
 
     @staticmethod
-    async def get_article(db: Any, identity: str):
+    async def get_article(db: Any, identity: str) -> PipelineArticle | None:
         return await db.get(PipelineArticle, parse_business_id(identity))
 
     @staticmethod
-    async def get_paper(db: Any, identity: str):
+    async def get_paper(db: Any, identity: str) -> PipelinePaper | None:
         return await db.get(PipelinePaper, parse_business_id(identity))
 
     @classmethod
-    async def list_search_materials(cls, db: Any, user_id: int, **filters: Any):
+    async def list_search_materials(cls, db: Any, user_id: int, **filters: Any) -> list[Any]:
         return await cls._list(db, PipelineMaterial, user_id=user_id, **filters)
 
     @classmethod
-    async def count_search_materials(cls, db: Any, user_id: int, **filters: Any):
+    async def count_search_materials(cls, db: Any, user_id: int, **filters: Any) -> int:
         return await cls._count(db, PipelineMaterial, user_id=user_id, **filters)
 
     @classmethod
-    async def list_search_reports(cls, db: Any, user_id: int, **filters: Any):
+    async def list_search_reports(cls, db: Any, user_id: int, **filters: Any) -> list[Any]:
         return await cls._list(db, PipelineReport, user_id=user_id, **filters)
 
     @classmethod
-    async def count_search_reports(cls, db: Any, user_id: int, **filters: Any):
+    async def count_search_reports(cls, db: Any, user_id: int, **filters: Any) -> int:
         return await cls._count(db, PipelineReport, user_id=user_id, **filters)
 
     @staticmethod
-    async def portal_overview_counts(db: Any, *, user_id: int, start: datetime, end: datetime):
+    async def portal_overview_counts(db: Any, *, user_id: int, start: datetime, end: datetime) -> dict[str, int]:
         # One round trip; every aggregate describes the same database statement snapshot.
         expressions = []
         for kind, source_type in (('news', 'website'), ('wechat', 'wechat')):

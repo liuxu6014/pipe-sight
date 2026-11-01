@@ -1,7 +1,6 @@
 """G01/G02/G03/G04/G07/G11：纯内存对象与 AsyncMock，无数据库/模型/调度写入。"""
 
 # 与共享离线测试夹具一致，使用动态服务对象。
-# ruff: noqa: ANN001, ANN201, N814
 
 import importlib
 import json
@@ -20,17 +19,36 @@ no_external_network = offline_network
 
 
 def template(**updates):
-    return NS(id=201, name='日报', purpose='digest', description='', prompt='模板要求',
-              model_id=1, image_model_id=None, sections=[], image_config={}, is_enabled=True,
-              updated_at=None, **updates)
+    return NS(
+        id=201,
+        name='日报',
+        purpose='digest',
+        description='',
+        prompt='模板要求',
+        model_id=1,
+        image_model_id=None,
+        sections=[],
+        image_config={},
+        is_enabled=True,
+        updated_at=None,
+        **updates,
+    )
 
 
-@pytest.mark.parametrize(('name', 'purpose', 'expected'), [
-    ('日报', 'digest', 'daily'), ('周报', 'digest', 'weekly'), ('月报', 'digest', 'monthly'),
-    ('科技情报日报', 'digest', 'daily'), ('管网科技情报月报', 'digest', 'monthly'),
-    ('通用简报', 'digest', 'all'), ('未知模板', 'digest', None),
-    ('日报周报月报', 'digest', None), ('日报', 'research', None),
-])
+@pytest.mark.parametrize(
+    ('name', 'purpose', 'expected'),
+    [
+        ('日报', 'digest', 'daily'),
+        ('周报', 'digest', 'weekly'),
+        ('月报', 'digest', 'monthly'),
+        ('科技情报日报', 'digest', 'daily'),
+        ('管网科技情报月报', 'digest', 'monthly'),
+        ('通用简报', 'digest', 'all'),
+        ('未知模板', 'digest', None),
+        ('日报周报月报', 'digest', None),
+        ('日报', 'research', None),
+    ],
+)
 def test_template_cadence_is_explicit_and_keeps_legacy_fields(env, name, purpose, expected):
     row = template()
     row.name, row.purpose = name, purpose
@@ -44,12 +62,16 @@ def queue_mocks(env, monkeypatch, row):
     model = NS(id=1, provider='compatible', code='offline', base_url='https://offline.invalid', parameters={})
     service = NS(get_published=AsyncMock(return_value=row), validate_models=AsyncMock(return_value=model))
     monkeypatch.setattr(env.repo.ResearchDao, 'get_research_job_by_request_id', AsyncMock(return_value=None))
-    monkeypatch.setattr(env.repo.ResearchDao, 'add_report', AsyncMock(side_effect=lambda db, report: setattr(report, 'id', 301)))
+    monkeypatch.setattr(
+        env.repo.ResearchDao, 'add_report', AsyncMock(side_effect=lambda db, report: setattr(report, 'id', 301))
+    )
     add_job = AsyncMock()
     monkeypatch.setattr(env.repo.ResearchDao, 'add_research_job', add_job)
-    monkeypatch.setattr(jobs.ResearchEvidenceService, 'resolve', AsyncMock(return_value=[
-        {'type': 'file', 'id': '101', 'title': '证据', 'content': '原文', 'source': {}}
-    ]))
+    monkeypatch.setattr(
+        jobs.ResearchEvidenceService,
+        'resolve',
+        AsyncMock(return_value=[{'type': 'file', 'id': '101', 'title': '证据', 'content': '原文', 'source': {}}]),
+    )
     return jobs, service, add_job
 
 
@@ -61,26 +83,46 @@ async def test_manual_submission_rejects_wrong_or_unknown_cadence_before_enqueue
     jobs, service, enqueue = queue_mocks(env, monkeypatch, row)
     with pytest.raises(env.exc) as caught:
         await jobs.ResearchJobService.queue(
-            AsyncMock(), user_id=7, owner_name='', payload={
-                'title': '日报任务', 'report_type': 'daily', 'template_id': '201', 'selected_item_ids': ['101']
-            }, stage_labels=[], job_serializer=lambda *a, **k: {}, template_service=service,
+            AsyncMock(),
+            user_id=7,
+            owner_name='',
+            payload={'title': '日报任务', 'report_type': 'daily', 'template_id': '201', 'selected_item_ids': ['101']},
+            stage_labels=[],
+            job_serializer=lambda *a, **k: {},
+            template_service=service,
         )
     assert '周期' in caught.value.message
     enqueue.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('choice', [{'diagram': False}, {'options': {'generateImages': False}},
-                                  {'diagram': False, 'options': {'generateImages': True}}])
+@pytest.mark.parametrize(
+    'choice',
+    [
+        {'diagram': False},
+        {'options': {'generateImages': False}},
+        {'diagram': False, 'options': {'generateImages': True}},
+    ],
+)
 async def test_explicit_image_off_overrides_template_before_model_validation(env, monkeypatch, choice):
     row = template()
     row.image_config = {'enabled': True, 'count': 2}
     jobs, service, enqueue = queue_mocks(env, monkeypatch, row)
     original = deepcopy(row.image_config)
     await jobs.ResearchJobService.queue(
-        AsyncMock(), user_id=7, owner_name='', payload={
-            'title': '日报任务', 'report_type': 'daily', 'template_id': '201', 'selected_item_ids': ['101'], **choice
-        }, stage_labels=[], job_serializer=lambda *a, **k: {}, template_service=service,
+        AsyncMock(),
+        user_id=7,
+        owner_name='',
+        payload={
+            'title': '日报任务',
+            'report_type': 'daily',
+            'template_id': '201',
+            'selected_item_ids': ['101'],
+            **choice,
+        },
+        stage_labels=[],
+        job_serializer=lambda *a, **k: {},
+        template_service=service,
     )
     assert all(call.args[3]['enabled'] is False for call in service.validate_models.await_args_list)
     snapshot = enqueue.await_args.args[1].config_snapshot
@@ -90,12 +132,29 @@ async def test_explicit_image_off_overrides_template_before_model_validation(env
 
 @pytest.mark.asyncio
 async def test_model_instructions_include_business_boundaries_and_output_options(env, monkeypatch):
-    request = {'direction': '漏损研究', 'project': '示范工程', 'scenario': '地下管道',
-               'period': ['2026-10-01', '2026-10-31'], 'keywords': ['声学'], 'requirements': '用户要求',
-               'options': {'language': 'zh', 'length': 'long', 'summaryLength': 'short',
-                           'hotAnalysis': False, 'duplicateMerge': True, 'itemCount': 3}}
-    snapshot = {'title': '月报', 'type': 'monthly', 'request': request,
-                'template': {'prompt': '模板', 'sections': []}, 'model': {}}
+    request = {
+        'direction': '漏损研究',
+        'project': '示范工程',
+        'scenario': '地下管道',
+        'period': ['2026-10-01', '2026-10-31'],
+        'keywords': ['声学'],
+        'requirements': '用户要求',
+        'options': {
+            'language': 'zh',
+            'length': 'long',
+            'summaryLength': 'short',
+            'hotAnalysis': False,
+            'duplicateMerge': True,
+            'itemCount': 3,
+        },
+    }
+    snapshot = {
+        'title': '月报',
+        'type': 'monthly',
+        'request': request,
+        'template': {'prompt': '模板', 'sections': []},
+        'model': {},
+    }
     before = deepcopy(snapshot)
     call = AsyncMock(return_value='离线正文')
     monkeypatch.setattr(env.gateway.ModelGateway, 'call', call)
@@ -115,24 +174,39 @@ async def mock_session(db):
 
 @pytest.mark.asyncio
 async def test_schedule_rebuilds_current_period_without_mutating_saved_preferences(env, monkeypatch):
-    row = NS(id=501, user_id=7, template_id=201, name='日报', frequency='daily', run_time=time(8),
-             timezone='Asia/Shanghai', next_run_at=datetime(2026, 10, 26, tzinfo=timezone.utc),
-             selection_config={'keywords': ['漏损'], 'limit': 5},
-             generation_config={'requirements': '报告周期：2020-01-01；来源范围：新闻网站；自定义关注管网',
-                                'direction': '监测', 'options': {'sources': ['新闻网站']}})
+    row = NS(
+        id=501,
+        user_id=7,
+        template_id=201,
+        name='日报',
+        frequency='daily',
+        run_time=time(8),
+        timezone='Asia/Shanghai',
+        next_run_at=datetime(2026, 10, 26, tzinfo=timezone.utc),
+        selection_config={'keywords': ['漏损'], 'limit': 5},
+        generation_config={
+            'requirements': '报告周期：2020-01-01；来源范围：新闻网站；自定义关注管网',
+            'direction': '监测',
+            'options': {'sources': ['新闻网站']},
+        },
+    )
     before = deepcopy(row.generation_config)
     db = AsyncMock()
     db.begin_nested = lambda: mock_session(db)
     monkeypatch.setattr(env.schedules, 'AsyncSessionLocal', lambda: mock_session(db))
     monkeypatch.setattr(env.repo.ResearchDao, 'list_due_schedules', AsyncMock(return_value=[row]))
-    monkeypatch.setattr(env.repo.ResearchDao, 'digest_candidates', AsyncMock(return_value=[
-        NS(id=101, title='资料', content='原文', content_zh=None)
-    ]))
+    monkeypatch.setattr(
+        env.repo.ResearchDao,
+        'digest_candidates',
+        AsyncMock(return_value=[NS(id=101, title='资料', content='原文', content_zh=None)]),
+    )
     enqueue = AsyncMock()
     monkeypatch.setattr(env.schedules.ResearchJobService, 'queue', enqueue)
     service = NS(get_published=AsyncMock(return_value=template()), validate_models=AsyncMock())
     result = await env.schedules.DigestScheduleService.dispatch_due(
-        stage_labels=[], job_serializer=lambda *a, **k: {}, template_service=service,
+        stage_labels=[],
+        job_serializer=lambda *a, **k: {},
+        template_service=service,
     )
     assert result['queued'] == 1
     data = enqueue.await_args.kwargs['payload']
@@ -165,8 +239,12 @@ async def test_generated_version_records_normalization_separately_from_unrun_che
     report = NS(id=301, version=1, title='报告', content='', template_id=201)
     db = AsyncMock()
     monkeypatch.setattr(execution, 'AsyncSessionLocal', lambda: mock_session(db))
-    for name, value in [('claim_research_job', job), ('lock_running_research_job', job),
-                        ('get_report', report), ('get_report_version', None)]:
+    for name, value in [
+        ('claim_research_job', job),
+        ('lock_running_research_job', job),
+        ('get_report', report),
+        ('get_report_version', None),
+    ]:
         monkeypatch.setattr(env.repo.ResearchDao, name, AsyncMock(return_value=value))
     save = AsyncMock()
     monkeypatch.setattr(env.repo.ResearchDao, 'add_report_version', save)
@@ -178,17 +256,27 @@ async def test_generated_version_records_normalization_separately_from_unrun_che
     version = save.await_args.args[1]
     checks = version.model_snapshot.get('checks')
     assert checks is not None
-    assert checks['citation'] == {'requested': requested, 'status': 'not_run',
-                                  'reason': 'normalization_only', 'normalization': 'completed', 'version': 2}
+    assert checks['citation'] == {
+        'requested': requested,
+        'status': 'not_run',
+        'reason': 'normalization_only',
+        'normalization': 'completed',
+        'version': 2,
+    }
     assert checks['quality'] == {'status': 'not_run', 'version': 2}
     assert job.config_snapshot == version.model_snapshot
     assert 'checks' not in snapshot
 
 
-@pytest.mark.parametrize(('choice', 'expected'), [
-    ({}, True), ({'diagram': True}, True), ({'options': {'generateImages': False}}, False),
-    ({'diagram': True, 'options': {'generateImages': False}}, True),
-])
+@pytest.mark.parametrize(
+    ('choice', 'expected'),
+    [
+        ({}, True),
+        ({'diagram': True}, True),
+        ({'options': {'generateImages': False}}, False),
+        ({'diagram': True, 'options': {'generateImages': False}}, True),
+    ],
+)
 def test_image_selection_presence_and_precedence(env, choice, expected):
     original = {'enabled': True, 'count': 2}
     result = env.template.PipelineTemplateService.effective_image_config(original, choice)
@@ -213,13 +301,23 @@ async def test_pydantic_default_is_not_an_explicit_image_choice(env, monkeypatch
     image = NS(id=2, provider='compatible', code='image', base_url='https://offline.invalid', parameters={})
     monkeypatch.setattr(env.repo.ResearchDao, 'get_model', AsyncMock(return_value=image))
     schema = importlib.import_module('app.intelligence.schemas.pipeline')
-    data = {'title': '日报', 'reportType': 'daily', 'templateId': '201', 'selectedItemIds': ['101'],
-            'options': {'generateImages': True}}
+    data = {
+        'title': '日报',
+        'reportType': 'daily',
+        'templateId': '201',
+        'selectedItemIds': ['101'],
+        'options': {'generateImages': True},
+    }
     if explicit:
         data['diagram'] = False
     await jobs.ResearchJobService.queue(
-        AsyncMock(), user_id=7, owner_name='', payload=schema.PipelineResearchJobCreateModel(**data),
-        stage_labels=[], job_serializer=lambda *a, **k: {}, template_service=service,
+        AsyncMock(),
+        user_id=7,
+        owner_name='',
+        payload=schema.PipelineResearchJobCreateModel(**data),
+        stage_labels=[],
+        job_serializer=lambda *a, **k: {},
+        template_service=service,
     )
     snapshot = enqueue.await_args.args[1].config_snapshot
     assert snapshot['template']['image_config']['enabled'] is (not explicit)
@@ -239,15 +337,25 @@ async def test_image_choice_presence_is_part_of_idempotency_without_breaking_rep
     monkeypatch.setattr(env.repo.ResearchDao, 'get_model', AsyncMock(return_value=image))
     monkeypatch.setattr(env.repo.ResearchDao, 'get_report', AsyncMock(return_value=NS(id=301)))
     schema = importlib.import_module('app.intelligence.schemas.pipeline')
-    data = {'title': '日报', 'reportType': 'daily', 'templateId': '201', 'selectedItemIds': ['101'],
-            'requestId': 'image-presence'}
+    data = {
+        'title': '日报',
+        'reportType': 'daily',
+        'templateId': '201',
+        'selectedItemIds': ['101'],
+        'requestId': 'image-presence',
+    }
     if initial_choice is not None:
         data['diagram'] = initial_choice
 
     async def submit(value) -> dict:
         return await jobs.ResearchJobService.queue(
-            AsyncMock(), user_id=7, owner_name='', payload=value,
-            stage_labels=[], job_serializer=lambda *a, **k: {'jobId': '401'}, template_service=service,
+            AsyncMock(),
+            user_id=7,
+            owner_name='',
+            payload=value,
+            stage_labels=[],
+            job_serializer=lambda *a, **k: {'jobId': '401'},
+            template_service=service,
         )
 
     original = schema.PipelineResearchJobCreateModel(**data)
@@ -309,9 +417,13 @@ async def test_plan_lifecycle_rejects_unknown_cadence_without_commit(env, monkey
     schedules = env.schedules.DigestScheduleService
     with pytest.raises(env.exc) as caught:
         if action == 'create':
-            await schedules.create(db, user_id=7, owner_name='', payload={
-                'name': '日报计划', 'template_id': '201', 'report_type': 'daily'
-            }, template_service=service)
+            await schedules.create(
+                db,
+                user_id=7,
+                owner_name='',
+                payload={'name': '日报计划', 'template_id': '201', 'report_type': 'daily'},
+                template_service=service,
+            )
         elif action == 'set_enabled':
             await schedules.set_enabled(db, 7, 501, True)
         else:

@@ -30,22 +30,14 @@ def _create_quality_issue_table() -> None:
         sa.Column('resolved_at', sa.DateTime(), nullable=True),
         sa.Column('create_time', sa.DateTime(), nullable=False),
         sa.Column('update_time', sa.DateTime(), nullable=False),
-        sa.UniqueConstraint(
-            'content_type', 'content_id', 'issue_code', name='uk_pipeline_quality_issue_content_code'
-        ),
-        sa.CheckConstraint(
-            "content_type IN ('article', 'paper')", name='ck_pipeline_quality_issue_content_type'
-        ),
+        sa.UniqueConstraint('content_type', 'content_id', 'issue_code', name='uk_pipeline_quality_issue_content_code'),
+        sa.CheckConstraint("content_type IN ('article', 'paper')", name='ck_pipeline_quality_issue_content_type'),
         sa.CheckConstraint(
             "issue_code IN ('duplicate', 'missing', 'tag', 'parse', 'review')",
             name='ck_pipeline_quality_issue_code',
         ),
-        sa.CheckConstraint(
-            "severity IN ('error', 'warning', 'info')", name='ck_pipeline_quality_issue_severity'
-        ),
-        sa.CheckConstraint(
-            "status IN ('open', 'resolved', 'ignored')", name='ck_pipeline_quality_issue_status'
-        ),
+        sa.CheckConstraint("severity IN ('error', 'warning', 'info')", name='ck_pipeline_quality_issue_severity'),
+        sa.CheckConstraint("status IN ('open', 'resolved', 'ignored')", name='ck_pipeline_quality_issue_status'),
         sa.ForeignKeyConstraint(
             ['operator_id'], ['sys_user.user_id'], ondelete='SET NULL', name='fk_pipeline_quality_issue_operator'
         ),
@@ -77,9 +69,7 @@ def _create_duplicate_tables() -> None:
         sa.Column('create_time', sa.DateTime(), nullable=False),
         sa.Column('update_time', sa.DateTime(), nullable=False),
         sa.UniqueConstraint('content_type', 'group_key', name='uk_pipeline_duplicate_group_key'),
-        sa.CheckConstraint(
-            "content_type IN ('article', 'paper')", name='ck_pipeline_duplicate_group_content_type'
-        ),
+        sa.CheckConstraint("content_type IN ('article', 'paper')", name='ck_pipeline_duplicate_group_content_type'),
         sa.CheckConstraint(
             "status IN ('candidate', 'merged', 'split', 'dismissed')",
             name='ck_pipeline_duplicate_group_status',
@@ -106,12 +96,8 @@ def _create_duplicate_tables() -> None:
         sa.Column('relation_type', sa.String(16), nullable=False, server_default='candidate'),
         sa.Column('similarity', sa.Float(), nullable=True),
         sa.Column('create_time', sa.DateTime(), nullable=False),
-        sa.UniqueConstraint(
-            'group_id', 'content_type', 'content_id', name='uk_pipeline_duplicate_member_content'
-        ),
-        sa.CheckConstraint(
-            "content_type IN ('article', 'paper')", name='ck_pipeline_duplicate_member_content_type'
-        ),
+        sa.UniqueConstraint('group_id', 'content_type', 'content_id', name='uk_pipeline_duplicate_member_content'),
+        sa.CheckConstraint("content_type IN ('article', 'paper')", name='ck_pipeline_duplicate_member_content_type'),
         sa.CheckConstraint(
             "relation_type IN ('candidate', 'master', 'duplicate')",
             name='ck_pipeline_duplicate_member_relation_type',
@@ -121,7 +107,9 @@ def _create_duplicate_tables() -> None:
             name='ck_pipeline_duplicate_member_similarity',
         ),
         sa.ForeignKeyConstraint(
-            ['group_id'], ['pipeline_duplicate_groups.group_id'], ondelete='CASCADE',
+            ['group_id'],
+            ['pipeline_duplicate_groups.group_id'],
+            ondelete='CASCADE',
             name='fk_pipeline_duplicate_member_group',
         ),
     )

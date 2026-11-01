@@ -101,7 +101,7 @@ class IntelligenceCatalogService:
         date_formatter: Any,
         **filters: Any,
     ) -> dict[str, Any]:
-        if page_num < 1 or not 1 <= page_size <= 100:
+        if page_num < 1 or not 1 <= page_size <= 100:  # noqa: PLR2004
             raise ServiceException(message='分页参数不正确')
         article_type = (
             source_type if source_type in {'news', 'wechat'} else category if category in {'news', 'wechat'} else None

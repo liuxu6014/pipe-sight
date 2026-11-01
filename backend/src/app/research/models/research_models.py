@@ -118,7 +118,10 @@ class PipelineDigestSchedule(Base):
             name='ck_digest_schedules_frequency',
         ),
         CheckConstraint('NOT is_enabled OR next_run_at IS NOT NULL', name='ck_digest_schedules_next_run_at'),
-        CheckConstraint("last_status IS NULL OR last_status IN ('queued','no_data','skipped','failed')", name='ck_digest_schedules_last_status'),
+        CheckConstraint(
+            "last_status IS NULL OR last_status IN ('queued','no_data','skipped','failed')",
+            name='ck_digest_schedules_last_status',
+        ),
         CheckConstraint("jsonb_typeof(selection_config)='object'", name='ck_digest_schedules_selection_config').ddl_if(
             dialect='postgresql'
         ),

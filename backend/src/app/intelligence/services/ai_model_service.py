@@ -17,7 +17,7 @@ from exceptions.exception import ServiceException
 
 class AiModelService:
     @staticmethod
-    def public(row):
+    def public(row) -> AiModelModel:
         # 不返回 credential_ref 密文/引用，不回传凭证；只告知已配置。
         return AiModelModel(
             id=row.id,
@@ -45,7 +45,9 @@ class AiModelService:
         )
 
     @classmethod
-    async def get_ai_model_list_services(cls, query_db, query_object, data_scope_sql=True, is_page=False):
+    async def get_ai_model_list_services(
+        cls, query_db, query_object, data_scope_sql=True, is_page=False
+    ) -> PageModel | list[dict]:
         query = select(AiModels).order_by(AiModels.id)
         if query_object.model_id is not None:
             query = query.where(AiModels.id == query_object.model_id)
@@ -76,14 +78,14 @@ class AiModelService:
         )
 
     @staticmethod
-    async def check_ai_model_data_scope_services(query_db, model_id, data_scope_sql=True):
+    async def check_ai_model_data_scope_services(query_db, model_id, data_scope_sql=True) -> CrudResponseModel:
         # 管理员权限由路由鉴权；不存在按真实实体判断。
         if not await query_db.get(AiModels, model_id):
             raise ServiceException(message='AI模型不存在')
         return CrudResponseModel(is_success=True, message='校验通过')
 
     @staticmethod
-    def values(dto, current=None):
+    def values(dto, current=None) -> dict:
         result = {}
         for name in ('name', 'provider', 'code', 'base_url', 'capabilities', 'parameters', 'is_enabled'):
             value = getattr(dto, name)
@@ -118,12 +120,12 @@ class AiModelService:
         ):
             raise ServiceException(message='模型地址必须为有效 HTTP(S) 基础地址')
         if (
-            not 1 <= int(params.get('timeout_seconds', 60)) <= 120
-            or not 1 <= int(params.get('max_tokens', 2048)) <= 32768
-            or not 0 <= float(params.get('temperature', 0.2)) <= 2
+            not 1 <= int(params.get('timeout_seconds', 60)) <= 120  # noqa: PLR2004
+            or not 1 <= int(params.get('max_tokens', 2048)) <= 32768  # noqa: PLR2004
+            or not 0 <= float(params.get('temperature', 0.2)) <= 2  # noqa: PLR2004
         ):
             raise ServiceException(message='模型超时、Token 或温度参数超出范围')
-        if int(params.get('daily_limit', 0)) < 0 or not 1 <= int(params.get('context_chars', 100000)) <= 2000000:
+        if int(params.get('daily_limit', 0)) < 0 or not 1 <= int(params.get('context_chars', 100000)) <= 2000000:  # noqa: PLR2004
             raise ServiceException(message='模型配额或上下文预算不合法')
         # 参数白名单禁止把凭证/任意正文塞入任务快照。
         allowed = {
@@ -142,7 +144,7 @@ class AiModelService:
         return result
 
     @classmethod
-    async def add_ai_model_services(cls, query_db, page_object):
+    async def add_ai_model_services(cls, query_db, page_object) -> CrudResponseModel:
         values = cls.values(page_object)
         values.setdefault('is_enabled', True)
         query_db.add(AiModels(**values))
@@ -150,7 +152,7 @@ class AiModelService:
         return CrudResponseModel(is_success=True, message='新增成功')
 
     @classmethod
-    async def edit_ai_model_services(cls, query_db, page_object):
+    async def edit_ai_model_services(cls, query_db, page_object) -> CrudResponseModel:
         row = await query_db.get(AiModels, page_object.id)
         if not row:
             raise ServiceException(message='AI模型不存在')
@@ -160,14 +162,14 @@ class AiModelService:
         return CrudResponseModel(is_success=True, message='修改成功')
 
     @classmethod
-    async def ai_model_detail_services(cls, query_db, model_id):
+    async def ai_model_detail_services(cls, query_db, model_id) -> AiModelModel:
         row = await query_db.get(AiModels, model_id)
         if not row:
             raise ServiceException(message='AI模型不存在')
         return cls.public(row)
 
     @staticmethod
-    async def delete_ai_model_services(query_db, page_object):
+    async def delete_ai_model_services(query_db, page_object) -> CrudResponseModel:
         try:
             ids = [int(item) for item in page_object.model_ids.split(',')]
             await query_db.execute(delete(AiModels).where(AiModels.id.in_(ids)))
@@ -178,7 +180,9 @@ class AiModelService:
         return CrudResponseModel(is_success=True, message='删除成功')
 
     @staticmethod
-    async def test_ai_model_services(query_db, model_id, data_scope_sql=True, capability='text_generate'):
+    async def test_ai_model_services(
+        query_db, model_id, data_scope_sql=True, capability='text_generate'
+    ) -> AiModelTestResultModel:
         row = await query_db.get(AiModels, model_id)
         if not row:
             raise ServiceException(message='AI模型不存在')

@@ -57,7 +57,7 @@ def projected_fingerprints(connection: sa.Connection, columns: dict[str, list[st
     return result
 
 
-def validate_conversion_scope(previous: dict, target: dict) -> dict[str, list[str]]:  # noqa: PLR0912
+def validate_conversion_scope(previous: dict, target: dict) -> dict[str, list[str]]:
     """Fail closed if a future snapshot attempts unrelated metadata changes."""
     selected = audit_columns(previous)
     if set(previous['catalog']) != set(target['catalog']) or set(selected) != set(BUSINESS_TABLES):
@@ -90,7 +90,7 @@ def validate_conversion_scope(previous: dict, target: dict) -> dict[str, list[st
     return selected
 
 
-def migrate_beijing_audit_time(connection: sa.Connection, *, backup_dir: Path, allow_live: bool = False) -> dict:  # noqa: PLR0912, PLR0915
+def migrate_beijing_audit_time(connection: sa.Connection, *, backup_dir: Path, allow_live: bool = False) -> dict:
     """Atomic, explicit Beijing wall-clock migration under a caller transaction."""
     if not connection.in_transaction() or connection.dialect.name != 'postgresql':
         raise RuntimeError('A PostgreSQL caller-owned transaction is required')

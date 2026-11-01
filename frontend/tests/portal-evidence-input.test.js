@@ -79,6 +79,12 @@ test('digest starts unfiltered and uses administrator category labels', async ()
     ctx.page.updateKeywords(undefined)
     await settle()
     assert.deepEqual(calls.at(-1).keywords, [])
+    ctx.page.keywordDraft.value = ' 管道 '
+    ctx.page.addKeyword()
+    assert.deepEqual(ctx.page.form.keywords, ['管道'])
+    assert.equal(ctx.page.keywordDraft.value, '')
+    ctx.page.removeKeyword('管道')
+    assert.deepEqual(ctx.page.form.keywords, [])
     assert.equal(ctx.mutations, 0)
   } finally { ctx.close() }
 })

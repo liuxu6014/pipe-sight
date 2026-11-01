@@ -57,6 +57,15 @@ test('portal hydration fetches unified reports once and shares report failures w
   assert.match(store.dataError, /1\/6/)
 })
 
+test('session expiry is not presented as a data synchronization outage', async () => {
+  const { store, requests } = portalStore()
+  const pending = store.hydrate()
+  requests.forEach(request => request.reject('无效的会话，或者会话已过期，请重新登录！'))
+  await pending
+  assert.equal(store.dataError, '')
+  assert.equal(Object.values(store.sectionErrors).every(error => error === ''), true)
+})
+
 test('late hydration after logout cannot repopulate the cleared workspace', async () => {
   const { store, requests } = portalStore()
   const previous = store.hydrate()

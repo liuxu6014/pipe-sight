@@ -4,9 +4,11 @@
 网络 I/O 不得在这些事务内发生。共享 PipelineDao 不参与采集执行。
 """
 
+from collections.abc import Callable
 from copy import deepcopy
-from datetime import timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from functools import wraps
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import func, select
@@ -21,9 +23,9 @@ ACTIVE = ('queued', 'running', 'stopping')
 TERMINAL = ('success', 'failed', 'cancelled')
 
 
-def write_operation(method):
+def write_operation(method) -> Callable[..., Any]:
     @wraps(method)
-    async def wrapped(cls, db, *args, **kwargs):
+    async def wrapped(cls, db, *args, **kwargs) -> Any:
         try:
             return await method(cls, db, *args, **kwargs)
         except BaseException:
@@ -41,14 +43,14 @@ class LeaseLost(CollectionConflict):
     pass
 
 
-def aware(value):
+def aware(value) -> datetime:
     # Only used by the in-memory SQLite tests (SQLite drops timezone offsets).
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
 
 
 class CollectionRepository:
     @staticmethod
-    async def source(db, source_id, *, lock=False):
+    async def source(db, source_id, *, lock=False) -> Source:
         source_id = parse_business_id(source_id)
         stmt = select(Source).where(Source.id == source_id).execution_options(populate_existing=True)
         if lock:
@@ -59,7 +61,7 @@ class CollectionRepository:
         return source
 
     @staticmethod
-    async def run(db, run_id):
+    async def run(db, run_id) -> Run:
         run_id = parse_business_id(run_id)
         run = (
             (await db.execute(select(Run).where(Run.id == run_id).execution_options(populate_existing=True)))
@@ -71,7 +73,7 @@ class CollectionRepository:
         return run
 
     @classmethod
-    async def locked_run(cls, db, run_id):
+    async def locked_run(cls, db, run_id) -> tuple[Source, Run]:
         run_id = parse_business_id(run_id)
         # The source ID is immutable after insertion.
         source_id = (await db.execute(select(Run.source_id).where(Run.id == run_id))).scalar_one_or_none()
@@ -90,14 +92,14 @@ class CollectionRepository:
         return source, run
 
     @staticmethod
-    async def active(db, source_id):
+    async def active(db, source_id) -> Run | None:
         source_id = parse_business_id(source_id)
         return (
             (await db.execute(select(Run).where(Run.source_id == source_id, Run.status.in_(ACTIVE)))).scalars().first()
         )
 
     @staticmethod
-    def terminal(run, status, now, error=None):
+    def terminal(run, status, now, error=None) -> None:
         run.status = status
         run.error = error
         run.finished_at = now
@@ -106,7 +108,7 @@ class CollectionRepository:
         run.lease_expires_at = None
 
     @staticmethod
-    def fence(run, token, now, *, allow_stopping=False):
+    def fence(run, token, now, *, allow_stopping=False) -> None:
         states = ('running', 'stopping') if allow_stopping else ('running',)
         if (
             run.status not in states
@@ -131,10 +133,10 @@ class CollectionRepository:
         parent_id=None,
         available_at=None,
         checkpoint=None,
-    ):
+    ) -> Run:
         source_id = parse_business_id(source_id)
         parent_id = parse_business_id(parent_id) if parent_id is not None else None
-        if not request_id or len(request_id) > 128:
+        if not request_id or len(request_id) > 128:  # noqa: PLR2004
             raise CollectionConflict('request_id 必须为 1～128 字符')
         source = await cls.source(db, source_id, lock=True)
         previous = (await db.execute(select(Run).where(Run.request_id == request_id))).scalars().first()
@@ -198,7 +200,7 @@ class CollectionRepository:
 
     @classmethod
     @write_operation
-    async def set_enabled(cls, db, source_id, enabled, *, now, next_run_at):
+    async def set_enabled(cls, db, source_id, enabled, *, now, next_run_at) -> Source:
         source = await cls.source(db, source_id, lock=True)
         source.is_enabled = enabled
         source.next_run_at = next_run_at if enabled else None
@@ -213,7 +215,7 @@ class CollectionRepository:
 
     @classmethod
     @write_operation
-    async def claim(cls, db, run_id, *, now, lease_seconds):
+    async def claim(cls, db, run_id, *, now, lease_seconds) -> Run | None:
         if lease_seconds <= 0:
             raise CollectionConflict('租约必须大于零')
         source, run = await cls.locked_run(db, run_id)
@@ -233,7 +235,7 @@ class CollectionRepository:
 
     @classmethod
     @write_operation
-    async def stop(cls, db, run_id, *, now):
+    async def stop(cls, db, run_id, *, now) -> Run:
         _, run = await cls.locked_run(db, run_id)
         if run.status == 'queued':
             run.stop_requested_at = now
@@ -245,7 +247,7 @@ class CollectionRepository:
 
     @classmethod
     @write_operation
-    async def heartbeat(cls, db, run_id, token, *, now, lease_seconds):
+    async def heartbeat(cls, db, run_id, token, *, now, lease_seconds) -> bool:
         if lease_seconds <= 0:
             raise CollectionConflict('租约必须大于零')
         _, run = await cls.locked_run(db, run_id)
@@ -258,7 +260,7 @@ class CollectionRepository:
 
     @classmethod
     @write_operation
-    async def finish(cls, db, run_id, token, *, now, error=None):
+    async def finish(cls, db, run_id, token, *, now, error=None) -> Run:
         _, run = await cls.locked_run(db, run_id)
         cls.fence(run, token, now, allow_stopping=True)
         if run.status == 'stopping':
@@ -272,7 +274,7 @@ class CollectionRepository:
 
     @classmethod
     @write_operation
-    async def recover(cls, db, run_id, *, now, isolated=False):
+    async def recover(cls, db, run_id, *, now, isolated=False) -> Run:
         _, run = await cls.locked_run(db, run_id)
         if run.status in ('running', 'stopping') and run.lease_expires_at and aware(run.lease_expires_at) <= now:
             run.execution_token = run.lease_expires_at = None
@@ -287,7 +289,7 @@ class CollectionRepository:
         return run
 
     @staticmethod
-    async def ready(db, now, limit=50):
+    async def ready(db, now, limit=50) -> list[int]:
         return list(
             (
                 await db.execute(
@@ -302,14 +304,14 @@ class CollectionRepository:
         )
 
     @staticmethod
-    async def history(db, source_id=None, limit=100):
+    async def history(db, source_id=None, limit=100) -> list[Run]:
         stmt = select(Run).order_by(Run.created_at.desc(), Run.id.desc()).limit(limit)
         if source_id:
             stmt = stmt.where(Run.source_id == parse_business_id(source_id))
         return list((await db.execute(stmt)).scalars().all())
 
     @staticmethod
-    async def source_tasks(db):
+    async def source_tasks(db) -> Any:
         ranked = select(
             Run.id.label('run_id'),
             func.row_number()

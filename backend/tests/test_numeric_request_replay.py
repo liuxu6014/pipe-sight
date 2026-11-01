@@ -5,7 +5,6 @@ network, model calls, production edits, or source-body reload on replay.
 """
 
 # Fixture doubles and literal examples follow the existing research test suite.
-# ruff: noqa: ANN001, ANN201
 
 import importlib
 import json

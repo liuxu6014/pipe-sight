@@ -19,8 +19,12 @@ def _add_columns() -> None:
         'report_exports',
         sa.Column('attempt_count', sa.Integer(), nullable=False, server_default='0', comment='执行尝试次数'),
     )
-    op.add_column('report_exports', sa.Column('lease_owner', sa.String(128), nullable=True, comment='当前执行器租约持有者'))
-    op.add_column('report_exports', sa.Column('lease_until', sa.DateTime(), nullable=True, comment='当前执行器租约到期时间'))
+    op.add_column(
+        'report_exports', sa.Column('lease_owner', sa.String(128), nullable=True, comment='当前执行器租约持有者')
+    )
+    op.add_column(
+        'report_exports', sa.Column('lease_until', sa.DateTime(), nullable=True, comment='当前执行器租约到期时间')
+    )
     op.add_column('report_exports', sa.Column('next_retry_at', sa.DateTime(), nullable=True, comment='下次重试时间'))
 
 

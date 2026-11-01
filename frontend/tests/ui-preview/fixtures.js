@@ -20,6 +20,16 @@ const dashboard = {
 export async function fixtureRequest(name, args = []) {
   let data = { rows: [], total: 0 }
   if (name === 'getPipelineDashboard') data = dashboard
+  else if (name === 'getPipelinePortalOverview') data = {
+    paperCount: paperItems.length,
+    newsCount: newsItems.length,
+    wechatCount: newsItems.filter(item => item.sourceType === 'wechat' || item.sourceType?.includes('微信')).length,
+    todayAddedCount: newsItems.length + paperItems.length,
+    reportCount: 2,
+    todayPaperCount: 1,
+    todayNewsCount: 2,
+    todayWechatCount: 1
+  }
   else if (name === 'listPipelineResearchReports') data = { rows: [{ ...report, id: '900040', ownerId: '7',
     type: 'research', reportType: 'research', requiresReview: false, generationWarning: '',
     content: sections.map(section => `## ${section.title}\n\n${section.content}`).join('\n\n') }] }

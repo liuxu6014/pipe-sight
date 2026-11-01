@@ -12,7 +12,7 @@ from app.business_ids import parse_business_id
 from app.intelligence.repositories.collection_repository import CollectionRepository
 
 
-def canonical_url(value):
+def canonical_url(value) -> str:
     if not isinstance(value, str):
         raise ValueError('内容 URL 必须为文本')
     parts = urlsplit((value or '').strip())
@@ -32,7 +32,7 @@ def canonical_url(value):
     return urlunsplit((parts.scheme.lower(), host, parts.path or '/', urlencode(query), ''))
 
 
-def normalize_doi(value):
+def normalize_doi(value) -> str | None:
     if value is not None and not isinstance(value, str):
         raise ValueError('DOI 必须为文本')
     doi = re.sub(r'^(?:https?://(?:dx\.)?doi\.org/|doi:\s*)', '', (value or '').strip(), flags=re.I).lower()
@@ -41,7 +41,7 @@ def normalize_doi(value):
     return doi or None
 
 
-def publication_date(value):
+def publication_date(value) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str) or not re.fullmatch(r'\d{4}(?:-\d{2}(?:-\d{2})?)?', value):
@@ -52,10 +52,10 @@ def publication_date(value):
 
 class CollectionPersistenceService:
     @staticmethod
-    async def save_record(db, source, record, now, *, category_id=None):
+    async def save_record(db, source, record, now, *, category_id=None) -> int:
         # Lazy import permits main-agent content-model integration without importing
         # retired processing/review/model-route modules in the worker.
-        from app.intelligence.models.content import PipelineArticle, PipelinePaper
+        from app.intelligence.models.content import PipelineArticle, PipelinePaper  # noqa: PLC0415
 
         if category_id is not None:
             category_id = parse_business_id(category_id)
@@ -66,7 +66,7 @@ class CollectionPersistenceService:
             if record.get(key) is not None and not isinstance(record[key], str):
                 raise ValueError('候选文本字段类型无效')
         title = record.get('title')
-        if not isinstance(title, str) or not title.strip() or len(title) > 1000:
+        if not isinstance(title, str) or not title.strip() or len(title) > 1000:  # noqa: PLR2004
             raise ValueError('标题无效')
         url = canonical_url(record['url']) if record.get('url') else None
         if source.type == 'paper':
@@ -136,12 +136,12 @@ class CollectionPersistenceService:
     @classmethod
     async def save_batch(
         cls, db, run_id, token, records, checkpoint, *, now, supports_resume=False, clock=None, classifications=None
-    ):
+    ) -> tuple[int, int]:
         try:
             source, run = await CollectionRepository.locked_run(db, run_id)
             CollectionRepository.fence(run, token, now)
             # Source configuration may have changed since enqueueing.
-            from types import SimpleNamespace
+            from types import SimpleNamespace  # noqa: PLC0415
 
             frozen_source = SimpleNamespace(id=source.id, type=run.config_snapshot['type'])
             saved = failed = 0
@@ -159,7 +159,7 @@ class CollectionPersistenceService:
                     async with db.begin_nested():
                         if category_id is not None:
                             category_id = parse_business_id(category_id)
-                            from app.intelligence.models.content import PipelineCategory
+                            from app.intelligence.models.content import PipelineCategory  # noqa: PLC0415
 
                             category = (
                                 (

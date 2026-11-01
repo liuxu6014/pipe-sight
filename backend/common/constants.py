@@ -3,6 +3,7 @@
 仅保留不属于某个 HTTP 契约或业务领域的运行常量。
 """
 
+
 class CommonConstant:
     """
     常用常量
@@ -35,6 +36,7 @@ class CommonConstant:
     DEPT_DISABLE = '1'
     UNIQUE = True
     NOT_UNIQUE = False
+
 
 class JobConstant:
     """
@@ -89,6 +91,7 @@ class JobConstant:
         ' ',
     ]
     JOB_WHITE_LIST = ['app.']
+
 
 class LockConstant:
     """

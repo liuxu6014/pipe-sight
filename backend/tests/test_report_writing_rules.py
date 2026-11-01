@@ -15,9 +15,14 @@ no_external_network = offline_network
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('kind', ['research', 'daily', 'weekly', 'monthly'])
-async def test_actual_generation_call_requires_supported_claims_or_specific_questions(env, monkeypatch, kind):
-    snapshot = {'title': '证据边界测试', 'type': kind, 'request': {}, 'model': {},
-                'template': {'purpose': 'research' if kind == 'research' else 'digest', 'prompt': '', 'sections': []}}
+async def test_actual_generation_call_requires_supported_claims_or_specific_questions(env, monkeypatch, kind) -> None:
+    snapshot = {
+        'title': '证据边界测试',
+        'type': kind,
+        'request': {},
+        'model': {},
+        'template': {'purpose': 'research' if kind == 'research' else 'digest', 'prompt': '', 'sections': []},
+    }
     materials = [{'id': '24', 'type': 'paper', 'content': '导读摘要（据公开资料整理）：讨论检测局限。'}]
     original = deepcopy(materials)
     call = AsyncMock(return_value='正文')
@@ -35,13 +40,26 @@ async def test_actual_generation_call_requires_supported_claims_or_specific_ques
 @pytest.mark.asyncio
 @pytest.mark.parametrize('purpose', ['research', 'article'])
 async def test_legacy_structure_is_not_used_as_prose_prompt(
-    env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, purpose: str,
+    env: SimpleNamespace,
+    monkeypatch: pytest.MonkeyPatch,
+    purpose: str,
 ) -> None:
-    legacy = {'name': '科技项目需求填报表', 'description': '研究需求',
-              'sections': [{'title': '研究内容', 'words': 900}]}
-    snapshot = {'title': '研究报告', 'type': purpose, 'request': {}, 'model': {},
-                'template': {'purpose': purpose, 'prompt': json.dumps(legacy, ensure_ascii=False),
-                             'sections': legacy['sections']}}
+    legacy = {
+        'name': '科技项目需求填报表',
+        'description': '研究需求',
+        'sections': [{'title': '研究内容', 'words': 900}],
+    }
+    snapshot = {
+        'title': '研究报告',
+        'type': purpose,
+        'request': {},
+        'model': {},
+        'template': {
+            'purpose': purpose,
+            'prompt': json.dumps(legacy, ensure_ascii=False),
+            'sections': legacy['sections'],
+        },
+    }
     original = deepcopy(snapshot)
     call = AsyncMock(return_value='正文')
     monkeypatch.setattr(env.gateway.ModelGateway, 'call', call)
@@ -56,10 +74,16 @@ async def test_legacy_structure_is_not_used_as_prose_prompt(
 
 @pytest.mark.asyncio
 async def test_administrator_prose_prompt_is_preserved(
-    env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch,
+    env: SimpleNamespace,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    snapshot = {'title': '日报', 'type': 'daily', 'request': {}, 'model': {},
-                'template': {'purpose': 'digest', 'prompt': '每条简讯控制在两段以内。', 'sections': []}}
+    snapshot = {
+        'title': '日报',
+        'type': 'daily',
+        'request': {},
+        'model': {},
+        'template': {'purpose': 'digest', 'prompt': '每条简讯控制在两段以内。', 'sections': []},
+    }
     call = AsyncMock(return_value='正文')
     monkeypatch.setattr(env.gateway.ModelGateway, 'call', call)
     await env.gateway.ResearchModelGenerationService.generate_content(None, snapshot, [], task_id=1)
@@ -70,11 +94,19 @@ async def test_administrator_prose_prompt_is_preserved(
 
 @pytest.mark.asyncio
 async def test_legacy_explicit_writing_text_is_not_lost(
-    env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch,
+    env: SimpleNamespace,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    snapshot = {'title': '研究报告', 'type': 'research', 'request': {}, 'model': {},
-                'template': {'prompt': json.dumps({'sections': [], 'prompt': '专门讨论腐蚀机理',
-                                                  'instructions': '比较方法局限'}), 'sections': []}}
+    snapshot = {
+        'title': '研究报告',
+        'type': 'research',
+        'request': {},
+        'model': {},
+        'template': {
+            'prompt': json.dumps({'sections': [], 'prompt': '专门讨论腐蚀机理', 'instructions': '比较方法局限'}),
+            'sections': [],
+        },
+    }
     call = AsyncMock(return_value='正文')
     monkeypatch.setattr(env.gateway.ModelGateway, 'call', call)
     await env.gateway.ResearchModelGenerationService.generate_content(None, snapshot, [], task_id=1)

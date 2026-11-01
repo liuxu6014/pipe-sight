@@ -312,4 +312,5 @@ class NestedCliSupport:
         os.chdir(project_dir)
         os.execvp(executable, subprocess_arguments)
 
+
 NESTED_CLI_SUPPORT = NestedCliSupport()

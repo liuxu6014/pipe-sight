@@ -2,6 +2,7 @@
 
 import logging
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import select
 
@@ -15,20 +16,20 @@ JOB_PREFIX = '_pipesight_collection_'
 logger = logging.getLogger(__name__)
 
 
-def session_factory():
+def session_factory() -> Any:
     # Merely importing this module never initializes a database engine.
-    from config.database import AsyncSessionLocal
+    from config.database import AsyncSessionLocal  # noqa: PLC0415
 
     return AsyncSessionLocal
 
 
-async def run_scheduled_collection(source_id, *, sessions=None, registry=ADAPTERS):
+async def run_scheduled_collection(source_id: int, *, sessions: Any = None, registry: dict = ADAPTERS) -> Any:
     sessions = sessions or session_factory()
     async with sessions() as db:
         return await IntelligenceSourceService.schedule_due_source(db, source_id, registry=registry)
 
 
-async def scan_due_sources(*, sessions=None, registry=ADAPTERS):
+async def scan_due_sources(*, sessions: Any = None, registry: dict = ADAPTERS) -> list:
     sessions = sessions or session_factory()
     now = datetime.now(timezone.utc)
     async with sessions() as db:
@@ -48,18 +49,18 @@ async def scan_due_sources(*, sessions=None, registry=ADAPTERS):
     for source_id in ids:
         try:
             results.append(await run_scheduled_collection(source_id, sessions=sessions, registry=registry))
-        except Exception:
+        except Exception:  # noqa: PERF203 (per-item isolation for a batch job)
             logger.warning('来源调度失败，source_id=%s；检查来源配置', source_id)
     return results
 
 
-async def run_queued_collection(run_id, *, sessions=None, registry=ADAPTERS):
+async def run_queued_collection(run_id: int, *, sessions: Any = None, registry: dict = ADAPTERS) -> Any:
     sessions = sessions or session_factory()
     async with sessions() as db:
         return await PipelineCollectionService.execute(db, run_id, registry=registry)
 
 
-async def run_queued_collections(*, sessions=None, registry=ADAPTERS):
+async def run_queued_collections(*, sessions: Any = None, registry: dict = ADAPTERS) -> list:
     sessions = sessions or session_factory()
     async with sessions() as db:
         ids = await CollectionRepository.ready(db, datetime.now(timezone.utc))
@@ -67,12 +68,12 @@ async def run_queued_collections(*, sessions=None, registry=ADAPTERS):
     for run_id in ids:
         try:
             results.append(await run_queued_collection(run_id, sessions=sessions, registry=registry))
-        except Exception:
+        except Exception:  # noqa: PERF203 (per-item isolation for a batch job)
             logger.warning('采集执行器异常，run_id=%s；由租约恢复器处理', run_id)
     return results
 
 
-async def recover_expired_collections(*, sessions=None, registry=ADAPTERS):
+async def recover_expired_collections(*, sessions: Any = None, registry: dict = ADAPTERS) -> list[dict]:
     sessions = sessions or session_factory()
     now = datetime.now(timezone.utc)
     async with sessions() as db:
@@ -97,7 +98,7 @@ async def recover_expired_collections(*, sessions=None, registry=ADAPTERS):
     return results
 
 
-async def register_real_collection_schedules(scheduler):
+async def register_real_collection_schedules(scheduler: Any) -> list[str]:
     """Install generic wakeups. No source bootstrap and no immediate collection."""
     jobs = {
         'scan': (scan_due_sources, 15),

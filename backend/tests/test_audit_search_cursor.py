@@ -1,7 +1,6 @@
 """Audit wall clocks must be UTC instants in SQL, including same-second cursors."""
 
 # Offline fixture doubles and literal datetime/ID examples are intentional.
-# ruff: noqa: ANN001, ANN201, PLR2004
 
 from datetime import datetime, timezone
 
@@ -18,10 +17,16 @@ from app.intelligence.repositories import content_repository as repository
 @pytest.fixture
 def model(monkeypatch):
     mapper = registry(metadata=MetaData())
-    table = Table('cursor_material', mapper.metadata,
-                  Column('id', BigInteger, primary_key=True), Column('user_id', BigInteger),
-                  Column('name', Text), Column('edited_text', Text), Column('extracted_text', Text),
-                  Column('updated_at', BeijingAuditTime()))
+    table = Table(
+        'cursor_material',
+        mapper.metadata,
+        Column('id', BigInteger, primary_key=True),
+        Column('user_id', BigInteger),
+        Column('name', Text),
+        Column('edited_text', Text),
+        Column('extracted_text', Text),
+        Column('updated_at', BeijingAuditTime()),
+    )
 
     class Material:
         pass
@@ -37,10 +42,13 @@ async def test_pg_search_sql_uses_explicit_utc_audit_expression(model):
     from types import SimpleNamespace
     from unittest.mock import AsyncMock
 
-    material, _ = model
-    db = SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(all=lambda: [])))
+    _material, _ = model
+    db = SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(all=list)))
     await repository.ContentDao.list_search_materials(
-        db, 7, ranked=True, search_after=(0, datetime(2026, 10, 25, 12, tzinfo=timezone.utc), 'document', 2),
+        db,
+        7,
+        ranked=True,
+        search_after=(0, datetime(2026, 10, 25, 12, tzinfo=timezone.utc), 'document', 2),
     )
     sql = str(db.execute.await_args.args[0].compile(dialect=postgresql.asyncpg.dialect()))
     assert "AT TIME ZONE 'Asia/Shanghai'" in sql
@@ -68,7 +76,11 @@ async def test_sqlite_equal_second_cursor_does_not_repeat_or_skip(model):
                 cursor_date = cursor_date.replace(tzinfo=timezone.utc)
             assert cursor_date == stamp
             second = await repository.ContentDao.list_search_materials(
-                db, 7, ranked=True, limit=1, search_after=(0, cursor_date, 'document', 2),
+                db,
+                7,
+                ranked=True,
+                limit=1,
+                search_after=(0, cursor_date, 'document', 2),
             )
             assert [row.id for row in second] == [1]
     finally:

@@ -14,7 +14,7 @@ no_external_network = refactor_no_external_network
 
 
 @pytest.mark.asyncio
-async def test_list_items_resolves_live_titles_and_no_persisted_snapshot(env, db):
+async def test_list_items_resolves_live_titles_and_no_persisted_snapshot(env, db) -> None:
     _, file = seed(env, db)
     service = env.app.ResearchWorkspaceService
     await service.upsert_item(
@@ -31,7 +31,7 @@ async def test_list_items_resolves_live_titles_and_no_persisted_snapshot(env, db
 
 
 @pytest.mark.asyncio
-async def test_workspace_is_idempotent_and_delete_only_removes_relation(env, db):
+async def test_workspace_is_idempotent_and_delete_only_removes_relation(env, db) -> None:
     _, file = seed(env, db)
     service = env.app.ResearchWorkspaceService
     payload = NS(item_type='material', item_id=file.id, action='favorite')
@@ -46,7 +46,7 @@ async def test_workspace_is_idempotent_and_delete_only_removes_relation(env, db)
 
 
 @pytest.mark.asyncio
-async def test_workspace_rejects_other_users_file(env, db):
+async def test_workspace_rejects_other_users_file(env, db) -> None:
     _, file = seed(env, db)
     with raises(env, '无权'):
         await env.app.ResearchWorkspaceService.upsert_item(

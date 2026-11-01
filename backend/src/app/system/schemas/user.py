@@ -46,7 +46,7 @@ class UserModel(BaseModel):
 
     @model_validator(mode='after')
     def check_password(self) -> 'UserModel':
-        pattern = r'''^[^<>"'|\\]+$'''
+        pattern = r"""^[^<>"'|\\]+$"""
         if self.password is None or re.match(pattern, self.password):
             return self
         raise ModelValidatorException(message='密码不能包含非法字符：< > " \' \\ |')
@@ -180,7 +180,7 @@ class ResetPasswordModel(BaseModel):
 
     @model_validator(mode='after')
     def check_new_password(self) -> 'ResetPasswordModel':
-        pattern = r'''^[^<>"'|\\]+$'''
+        pattern = r"""^[^<>"'|\\]+$"""
         if self.new_password is None or re.match(pattern, self.new_password):
             return self
         raise ModelValidatorException(message='密码不能包含非法字符：< > " \' \\ |')

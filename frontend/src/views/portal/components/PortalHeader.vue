@@ -28,12 +28,27 @@
           <input v-model.trim="keyword" aria-label="搜索平台内容" placeholder="搜索资讯、论文、资料" />
         </form>
 
-        <button v-if="store.dataError" class="ps-sync-status" type="button" role="status" :title="store.dataError" :aria-label="`${store.dataError}，点击重试`" @click="store.hydrate(true)">
+        <button
+          v-if="store.dataError || store.dataLoading"
+          class="ps-sync-status"
+          :class="{ 'is-loading': store.dataLoading }"
+          type="button"
+          aria-live="polite"
+          :title="store.dataLoading ? '正在同步实时数据' : store.dataError"
+          :aria-label="store.dataLoading ? '正在同步实时数据' : `${store.dataError}，点击重试`"
+          @click="store.hydrate(true)"
+        >
+          <i class="ps-sync-status-dot" aria-hidden="true"></i>
           <Refresh :class="{ 'is-loading': store.dataLoading }" />
-          <span>数据同步异常</span>
+          <span>{{ store.dataLoading ? '正在同步' : '数据同步异常' }}</span>
         </button>
 
-        <button class="ps-basket-button" type="button" :aria-label="`资料库，${store.libraryCount} 条资料`" @click="router.push('/portal/basket')">
+        <button
+          class="ps-basket-button"
+          type="button"
+          :aria-label="`资料库，${store.libraryCount} 条资料`"
+          @click="router.push('/portal/basket')"
+        >
           <Collection />
           <span>资料库</span>
           <b>{{ store.libraryCount }}</b>
@@ -55,16 +70,36 @@
           </el-dropdown>
         </div>
 
-        <button class="ps-mobile-menu" type="button" :aria-label="mobileOpen ? '收起导航' : '打开导航'" :aria-expanded="mobileOpen" aria-controls="portal-mobile-nav" @click="mobileOpen = !mobileOpen"><Menu /></button>
+        <button
+          class="ps-mobile-menu"
+          type="button"
+          :aria-label="mobileOpen ? '收起导航' : '打开导航'"
+          :aria-expanded="mobileOpen"
+          aria-controls="portal-mobile-nav"
+          @click="mobileOpen = !mobileOpen"
+        >
+          <Menu />
+        </button>
       </div>
     </div>
 
-    <div v-if="mobileOpen" id="portal-mobile-nav" class="ps-mobile-nav" @keydown.esc="mobileOpen = false">
+    <nav v-if="mobileOpen" id="portal-mobile-nav" class="ps-mobile-nav" aria-label="移动端主导航" @keydown.esc="mobileOpen = false">
       <form class="ps-mobile-search ps-search-inline" role="search" @submit.prevent="submitSearch">
-        <Search /><input v-model.trim="keyword" aria-label="搜索平台内容（移动端）" placeholder="搜索资讯、论文、资料" /><button type="submit">搜索</button>
+        <Search />
+        <input v-model.trim="keyword" aria-label="搜索平台内容（移动端）" placeholder="搜索资讯、论文、资料" />
+        <button type="submit">搜索</button>
       </form>
-      <button v-for="item in portalNavigation" :key="item.path" type="button" :class="{ 'is-active': item.match(route.path) }" :aria-current="item.match(route.path) ? 'page' : undefined" @click="goMobile(item.path)">{{ item.label }}</button>
-    </div>
+      <button
+        v-for="item in portalNavigation"
+        :key="item.path"
+        type="button"
+        :class="{ 'is-active': item.match(route.path) }"
+        :aria-current="item.match(route.path) ? 'page' : undefined"
+        @click="goMobile(item.path)"
+      >
+        {{ item.label }}
+      </button>
+    </nav>
   </header>
 </template>
 

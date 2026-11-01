@@ -1,5 +1,7 @@
 """资料篮仅持有来源外键；列表重新授权并解析实时标题。"""
 
+from typing import Any
+
 from sqlalchemy.exc import IntegrityError
 
 from app.business_ids import parse_business_id, wire_id
@@ -19,7 +21,7 @@ class ResearchWorkspaceService:
     }
 
     @classmethod
-    async def _source(cls, db, user_id, kind, item_id):
+    async def _source(cls, db, user_id, kind, item_id) -> Any:
         if kind in {'file', 'material'}:
             return await MaterialDao.get_owned_material(db, item_id, user_id)
         if kind == 'report':
@@ -29,7 +31,7 @@ class ResearchWorkspaceService:
         raise ServiceException(message='资料篮类型不合法')
 
     @classmethod
-    async def list_items(cls, db, user_id):
+    async def list_items(cls, db, user_id) -> dict:
         rows = await ResearchDao.list_workspace_items(db, user_id)
         favorite, basket = [], []
         for row in rows:
@@ -45,7 +47,7 @@ class ResearchWorkspaceService:
         return {'favorites': [i['id'] for i in favorite], 'favoriteItems': favorite, 'basket': basket}
 
     @classmethod
-    async def upsert_item(cls, db, user_id, payload):
+    async def upsert_item(cls, db, user_id, payload) -> dict:
         item_id = parse_business_id(payload.item_id)
         if payload.action not in {'basket', 'favorite'} or payload.item_type not in cls.targets:
             raise ServiceException(message='资料篮操作或来源不合法')
@@ -69,7 +71,7 @@ class ResearchWorkspaceService:
         return {'itemId': wire_id(item_id), 'action': payload.action, 'saved': True}
 
     @staticmethod
-    async def delete_item(db, user_id, item_id, action):
+    async def delete_item(db, user_id, item_id, action) -> dict:
         await ResearchDao.delete_workspace_item(db, user_id, item_id, action)
         await db.commit()
         return {'itemId': wire_id(item_id), 'action': action, 'deleted': True}

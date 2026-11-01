@@ -29,12 +29,12 @@ MAX_BIGINT = 9223372036854775807
 
 
 @compiles(next_value, 'sqlite')
-def _sqlite_next_value(element, compiler, **kwargs):
+def _sqlite_next_value(element, compiler, **kwargs) -> str:
     # SQLite INTEGER PRIMARY KEY allocates its own value for offline tests.
     return 'NULL'
 
 
-def business_pk(**kwargs):
+def business_pk(**kwargs) -> Column:
     return Column(
         BigInteger().with_variant(Integer, 'sqlite'),
         BUSINESS_ID_SEQUENCE,
@@ -44,7 +44,7 @@ def business_pk(**kwargs):
     )
 
 
-def parse_business_id(value):
+def parse_business_id(value) -> int:
     if isinstance(value, bool) or not isinstance(value, (str, int)):
         raise ValueError('资料编号必须为正整数')
     if isinstance(value, str) and (not value.isascii() or not value.isdecimal()):
@@ -55,11 +55,11 @@ def parse_business_id(value):
     return number
 
 
-def wire_id(value):
+def wire_id(value) -> str | None:
     return None if value is None else str(parse_business_id(value))
 
 
-def generation_request_data(payload):
+def generation_request_data(payload) -> dict:
     """保留配图选择的显式性；省略表示继承，显式 false 表示关闭。"""
     if hasattr(payload, 'model_dump'):
         data = payload.model_dump(by_alias=False)
@@ -69,14 +69,19 @@ def generation_request_data(payload):
     return dict(payload)
 
 
-def generation_request_fingerprint(request, materials):
+def generation_request_fingerprint(request, materials) -> str:
     """One representation for raw scalar IDs, typed input and stored snapshots.
 
     Frozen/authorized materials resolve scalar IDs without reloading changed or
     deleted source bodies. Explicitly changing a supplied type still conflicts.
     """
-    canonical = deepcopy({key: value for key, value in generation_request_data(request).items()
-                          if key not in {'request_id', 'requestId'}})
+    canonical = deepcopy(
+        {
+            key: value
+            for key, value in generation_request_data(request).items()
+            if key not in {'request_id', 'requestId'}
+        }
+    )
     kinds = {}
     for material in materials:
         identity = wire_id(material['id'])

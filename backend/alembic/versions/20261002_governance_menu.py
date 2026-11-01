@@ -35,7 +35,7 @@ def _insert_menu(connection: sa.Connection, row: tuple[object, ...]) -> None:
         sa.text(
             'SELECT menu_id FROM sys_menu '
             'WHERE menu_id = :menu_id OR '
-            '(menu_type <> \'F\' AND parent_id = :parent_id AND path = :path AND menu_type = :menu_type) '
+            "(menu_type <> 'F' AND parent_id = :parent_id AND path = :path AND menu_type = :menu_type) "
             'LIMIT 1'
         ),
         {'menu_id': menu_id, 'parent_id': parent_id, 'path': path, 'menu_type': menu_type},
@@ -48,8 +48,8 @@ def _insert_menu(connection: sa.Connection, row: tuple[object, ...]) -> None:
             '(menu_id, menu_name, parent_id, order_num, path, component, query, route_name, '
             'is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, '
             'update_by, update_time, remark) '
-            'VALUES (:menu_id, :menu_name, :parent_id, :order_num, :path, :component, \'\', \'\', '
-            '1, 0, :menu_type, :visible, \'0\', :perms, :icon, \'admin\', CURRENT_TIMESTAMP, \'\', NULL, :remark)'
+            "VALUES (:menu_id, :menu_name, :parent_id, :order_num, :path, :component, '', '', "
+            "1, 0, :menu_type, :visible, '0', :perms, :icon, 'admin', CURRENT_TIMESTAMP, '', NULL, :remark)"
         ),
         {
             'menu_id': menu_id,
@@ -94,8 +94,6 @@ def downgrade() -> None:
             {'menu_ids': menu_ids},
         )
     connection.execute(
-        sa.text('DELETE FROM sys_menu WHERE menu_id IN :menu_ids').bindparams(
-            sa.bindparam('menu_ids', expanding=True)
-        ),
+        sa.text('DELETE FROM sys_menu WHERE menu_id IN :menu_ids').bindparams(sa.bindparam('menu_ids', expanding=True)),
         {'menu_ids': menu_ids},
     )

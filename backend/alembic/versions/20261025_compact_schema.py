@@ -25,11 +25,14 @@ def upgrade() -> None:
     args = context.get_x_argument(as_dictionary=True)
     required = ('compact_archive', 'compact_archive_sha256', 'compact_source_snapshot', 'historical_timezone')
     if not all(args.get(key) for key in required):
-        raise RuntimeError('compact_archive, compact_archive_sha256, compact_source_snapshot and historical_timezone are required')
+        raise RuntimeError(
+            'compact_archive, compact_archive_sha256, compact_source_snapshot and historical_timezone are required'
+        )
     archive = json.loads(Path(args['compact_archive']).read_bytes())
     summary = archive['summary']
     migrate(
-        op.get_bind(), archive_path=args['compact_archive'],
+        op.get_bind(),
+        archive_path=args['compact_archive'],
         archive_sha256=args['compact_archive_sha256'],
         historical_timezone=args['historical_timezone'],
         expected_source_fingerprints=summary['source_fingerprints'],

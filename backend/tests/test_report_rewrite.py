@@ -21,9 +21,20 @@ async def test_rewrite_returns_proposal_without_saving_report(env: Any, db: Any,
     service = importlib.import_module('app.research.services.rewrite')
     call = AsyncMock(return_value='改写后的正文')
     monkeypatch.setattr(service.ModelGateway, 'call', call)
-    result = await service.ReportRewriteService.propose(db, user_id=7, report_id=301, payload=SimpleNamespace(
-        expected_version=1, expected_revision=service.report_revision(report), section_id='local-1',
-        start=0, end=4, text='原始正文', mode='polish'))
+    result = await service.ReportRewriteService.propose(
+        db,
+        user_id=7,
+        report_id=301,
+        payload=SimpleNamespace(
+            expected_version=1,
+            expected_revision=service.report_revision(report),
+            section_id='local-1',
+            start=0,
+            end=4,
+            text='原始正文',
+            mode='polish',
+        ),
+    )
     assert result['text'] == '改写后的正文'
     assert report.content == '原始正文' and report.version == 1
     assert '不能新增事实' in call.await_args.kwargs['system_prompt']
@@ -34,21 +45,32 @@ async def test_rewrite_returns_proposal_without_saving_report(env: Any, db: Any,
 @pytest.mark.asyncio
 @pytest.mark.parametrize('change', ['owner', 'revision', 'selection'])
 async def test_rewrite_rejects_invalid_context_before_model(
-    env: Any, db: Any, monkeypatch: Any, change: str,
+    env: Any,
+    db: Any,
+    monkeypatch: Any,
+    change: str,
 ) -> None:
     report, _ = history_fixture(env, db)
     service = importlib.import_module('app.research.services.rewrite')
     call = AsyncMock(return_value='不应调用')
     monkeypatch.setattr(service.ModelGateway, 'call', call)
-    body = SimpleNamespace(expected_version=1, expected_revision=service.report_revision(report),
-                           section_id='local-1', start=0, end=4, text='原始正文', mode='polish')
+    body = SimpleNamespace(
+        expected_version=1,
+        expected_revision=service.report_revision(report),
+        section_id='local-1',
+        start=0,
+        end=4,
+        text='原始正文',
+        mode='polish',
+    )
     if change == 'revision':
         body.expected_revision = 'stale'
     if change == 'selection':
         body.text = '其他正文'
     with pytest.raises(env.exc):
-        await service.ReportRewriteService.propose(db, user_id=8 if change == 'owner' else 7,
-                                                  report_id=301, payload=body)
+        await service.ReportRewriteService.propose(
+            db, user_id=8 if change == 'owner' else 7, report_id=301, payload=body
+        )
     call.assert_not_awaited()
 
 
@@ -62,7 +84,9 @@ def test_rewrite_rejects_new_or_missing_citations(env: Any) -> None:
 
 @pytest.mark.asyncio
 async def test_rewrite_uses_real_gateway_with_offline_provider_and_keeps_report(
-    env: Any, db: Any, monkeypatch: Any,
+    env: Any,
+    db: Any,
+    monkeypatch: Any,
 ) -> None:
     report, _ = history_fixture(env, db)
     service = importlib.import_module('app.research.services.rewrite')
@@ -74,23 +98,44 @@ async def test_rewrite_uses_real_gateway_with_offline_provider_and_keeps_report(
         return httpx.Response(200, json={'choices': [{'message': {'content': '离线供应商改写正文'}}]})
 
     monkeypatch.setenv('OFFLINE_MODEL_KEY', 'offline-test-not-a-secret')
-    monkeypatch.setattr(env.gateway.httpx, 'AsyncClient',
-                        lambda **kwargs: client(transport=httpx.MockTransport(reply), **kwargs))
-    result = await service.ReportRewriteService.propose(db, user_id=7, report_id=301, payload=SimpleNamespace(
-        expected_version=1, expected_revision=service.report_revision(report), section_id='local-1',
-        start=0, end=4, text='原始正文', mode='polish'))
+    monkeypatch.setattr(
+        env.gateway.httpx, 'AsyncClient', lambda **kwargs: client(transport=httpx.MockTransport(reply), **kwargs)
+    )
+    result = await service.ReportRewriteService.propose(
+        db,
+        user_id=7,
+        report_id=301,
+        payload=SimpleNamespace(
+            expected_version=1,
+            expected_revision=service.report_revision(report),
+            section_id='local-1',
+            start=0,
+            end=4,
+            text='原始正文',
+            mode='polish',
+        ),
+    )
     assert len(requests) == 1 and result['text'] == '离线供应商改写正文'
     assert report.content == '原始正文' and report.version == 1
 
 
 @pytest.mark.asyncio
 async def test_report_changed_during_model_call_rejects_stale_result(
-    env: Any, db: Any, monkeypatch: Any,
+    env: Any,
+    db: Any,
+    monkeypatch: Any,
 ) -> None:
     report, _ = history_fixture(env, db)
     service = importlib.import_module('app.research.services.rewrite')
-    body = SimpleNamespace(expected_version=1, expected_revision=service.report_revision(report),
-                           section_id='local-1', start=0, end=4, text='原始正文', mode='polish')
+    body = SimpleNamespace(
+        expected_version=1,
+        expected_revision=service.report_revision(report),
+        section_id='local-1',
+        start=0,
+        end=4,
+        text='原始正文',
+        mode='polish',
+    )
 
     async def concurrent_edit(*args: Any, **kwargs: Any) -> str:
         report.content = '其他会话新编辑'

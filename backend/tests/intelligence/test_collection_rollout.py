@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+from typing import NoReturn
 
 import pytest
 from sqlalchemy import (
@@ -40,7 +41,7 @@ NOW = datetime(2026, 10, 25, 0, 0, tzinfo=timezone.utc)
 class AsyncMemorySession:
     """Small async interface around an actual local SQLAlchemy Session."""
 
-    def __init__(self, engine):
+    def __init__(self, engine) -> None:
         self.sync = Session(engine, expire_on_commit=False, autoflush=False)
 
     async def execute(self, *args, **kwargs):
@@ -55,16 +56,16 @@ class AsyncMemorySession:
     async def __aexit__(self, *args):
         self.sync.close()
 
-    async def commit(self):
+    async def commit(self) -> None:
         self.sync.commit()
 
-    async def rollback(self):
+    async def rollback(self) -> None:
         self.sync.rollback()
 
-    async def flush(self):
+    async def flush(self) -> None:
         self.sync.flush()
 
-    def add(self, value):
+    def add(self, value) -> None:
         self.sync.add(value)
 
     def get_bind(self):
@@ -78,7 +79,7 @@ class AsyncMemorySession:
 
 @pytest.fixture
 def env(monkeypatch):
-    def forbidden(*args, **kwargs):
+    def forbidden(*args, **kwargs) -> NoReturn:
         raise AssertionError('外网/真实数据库连接被测试阻断')
 
     monkeypatch.setattr(socket, 'create_connection', forbidden)
@@ -156,7 +157,7 @@ def env(monkeypatch):
     content.PipelinePaper = content_model(
         'PipelinePaper',
         'papers',
-        {key: Text for key in ('title_zh', 'doi', 'authors', 'journal', 'published_date', 'abstract', 'abstract_zh')},
+        dict.fromkeys(('title_zh', 'doi', 'authors', 'journal', 'published_date', 'abstract', 'abstract_zh'), Text),
     )
     monkeypatch.setitem(sys.modules, content.__name__, content)
     repository = importlib.import_module('app.intelligence.repositories.collection_repository')
@@ -181,12 +182,12 @@ def env(monkeypatch):
     engine = create_engine('sqlite:///:memory:')
 
     @event.listens_for(engine, 'connect')
-    def fk_on(connection, _):
+    def fk_on(connection, _) -> None:
         connection.isolation_level = None
         connection.execute('PRAGMA foreign_keys=ON')
 
     @event.listens_for(engine, 'begin')
-    def explicit_begin(connection):
+    def explicit_begin(connection) -> None:
         connection.exec_driver_sql('BEGIN')
 
     Base.metadata.create_all(engine)
@@ -199,9 +200,7 @@ def env(monkeypatch):
             for batch in state.batches:
                 if isinstance(batch, Exception):
                     raise batch
-                if callable(batch):
-                    batch = await batch()
-                yield batch
+                yield (await batch() if callable(batch) else batch)
         finally:
             state.cleanup = True
 
@@ -250,7 +249,7 @@ async def execute(e, run_id):
     return await e.collection.PipelineCollectionService.execute(e.db, run_id, registry=e.registry, clock=e.clock)
 
 
-def test_exact_schema_and_postgres_constraints(env):
+def test_exact_schema_and_postgres_constraints(env) -> None:
     e = env
     assert list(e.models.PipelineSource.__table__.columns.keys()) == [
         'id',
@@ -305,7 +304,7 @@ def test_exact_schema_and_postgres_constraints(env):
 
 
 @pytest.mark.asyncio
-async def test_manual_idempotency_active_exclusion_and_repeat_delivery(env):
+async def test_manual_idempotency_active_exclusion_and_repeat_delivery(env) -> None:
     e = env
     s = await source(e)
     first = await enqueue(e, s['id'])
@@ -321,7 +320,7 @@ async def test_manual_idempotency_active_exclusion_and_repeat_delivery(env):
 
 
 @pytest.mark.asyncio
-async def test_disable_cancels_queue_and_enable_does_not_revive(env):
+async def test_disable_cancels_queue_and_enable_does_not_revive(env) -> None:
     e = env
     s = await source(e, cron='0 8 * * *')
     assert s['next_run_at']
@@ -337,7 +336,7 @@ async def test_disable_cancels_queue_and_enable_does_not_revive(env):
 
 
 @pytest.mark.asyncio
-async def test_stopping_blocks_writes_and_waits_for_cleanup(env):
+async def test_stopping_blocks_writes_and_waits_for_cleanup(env) -> None:
     e = env
     s = await source(e)
     r = await enqueue(e, s['id'])
@@ -361,7 +360,7 @@ async def test_stopping_blocks_writes_and_waits_for_cleanup(env):
 
 
 @pytest.mark.asyncio
-async def test_disable_running_does_not_fake_stop(env):
+async def test_disable_running_does_not_fake_stop(env) -> None:
     e = env
     s = await source(e)
     r = await enqueue(e, s['id'])
@@ -373,7 +372,7 @@ async def test_disable_running_does_not_fake_stop(env):
 
 
 @pytest.mark.asyncio
-async def test_retry_chain_frozen_snapshot_unique_child_and_backoff(env):
+async def test_retry_chain_frozen_snapshot_unique_child_and_backoff(env) -> None:
     e = env
     s = await source(e, config={'retry': {'enabled': True, 'max_retries': 2, 'backoff_seconds': 10}})
     r = await enqueue(e, s['id'])
@@ -413,7 +412,7 @@ async def test_retry_chain_frozen_snapshot_unique_child_and_backoff(env):
 
 
 @pytest.mark.asyncio
-async def test_cancelled_retry_child_stays_cancelled(env):
+async def test_cancelled_retry_child_stays_cancelled(env) -> None:
     e = env
     s = await source(e)
     r = await enqueue(e, s['id'])
@@ -428,7 +427,7 @@ async def test_cancelled_retry_child_stays_cancelled(env):
 
 
 @pytest.mark.asyncio
-async def test_partial_failure_restarts_from_entry_without_losing_saved_articles(env):
+async def test_partial_failure_restarts_from_entry_without_losing_saved_articles(env) -> None:
     e = env
     s = await source(e)
     r = await enqueue(e, s['id'])
@@ -456,7 +455,7 @@ async def test_partial_failure_restarts_from_entry_without_losing_saved_articles
 
 
 @pytest.mark.asyncio
-async def test_papers_store_metadata_abstract_only_and_allow_url_without_doi(env):
+async def test_papers_store_metadata_abstract_only_and_allow_url_without_doi(env) -> None:
     e = env
     s = await source(e, type='paper')
     r = await enqueue(e, s['id'])
@@ -484,7 +483,7 @@ async def test_papers_store_metadata_abstract_only_and_allow_url_without_doi(env
 
 
 @pytest.mark.asyncio
-async def test_lease_fences_batch_and_recovery_does_not_confirm_unobserved_stop(env):
+async def test_lease_fences_batch_and_recovery_does_not_confirm_unobserved_stop(env) -> None:
     e = env
     s = await source(e)
     r = await enqueue(e, s['id'])
@@ -502,7 +501,7 @@ async def test_lease_fences_batch_and_recovery_does_not_confirm_unobserved_stop(
 
 
 @pytest.mark.asyncio
-async def test_running_crash_failed_and_old_worker_cannot_finish(env):
+async def test_running_crash_failed_and_old_worker_cannot_finish(env) -> None:
     e = env
     s = await source(e)
     r = await enqueue(e, s['id'])
@@ -516,7 +515,7 @@ async def test_running_crash_failed_and_old_worker_cannot_finish(env):
 
 
 @pytest.mark.asyncio
-async def test_scheduler_advances_once_and_skips_active_round(env):
+async def test_scheduler_advances_once_and_skips_active_round(env) -> None:
     e = env
     s = await source(e, cron='* * * * *', timezone='UTC')
     e.clock = lambda: NOW + timedelta(minutes=1)
@@ -544,13 +543,13 @@ async def test_scheduler_advances_once_and_skips_active_round(env):
     ],
 )
 @pytest.mark.asyncio
-async def test_invalid_source_config_rejected(env, change):
+async def test_invalid_source_config_rejected(env, change) -> None:
     with pytest.raises(env.collection.ConfigurationError):
         await source(env, **change)
 
 
 @pytest.mark.asyncio
-async def test_fk_rejects_cross_source_retry_and_partial_unique_blocks_second_active(env):
+async def test_fk_rejects_cross_source_retry_and_partial_unique_blocks_second_active(env) -> None:
     e = env
     s, s2 = await source(e), await source(e)
     r = await enqueue(e, s['id'])
@@ -587,20 +586,20 @@ async def test_fk_rejects_cross_source_retry_and_partial_unique_blocks_second_ac
 
 
 @pytest.mark.parametrize('value', ['2024-02-30', '2024-13', '2024-1', 'not-a-date'])
-def test_paper_partial_date_rejects_fabricated_or_invalid_dates(env, value):
+def test_paper_partial_date_rejects_fabricated_or_invalid_dates(env, value) -> None:
     with pytest.raises(ValueError):
         env.persistence.publication_date(value)
 
 
 @pytest.mark.asyncio
-async def test_batch_and_counters_rollback_together(env, monkeypatch):
+async def test_batch_and_counters_rollback_together(env, monkeypatch) -> None:
     e = env
     s = await source(e)
     r = await enqueue(e, s['id'])
     run = await e.repo.claim(e.db, r['id'], now=NOW, lease_seconds=60)
     token = run.execution_token
 
-    async def failed_commit():
+    async def failed_commit() -> NoReturn:
         raise RuntimeError('模拟提交故障')
 
     monkeypatch.setattr(e.db, 'commit', failed_commit)
@@ -621,12 +620,12 @@ async def test_batch_and_counters_rollback_together(env, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_request_timeout_cancels_adapter_and_default_no_auto_retry(env):
+async def test_request_timeout_cancels_adapter_and_default_no_auto_retry(env) -> None:
     e = env
     s = await source(e, config={'request_timeout': 0.01})
     r = await enqueue(e, s['id'])
 
-    async def stalled():
+    async def stalled() -> None:
         await asyncio.Event().wait()
 
     e.state.batches = [stalled]
@@ -638,7 +637,7 @@ async def test_request_timeout_cancels_adapter_and_default_no_auto_retry(env):
 
 
 @pytest.mark.asyncio
-async def test_inflight_request_renews_lease_before_saving(env, monkeypatch):
+async def test_inflight_request_renews_lease_before_saving(env, monkeypatch) -> None:
     e = env
     s = await source(e)
     r = await enqueue(e, s['id'])
@@ -663,7 +662,7 @@ async def test_inflight_request_renews_lease_before_saving(env, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_disable_prevents_retry_and_stop_prevents_auto_retry(env):
+async def test_disable_prevents_retry_and_stop_prevents_auto_retry(env) -> None:
     e = env
     s = await source(e, config={'retry': {'enabled': True, 'max_retries': 3}})
     r = await enqueue(e, s['id'])
@@ -686,7 +685,7 @@ async def test_disable_prevents_retry_and_stop_prevents_auto_retry(env):
 
 
 @pytest.mark.asyncio
-async def test_no_resume_adapter_discards_parent_checkpoint(env):
+async def test_no_resume_adapter_discards_parent_checkpoint(env) -> None:
     e = env
     e.registry.adapters['fixed'] = e.collection.Adapter(
         e.registry.adapters['fixed'].factory, ('website',), ('example.test',), False
@@ -715,18 +714,18 @@ async def test_no_resume_adapter_discards_parent_checkpoint(env):
     ],
 )
 @pytest.mark.asyncio
-async def test_row_checks_reject_invalid_states(env, values):
+async def test_row_checks_reject_invalid_states(env, values) -> None:
     e = env
     s = await source(e)
-    attrs = dict(
-        id=900003,
-        source_id=int(s['id']),
-        trigger_type='manual',
-        request_id=900003,
-        available_at=NOW,
-        created_at=NOW,
-        updated_at=NOW,
-    )
+    attrs = {
+        'id': 900003,
+        'source_id': int(s['id']),
+        'trigger_type': 'manual',
+        'request_id': 900003,
+        'available_at': NOW,
+        'created_at': NOW,
+        'updated_at': NOW,
+    }
     attrs.update(values)
     e.db.add(e.models.PipelineCrawlRun(**attrs))
     with pytest.raises(IntegrityError):
@@ -734,7 +733,7 @@ async def test_row_checks_reject_invalid_states(env, values):
     await e.db.rollback()
 
 
-def test_timezone_cron_and_dst_policy(env):
+def test_timezone_cron_and_dst_policy(env) -> None:
     next_time = env.sources.next_occurrence('0 8 * * *', 'Asia/Shanghai', NOW)
     assert next_time == NOW + timedelta(days=1)
     spring = datetime(2026, 3, 8, 6, tzinfo=timezone.utc)
@@ -742,7 +741,7 @@ def test_timezone_cron_and_dst_policy(env):
     assert result == datetime(2026, 3, 9, 6, 30, tzinfo=timezone.utc)
 
 
-def test_dto_rejects_legacy_fields_and_coerced_enabled(env):
+def test_dto_rejects_legacy_fields_and_coerced_enabled(env) -> None:
     from pydantic import ValidationError
 
     schema = importlib.import_module('app.intelligence.schemas.collection')
@@ -753,7 +752,7 @@ def test_dto_rejects_legacy_fields_and_coerced_enabled(env):
 
 
 @pytest.mark.asyncio
-async def test_manual_idempotency_survives_source_config_change_and_disabling(env):
+async def test_manual_idempotency_survives_source_config_change_and_disabling(env) -> None:
     e = env
     s = await source(e)
     r = await enqueue(e, s['id'])
@@ -764,7 +763,7 @@ async def test_manual_idempotency_survives_source_config_change_and_disabling(en
 
 
 @pytest.mark.asyncio
-async def test_admin_isolation_confirmation_is_explicit_and_terminal_safe(env):
+async def test_admin_isolation_confirmation_is_explicit_and_terminal_safe(env) -> None:
     e = env
     s = await source(e)
     r = await enqueue(e, s['id'])
@@ -781,20 +780,20 @@ async def test_admin_isolation_confirmation_is_explicit_and_terminal_safe(env):
 
 
 @pytest.mark.asyncio
-async def test_generic_scheduler_does_not_bootstrap_or_connect_database(env):
+async def test_generic_scheduler_does_not_bootstrap_or_connect_database(env) -> None:
     scheduler_module = importlib.import_module('app.intelligence.tasks.collection_scheduler')
 
     class Scheduler:
-        def __init__(self):
+        def __init__(self) -> None:
             self.jobs, self.removed = {}, []
 
         def get_jobs(self):
             return [SimpleNamespace(id='_pipesight_collection_old-source'), SimpleNamespace(id='unrelated')]
 
-        def remove_job(self, job_id):
+        def remove_job(self, job_id) -> None:
             self.removed.append(job_id)
 
-        def add_job(self, function, trigger, **kwargs):
+        def add_job(self, function, trigger, **kwargs) -> None:
             assert trigger == 'interval'
             assert 'cron' not in kwargs
             self.jobs[kwargs['id']] = (function, kwargs)
@@ -806,7 +805,7 @@ async def test_generic_scheduler_does_not_bootstrap_or_connect_database(env):
 
 
 @pytest.mark.asyncio
-async def test_configuration_fault_never_auto_retries_and_masks_exception(env):
+async def test_configuration_fault_never_auto_retries_and_masks_exception(env) -> None:
     e = env
     s = await source(e, config={'retry': {'enabled': True, 'max_retries': 3}})
     r = await enqueue(e, s['id'])
@@ -820,7 +819,7 @@ async def test_configuration_fault_never_auto_retries_and_masks_exception(env):
 
 
 @pytest.mark.asyncio
-async def test_lease_expiring_during_batch_rolls_back_content_and_counts(env):
+async def test_lease_expiring_during_batch_rolls_back_content_and_counts(env) -> None:
     e = env
     s = await source(e)
     r = await enqueue(e, s['id'])
@@ -869,7 +868,7 @@ def replay_transport(e, monkeypatch, handler):
 
 
 @pytest.mark.asyncio
-async def test_real_pipechina_bridge_replays_existing_samples_as_batches(env, monkeypatch):
+async def test_real_pipechina_bridge_replays_existing_samples_as_batches(env, monkeypatch) -> None:
     import html
 
     import httpx
@@ -920,7 +919,7 @@ async def test_real_pipechina_bridge_replays_existing_samples_as_batches(env, mo
 
 
 @pytest.mark.asyncio
-async def test_real_crossref_bridge_replays_existing_metadata_in_multiple_pages(env, monkeypatch):
+async def test_real_crossref_bridge_replays_existing_metadata_in_multiple_pages(env, monkeypatch) -> None:
     import json
 
     import httpx
@@ -965,7 +964,7 @@ async def test_real_crossref_bridge_replays_existing_metadata_in_multiple_pages(
 
 @pytest.mark.parametrize('adapter', ['pipechina_group_news', 'crossref_works'])
 @pytest.mark.asyncio
-async def test_real_bridge_stop_during_request_closes_stream_and_client(env, monkeypatch, adapter):
+async def test_real_bridge_stop_during_request_closes_stream_and_client(env, monkeypatch, adapter) -> None:
     import httpx
 
     e = env
@@ -982,7 +981,7 @@ async def test_real_bridge_stop_during_request_closes_stream_and_client(env, mon
             await asyncio.Event().wait()
             yield b'unreachable'
 
-        async def aclose(self):
+        async def aclose(self) -> None:
             self.closed = True
 
     async def handler(request):
@@ -1010,7 +1009,7 @@ async def test_real_bridge_stop_during_request_closes_stream_and_client(env, mon
 
 
 @pytest.mark.asyncio
-async def test_real_bridge_generator_close_stops_further_pages(env, monkeypatch):
+async def test_real_bridge_generator_close_stops_further_pages(env, monkeypatch) -> None:
     import httpx
 
     e = env
@@ -1031,7 +1030,7 @@ async def test_real_bridge_generator_close_stops_further_pages(env, monkeypatch)
 
 @pytest.mark.parametrize('status', [302, 403, 429, 503])
 @pytest.mark.asyncio
-async def test_real_bridge_http_failures_are_not_fake_success(env, monkeypatch, status):
+async def test_real_bridge_http_failures_are_not_fake_success(env, monkeypatch, status) -> None:
     import httpx
 
     e = env
@@ -1049,7 +1048,7 @@ async def test_real_bridge_http_failures_are_not_fake_success(env, monkeypatch, 
 
 
 @pytest.mark.asyncio
-async def test_no_source_returns_explicit_message_and_formal_task_dtos(env):
+async def test_no_source_returns_explicit_message_and_formal_task_dtos(env) -> None:
     e = env
     assert '尚未配置采集来源' in (await e.service.list_sources(e.db))['message']
     assert '尚未配置采集来源' in (await e.service.list_collection_tasks(e.db))['message']
@@ -1065,7 +1064,7 @@ async def test_no_source_returns_explicit_message_and_formal_task_dtos(env):
     assert detail['runId'] == r['id'] and detail['sourceId'] == s['id']
 
 
-async def configured_category(e, *, kind='all', enabled=True):
+async def configured_category(e, *, kind='all', enabled=True) -> None:
     e.db.add(
         e.ai_model(
             id=1,
@@ -1093,7 +1092,7 @@ async def configured_category(e, *, kind='all', enabled=True):
 
 @pytest.mark.parametrize('source_type', ['website', 'wechat'])
 @pytest.mark.asyncio
-async def test_real_category_service_called_outside_run_locks_and_saved(env, source_type):
+async def test_real_category_service_called_outside_run_locks_and_saved(env, source_type) -> None:
     e = env
     await configured_category(e, kind='news')
     s = await source(e, type=source_type)
@@ -1110,7 +1109,7 @@ async def test_real_category_service_called_outside_run_locks_and_saved(env, sou
 
 
 @pytest.mark.asyncio
-async def test_paper_classification_never_receives_fulltext_and_failure_retries(env):
+async def test_paper_classification_never_receives_fulltext_and_failure_retries(env) -> None:
     e = env
     await configured_category(e, kind='paper')
     s = await source(e, type='paper')
@@ -1133,14 +1132,14 @@ async def test_paper_classification_never_receives_fulltext_and_failure_retries(
 
 
 @pytest.mark.asyncio
-async def test_stop_while_classifying_cancels_model_task_without_writing(env):
+async def test_stop_while_classifying_cancels_model_task_without_writing(env) -> None:
     e = env
     await configured_category(e)
     s = await source(e)
     r = await enqueue(e, s['id'])
     cleaned = []
 
-    async def waiting_model(classification_db):
+    async def waiting_model(classification_db) -> None:
         # This offline fake releases its read transaction before simulating an
         # in-flight model call. The real service is unchanged/main-owned.
         await classification_db.rollback()
@@ -1162,7 +1161,7 @@ async def test_stop_while_classifying_cancels_model_task_without_writing(env):
 
 
 @pytest.mark.asyncio
-async def test_bad_success_response_is_failure_and_resources_close(env, monkeypatch):
+async def test_bad_success_response_is_failure_and_resources_close(env, monkeypatch) -> None:
     import httpx
 
     e = env
@@ -1180,26 +1179,26 @@ async def test_bad_success_response_is_failure_and_resources_close(env, monkeypa
 def load_collection_router(e, monkeypatch):
     from fastapi import APIRouter, Depends, HTTPException, Request
 
-    def module(name, **members):
+    def module(name, **members) -> None:
         stub = ModuleType(name)
         stub.__dict__.update(members)
         monkeypatch.setitem(sys.modules, name, stub)
 
     def preauth():
-        async def check():
+        async def check() -> None:
             pass
 
         return Depends(check)
 
     def role(name):
-        async def check(request: Request):
+        async def check(request: Request) -> None:
             if request.headers.get('x-role') != name:
                 raise HTTPException(status_code=403)
 
         return Depends(check)
 
     def permission(name):
-        async def check(request: Request):
+        async def check(request: Request) -> None:
             if name not in request.headers.get('x-permissions', '').split(','):
                 raise HTTPException(status_code=403)
 
@@ -1218,7 +1217,7 @@ def load_collection_router(e, monkeypatch):
         return lambda function: function
 
     class Router(APIRouter):
-        def __init__(self, *, auto_register, **kwargs):
+        def __init__(self, *, auto_register, **kwargs) -> None:
             assert auto_register is False
             super().__init__(**kwargs)
 
@@ -1234,7 +1233,7 @@ def load_collection_router(e, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_formal_frontend_routes_call_services_with_camelcase_and_optional_body(env, monkeypatch):
+async def test_formal_frontend_routes_call_services_with_camelcase_and_optional_body(env, monkeypatch) -> None:
     import httpx
     from fastapi import FastAPI
 
@@ -1282,7 +1281,7 @@ async def test_formal_frontend_routes_call_services_with_camelcase_and_optional_
 
 
 @pytest.mark.asyncio
-async def test_disabled_category_without_model_does_not_block_normal_collection(env):
+async def test_disabled_category_without_model_does_not_block_normal_collection(env) -> None:
     e = env
     e.db.add(
         e.content.PipelineCategory(
@@ -1305,7 +1304,7 @@ async def test_disabled_category_without_model_does_not_block_normal_collection(
 
 
 @pytest.mark.asyncio
-async def test_frontend_source_payload_allows_blank_query_and_thirty_total_papers(env):
+async def test_frontend_source_payload_allows_blank_query_and_thirty_total_papers(env) -> None:
     e = env
     schema = importlib.import_module('app.intelligence.schemas.collection')
     payload = schema.SourceSave.model_validate(

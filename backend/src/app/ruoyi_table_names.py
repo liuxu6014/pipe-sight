@@ -33,10 +33,14 @@ def row_fingerprints(bind: sa.Connection, names: set[str]) -> dict[str, list[Any
     for name in sorted(names):
         if not name.replace('_', '').isalnum():
             raise ValueError('Unexpected identifier')
-        result[name] = list(bind.execute(sa.text(
-            "SELECT count(*),md5(coalesce(string_agg(h,'' ORDER BY h),'')) FROM "
-            f'(SELECT md5(row_to_json(t)::text) h FROM public."{name}" t)s'
-        )).one())
+        result[name] = list(
+            bind.execute(
+                sa.text(
+                    "SELECT count(*),md5(coalesce(string_agg(h,'' ORDER BY h),'')) FROM "
+                    f'(SELECT md5(row_to_json(t)::text) h FROM public."{name}" t)s'
+                )
+            ).one()
+        )
     return result
 
 
@@ -66,11 +70,11 @@ def restore_ruoyi_names(bind: sa.Connection, *, manifest: dict, allow_live: bool
     if not bind.in_transaction():
         raise RuntimeError('A caller-owned transaction is required')
     url = bind.engine.url
-    if not allow_live and not (url.host in {'localhost', '127.0.0.1'} and url.port == 19432):
+    if not allow_live and not (url.host in {'localhost', '127.0.0.1'} and url.port == 19432):  # noqa: PLR2004
         raise RuntimeError('Live destination requires explicit ruoyi_allow_live=true')
     target = set(TABLE_COMMENTS)
     source = (target - set(RUOYI_TABLE_NAMES.values())) | set(RUOYI_TABLE_NAMES)
-    if len(target) != 29 or not set(RUOYI_TABLE_NAMES.values()) <= target:
+    if len(target) != 29 or not set(RUOYI_TABLE_NAMES.values()) <= target:  # noqa: PLR2004
         raise RuntimeError('Runtime comment contract must describe the 29-table RuoYi target')
     if manifest['revision'] != '20261025_compact_schema' or set(manifest['tables']) != source:
         raise RuntimeError('Backup must describe the pre-correction 29-table schema')
@@ -80,7 +84,9 @@ def restore_ruoyi_names(bind: sa.Connection, *, manifest: dict, allow_live: bool
         bind.exec_driver_sql('SELECT pg_advisory_xact_lock(20261025, 29)')
         if inventory(bind) != source:
             raise RuntimeError('Unexpected source tables; refusing partial or repeated rename')
-        bind.exec_driver_sql('LOCK TABLE ' + ','.join('public."' + name + '"' for name in sorted(source)) + ' IN ACCESS EXCLUSIVE MODE')
+        bind.exec_driver_sql(
+            'LOCK TABLE ' + ','.join('public."' + name + '"' for name in sorted(source)) + ' IN ACCESS EXCLUSIVE MODE'
+        )
         before_rows = row_fingerprints(bind, source)
         if before_rows != manifest['fingerprints']:
             raise RuntimeError('Database changed since backup; take a fresh stopped-write snapshot')
@@ -94,15 +100,21 @@ def restore_ruoyi_names(bind: sa.Connection, *, manifest: dict, allow_live: bool
             raise RuntimeError('Rows changed during table-name correction')
         inspector = sa.inspect(bind)
         for name in sorted(target):
-            if {column['name'] for column in inspector.get_columns(name, schema='public')} != set(COLUMN_COMMENTS[name]):
+            if {column['name'] for column in inspector.get_columns(name, schema='public')} != set(
+                COLUMN_COMMENTS[name]
+            ):
                 raise RuntimeError('Unexpected target columns: ' + name)
             comment = TABLE_COMMENTS[name].replace("'", "''")
             bind.exec_driver_sql(f'COMMENT ON TABLE public."{name}" IS \'{comment}\'')
             for column, value in COLUMN_COMMENTS[name].items():
-                value = value.replace("'", "''")
-                bind.exec_driver_sql(f'COMMENT ON COLUMN public."{name}"."{column}" IS \'{value}\'')
+                escaped = value.replace("'", "''")
+                bind.exec_driver_sql(f'COMMENT ON COLUMN public."{name}"."{column}" IS \'{escaped}\'')
         if _physical_snapshot(bind) != before or row_fingerprints(bind, target) != expected_rows:
             raise RuntimeError('Comment synchronization changed protected data or structure')
-        return {'tables': len(target), 'renamed_tables': len(RUOYI_TABLE_NAMES),
-                'columns_unchanged': True, 'all_rows_unchanged': True,
-                'object_ids_constraints_indexes_ownership_acl_unchanged': True}
+        return {
+            'tables': len(target),
+            'renamed_tables': len(RUOYI_TABLE_NAMES),
+            'columns_unchanged': True,
+            'all_rows_unchanged': True,
+            'object_ids_constraints_indexes_ownership_acl_unchanged': True,
+        }

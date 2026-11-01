@@ -17,7 +17,7 @@ def upgrade() -> None:
         else:
             op.execute('ALTER TABLE sys_oper_log DROP COLUMN IF EXISTS dept_name')
         op.execute(
-            "DELETE FROM sys_role_menu WHERE role_id IN "
+            'DELETE FROM sys_role_menu WHERE role_id IN '
             "(SELECT role_id FROM sys_role WHERE role_key IN ('common', 'user'))"
         )
         op.execute(
@@ -34,7 +34,7 @@ def upgrade() -> None:
     if {'sys_role', 'sys_role_menu'}.issubset(tables):
         op.execute(
             text(
-                "DELETE FROM sys_role_menu WHERE role_id IN "
+                'DELETE FROM sys_role_menu WHERE role_id IN '
                 "(SELECT role_id FROM sys_role WHERE role_key IN ('common', 'user'))"
             )
         )

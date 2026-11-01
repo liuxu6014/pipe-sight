@@ -31,12 +31,8 @@ class InsightHubAdapter:
         """Allocate an ID for the deployed schema, which currently has no sequence."""
         # ponytail: MAX+1 is acceptable for the low-rate handoff path; replace with a
         # shared sequence when InsightHub exposes one to all writers.
-        await conn.execute("SELECT pg_advisory_xact_lock(318742, 1)")
-        return int(
-            await conn.fetchval(
-                f'SELECT COALESCE(MAX({column_name}), 0) + 1 FROM {self._schema}.{table_name}'
-            )
-        )
+        await conn.execute('SELECT pg_advisory_xact_lock(318742, 1)')
+        return int(await conn.fetchval(f'SELECT COALESCE(MAX({column_name}), 0) + 1 FROM {self._schema}.{table_name}'))
 
     async def _connect(self) -> Any:
         if not self.settings.insighthub_enabled or not self.settings.insighthub_db_password:
@@ -242,9 +238,7 @@ class InsightHubAdapter:
                             'handoff_record_id': str(external_id),
                             'handoff_create_time': external_time,
                             'handoff_status': (
-                                'processing'
-                                if existing is None or existing['prompt_trace_id']
-                                else 'dispatched'
+                                'processing' if existing is None or existing['prompt_trace_id'] else 'dispatched'
                             ),
                         }
                     )
@@ -287,10 +281,21 @@ class InsightHubAdapter:
                 data['result'] = {
                     key: data.get(key)
                     for key in (
-                        'ai_title', 'summary', 'domain_id', 'domain', 'classify', 'score',
-                        'warning_grade', 'warning_cause', 'focus_risk', 'suggestion',
-                        'event_keywords', 'filter_result', 'processing_status',
-                        'processing_attempts', 'processing_error',
+                        'ai_title',
+                        'summary',
+                        'domain_id',
+                        'domain',
+                        'classify',
+                        'score',
+                        'warning_grade',
+                        'warning_cause',
+                        'focus_risk',
+                        'suggestion',
+                        'event_keywords',
+                        'filter_result',
+                        'processing_status',
+                        'processing_attempts',
+                        'processing_error',
                     )
                     if data.get(key) is not None
                 }

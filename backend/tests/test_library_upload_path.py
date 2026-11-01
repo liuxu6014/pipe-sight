@@ -12,7 +12,7 @@ from config.env import UploadConfig
 
 
 @pytest.mark.asyncio
-async def test_upload_controller_resolves_relative_root_once(tmp_path, monkeypatch):
+async def test_upload_controller_resolves_relative_root_once(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(UploadConfig, 'UPLOAD_PATH', 'vf_admin/upload_path')
     monkeypatch.setattr(UploadConfig, 'UPLOAD_PREFIX', '/profile')

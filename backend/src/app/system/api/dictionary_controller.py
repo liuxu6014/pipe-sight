@@ -77,7 +77,9 @@ async def add_system_dict_type(
     add_dict_type.create_time = datetime.now()
     add_dict_type.update_by = current_user.user.user_name
     add_dict_type.update_time = datetime.now()
-    add_dict_type_result = await DictTypeService.add_dict_type_services(request.app.state.redis, query_db, add_dict_type)
+    add_dict_type_result = await DictTypeService.add_dict_type_services(
+        request.app.state.redis, query_db, add_dict_type
+    )
     logger.info(add_dict_type_result.message)
 
     return ResponseUtil.success(msg=add_dict_type_result.message)
@@ -101,7 +103,9 @@ async def edit_system_dict_type(
 ) -> Response:
     edit_dict_type.update_by = current_user.user.user_name
     edit_dict_type.update_time = datetime.now()
-    edit_dict_type_result = await DictTypeService.edit_dict_type_services(request.app.state.redis, query_db, edit_dict_type)
+    edit_dict_type_result = await DictTypeService.edit_dict_type_services(
+        request.app.state.redis, query_db, edit_dict_type
+    )
     logger.info(edit_dict_type_result.message)
 
     return ResponseUtil.success(msg=edit_dict_type_result.message)
@@ -138,7 +142,9 @@ async def delete_system_dict_type(
     query_db: Annotated[AsyncSession, DBSessionDependency()],
 ) -> Response:
     delete_dict_type = DeleteDictTypeModel(dictIds=dict_ids)
-    delete_dict_type_result = await DictTypeService.delete_dict_type_services(request.app.state.redis, query_db, delete_dict_type)
+    delete_dict_type_result = await DictTypeService.delete_dict_type_services(
+        request.app.state.redis, query_db, delete_dict_type
+    )
     logger.info(delete_dict_type_result.message)
 
     return ResponseUtil.success(msg=delete_dict_type_result.message)
@@ -275,7 +281,9 @@ async def add_system_dict_data(
     add_dict_data.create_time = datetime.now()
     add_dict_data.update_by = current_user.user.user_name
     add_dict_data.update_time = datetime.now()
-    add_dict_data_result = await DictDataService.add_dict_data_services(request.app.state.redis, query_db, add_dict_data)
+    add_dict_data_result = await DictDataService.add_dict_data_services(
+        request.app.state.redis, query_db, add_dict_data
+    )
     logger.info(add_dict_data_result.message)
 
     return ResponseUtil.success(msg=add_dict_data_result.message)
@@ -299,7 +307,9 @@ async def edit_system_dict_data(
 ) -> Response:
     edit_dict_data.update_by = current_user.user.user_name
     edit_dict_data.update_time = datetime.now()
-    edit_dict_data_result = await DictDataService.edit_dict_data_services(request.app.state.redis, query_db, edit_dict_data)
+    edit_dict_data_result = await DictDataService.edit_dict_data_services(
+        request.app.state.redis, query_db, edit_dict_data
+    )
     logger.info(edit_dict_data_result.message)
 
     return ResponseUtil.success(msg=edit_dict_data_result.message)
@@ -320,7 +330,9 @@ async def delete_system_dict_data(
     query_db: Annotated[AsyncSession, DBSessionDependency()],
 ) -> Response:
     delete_dict_data = DeleteDictDataModel(dictCodes=dict_codes)
-    delete_dict_data_result = await DictDataService.delete_dict_data_services(request.app.state.redis, query_db, delete_dict_data)
+    delete_dict_data_result = await DictDataService.delete_dict_data_services(
+        request.app.state.redis, query_db, delete_dict_data
+    )
     logger.info(delete_dict_data_result.message)
 
     return ResponseUtil.success(msg=delete_dict_data_result.message)

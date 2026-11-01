@@ -15,7 +15,7 @@ no_external_network = refactor_no_external_network
 
 
 @pytest.mark.asyncio
-async def test_save_template_can_remain_unconfigured(env, db):
+async def test_save_template_can_remain_unconfigured(env, db) -> None:
     result = await env.template.PipelineTemplateService.save_draft(
         db,
         template_key=None,
@@ -30,7 +30,7 @@ async def test_save_template_can_remain_unconfigured(env, db):
 
 
 @pytest.mark.asyncio
-async def test_enable_disable_keeps_same_template_id(env, db):
+async def test_enable_disable_keeps_same_template_id(env, db) -> None:
     seed(env, db, model=False)
     await env.template.PipelineTemplateService.retire(db, '201')
     assert await env.template.PipelineTemplateService.get_published(db, '201') is None
@@ -40,7 +40,7 @@ async def test_enable_disable_keeps_same_template_id(env, db):
 
 
 @pytest.mark.asyncio
-async def test_get_available_uses_research_repository(env, monkeypatch):
+async def test_get_available_uses_research_repository(env, monkeypatch) -> None:
     row = NS(is_enabled=True)
     get = AsyncMock(return_value=row)
     monkeypatch.setattr(env.repo.ResearchDao, 'get_template', get)
@@ -51,7 +51,7 @@ async def test_get_available_uses_research_repository(env, monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('field,value', [('prompt', ' '), ('name', ''), ('purpose', 'review')])
-async def test_template_rejects_invalid_required_fields(env, db, field, value):
+async def test_template_rejects_invalid_required_fields(env, db, field, value) -> None:
     data = {'purpose': 'research', 'name': '模板', 'prompt': '提示词', field: value}
     with pytest.raises(env.exc):
         await env.template.PipelineTemplateService.save_draft(
@@ -60,7 +60,7 @@ async def test_template_rejects_invalid_required_fields(env, db, field, value):
 
 
 @pytest.mark.asyncio
-async def test_listing_exposes_readiness_without_hiding_unconfigured_templates(env, db):
+async def test_listing_exposes_readiness_without_hiding_unconfigured_templates(env, db) -> None:
     template, _ = seed(env, db, model=False)
     result = await env.template.PipelineTemplateService.list_templates(db, published_only=True)
     assert result['total'] == 1 and result['rows'][0]['modelConfigured'] is False
@@ -71,7 +71,7 @@ async def test_listing_exposes_readiness_without_hiding_unconfigured_templates(e
 
 
 @pytest.mark.asyncio
-async def test_missing_text_model_is_a_generation_error_not_template_approval(env, db):
+async def test_missing_text_model_is_a_generation_error_not_template_approval(env, db) -> None:
     seed(env, db, model=False)
     with raises(env, 'text_generate'):
         await env.template.PipelineTemplateService.validate_models(db, None)
@@ -81,7 +81,7 @@ async def test_missing_text_model_is_a_generation_error_not_template_approval(en
 @pytest.mark.parametrize('template_key', [None, '201'])
 async def test_template_model_references_are_int_before_persist_and_exact_strings_on_wire(
     env, monkeypatch, template_key
-):
+) -> None:
     from app.intelligence.schemas.pipeline import PipelineTemplateSaveModel
 
     text_id, image_id = 9007199254740993, 9007199254740995
@@ -104,12 +104,12 @@ async def test_template_model_references_are_int_before_persist_and_exact_string
         assert type(identity) is int  # Check before any driver can coerce it.
         return models[identity]
 
-    def assert_persist_types():
+    def assert_persist_types() -> None:
         row = database.add.call_args.args[0] if template_key is None else stored
         assert type(row.model_id) is int and row.model_id == text_id
         assert type(row.image_model_id) is int and row.image_model_id == image_id
 
-    async def refresh(row):
+    async def refresh(row) -> None:
         row.id = 201
 
     database = NS(
@@ -125,7 +125,7 @@ async def test_template_model_references_are_int_before_persist_and_exact_string
     assert result['modelId'] == str(text_id) and result['imageModelId'] == str(image_id)
 
 
-def test_template_model_references_preserve_large_ids_and_nulls_in_output(env):
+def test_template_model_references_preserve_large_ids_and_nulls_in_output(env) -> None:
     row = env.configuration.PipelineTemplateVersion(
         id=201,
         name='模板',

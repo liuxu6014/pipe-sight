@@ -28,8 +28,8 @@ async def main(*, reactivate: bool = False) -> None:
         failures: list[str] = []
         for source_id in source_ids:
             source = (
-                await db.execute(select(PipelineSource).where(PipelineSource.source_id == source_id))
-            ).scalars().one()
+                (await db.execute(select(PipelineSource).where(PipelineSource.source_id == source_id))).scalars().one()
+            )
             try:
                 result = await PipelineCollectionService.collect_source(db, source)
             except Exception as exc:

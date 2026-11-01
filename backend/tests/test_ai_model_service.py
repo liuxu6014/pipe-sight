@@ -16,7 +16,7 @@ db = refactor_db
 no_external_network = refactor_network
 
 
-def offline_transport(env, monkeypatch, respond):
+def offline_transport(env, monkeypatch, respond) -> None:
     original = httpx.AsyncClient
     monkeypatch.setattr(
         env.gateway.httpx, 'AsyncClient', lambda **kwargs: original(transport=httpx.MockTransport(respond), **kwargs)
@@ -25,7 +25,7 @@ def offline_transport(env, monkeypatch, respond):
 
 
 @pytest.mark.asyncio
-async def test_model_test_runs_minimal_gateway_request_without_exposing_secret(env, db, monkeypatch):
+async def test_model_test_runs_minimal_gateway_request_without_exposing_secret(env, db, monkeypatch) -> None:
     seed(env, db)
     model = await db.get(env.ai.AiModels, 1)
     model.parameters = {'max_tokens': 32}
@@ -51,7 +51,7 @@ async def test_model_test_runs_minimal_gateway_request_without_exposing_secret(e
 
 
 @pytest.mark.asyncio
-async def test_model_test_error_is_safe_and_failure_audit_is_committed(env, db, monkeypatch):
+async def test_model_test_error_is_safe_and_failure_audit_is_committed(env, db, monkeypatch) -> None:
     seed(env, db)
 
     def respond(request):
@@ -69,7 +69,7 @@ async def test_model_test_error_is_safe_and_failure_audit_is_committed(env, db, 
 
 
 @pytest.mark.asyncio
-async def test_add_model_rejects_unsupported_native_protocol_before_persisting(env, db):
+async def test_add_model_rejects_unsupported_native_protocol_before_persisting(env, db) -> None:
     values = {
         'name': '不支持原生协议',
         'provider': 'anthropic',
@@ -90,7 +90,7 @@ async def test_add_model_rejects_unsupported_native_protocol_before_persisting(e
 
 
 @pytest.mark.asyncio
-async def test_model_existence_check_uses_canonical_id_and_no_legacy_owner_scope(env, db):
+async def test_model_existence_check_uses_canonical_id_and_no_legacy_owner_scope(env, db) -> None:
     seed(env, db)
     result = await env.ai_service.AiModelService.check_ai_model_data_scope_services(db, 1, True)
     assert result.is_success
@@ -99,20 +99,20 @@ async def test_model_existence_check_uses_canonical_id_and_no_legacy_owner_scope
 
 
 @pytest.mark.asyncio
-async def test_disabled_model_is_rejected_before_transport(env, db, monkeypatch):
+async def test_disabled_model_is_rejected_before_transport(env, db, monkeypatch) -> None:
     seed(env, db)
     model = await db.get(env.ai.AiModels, 1)
     model.is_enabled = False
     await db.commit()
     calls = []
-    offline_transport(env, monkeypatch, lambda request: calls.append(request))
+    offline_transport(env, monkeypatch, calls.append)
     with raises(env, '已停用'):
         await env.ai_service.AiModelService.test_ai_model_services(db, 1, True)
     assert calls == []
 
 
 @pytest.mark.asyncio
-async def test_image_test_uses_image_capability_and_returns_no_raw_image_or_credentials(env, db, monkeypatch):
+async def test_image_test_uses_image_capability_and_returns_no_raw_image_or_credentials(env, db, monkeypatch) -> None:
     import base64
     from io import BytesIO
 
@@ -136,7 +136,7 @@ async def test_image_test_uses_image_capability_and_returns_no_raw_image_or_cred
 
 
 @pytest.mark.asyncio
-async def test_model_details_do_not_return_credential_reference_or_plain_secret(env, db):
+async def test_model_details_do_not_return_credential_reference_or_plain_secret(env, db) -> None:
     seed(env, db)
     result = await env.ai_service.AiModelService.ai_model_detail_services(db, 1)
     values = result.model_dump(by_alias=True)

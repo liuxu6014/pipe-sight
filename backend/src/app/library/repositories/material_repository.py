@@ -24,40 +24,46 @@ async def _sqlite_parse_token(db: Any) -> str:
     """
     connection = db.s.connection() if hasattr(db, 's') else await db.connection()
     identity = connection.info.setdefault('material_parse_connection', uuid4().hex)
-    changes, version = (await db.execute(text(
-        'SELECT total_changes(), (SELECT data_version FROM pragma_data_version)'
-    ))).one()
+    changes, version = (
+        await db.execute(text('SELECT total_changes(), (SELECT data_version FROM pragma_data_version)'))
+    ).one()
     return f'sqlite:{identity}:{changes}:{version}'
 
 
 class MaterialDao:
     @staticmethod
-    async def find_duplicate_upload(db, user_id, file_hash):
+    async def find_duplicate_upload(db, user_id, file_hash) -> Material | None:
         # Serialize uploads of identical bytes per owner across API processes.
         # No global/cross-owner lookup, and edited documents remain independent.
         if _dialect_name(db) == 'postgresql':
-            import hashlib
-            key = int.from_bytes(hashlib.sha256(f'material:{user_id}:{file_hash}'.encode()).digest()[:8], 'big', signed=True)
+            import hashlib  # noqa: PLC0415
+
+            key = int.from_bytes(
+                hashlib.sha256(f'material:{user_id}:{file_hash}'.encode()).digest()[:8], 'big', signed=True
+            )
             await db.execute(text('SELECT pg_advisory_xact_lock(:key)'), {'key': key})
-        query = select(Material).where(
-            Material.user_id == user_id, Material.hash == file_hash, Material.edited_text.is_(None)
-        ).order_by((Material.status == 'ready').desc(), Material.id.asc()).limit(1)
+        query = (
+            select(Material)
+            .where(Material.user_id == user_id, Material.hash == file_hash, Material.edited_text.is_(None))
+            .order_by((Material.status == 'ready').desc(), Material.id.asc())
+            .limit(1)
+        )
         return await db.scalar(query.execution_options(populate_existing=True))
 
     @staticmethod
-    async def add_material(db, material):
+    async def add_material(db, material) -> None:
         db.add(material)
         await db.flush()
 
     @staticmethod
-    async def list_accessible_materials(db, user_id, file_ids=None):
+    async def list_accessible_materials(db, user_id, file_ids=None) -> list[Material]:
         query = select(Material).where(Material.user_id == user_id)
         if file_ids is not None:
             query = query.where(Material.id.in_([parse_business_id(i) for i in file_ids]))
         return list(await db.scalars(query.order_by(Material.updated_at.desc())))
 
     @staticmethod
-    async def get_owned_material(db, material_id, user_id, *, lock=False):
+    async def get_owned_material(db, material_id, user_id, *, lock=False) -> Material | None:
         material_id = parse_business_id(material_id)
         query = select(Material).where(Material.id == material_id, Material.user_id == user_id)
         if lock:
@@ -67,11 +73,11 @@ class MaterialDao:
     get_accessible_material = get_owned_material
 
     @staticmethod
-    async def list_material_ids_for_dispatch(db, **_):
+    async def list_material_ids_for_dispatch(db, **_) -> list[int]:
         return list(await db.scalars(select(Material.id).where(Material.status == 'queued')))
 
     @staticmethod
-    async def claim_material_parse(db, material_id, **_):
+    async def claim_material_parse(db, material_id, **_) -> Material | None:
         material_id = parse_business_id(material_id)
         # RETURNING captures the claimed row and its version atomically. Never
         # reload after committing: that could pick up a later worker's attempt.
@@ -99,7 +105,7 @@ class MaterialDao:
         return row
 
     @staticmethod
-    async def finish_material_parse(db, material_id, *, parse_token, status, extracted_text, error=None):
+    async def finish_material_parse(db, material_id, *, parse_token, status, extracted_text, error=None) -> bool:
         material_id = parse_business_id(material_id)
         if not isinstance(parse_token, str):
             return False
@@ -112,9 +118,10 @@ class MaterialDao:
             _, _, changes, version = parse_token.split(':')
             # Recheck in the UPDATE itself, not only before its await boundary.
             guard = (func.total_changes() == int(changes)) & (
-                select(literal_column('data_version', Integer)).select_from(
-                    text('pragma_data_version')
-                ).scalar_subquery() == int(version)
+                select(literal_column('data_version', Integer))
+                .select_from(text('pragma_data_version'))
+                .scalar_subquery()
+                == int(version)
             )
         else:
             return False

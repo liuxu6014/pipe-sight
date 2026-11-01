@@ -18,7 +18,7 @@ importer = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(importer)
 
 
-def test_extract_preserves_paragraph_and_image_order():
+def test_extract_preserves_paragraph_and_image_order() -> None:
     node = html.fromstring(
         '<div><p>第一段<strong>强调</strong><img src="/one.png"/>图注</p><p>末段<br/>尾句</p><script>bad()</script></div>'
     )
@@ -32,7 +32,7 @@ def test_extract_preserves_paragraph_and_image_order():
     ]
 
 
-def test_assets_require_matching_checksum_and_safe_key(tmp_path, monkeypatch):
+def test_assets_require_matching_checksum_and_safe_key(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(UploadConfig, 'UPLOAD_PATH', str(tmp_path))
     key = 'curated-news-' + 'a' * 24
     path = tmp_path / 'authorized_articles' / key / 'article.json'
@@ -50,7 +50,7 @@ def test_assets_require_matching_checksum_and_safe_key(tmp_path, monkeypatch):
     assert read_authorized_article({**meta, 'asset_key': '../escape'}) == []
 
 
-def test_unsafe_images_are_not_returned(tmp_path, monkeypatch):
+def test_unsafe_images_are_not_returned(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(UploadConfig, 'UPLOAD_PATH', str(tmp_path))
     key = 'curated-wechat-' + 'b' * 24
     path = tmp_path / 'authorized_articles' / key / 'article.json'
@@ -60,7 +60,7 @@ def test_unsafe_images_are_not_returned(tmp_path, monkeypatch):
     assert read_authorized_article({'asset_key': key, 'sha256': hashlib.sha256(raw).hexdigest()}) == []
 
 
-def test_catalog_does_not_load_full_text_for_lists(monkeypatch):
+def test_catalog_does_not_load_full_text_for_lists(monkeypatch) -> None:
     from app.intelligence.services import catalog
 
     article = SimpleNamespace(

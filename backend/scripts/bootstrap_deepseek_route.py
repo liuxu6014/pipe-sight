@@ -81,22 +81,26 @@ async def main() -> None:
 
     async with AsyncSessionLocal() as db:
         admin = (
-            await db.execute(
-                select(SysUser).where(SysUser.user_name == 'admin', SysUser.del_flag == '0')
-            )
-        ).scalars().first()
+            (await db.execute(select(SysUser).where(SysUser.user_name == 'admin', SysUser.del_flag == '0')))
+            .scalars()
+            .first()
+        )
         if admin is None:
             raise RuntimeError('未找到启用的 admin 用户，无法确定模型配置归属')
 
         model = (
-            await db.execute(
-                select(AiModels).where(
-                    AiModels.user_id == admin.user_id,
-                    AiModels.provider == DEEPSEEK_PROVIDER,
-                    AiModels.model_code == model_code,
+            (
+                await db.execute(
+                    select(AiModels).where(
+                        AiModels.user_id == admin.user_id,
+                        AiModels.provider == DEEPSEEK_PROVIDER,
+                        AiModels.model_code == model_code,
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if model is None:
             model = AiModels(
                 model_code=model_code,
@@ -125,10 +129,10 @@ async def main() -> None:
             model_action = 'reused'
 
         route = (
-            await db.execute(
-                select(PipelineModelRoute).where(PipelineModelRoute.scene == DATA_FILTER_SCENE)
-            )
-        ).scalars().first()
+            (await db.execute(select(PipelineModelRoute).where(PipelineModelRoute.scene == DATA_FILTER_SCENE)))
+            .scalars()
+            .first()
+        )
         if route is not None:
             if route.primary_model_id != model.model_id or not route.enabled:
                 raise RuntimeError('data-filter 路由已存在，请在管理端确认后再修改，脚本不会覆盖已有路由')

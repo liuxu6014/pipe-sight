@@ -3,7 +3,6 @@
 from alembic import context, op
 from sqlalchemy import inspect, text
 
-
 revision = '20260829_drop_legacy_tables'
 down_revision = '20260829_simplify_user_role_seed'
 branch_labels = None

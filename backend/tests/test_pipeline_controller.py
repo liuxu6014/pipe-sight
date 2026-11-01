@@ -18,27 +18,43 @@ def route_map():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('admin', [False, True])
-@pytest.mark.parametrize('suffix,method', [('', 'get_report'), ('/versions', 'list_report_versions'),
-                                        ('/versions/{version_no}', 'get_report_version'), ('/exports', 'list_report_exports')])
-async def test_report_read_routes_derive_scope_from_authenticated_admin(monkeypatch, admin, suffix, method):
+@pytest.mark.parametrize(
+    'suffix,method',
+    [
+        ('', 'get_report'),
+        ('/versions', 'list_report_versions'),
+        ('/versions/{version_no}', 'get_report_version'),
+        ('/exports', 'list_report_exports'),
+    ],
+)
+async def test_report_read_routes_derive_scope_from_authenticated_admin(monkeypatch, admin, suffix, method) -> None:
     from app.research.api.controller import ResearchApplicationService
+
     mock = AsyncMock(return_value={})
     monkeypatch.setattr(ResearchApplicationService, method, mock)
-    route = next(r for r in pipeline_controller.routes if r.path == '/pipeline/research/reports/{report_id}' + suffix and 'GET' in r.methods)
-    args = dict(request=None, report_id=33, query_db=object(),
-                current_user=SimpleNamespace(user=SimpleNamespace(user_id=8, admin=admin)))
+    route = next(
+        r
+        for r in pipeline_controller.routes
+        if r.path == '/pipeline/research/reports/{report_id}' + suffix and 'GET' in r.methods
+    )
+    args = {
+        'request': None,
+        'report_id': 33,
+        'query_db': object(),
+        'current_user': SimpleNamespace(user=SimpleNamespace(user_id=8, admin=admin)),
+    }
     if 'version_no' in suffix:
         args['version_no'] = 1
     await route.endpoint(**args)
     assert mock.await_args.kwargs['include_all'] is admin
 
 
-def test_management_dashboard_requires_administrator_identity():
+def test_management_dashboard_requires_administrator_identity() -> None:
     route = next(route for route in pipeline_controller.routes if route.path == '/pipeline/dashboard')
     assert any(getattr(dependency.dependency, 'role_key', None) == 'admin' for dependency in route.dependencies)
 
 
-def test_pipeline_controller_exposes_canonical_action_routes_without_retired_workflow():
+def test_pipeline_controller_exposes_canonical_action_routes_without_retired_workflow() -> None:
     routes = route_map()
     required = {
         ('/pipeline/sources', ('GET',)),
@@ -96,12 +112,12 @@ def test_pipeline_controller_exposes_canonical_action_routes_without_retired_wor
     assert not any(retired.intersection(path.split('/')) for path, _ in routes)
 
 
-def test_report_export_route_accepts_binary_format_query():
+def test_report_export_route_accepts_binary_format_query() -> None:
     route = route_map()['/pipeline/research/reports/{}/export', ('GET',)]
     assert 'file_format' in {param.name for param in route.dependant.query_params}
 
 
-def test_pipeline_management_routes_require_explicit_authorization():
+def test_pipeline_management_routes_require_explicit_authorization() -> None:
     routes = route_map()
     for path, method, permission in (
         ('/pipeline/sources', 'GET', 'pipeline:source:list'),

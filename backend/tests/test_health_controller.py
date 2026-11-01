@@ -42,9 +42,7 @@ async def test_health_ready_reports_postgres_and_redis(monkeypatch: pytest.Monke
     response = await health.health_ready(_request(_FakeRedis()))
 
     assert response.status_code == HTTP_200_OK
-    assert response.body == (
-        b'{"status":"ok","service":"pipesight-backend","checks":{"postgres":"ok","redis":"ok"}}'
-    )
+    assert response.body == (b'{"status":"ok","service":"pipesight-backend","checks":{"postgres":"ok","redis":"ok"}}')
 
 
 @pytest.mark.asyncio

@@ -7,11 +7,13 @@
 from __future__ import annotations
 
 import asyncio
+import codecs
+import hashlib
 import re
 import zipfile
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from xml.etree import ElementTree as ET
 
 from pypdf import PdfReader
@@ -19,14 +21,11 @@ from pypdf.errors import PyPdfError
 
 from app.business_ids import wire_id
 from app.business_time import format_business_time
-from app.library.models.materials import PipelineMaterial
+from app.library.models.materials import PipelineMaterial, utcnow
 from app.library.repositories.material_repository import MaterialDao
 from app.system.services.file_scan import FileScanService
 from config.env import UploadConfig
 from exceptions.exception import ServiceException
-
-if TYPE_CHECKING:
-    pass
 
 
 class MaterialFileService:
@@ -233,12 +232,11 @@ class MaterialService:
     """私有资料事务。扫描结果不另加旧实体列；解析/下载每次执行安全门。"""
 
     @staticmethod
-    def effective_text(item):
+    def effective_text(item) -> str:
         return item.edited_text if item.edited_text is not None else (item.extracted_text or '')
 
     @classmethod
-    def material_dict(cls, item, viewer_user_id=None, **_):
-        import hashlib
+    def material_dict(cls, item, viewer_user_id=None, **_) -> dict:
         text = cls.effective_text(item)
         return {
             'id': wire_id(item.id),
@@ -246,7 +244,9 @@ class MaterialService:
             'fileName': item.filename,
             'fileSize': item.size,
             'fileHash': item.hash,
-            'editHash': hashlib.sha256(item.edited_text.encode('utf-8')).hexdigest() if item.edited_text is not None else None,
+            'editHash': hashlib.sha256(item.edited_text.encode('utf-8')).hexdigest()
+            if item.edited_text is not None
+            else None,
             'format': Path(item.filename).suffix.lstrip('.').upper(),
             'type': '内部文献',
             'permissionScope': 'private',
@@ -269,7 +269,7 @@ class MaterialService:
         }
 
     @classmethod
-    def material_detail_dict(cls, item, viewer_user_id=None, **kwargs):
+    def material_detail_dict(cls, item, viewer_user_id=None, **kwargs) -> dict:
         return {
             **cls.material_dict(item, viewer_user_id, **kwargs),
             'extractedText': item.extracted_text or '',
@@ -280,19 +280,21 @@ class MaterialService:
         }
 
     @classmethod
-    async def list_materials(cls, db, user_id, **kwargs):
+    async def list_materials(cls, db, user_id, **kwargs) -> dict:
         rows = await MaterialDao.list_accessible_materials(db, user_id)
         return {'rows': [cls.material_dict(i, user_id, **kwargs) for i in rows], 'total': len(rows)}
 
     @classmethod
-    async def get_material(cls, db, user_id, material_id, **kwargs):
+    async def get_material(cls, db, user_id, material_id, **kwargs) -> dict:
         row = await MaterialDao.get_owned_material(db, material_id, user_id)
         if not row:
             raise ServiceException(message='资料不存在或无权访问')
         return cls.material_detail_dict(row, user_id, **kwargs)
 
     @staticmethod
-    async def get_download(db, user_id, material_id, *, local_path_resolver=MaterialFileService.safe_local_path):
+    async def get_download(
+        db, user_id, material_id, *, local_path_resolver=MaterialFileService.safe_local_path
+    ) -> tuple[Path, str, str]:
         row = await MaterialDao.get_owned_material(db, material_id, user_id)
         if not row:
             raise ServiceException(message='资料不存在或无权访问')
@@ -305,7 +307,7 @@ class MaterialService:
         return path, row.filename, row.mime_type
 
     @staticmethod
-    def detect_mime(path, name):
+    def detect_mime(path, name) -> str:
         suffix = Path(name).suffix.lower()
         if path.stat().st_size > MaterialFileService.max_source_bytes:
             raise ServiceException(message='资料超过大小限制')
@@ -320,8 +322,6 @@ class MaterialService:
             return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         if suffix in {'.txt', '.md'} and b'\x00' not in header and not header.startswith((b'MZ', b'\x7fELF')):
             # 确认可解码文本，不只相信上传 MIME。
-            import codecs
-
             try:
                 codecs.getincrementaldecoder('utf-8-sig')().decode(header, final=False)
             except UnicodeDecodeError:
@@ -344,9 +344,7 @@ class MaterialService:
         scanner=FileScanService.scan,
         detail_serializer=None,
         **kwargs,
-    ):
-        import hashlib
-
+    ) -> dict:
         if permission_scope != 'private':
             raise ServiceException(message='上传资料默认私有，暂不支持公开共享')
         path = MaterialFileService.safe_local_path(local_path or file_path)
@@ -357,8 +355,6 @@ class MaterialService:
         except (ValueError, UnicodeError, KeyError, zipfile.BadZipFile):
             raise ServiceException(message='文件内容校验失败') from None
         scan = await asyncio.to_thread(scanner, str(path), name)
-        from app.library.models.materials import utcnow
-
         file_hash = await asyncio.to_thread(lambda: hashlib.sha256(path.read_bytes()).hexdigest())
         if scan.status == 'clean':
             existing = await MaterialDao.find_duplicate_upload(db, user_id, file_hash)
@@ -380,7 +376,7 @@ class MaterialService:
             user_id=user_id,
             name=name,
             filename=name,
-            storage_key=str(path.relative_to(Path(UploadConfig.UPLOAD_PATH).resolve())),
+            storage_key=str(path.relative_to(Path(UploadConfig.UPLOAD_PATH).resolve())),  # noqa: ASYNC240
             mime_type=mime,
             size=path.stat().st_size,
             hash=file_hash,
@@ -397,22 +393,20 @@ class MaterialService:
         return (detail_serializer or cls.material_detail_dict)(row, user_id)
 
     @classmethod
-    async def retry_parse(cls, db, user_id, material_id, **kwargs):
+    async def retry_parse(cls, db, user_id, material_id, **kwargs) -> dict:
         row = await MaterialDao.get_owned_material(db, material_id, user_id, lock=True)
         if not row:
             raise ServiceException(message='资料不存在或无权解析')
         if row.status in {'parsing', 'queued'}:
             return cls.material_detail_dict(row, user_id)
         row.status, row.error = 'queued', None
-        from app.library.models.materials import utcnow
-
         row.updated_at = utcnow()
         # 重解析不清空提取结果，更不修改 edited_text。
         await db.commit()
         return cls.material_detail_dict(row, user_id)
 
     @classmethod
-    async def edit(cls, db, user_id, material_id, *, expected_version, edited_text, name=None):
+    async def edit(cls, db, user_id, material_id, *, expected_version, edited_text, name=None) -> dict:
         row = await MaterialDao.get_owned_material(db, material_id, user_id, lock=True)
         if not row or row.version != expected_version:
             raise ServiceException(message='资料不存在、无权访问或版本已变化')
@@ -425,14 +419,12 @@ class MaterialService:
                 raise ServiceException(message='资料名不能为空')
             row.name = name.strip()
         row.version += 1
-        from app.library.models.materials import utcnow
-
         row.updated_at = utcnow()
         await db.commit()
         return cls.material_detail_dict(row, user_id)
 
     @staticmethod
-    async def delete_material(db, user_id, material_id, **kwargs):
+    async def delete_material(db, user_id, material_id, **kwargs) -> dict:
         row = await MaterialDao.get_owned_material(db, material_id, user_id, lock=True)
         if not row:
             raise ServiceException(message='资料不存在或无权删除')
@@ -470,5 +462,5 @@ class MaterialApiService:
     edit = MaterialService.edit
 
     @staticmethod
-    def _parse_material_file(local_path, original_name):
+    def _parse_material_file(local_path, original_name) -> tuple[str, str, str, dict[str, Any]]:
         return MaterialFileService.parse(local_path, original_name, requested_at=datetime.now().isoformat())

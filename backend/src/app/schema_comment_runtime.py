@@ -1,6 +1,5 @@
 """Current compact-v5 comment SQL and catalog verification; no ORM imports."""
 
-
 import sqlalchemy as sa
 
 from app.schema_comments import (
@@ -48,8 +47,15 @@ def render_comment_sql() -> str:
 
 def _guard_comments(name: str, statements: list[str]) -> list[str]:
     tag = f'$pipesight_{name}_comments$'
-    return [f'DO {tag}', 'BEGIN', f"    IF to_regclass('public.{name}') IS NOT NULL THEN",
-            *('        ' + statement for statement in statements), '    END IF;', 'END;', f'{tag};']
+    return [
+        f'DO {tag}',
+        'BEGIN',
+        f"    IF to_regclass('public.{name}') IS NOT NULL THEN",
+        *('        ' + statement for statement in statements),
+        '    END IF;',
+        'END;',
+        f'{tag};',
+    ]
 
 
 def verify_schema_comments(bind: sa.Connection, *, optional_tables: tuple[str, ...] = OPTIONAL_TABLE_NAMES) -> dict:
@@ -66,16 +72,18 @@ def verify_schema_comments(bind: sa.Connection, *, optional_tables: tuple[str, .
         columns += len(actual)
     views = set(inspector.get_view_names(schema='public')) & set(VIEW_COMMENTS)
     for name in views:
-        actual_table_comment = bind.execute(sa.text('SELECT obj_description(to_regclass(:name))'),
-                                            {'name': 'public.' + name}).scalar_one()
+        actual_table_comment = bind.execute(
+            sa.text('SELECT obj_description(to_regclass(:name))'), {'name': 'public.' + name}
+        ).scalar_one()
         actual = {c['name']: c.get('comment') for c in inspector.get_columns(name, schema='public')}
         if actual_table_comment != VIEW_COMMENTS[name]['comment'] or actual != VIEW_COMMENTS[name]['columns']:
             raise SchemaPrerequisiteError(f'Database catalog view comments mismatch: {name}')
     return {'tables': len(names), 'columns': columns, 'views': len(views)}
 
 
-def apply_schema_comments(bind: sa.Connection, *, optional_tables: tuple[str, ...] = OPTIONAL_TABLE_NAMES,
-                          allow_live: bool = False) -> dict:
+def apply_schema_comments(
+    bind: sa.Connection, *, optional_tables: tuple[str, ...] = OPTIONAL_TABLE_NAMES, allow_live: bool = False
+) -> dict:
     """Comment-only, atomic application; no application imports or business DML."""
     if not bind.in_transaction():
         raise SchemaPrerequisiteError('A caller-owned transaction is required')

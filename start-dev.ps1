@@ -724,6 +724,11 @@ else {
 
 $env:PYTHONIOENCODING = 'utf-8'
 $env:PYTHONUTF8 = '1'
+$env:PYTHONPATH = @(
+    (Join-Path $BackendRoot 'src')
+    $BackendRoot
+    if ($env:PYTHONPATH) { $env:PYTHONPATH }
+) -join [IO.Path]::PathSeparator
 $env:APP_PORT = [string]$BackendPort
 $env:VITE_BACKEND_TARGET = $backendBaseUrl
 $env:BROWSER = 'none'
@@ -737,7 +742,6 @@ try {
             FilePath = $uvPath
             ArgumentList = @('run', '--project', $BackendRoot, '--no-sync', 'python', '-m', $BackendApiModule, '--env=dev')
             WorkingDirectory = $BackendRoot
-            Environment = @{ PYTHONPATH = "$(Join-Path $BackendRoot 'src');$BackendRoot" }
             RedirectStandardOutput = $BackendStdout
             RedirectStandardError = $BackendStderr
             WindowStyle = 'Hidden'

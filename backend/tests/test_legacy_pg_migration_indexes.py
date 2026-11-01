@@ -11,12 +11,17 @@ from alembic.operations import Operations
 from sqlalchemy import create_engine, inspect
 
 
-@pytest.mark.parametrize('filename', [
-    '20260814_pipeline_domain_enhancement.py',
-    '20260814_full_system_redesign.py',
-])
+@pytest.mark.parametrize(
+    'filename',
+    [
+        '20260814_pipeline_domain_enhancement.py',
+        '20260814_full_system_redesign.py',
+    ],
+)
 def test_old_postgresql_table_defers_future_column_indexes_and_can_reconcile_them(
-    filename: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    filename: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     path = Path(__file__).parents[1] / 'alembic' / 'versions' / filename
     spec = importlib.util.spec_from_file_location('legacy_migration', path)
@@ -42,9 +47,12 @@ def test_old_postgresql_table_defers_future_column_indexes_and_can_reconcile_the
             indexes = {item['name'] for item in inspect(connection).get_indexes('legacy_files')}
             assert 'idx_legacy_name' in indexes
             assert 'idx_legacy_lease' not in indexes
-            assert connection.exec_driver_sql(
-                "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_legacy_expression'"
-            ).scalar_one() == 'idx_legacy_expression'
+            assert (
+                connection.exec_driver_sql(
+                    "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_legacy_expression'"
+                ).scalar_one()
+                == 'idx_legacy_expression'
+            )
             connection.exec_driver_sql('ALTER TABLE legacy_files ADD COLUMN lease_until TEXT')
             migration._execute_schema_file('schema.sql')
             indexes = {item['name'] for item in inspect(connection).get_indexes('legacy_files')}
@@ -55,7 +63,8 @@ def test_alembic_url_round_trips_percent_encoded_password_characters() -> None:
     path = Path(__file__).parents[1] / 'alembic' / 'env.py'
     tree = ast.parse(path.read_text(encoding='utf-8'))
     statement = next(
-        node for node in tree.body
+        node
+        for node in tree.body
         if isinstance(node, ast.Expr)
         and isinstance(node.value, ast.Call)
         and isinstance(node.value.func, ast.Attribute)
@@ -65,7 +74,11 @@ def test_alembic_url_round_trips_percent_encoded_password_characters() -> None:
     config = Config()
     # Exercise the actual environment configuration expression without importing
     # env.py, which would run migrations as a side effect.
-    exec(compile(ast.Module(body=[statement], type_ignores=[]), str(path), 'exec'), {
-        'alembic_config': config, 'ASYNC_SQLALCHEMY_DATABASE_URL': url,
-    })
+    exec(
+        compile(ast.Module(body=[statement], type_ignores=[]), str(path), 'exec'),
+        {
+            'alembic_config': config,
+            'ASYNC_SQLALCHEMY_DATABASE_URL': url,
+        },
+    )
     assert config.get_main_option('sqlalchemy.url') == url

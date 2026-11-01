@@ -32,6 +32,7 @@ select = [
     "RUF",    # Ruff-specific rules
 ]
 ignore = [
+    "ANN001", # missing type annotation for function argument
     "ANN002", # missing type annotation for *{name}
     "ANN003", # missing type annotation for **{name}
     "ANN401", # dynamically typed expressions (typing.Any) are disallowed in {name}
@@ -40,6 +41,8 @@ ignore = [
     "RET504", # unnecessary assignment to {name} before return statement
     "SIM105", # use contextlib.suppress({exception}) instead of try-except-pass
     "C901",   # too complex
+    "PLR0912", # too many branches
+    "PLR0915", # too many statements
     "N818",   # exception name {name} should be named with an Error suffix
     "E501",   # line too long
     "W191",   # indentation contains tabs
@@ -58,6 +61,10 @@ known-third-party = ["alembic"]
 [lint.pylint]
 max-args = 10
 max-returns = 10
+
+[lint.per-file-ignores]
+"tests/**" = ["ANN", "PLR2004", "PLC0415", "E402", "N814"]
+"scripts/**" = ["PLC0415", "PLR2004", "N813"]
 
 [lint.pyupgrade]
 # Preserve types, even if a file imports `from __future__ import annotations`.

@@ -16,6 +16,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+from typing import NoReturn
 from uuid import uuid4
 
 import httpx
@@ -113,7 +114,7 @@ def domain(monkeypatch):
     registry.register('fixed-pg18', collection.Adapter(fixed, ('website', 'paper'), ('example.test',)))
     gateway = ModuleType('app.research.services.model_generation')
 
-    async def forbidden_model(*args, **kwargs):
+    async def forbidden_model(*args, **kwargs) -> NoReturn:
         raise AssertionError('No model network call is authorized in this rehearsal')
 
     gateway.ModelGateway = SimpleNamespace(call=forbidden_model)
@@ -240,7 +241,7 @@ async def claim(e, run_id, seconds=60):
     return run.execution_token
 
 
-async def test_pg_queued_stop_and_disabled_source_prevent_claim(pg):
+async def test_pg_queued_stop_and_disabled_source_prevent_claim(pg) -> None:
     e = pg
     s = await new_source(e)
     r = await queue(e, s['id'])
@@ -256,7 +257,7 @@ async def test_pg_queued_stop_and_disabled_source_prevent_claim(pg):
     assert await e.repo.claim(e.db, other['id'], now=e.now, lease_seconds=60) is None
 
 
-async def test_pg_running_stopping_fences_batches_until_executor_ack(pg):
+async def test_pg_running_stopping_fences_batches_until_executor_ack(pg) -> None:
     e = pg
     s = await new_source(e)
     r = await queue(e, s['id'])
@@ -292,7 +293,7 @@ async def test_pg_running_stopping_fences_batches_until_executor_ack(pg):
     assert (await e.service.stop_collection_run(e.db, r['id'], clock=e.clock))['status'] == 'cancelled'
 
 
-async def test_pg_retry_child_snapshot_backoff_and_unique_parent(pg):
+async def test_pg_retry_child_snapshot_backoff_and_unique_parent(pg) -> None:
     e = pg
     s = await new_source(e, config={'retry': {'backoff_seconds': 10}})
     r = await queue(e, s['id'])
@@ -330,7 +331,7 @@ async def test_pg_retry_child_snapshot_backoff_and_unique_parent(pg):
     await e.db.commit()
 
 
-async def test_pg_composite_fk_refuses_cross_source_retry(pg):
+async def test_pg_composite_fk_refuses_cross_source_retry(pg) -> None:
     e = pg
     left, right = await new_source(e), await new_source(e)
     r = await queue(e, left['id'])
@@ -353,7 +354,7 @@ async def test_pg_composite_fk_refuses_cross_source_retry(pg):
     await e.db.commit()
 
 
-async def test_pg_lease_fencing_recovery_and_stopping_isolation(pg):
+async def test_pg_lease_fencing_recovery_and_stopping_isolation(pg) -> None:
     e = pg
     s = await new_source(e)
     r = await queue(e, s['id'])
@@ -398,7 +399,7 @@ async def test_pg_lease_fencing_recovery_and_stopping_isolation(pg):
     assert result['status'] == 'cancelled'
 
 
-async def test_pg_real_two_connection_source_lock_serializes_operations(pg):
+async def test_pg_real_two_connection_source_lock_serializes_operations(pg) -> None:
     e = pg
     # An existing source is visible to two uncommitted transactions. We do not
     # commit seed rows just to manufacture a concurrent test.
@@ -424,7 +425,7 @@ async def test_pg_real_two_connection_source_lock_serializes_operations(pg):
 
 
 @pytest.mark.parametrize('adapter', ['pipechina_group_news', 'crossref_works'])
-async def test_pg_real_adapter_offline_samples_work_with_production_content_models(pg, monkeypatch, adapter):
+async def test_pg_real_adapter_offline_samples_work_with_production_content_models(pg, monkeypatch, adapter) -> None:
     import html
 
     e = pg
@@ -492,7 +493,7 @@ async def test_pg_real_adapter_offline_samples_work_with_production_content_mode
         assert len(found) == 3 and all(not hasattr(row, 'content') for row in found)
 
 
-async def test_pg_task_and_source_dtos_match_frontend_contract(pg):
+async def test_pg_task_and_source_dtos_match_frontend_contract(pg) -> None:
     e = pg
     s = await new_source(e)
     r = await queue(e, s['id'])
@@ -505,7 +506,7 @@ async def test_pg_task_and_source_dtos_match_frontend_contract(pg):
 
 
 @pytest.mark.parametrize('adapter', ['pipechina_group_news', 'crossref_works'])
-async def test_pg_adapter_stop_in_request_confirms_exit_and_closes_resources(pg, monkeypatch, adapter):
+async def test_pg_adapter_stop_in_request_confirms_exit_and_closes_resources(pg, monkeypatch, adapter) -> None:
     e = pg
     streams = []
     active_run = None
@@ -525,7 +526,7 @@ async def test_pg_adapter_stop_in_request_confirms_exit_and_closes_resources(pg,
                 raise
             yield b'never received'
 
-        async def aclose(self):
+        async def aclose(self) -> None:
             self.closed = True
 
     async def response(request):

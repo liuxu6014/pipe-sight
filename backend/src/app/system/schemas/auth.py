@@ -31,7 +31,7 @@ class UserRegister(BaseModel):
 
     @model_validator(mode='after')
     def check_password(self) -> 'UserRegister':
-        pattern = r'''^[^<>"'|\\]+$'''
+        pattern = r"""^[^<>"'|\\]+$"""
         if self.password is None or re.match(pattern, self.password):
             return self
         raise ModelValidatorException(message='密码不能包含非法字符：< > " \' \\ |')
@@ -83,9 +83,13 @@ class RouterModel(BaseModel):
     name: str | None = Field(default=None, description='路由名称')
     path: str | None = Field(default=None, description='路由地址')
     hidden: bool | None = Field(default=None, description='是否隐藏路由，当设置 true 的时候该路由不会再侧边栏出现')
-    redirect: str | None = Field(default=None, description='重定向地址，当设置 noRedirect 的时候该路由在面包屑导航中不可被点击')
+    redirect: str | None = Field(
+        default=None, description='重定向地址，当设置 noRedirect 的时候该路由在面包屑导航中不可被点击'
+    )
     component: str | None = Field(default=None, description='组件地址')
     query: str | None = Field(default=None, description='路由参数：如 {"id": 1, "name": "ry"}')
-    always_show: bool | None = Field(default=None, description='当一个路由下面的children声明的路由大于1个时，自动变成嵌套模式')
+    always_show: bool | None = Field(
+        default=None, description='当一个路由下面的children声明的路由大于1个时，自动变成嵌套模式'
+    )
     meta: MetaModel | None = Field(default=None, description='其他元素')
     children: list['RouterModel'] | None | None = Field(default=None, description='子路由')

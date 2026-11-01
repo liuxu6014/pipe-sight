@@ -40,7 +40,7 @@ COMMON_CONFIG = {'limit', 'request_timeout', 'total_timeout', 'retry', 'request_
 
 def validate_adapter_config(snapshot: dict[str, Any]) -> None:
     """Validate before enqueue/enable, not after the first network request."""
-    from app.intelligence.services.collection import ConfigurationError
+    from app.intelligence.services.collection import ConfigurationError  # noqa: PLC0415
 
     config = snapshot['config']
     paper = snapshot['adapter'] == 'crossref_works'
@@ -52,14 +52,14 @@ def validate_adapter_config(snapshot: dict[str, Any]) -> None:
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= maximum:
         raise ConfigurationError(f'采集 limit 必须为 1～{maximum} 的整数')
     interval = config.get('request_interval', 0)
-    if isinstance(interval, bool) or not isinstance(interval, (int, float)) or not 0 <= interval <= 60:
+    if isinstance(interval, bool) or not isinstance(interval, (int, float)) or not 0 <= interval <= 60:  # noqa: PLR2004
         raise ConfigurationError('request_interval 必须为 0～60 秒')
     if paper:
         size = config.get('batch_size', 5)
-        if isinstance(size, bool) or not isinstance(size, int) or not 1 <= size <= 25:
+        if isinstance(size, bool) or not isinstance(size, int) or not 1 <= size <= 25:  # noqa: PLR2004
             raise ConfigurationError('Crossref batch_size 必须为 1～25 的整数')
         query = config.get('query') or 'oil gas pipeline integrity monitoring'
-        if not isinstance(query, str) or not query.strip() or len(query) > 1000:
+        if not isinstance(query, str) or not query.strip() or len(query) > 1000:  # noqa: PLR2004
             raise ConfigurationError('Crossref query 必须为非空文本且不超过 1000 字符')
     endpoint = snapshot.get('url') or (DEFAULT_CROSSREF_ENDPOINT if paper else DEFAULT_PIPECHINA_ENDPOINT)
     validate_url(endpoint, CROSSREF_HOSTS if paper else PIPECHINA_HOSTS)
@@ -69,7 +69,7 @@ def validate_adapter_config(snapshot: dict[str, Any]) -> None:
 
 
 def validate_url(url: str, hosts: tuple[str, ...]) -> None:
-    from app.intelligence.services.collection import ConfigurationError
+    from app.intelligence.services.collection import ConfigurationError  # noqa: PLC0415
 
     try:
         parsed = urlsplit(url)
@@ -105,14 +105,14 @@ async def fetch_text(
     params: dict[str, Any] | None = None,
     accept: str = 'text/html',
 ) -> str:
-    from app.intelligence.services.collection import ConfigurationError, TransientCollectionError
+    from app.intelligence.services.collection import ConfigurationError, TransientCollectionError  # noqa: PLC0415
 
     validate_url(url, hosts)
     try:
         async with client.stream('GET', url, params=params, headers={'Accept': accept}) as response:
-            if response.status_code in (408, 429) or response.status_code >= 500:
+            if response.status_code in (408, 429) or response.status_code >= 500:  # noqa: PLR2004
                 raise TransientCollectionError('公开端点临时不可用')
-            if response.status_code != 200:
+            if response.status_code != 200:  # noqa: PLR2004
                 # Redirects aren't followed (including a redirect to an internal
                 # address). Access/configuration failures must be fixed explicitly.
                 raise ConfigurationError('公开端点拒绝请求或返回重定向，请检查入口与权限')
@@ -150,7 +150,7 @@ def parse_pipechina_detail(source_html: str) -> dict[str, Any]:
 
 
 async def pipechina_batches(snapshot: dict[str, Any], checkpoint: dict[str, Any]) -> AsyncIterator[CollectionBatch]:
-    from app.intelligence.services.collection import CollectionBatch, ConfigurationError
+    from app.intelligence.services.collection import CollectionBatch, ConfigurationError  # noqa: PLC0415
 
     validate_adapter_config(snapshot)
     config = snapshot['config']
@@ -191,11 +191,11 @@ def parse_crossref_item(item: Any) -> dict[str, Any]:
     ]
     parts = (item.get('published') or {}).get('date-parts') or []
     published_date = None
-    if parts and isinstance(parts[0], list) and 1 <= len(parts[0]) <= 3:
+    if parts and isinstance(parts[0], list) and 1 <= len(parts[0]) <= 3:  # noqa: PLR2004
         values = parts[0]
         if all(isinstance(value, int) and not isinstance(value, bool) for value in values):
             try:
-                date(values[0], values[1] if len(values) > 1 else 1, values[2] if len(values) > 2 else 1)
+                date(values[0], values[1] if len(values) > 1 else 1, values[2] if len(values) > 2 else 1)  # noqa: PLR2004
                 published_date = '-'.join(
                     f'{value:04d}' if index == 0 else f'{value:02d}' for index, value in enumerate(values)
                 )
@@ -214,7 +214,7 @@ def parse_crossref_item(item: Any) -> dict[str, Any]:
 
 
 async def crossref_batches(snapshot: dict[str, Any], checkpoint: dict[str, Any]) -> AsyncIterator[CollectionBatch]:
-    from app.intelligence.services.collection import CollectionBatch, ConfigurationError
+    from app.intelligence.services.collection import CollectionBatch, ConfigurationError  # noqa: PLC0415
 
     validate_adapter_config(snapshot)
     config = snapshot['config']
@@ -249,7 +249,7 @@ async def crossref_batches(snapshot: dict[str, Any], checkpoint: dict[str, Any])
 
 
 def register_builtin_adapters(registry: AdapterRegistry) -> None:
-    from app.intelligence.services.collection import Adapter
+    from app.intelligence.services.collection import Adapter  # noqa: PLC0415
 
     registry.register(
         'pipechina_group_news',

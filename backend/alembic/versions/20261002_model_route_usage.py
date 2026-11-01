@@ -21,7 +21,9 @@ def _create_table() -> None:
         sa.PrimaryKeyConstraint('route_id', 'usage_date', name='pk_pipeline_model_route_usage'),
         sa.CheckConstraint('call_count >= 0', name='ck_pipeline_model_route_usage_count'),
         sa.ForeignKeyConstraint(
-            ['route_id'], ['pipeline_model_routes.route_id'], ondelete='CASCADE',
+            ['route_id'],
+            ['pipeline_model_routes.route_id'],
+            ondelete='CASCADE',
             name='fk_pipeline_model_route_usage_route',
         ),
     )

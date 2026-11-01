@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from typing import NoReturn
 
 from alembic import context, op
 
@@ -13,7 +14,7 @@ branch_labels = None
 depends_on = None
 
 
-def upgrade():
+def upgrade() -> None:
     args = context.get_x_argument(as_dictionary=True)
     if not args.get('numeric_backup'):
         raise RuntimeError('Pass -x numeric_backup=/private/verified/backup-directory')
@@ -24,5 +25,5 @@ def upgrade():
     )
 
 
-def downgrade():
+def downgrade() -> NoReturn:
     raise RuntimeError('Restore the verified backup and code snapshot; no lossy reverse-ID inference')

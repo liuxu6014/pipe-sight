@@ -294,7 +294,9 @@ def test_numeric_plan_preserves_external_config_local_ids_and_user_text(numeric_
         assert rows['report_versions'][0][column] == original['report_versions'][0][column]
     assert rows['digest_schedules'][0]['generation_config'] == original['digest_schedules'][0]['generation_config']
     task = rows['generation_tasks'][0]
-    assert task['request_id'] == f'schedule:{plan.mappings["digest_schedules"]["schedule-old"]}:2026-10-25T00:00:00+00:00'
+    assert (
+        task['request_id'] == f'schedule:{plan.mappings["digest_schedules"]["schedule-old"]}:2026-10-25T00:00:00+00:00'
+    )
     assert task['materials'][0]['title'] == 'shared-old'
     assert task['materials'][0]['content'] == 'source-old'
     assert task['materials'][0]['source']['url'] == 'https://example.invalid/shared-old'
@@ -491,7 +493,8 @@ def test_system_schedule_and_retry_keys_follow_numeric_fk_without_changing_slot(
 
 @pytest.mark.parametrize('key', ['manual:source-old', 'custom:run-root', 'schedule:unrelated:slot', 'retry:unrelated'])
 def test_manual_custom_and_nonmatching_keys_and_execution_tokens_remain_opaque(
-    minimal_plan_input: PlanInput, key: str,
+    minimal_plan_input: PlanInput,
+    key: str,
 ) -> None:
     rows, foreign_keys = minimal_plan_input
     for table in ('generation_tasks', 'collection_runs'):
@@ -505,14 +508,18 @@ def test_manual_custom_and_nonmatching_keys_and_execution_tokens_remain_opaque(
 
 @pytest.mark.parametrize('changed', [False, True])
 def test_real_request_fingerprint_uses_shared_helper_when_request_changes(
-    minimal_plan_input: PlanInput, changed: bool,
+    minimal_plan_input: PlanInput,
+    changed: bool,
 ) -> None:
     rows, foreign_keys = minimal_plan_input
     request = {'title': '保留中文与空格', 'limit': 3}
     if changed:
         request['template_id'] = 'template-old'
-    digest = (sha256(json.dumps(request, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
-              if changed else ids.generation_request_fingerprint(request, []))
+    digest = (
+        sha256(json.dumps(request, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
+        if changed
+        else ids.generation_request_fingerprint(request, [])
+    )
     rows['generation_tasks'][0]['config_snapshot'] = {'request': request, 'request_fingerprint': digest}
     plan = build_plan(rows, foreign_keys)
     snapshot = plan.target_rows['generation_tasks'][0]['config_snapshot']
@@ -524,7 +531,9 @@ def test_real_request_fingerprint_uses_shared_helper_when_request_changes(
 @pytest.mark.parametrize('field', ['materials', 'selected_item_ids'])
 @pytest.mark.parametrize('scalar_type', [int, str])
 def test_migrated_fingerprint_matches_raw_scalar_replay_with_frozen_typed_materials(
-    numeric_plan_input: PlanInput, field: str, scalar_type: type,
+    numeric_plan_input: PlanInput,
+    field: str,
+    scalar_type: type,
 ) -> None:
     rows, foreign_keys = numeric_plan_input
     original = rows['generation_tasks'][0]['config_snapshot']

@@ -3,6 +3,7 @@
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from functools import wraps
+from typing import Any
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -28,9 +29,9 @@ RETRYABLE_ERRORS = {
 }
 
 
-def transaction(method):
+def transaction(method) -> Any:
     @wraps(method)
-    async def wrapped(*args, **kwargs):
+    async def wrapped(*args, **kwargs) -> Any:
         db = args[1]
         try:
             return await method(*args, **kwargs)
@@ -41,7 +42,7 @@ def transaction(method):
     return wrapped
 
 
-def next_occurrence(cron, tz, after):
+def next_occurrence(cron, tz, after) -> datetime | None:
     """UTC cursor; CronTrigger chooses DST occurrences, skip missed history.
 
     Nonexistent wall times are skipped. On a repeated wall time the two UTC
@@ -51,7 +52,7 @@ def next_occurrence(cron, tz, after):
         zone = ZoneInfo(tz)
         if not cron:
             return None
-        if len(cron) > 100 or len(cron.split()) != 5:
+        if len(cron) > 100 or len(cron.split()) != 5:  # noqa: PLR2004
             raise ValueError('cron 必须为五字段')
         trigger = CronTrigger.from_crontab(cron, timezone=zone)
         candidate = trigger.get_next_fire_time(None, after + timedelta(microseconds=1))
@@ -69,7 +70,7 @@ def next_occurrence(cron, tz, after):
         raise ConfigurationError('无效 cron 或 IANA 时区') from exc
 
 
-def snapshot(source):
+def snapshot(source) -> dict:
     return deepcopy(
         {
             'source': {'id': wire_id(source.id)},
@@ -78,14 +79,14 @@ def snapshot(source):
     )
 
 
-async def frozen_snapshot(db, source):
+async def frozen_snapshot(db, source) -> dict:
     try:
         return await CollectionTranslationService.freeze(db, snapshot(source))
     except TranslationConfigurationError as exc:
         raise ConfigurationError(str(exc)) from None
 
 
-def run_dict(run):
+def run_dict(run) -> dict:
     # Execution tokens and credential references aren't public API output.
     keys = (
         'id',
@@ -107,8 +108,13 @@ def run_dict(run):
         'updated_at',
     )
     result = {
-        key: (format_business_time(value) if key in {'created_at', 'updated_at'}
-              else aware(value).isoformat() if isinstance(value, datetime) else value)
+        key: (
+            format_business_time(value)
+            if key in {'created_at', 'updated_at'}
+            else aware(value).isoformat()
+            if isinstance(value, datetime)
+            else value
+        )
         for key in keys
         for value in [getattr(run, key)]
     }
@@ -123,7 +129,7 @@ def run_dict(run):
 
 class IntelligenceSourceService:
     @staticmethod
-    def source_dict(source, date_formatter=None):
+    def source_dict(source, date_formatter=None) -> dict:
         data = {col.name: getattr(source, col.name) for col in Source.__table__.columns}
         data['id'] = wire_id(source.id)
         for key in ('created_at', 'updated_at'):
@@ -139,13 +145,13 @@ class IntelligenceSourceService:
 
     @classmethod
     @transaction
-    async def save(
+    async def save(  # noqa: PLR0913
         cls,
         db,
         *,
         source_id=None,
         name,
-        type,
+        type,  # noqa: A002 (wire field name for source type)
         url=None,
         adapter,
         cron=None,
@@ -156,10 +162,10 @@ class IntelligenceSourceService:
         registry=ADAPTERS,
         clock=None,
         date_formatter=None,
-    ):
+    ) -> dict:
         source_id = parse_business_id(source_id) if source_id is not None else None
         now = (clock or (lambda: datetime.now(UTC)))()
-        if not isinstance(name, str) or not name.strip() or len(name) > 255:
+        if not isinstance(name, str) or not name.strip() or len(name) > 255:  # noqa: PLR2004
             raise ConfigurationError('来源名称无效')
         if not isinstance(is_enabled, bool):
             raise ConfigurationError('is_enabled 必须为布尔值')
@@ -197,7 +203,7 @@ class IntelligenceSourceService:
 
     @classmethod
     @transaction
-    async def set_enabled(cls, db, source_id, enabled, *, date_formatter=None, registry=ADAPTERS, clock=None):
+    async def set_enabled(cls, db, source_id, enabled, *, date_formatter=None, registry=ADAPTERS, clock=None) -> dict:
         now = (clock or (lambda: datetime.now(timezone.utc)))()
         if not isinstance(enabled, bool):
             raise ConfigurationError('启停值必须为布尔值')
@@ -210,7 +216,7 @@ class IntelligenceSourceService:
 
     @classmethod
     @transaction
-    async def queue_collection_run(cls, db, source_id, *, request_id=None, registry=ADAPTERS, clock=None):
+    async def queue_collection_run(cls, db, source_id, *, request_id=None, registry=ADAPTERS, clock=None) -> dict:
         source_id = parse_business_id(source_id)
         now = (clock or (lambda: datetime.now(timezone.utc)))()
         source = await CollectionRepository.source(db, source_id, lock=True)
@@ -234,7 +240,7 @@ class IntelligenceSourceService:
 
     @classmethod
     @transaction
-    async def stop_collection_run(cls, db, run_id, *, clock=None):
+    async def stop_collection_run(cls, db, run_id, *, clock=None) -> dict:
         run = await CollectionRepository.stop(db, run_id, now=(clock or (lambda: datetime.now(timezone.utc)))())
         result = run_dict(run)
         result['message'] = '已请求停止' if run.status == 'stopping' else run.status
@@ -242,7 +248,7 @@ class IntelligenceSourceService:
 
     @classmethod
     @transaction
-    async def confirm_isolated_stop(cls, db, run_id, *, worker_isolated, clock=None):
+    async def confirm_isolated_stop(cls, db, run_id, *, worker_isolated, clock=None) -> dict:
         if worker_isolated is not True:
             raise CollectionConflict('须确认工作进程/外部请求已经隔离并退出')
         _, run = await CollectionRepository.locked_run(db, run_id)
@@ -255,7 +261,9 @@ class IntelligenceSourceService:
 
     @classmethod
     @transaction
-    async def retry_collection_run(cls, db, run_id, *, automatic=False, request_id=None, registry=ADAPTERS, clock=None):
+    async def retry_collection_run(
+        cls, db, run_id, *, automatic=False, request_id=None, registry=ADAPTERS, clock=None
+    ) -> dict | None:
         run_id = parse_business_id(run_id)
         now = (clock or (lambda: datetime.now(timezone.utc)))()
         source, parent = await CollectionRepository.locked_run(db, run_id)
@@ -300,7 +308,7 @@ class IntelligenceSourceService:
 
     @classmethod
     @transaction
-    async def schedule_due_source(cls, db, source_id, *, registry=ADAPTERS, clock=None):
+    async def schedule_due_source(cls, db, source_id, *, registry=ADAPTERS, clock=None) -> dict | None:
         now = (clock or (lambda: datetime.now(timezone.utc)))()
         source = await CollectionRepository.source(db, source_id, lock=True)
         if not source.is_enabled or not source.cron or not source.next_run_at or aware(source.next_run_at) > now:
@@ -311,7 +319,7 @@ class IntelligenceSourceService:
         source.next_run_at, source.updated_at = next_occurrence(source.cron, source.timezone, now), now
         await db.flush()
         if await CollectionRepository.active(db, source_id):
-            import logging
+            import logging  # noqa: PLC0415
 
             logging.getLogger(__name__).info('采集本轮跳过，来源仍有活跃运行: %s', source_id)
             await db.commit()
@@ -327,7 +335,7 @@ class IntelligenceSourceService:
         return run_dict(run)
 
     @classmethod
-    async def list_sources(cls, db, *, date_formatter=None):
+    async def list_sources(cls, db, *, date_formatter=None) -> dict:
         rows = list((await db.execute(select(Source).order_by(Source.created_at.desc(), Source.id))).scalars().all())
         return {
             'rows': [cls.source_dict(row, date_formatter) for row in rows],
@@ -336,7 +344,7 @@ class IntelligenceSourceService:
         }
 
     @staticmethod
-    async def get_collection_run_detail(db, run_id):
+    async def get_collection_run_detail(db, run_id) -> dict:
         run = await CollectionRepository.run(db, run_id)
         source = await CollectionRepository.source(db, run.source_id)
         return {
@@ -351,7 +359,7 @@ class IntelligenceSourceService:
         }
 
     @staticmethod
-    async def list_collection_tasks(db):
+    async def list_collection_tasks(db) -> dict:
         rows = []
         for source, latest in await CollectionRepository.source_tasks(db):
             rows.append(

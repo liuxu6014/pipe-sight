@@ -17,7 +17,7 @@ no_external_network = refactor_no_external_network
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('scan_status', ['pending', 'quarantined', 'failed'])
-async def test_upload_cannot_become_usable_before_clean_scan(env, db, tmp_path, monkeypatch, scan_status):
+async def test_upload_cannot_become_usable_before_clean_scan(env, db, tmp_path, monkeypatch, scan_status) -> None:
     monkeypatch.setattr(env.cfg.UploadConfig, 'UPLOAD_PATH', str(tmp_path))
     path = tmp_path / '资料.md'
     path.write_text('合法资料', encoding='utf-8')
@@ -35,7 +35,7 @@ async def test_upload_cannot_become_usable_before_clean_scan(env, db, tmp_path, 
 
 
 @pytest.mark.asyncio
-async def test_clean_file_is_queued_not_ready_at_upload(env, db, tmp_path, monkeypatch):
+async def test_clean_file_is_queued_not_ready_at_upload(env, db, tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(env.cfg.UploadConfig, 'UPLOAD_PATH', str(tmp_path))
     path = tmp_path / '资料.md'
     path.write_text('有效正文', encoding='utf-8')
@@ -48,7 +48,7 @@ async def test_clean_file_is_queued_not_ready_at_upload(env, db, tmp_path, monke
 
 
 @pytest.mark.asyncio
-async def test_download_requires_owner_and_clean_scan(env, db, tmp_path, monkeypatch):
+async def test_download_requires_owner_and_clean_scan(env, db, tmp_path, monkeypatch) -> None:
     _, row = seed(env, db)
     monkeypatch.setattr(env.cfg.UploadConfig, 'UPLOAD_PATH', str(tmp_path))
     path = tmp_path / 'a.txt'
@@ -60,7 +60,7 @@ async def test_download_requires_owner_and_clean_scan(env, db, tmp_path, monkeyp
         await env.materials.MaterialService.get_download(db, 7, row.id)
 
 
-def test_parser_path_and_file_type_limits(env, tmp_path, monkeypatch):
+def test_parser_path_and_file_type_limits(env, tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(env.cfg.UploadConfig, 'UPLOAD_PATH', str(tmp_path))
     assert env.materials.MaterialFileService.safe_local_path('../outside.txt') is None
     executable = tmp_path / 'fake.txt'
@@ -70,7 +70,7 @@ def test_parser_path_and_file_type_limits(env, tmp_path, monkeypatch):
     assert env.materials.MaterialFileService.parse(str(executable), 'legacy.doc', requested_at='offline')[0] == 'failed'
 
 
-def test_docx_archive_expansion_limit_remains_enforced(env, tmp_path, monkeypatch):
+def test_docx_archive_expansion_limit_remains_enforced(env, tmp_path, monkeypatch) -> None:
     path = tmp_path / 'oversized.docx'
     with zipfile.ZipFile(path, 'w') as archive:
         archive.writestr('word/document.xml', 'x' * 100)
@@ -80,7 +80,7 @@ def test_docx_archive_expansion_limit_remains_enforced(env, tmp_path, monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_reparse_preserves_edited_text_and_original_filename(env, db):
+async def test_reparse_preserves_edited_text_and_original_filename(env, db) -> None:
     _, row = seed(env, db)
     row.status = 'failed'
     row.edited_text = '用户编辑'

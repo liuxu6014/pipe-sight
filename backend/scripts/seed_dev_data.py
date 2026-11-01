@@ -336,14 +336,17 @@ async def seed() -> None:
                 )
             )
 
-        if await db.scalar(
-            select(PipelineWorkspaceItem).where(
-                PipelineWorkspaceItem.user_id == DEMO_USER_ID,
-                PipelineWorkspaceItem.item_id == 'news-001',
-                PipelineWorkspaceItem.item_type == 'article',
-                PipelineWorkspaceItem.action == 'favorite',
+        if (
+            await db.scalar(
+                select(PipelineWorkspaceItem).where(
+                    PipelineWorkspaceItem.user_id == DEMO_USER_ID,
+                    PipelineWorkspaceItem.item_id == 'news-001',
+                    PipelineWorkspaceItem.item_type == 'article',
+                    PipelineWorkspaceItem.action == 'favorite',
+                )
             )
-        ) is None:
+            is None
+        ):
             db.add(
                 PipelineWorkspaceItem(
                     user_id=DEMO_USER_ID,

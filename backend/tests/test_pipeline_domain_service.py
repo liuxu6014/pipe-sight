@@ -18,13 +18,13 @@ no_external_network = refactor_network
 
 
 @pytest.mark.parametrize('encoding', ['utf-8', 'utf-8-sig', 'gb18030', 'utf-16'])
-def test_plain_text_material_can_be_extracted_without_external_parser(env, tmp_path, encoding):
+def test_plain_text_material_can_be_extracted_without_external_parser(env, tmp_path, encoding) -> None:
     source = tmp_path / '现场记录.txt'
     source.write_bytes('管道应力监测：磁各向异性需要温度补偿。'.encode(encoding))
     assert '磁各向异性需要温度补偿' in env.materials.MaterialFileService.extract_plain_text(str(source), source.name)
 
 
-def test_docx_material_can_be_extracted_with_standard_library(env, tmp_path):
+def test_docx_material_can_be_extracted_with_standard_library(env, tmp_path) -> None:
     source = tmp_path / '应力监测.docx'
     xml = (
         '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
@@ -42,7 +42,7 @@ def test_docx_material_can_be_extracted_with_standard_library(env, tmp_path):
     'limit,value,expected',
     [('max_archive_entries', 1, 'too many archive entries'), ('max_archive_uncompressed_bytes', 4, 'expanded content')],
 )
-def test_docx_limits_are_checked_before_reading_xml(env, monkeypatch, tmp_path, limit, value, expected):
+def test_docx_limits_are_checked_before_reading_xml(env, monkeypatch, tmp_path, limit, value, expected) -> None:
     source = tmp_path / '受限.docx'
     with ZipFile(source, 'w', ZIP_DEFLATED) as archive:
         archive.writestr('word/document.xml', '<document/>')
@@ -52,7 +52,7 @@ def test_docx_limits_are_checked_before_reading_xml(env, monkeypatch, tmp_path, 
         env.materials.MaterialFileService._extract_docx_text(source)
 
 
-def test_searchable_pdf_material_is_ready_after_local_extraction(env, monkeypatch, tmp_path):
+def test_searchable_pdf_material_is_ready_after_local_extraction(env, monkeypatch, tmp_path) -> None:
     source = tmp_path / '研究报告.pdf'
     source.write_bytes(b'%PDF-1.7')
     monkeypatch.setattr(
@@ -65,7 +65,7 @@ def test_searchable_pdf_material_is_ready_after_local_extraction(env, monkeypatc
     assert text == '管道完整性与应力监测正文' and metadata['parser'] == 'pypdf'
 
 
-def test_pdf_page_limit_is_checked_before_page_extraction(env, monkeypatch, tmp_path):
+def test_pdf_page_limit_is_checked_before_page_extraction(env, monkeypatch, tmp_path) -> None:
     source = tmp_path / '页数过多.pdf'
     source.write_bytes(b'%PDF-1.7')
     monkeypatch.setattr(env.materials.MaterialFileService, 'max_pdf_pages', 1)
@@ -74,7 +74,7 @@ def test_pdf_page_limit_is_checked_before_page_extraction(env, monkeypatch, tmp_
         env.materials.MaterialFileService._extract_pdf_text(source)
 
 
-def test_scanned_or_invalid_pdf_fails_with_actionable_message(env, tmp_path):
+def test_scanned_or_invalid_pdf_fails_with_actionable_message(env, tmp_path) -> None:
     source = tmp_path / '扫描报告.pdf'
     source.write_bytes(b'%PDF-1.7')
     status, message, text, metadata = env.materials.MaterialFileService.parse(
@@ -84,7 +84,7 @@ def test_scanned_or_invalid_pdf_fails_with_actionable_message(env, tmp_path):
     assert metadata['parser'] == 'pypdf'
 
 
-def test_markdown_upload_extension_check_is_case_insensitive(env, monkeypatch):
+def test_markdown_upload_extension_check_is_case_insensitive(env, monkeypatch) -> None:
     upload = importlib.import_module('app.infrastructure.services.file_upload')
     monkeypatch.setattr(upload.UploadConfig, 'DEFAULT_ALLOWED_EXTENSION', ['md', 'txt'], raising=False)
     assert upload.FileUploadSupport.check_file_extension(NS(filename='现场记录.MD'))
@@ -92,7 +92,7 @@ def test_markdown_upload_extension_check_is_case_insensitive(env, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_user_one_never_gets_global_material_access(env, db):
+async def test_user_one_never_gets_global_material_access(env, db) -> None:
     _, material = seed(env, db)
     assert await env.library_repo.MaterialDao.list_accessible_materials(db, 1) == []
     assert await env.library_repo.MaterialDao.get_owned_material(db, material.id, 1) is None
@@ -100,7 +100,7 @@ async def test_user_one_never_gets_global_material_access(env, db):
 
 
 @pytest.mark.asyncio
-async def test_material_detail_exposes_real_text_and_owner_management_flag(env, db):
+async def test_material_detail_exposes_real_text_and_owner_management_flag(env, db) -> None:
     _, material = seed(env, db)
     material.edited_text = '用户编辑正文'
     await db.commit()
@@ -113,7 +113,9 @@ async def test_material_detail_exposes_real_text_and_owner_management_flag(env, 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('scan_status', ['pending', 'quarantined', 'failed'])
-async def test_download_rechecks_file_scan_and_rejects_unscanned_material(env, db, tmp_path, monkeypatch, scan_status):
+async def test_download_rechecks_file_scan_and_rejects_unscanned_material(
+    env, db, tmp_path, monkeypatch, scan_status
+) -> None:
     _, material = seed(env, db)
     monkeypatch.setattr(env.cfg.UploadConfig, 'UPLOAD_PATH', str(tmp_path))
     source = tmp_path / 'a.txt'
@@ -124,7 +126,7 @@ async def test_download_rechecks_file_scan_and_rejects_unscanned_material(env, d
 
 
 @pytest.mark.asyncio
-async def test_download_requires_owner_and_returns_original_filename(env, db, tmp_path, monkeypatch):
+async def test_download_requires_owner_and_returns_original_filename(env, db, tmp_path, monkeypatch) -> None:
     _, material = seed(env, db)
     material.name = '用户改名不改变原文件名'
     await db.commit()
@@ -140,7 +142,7 @@ async def test_download_requires_owner_and_returns_original_filename(env, db, tm
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('status', ['queued', 'parsing', 'failed'])
-async def test_unusable_selected_material_is_explicit_error_not_silently_dropped(env, db, monkeypatch, status):
+async def test_unusable_selected_material_is_explicit_error_not_silently_dropped(env, db, monkeypatch, status) -> None:
     _, material = seed(env, db)
     material.status = status
     await db.commit()
@@ -150,7 +152,7 @@ async def test_unusable_selected_material_is_explicit_error_not_silently_dropped
 
 
 @pytest.mark.asyncio
-async def test_invalid_selection_never_falls_back_to_unselected_materials(env, db, monkeypatch):
+async def test_invalid_selection_never_falls_back_to_unselected_materials(env, db, monkeypatch) -> None:
     seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     with raises(env, '无权'):
@@ -161,7 +163,7 @@ async def test_invalid_selection_never_falls_back_to_unselected_materials(env, d
 
 
 @pytest.mark.asyncio
-async def test_task_is_persisted_with_report_and_frozen_template_before_processing(env, db, monkeypatch):
+async def test_task_is_persisted_with_report_and_frozen_template_before_processing(env, db, monkeypatch) -> None:
     template, _ = seed(env, db)
     template.sections = [{'id': 1, 'title': '真实模板章节'}]
     await db.commit()
@@ -180,7 +182,7 @@ async def test_task_is_persisted_with_report_and_frozen_template_before_processi
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('status,label', [('cancelled', '已取消'), ('failed', '生成失败')])
-async def test_job_status_labels_cover_terminal_states(env, db, monkeypatch, status, label):
+async def test_job_status_labels_cover_terminal_states(env, db, monkeypatch, status, label) -> None:
     seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     result = await queue(env, db)
@@ -189,17 +191,26 @@ async def test_job_status_labels_cover_terminal_states(env, db, monkeypatch, sta
     assert env.app.ResearchApplicationService.job_dict(job)['statusLabel'] == label
 
 
-@pytest.mark.parametrize('submitted', [
-    [{'id': 1, 'title': '实际提交章节', 'words': 1000}, {'id': 2, 'title': '后续章节', 'words': 2000}],
-    [],
-    None,
-])
-def test_job_progress_outline_matches_submitted_snapshot_not_template_defaults(env, submitted):
+@pytest.mark.parametrize(
+    'submitted',
+    [
+        [{'id': 1, 'title': '实际提交章节', 'words': 1000}, {'id': 2, 'title': '后续章节', 'words': 2000}],
+        [],
+        None,
+    ],
+)
+def test_job_progress_outline_matches_submitted_snapshot_not_template_defaults(env, submitted) -> None:
     template = [{'id': 1, 'title': '模板默认章节', 'words': 10600}]
     request = {'outline': submitted} if submitted is not None else {}
     job = env.models.PipelineResearchJob(
-        id=501, report_id=502, request_id='outline-display-test', status='queued', progress=0,
-        attempts=0, materials=[], config_snapshot={'request': request, 'template': {'sections': template}},
+        id=501,
+        report_id=502,
+        request_id='outline-display-test',
+        status='queued',
+        progress=0,
+        attempts=0,
+        materials=[],
+        config_snapshot={'request': request, 'template': {'sections': template}},
     )
     result = env.app.ResearchApplicationService.job_dict(job)
     expected = template if submitted is None else submitted
@@ -209,13 +220,18 @@ def test_job_progress_outline_matches_submitted_snapshot_not_template_defaults(e
 
 
 @pytest.mark.parametrize('status', ['queued', 'running', 'completed', 'failed', 'cancelled'])
-def test_job_execution_display_matches_real_terminal_state(env, status):
+def test_job_execution_display_matches_real_terminal_state(env, status) -> None:
     from datetime import datetime
 
     job = env.models.PipelineResearchJob(
-        id=601, report_id=602, request_id='execution-display', status=status,
-        progress=100 if status == 'completed' else 0, attempts=0 if status == 'queued' else 1,
-        materials=[], config_snapshot={'model': {'id': '1'}},
+        id=601,
+        report_id=602,
+        request_id='execution-display',
+        status=status,
+        progress=100 if status == 'completed' else 0,
+        attempts=0 if status == 'queued' else 1,
+        materials=[],
+        config_snapshot={'model': {'id': '1'}},
         result_content='## 正文\n生成正文' if status == 'completed' else None,
         created_at=datetime(2026, 10, 25, 10, 0),
         started_at=None if status == 'queued' else datetime(2026, 10, 25, 10, 1),
@@ -237,10 +253,16 @@ def test_job_execution_display_matches_real_terminal_state(env, status):
 
 
 @pytest.mark.parametrize('name', ['科研需求报告', '科技项目需求填报表', ''])
-def test_job_template_name_uses_frozen_template_not_request_id(env, name):
+def test_job_template_name_uses_frozen_template_not_request_id(env, name) -> None:
     job = env.models.PipelineResearchJob(
-        id=701, report_id=702, request_id='template-name-display', status='queued', progress=0,
-        attempts=0, materials=[], config_snapshot={
+        id=701,
+        report_id=702,
+        request_id='template-name-display',
+        status='queued',
+        progress=0,
+        attempts=0,
+        materials=[],
+        config_snapshot={
             'template': {'id': '31', 'name': name},
             'request': {'template_id': '31'},
         },
@@ -252,7 +274,7 @@ def test_job_template_name_uses_frozen_template_not_request_id(env, name):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('status', ['queued', 'running'])
-async def test_active_job_cannot_be_explicitly_retried(env, db, monkeypatch, status):
+async def test_active_job_cannot_be_explicitly_retried(env, db, monkeypatch, status) -> None:
     seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     result = await queue(env, db)
@@ -264,7 +286,7 @@ async def test_active_job_cannot_be_explicitly_retried(env, db, monkeypatch, sta
 
 
 @pytest.mark.asyncio
-async def test_running_task_cancel_fences_executor_and_keeps_report(env, db, monkeypatch):
+async def test_running_task_cancel_fences_executor_and_keeps_report(env, db, monkeypatch) -> None:
     seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     result = await queue(env, db)
@@ -277,7 +299,7 @@ async def test_running_task_cancel_fences_executor_and_keeps_report(env, db, mon
 
 
 @pytest.mark.asyncio
-async def test_report_edit_rejects_stale_version_and_revision_without_overwriting(env, db, monkeypatch):
+async def test_report_edit_rejects_stale_version_and_revision_without_overwriting(env, db, monkeypatch) -> None:
     seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     result = await queue(env, db)
@@ -305,7 +327,7 @@ async def test_report_edit_rejects_stale_version_and_revision_without_overwritin
 
 
 @pytest.mark.asyncio
-async def test_only_owner_can_retry_parse_and_retry_preserves_edited_text(env, db):
+async def test_only_owner_can_retry_parse_and_retry_preserves_edited_text(env, db) -> None:
     _, material = seed(env, db)
     material.status = 'failed'
     material.edited_text = '保留用户编辑'
@@ -318,7 +340,7 @@ async def test_only_owner_can_retry_parse_and_retry_preserves_edited_text(env, d
 
 
 @pytest.mark.asyncio
-async def test_owner_delete_cascades_basket_and_removes_only_owned_file(env, db, tmp_path, monkeypatch):
+async def test_owner_delete_cascades_basket_and_removes_only_owned_file(env, db, tmp_path, monkeypatch) -> None:
     _, material = seed(env, db)
     monkeypatch.setattr(env.cfg.UploadConfig, 'UPLOAD_PATH', str(tmp_path))
     source = tmp_path / 'a.txt'
@@ -336,7 +358,7 @@ async def test_owner_delete_cascades_basket_and_removes_only_owned_file(env, db,
 
 
 @pytest.mark.asyncio
-async def test_report_history_requires_owner_and_restores_as_new_version(env, db, monkeypatch):
+async def test_report_history_requires_owner_and_restores_as_new_version(env, db, monkeypatch) -> None:
     seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     result = await queue(env, db)
@@ -362,7 +384,7 @@ async def test_report_history_requires_owner_and_restores_as_new_version(env, db
 
 
 @pytest.mark.asyncio
-async def test_generated_images_are_owned_assets_not_report_metadata(env, db, monkeypatch):
+async def test_generated_images_are_owned_assets_not_report_metadata(env, db, monkeypatch) -> None:
     template, _ = seed(env, db, image=True)
     template.image_config = {'enabled': True, 'count': 1, 'prompt': '真实管道示意'}
     await db.commit()
@@ -383,14 +405,14 @@ async def test_generated_images_are_owned_assets_not_report_metadata(env, db, mo
 @pytest.mark.parametrize(
     'options,message', [({'language': 'bilingual'}, '简体中文'), ({'publicSupplement': True}, '公开补充')]
 )
-async def test_unsupported_generation_options_fail_without_model_call(env, options, message):
+async def test_unsupported_generation_options_fail_without_model_call(env, options, message) -> None:
     with raises(env, message):
         await env.app.ResearchApplicationService.queue_job(
             object(), user_id=7, owner_name='用户', payload=payload(options=options)
         )
 
 
-def test_report_markdown_sections_preserve_actual_content_without_generation(env):
+def test_report_markdown_sections_preserve_actual_content_without_generation(env) -> None:
     module = importlib.import_module('app.research.services.report_content')
     assert module.sections_from_markdown('直接正文') == [{'id': 1, 'title': '正文', 'content': '直接正文'}]
     assert module.sections_from_markdown('# 报告\n\n## 背景\n\n现场证据\n\n## 结论\n\n用户结论') == [
@@ -400,7 +422,7 @@ def test_report_markdown_sections_preserve_actual_content_without_generation(env
 
 
 @pytest.mark.asyncio
-async def test_sources_are_read_directly_from_persistent_source_service(env, monkeypatch):
+async def test_sources_are_read_directly_from_persistent_source_service(env, monkeypatch) -> None:
     module = importlib.import_module('app.intelligence.services.sources')
     source = NS(**{column.name: None for column in module.Source.__table__.columns})
     source.id, source.name, source.type = 601, '科技资讯源', 'website'
@@ -412,7 +434,7 @@ async def test_sources_are_read_directly_from_persistent_source_service(env, mon
 
 
 @pytest.mark.asyncio
-async def test_manual_collection_queues_using_collection_repository_not_main_dao(env, monkeypatch):
+async def test_manual_collection_queues_using_collection_repository_not_main_dao(env, monkeypatch) -> None:
     module = importlib.import_module('app.intelligence.services.sources')
     source = NS(id=601, adapter='registered', url='https://offline.invalid', type='website', config={}, model_id=None)
     run = NS(**{column.name: None for column in module.Run.__table__.columns})
@@ -427,7 +449,7 @@ async def test_manual_collection_queues_using_collection_repository_not_main_dao
     database = NS(rollback=AsyncMock())
     validate = []
     result = await module.IntelligenceSourceService.queue_collection_run(
-        database, source.id, registry=NS(validate=lambda config: validate.append(config))
+        database, source.id, registry=NS(validate=validate.append)
     )
     assert result['status'] == 'queued' and result['sourceId'] == str(source.id)
     get.assert_awaited_once_with(database, source.id, lock=True)

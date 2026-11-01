@@ -103,7 +103,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile.pg
     image: ruoyi-backend-pg:latest
-    command: ["pipesight-task-worker"]
+    command: ["pipesight-task-worker", "--env", "dockerpg"]
     environment:
       APP_ENV: dockerpg
       DB_TYPE: postgresql

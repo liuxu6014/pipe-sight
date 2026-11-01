@@ -46,9 +46,7 @@ _COLUMNS = {
 }
 
 _CHECKS = {
-    'data_sources': (
-        ('ck_data_sources_handoff_mode', "handoff_mode IN ('local', 'external')"),
-    ),
+    'data_sources': (('ck_data_sources_handoff_mode', "handoff_mode IN ('local', 'external')"),),
     'collection_runs': (
         (
             'ck_collection_runs_handoff_status',

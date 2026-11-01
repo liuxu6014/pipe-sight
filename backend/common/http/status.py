@@ -1,5 +1,6 @@
 """HTTP 状态码常量。"""
 
+
 class HttpStatusConstant:
     """
     返回状态码

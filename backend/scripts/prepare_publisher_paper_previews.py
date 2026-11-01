@@ -5,7 +5,6 @@ Layout overrides apply only to the exact verified source documents, never arbitr
 """
 
 # Coordinates and typography thresholds below are measurements of the hash-bound PDFs.
-# ruff: noqa: PLR2004
 from __future__ import annotations
 
 import base64
@@ -133,9 +132,9 @@ def render_text(rows: list[dict], chinese: bool) -> str:
     return ''.join(result)
 
 
-def extract_page(page: Any, number: int, filename: str) -> tuple[str, dict]:  # noqa: PLR0912, PLR0915 -- fixed-PDF layout branches
-    import pymupdf  # noqa: PLC0415 -- optional offline dependency, not a server dependency
-    from PIL import Image  # noqa: PLC0415
+def extract_page(page: Any, number: int, filename: str) -> tuple[str, dict]:
+    import pymupdf
+    from PIL import Image
 
     chinese = not filename.startswith('coatings')
     blocks = page.get_text('dict')['blocks']
@@ -228,7 +227,7 @@ def extract_page(page: Any, number: int, filename: str) -> tuple[str, dict]:  # 
 
 
 def main() -> None:
-    import pymupdf  # noqa: PLC0415 -- optional offline dependency
+    import pymupdf
 
     manifest = json.loads(MANIFEST.read_text())
     for doi, filename in FILES.items():

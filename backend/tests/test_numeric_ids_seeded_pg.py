@@ -9,13 +9,16 @@ from pathlib import Path
 import pytest
 
 
-@pytest.mark.skipif(os.environ.get('PIPESIGHT_SEEDED_NUMERIC_REHEARSE') != '1',
-                    reason='Explicit unique labelled-local-database seeded rehearsal only')
+@pytest.mark.skipif(
+    os.environ.get('PIPESIGHT_SEEDED_NUMERIC_REHEARSE') != '1',
+    reason='Explicit unique labelled-local-database seeded rehearsal only',
+)
 def test_nonempty_numeric_ids_real_asyncpg_alembic_and_rollback() -> None:
     root = Path(__file__).resolve().parents[2]
     script = root / '.runtime/numeric-ids-CrDrud/seeded_rehearsal.py'
-    result = subprocess.run([sys.executable, str(script)], cwd=root / 'backend',
-                            capture_output=True, text=True, timeout=180, check=False)
+    result = subprocess.run(
+        [sys.executable, str(script)], cwd=root / 'backend', capture_output=True, text=True, timeout=180, check=False
+    )
     assert result.returncode == 0, result.stderr[-6000:]
     report = json.loads(result.stdout.strip().splitlines()[-1])
     assert report['actual_savepoint_failure_rollback'] == 'passed'

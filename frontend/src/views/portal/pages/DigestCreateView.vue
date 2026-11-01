@@ -23,7 +23,39 @@
           </label>
           <label>来源范围<el-select v-model="form.sources" multiple collapse-tags collapse-tags-tooltip :max-collapse-tags="2"><el-option label="新闻网站" value="新闻网站" /><el-option label="微信公众号" value="微信公众号" /></el-select></label>
           <label class="ps-digest-direction-field">文章类别<el-select v-model="form.directions" multiple filterable clearable collapse-tags collapse-tags-tooltip :max-collapse-tags="2" :multiple-limit="10" placeholder="全部类别" aria-label="文章类别"><el-option v-for="item in categoryOptions" :key="item" :label="item" :value="item" /></el-select><small v-if="categoryError" role="alert">{{ categoryError }} <el-button size="small" @click="loadCategories">重试</el-button></small></label>
-          <label class="ps-digest-keyword-field">关键词<el-input-tag :model-value="form.keywords" @update:model-value="updateKeywords" clearable :max="20" :maxlength="200" collapse-tags collapse-tags-tooltip :max-collapse-tags="2" placeholder="输入关键词后按回车添加" aria-label="筛选关键词" /><small>可添加多个词，命中任意一个即可；留空不限，最多 20 个词。</small></label>
+          <label class="ps-digest-keyword-field">
+            <span>关键词</span>
+            <div class="ps-keyword-editor" role="group" aria-label="关键词编辑器">
+              <div v-if="form.keywords.length" class="ps-keyword-tags">
+                <el-tag
+                  v-for="keyword in form.keywords"
+                  :key="keyword"
+                  closable
+                  @close="removeKeyword(keyword)"
+                >
+                  {{ keyword }}
+                </el-tag>
+              </div>
+              <div class="ps-keyword-entry">
+                <input
+                  v-model.trim="keywordDraft"
+                  maxlength="200"
+                  placeholder="输入后点击右侧按钮"
+                  aria-label="待添加关键词"
+                  @keydown.enter.prevent="addKeyword"
+                />
+                <el-button
+                  type="primary"
+                  plain
+                  :disabled="!keywordDraft || form.keywords.length >= 20"
+                  @click="addKeyword"
+                >
+                  确认添加
+                </el-button>
+              </div>
+            </div>
+            <small>每次添加一条，最多 20 个词；已添加内容可单独删除。</small>
+          </label>
         </div>
     </section>
         <section class="ps-panel ps-digest-candidates" :aria-busy="refreshing">
@@ -146,8 +178,18 @@ async function loadCategories() {
 }
 const initialType = ({ 日报: '日报', 周报: '周报', 月报: '月报' })[String(route.query.type || '')] || '日报'
 const form = reactive({ type: initialType, date: new Date(), period: [], month: new Date(), directions: [], sources: ['新闻网站', '微信公众号'], keywords: [], template: String(route.query.template || ''), itemCount: 8, summaryLength: 'normal', hotAnalysis: true, duplicateMerge: true })
+const keywordDraft = ref('')
 function updateKeywords(values) {
   form.keywords = [...new Set((values || []).map(value => value.trim()).filter(Boolean))]
+}
+function addKeyword() {
+  const value = keywordDraft.value.trim()
+  if (!value || form.keywords.length >= 20 || form.keywords.includes(value)) return
+  updateKeywords([...form.keywords, value])
+  keywordDraft.value = ''
+}
+function removeKeyword(value) {
+  updateKeywords(form.keywords.filter(keyword => keyword !== value))
 }
 const currentTypeConfig = computed(() => reportTypeConfigs[form.type])
 const periodFieldLabel = computed(() => currentTypeConfig.value.periodLabel)
@@ -420,6 +462,13 @@ onMounted(async () => {
 .ps-digest-filter-grid > .ps-digest-direction-field, .ps-digest-filter-grid > .ps-digest-keyword-field { grid-column: span 3; }
 .ps-digest-create-page .ps-digest-output-grid { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr); }
 .ps-digest-create-page .ps-form-grid :deep(.el-date-editor), .ps-digest-create-page .ps-form-grid :deep(.el-input-number) { width: 100%; }
+.ps-keyword-editor { display: flex; align-items: center; flex-wrap: nowrap; gap: 8px; min-width: 0; padding: 8px; border: 1px solid var(--ps-line); border-radius: 6px; background: #fff; transition: border-color .18s ease, box-shadow .18s ease; }
+.ps-keyword-editor:focus-within { border-color: color-mix(in srgb, var(--ps-blue), #fff 38%); box-shadow: 0 0 0 2px #00548712; }
+.ps-keyword-tags { display: flex; flex: 0 1 auto; flex-wrap: nowrap; gap: 6px; min-width: 0; max-width: 58%; overflow-x: auto; scrollbar-width: thin; }
+.ps-keyword-entry { display: flex; align-items: center; flex: 1 1 auto; min-width: 0; gap: 8px; }
+.ps-keyword-entry input { min-width: 0; flex: 1; height: 30px; padding: 0 8px; border: 0; outline: 0; background: transparent; color: var(--ps-ink); font: inherit; }
+.ps-keyword-entry input::placeholder { color: var(--ps-muted); }
+.ps-keyword-entry .el-button { flex-shrink: 0; min-height: 30px; padding: 4px 10px; }
 .ps-digest-candidate-scroll > .ps-inspector-empty { margin: 0; padding: 36px 16px; text-align: center; }
 .ps-digest-settings-toggle { display: flex; align-items: center; flex-shrink: 0; gap: 8px; min-height: 44px; padding: 0; border: 0; background: transparent; color: var(--ps-ink); font: inherit; cursor: pointer; }
 .ps-digest-settings-toggle > span { font-size: 22px; line-height: 1; }

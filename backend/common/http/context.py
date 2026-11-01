@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import re
 from contextvars import ContextVar, Token
 from typing import TYPE_CHECKING, Any, Literal
 
 from exceptions.exception import LoginException
 
 if TYPE_CHECKING:
+    import re
+
     from app.system.schemas.user import CurrentUserModel
 
 # 定义上下文变量

@@ -1,4 +1,5 @@
 """Admin review regressions. All persistence/transport boundaries are in memory."""
+
 from http import HTTPStatus
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -72,19 +73,33 @@ async def test_management_read_access_does_not_allow_writing_other_owners(monkey
     owned = AsyncMock(return_value=None)
     monkeypatch.setattr(ResearchDao, 'get_report', owned)
     with pytest.raises(ServiceException):
-        await ResearchReportService.update_report(object(), user_id=viewer_id, owner_name='用户', report_id=22,
-                                                 payload=SimpleNamespace(), report_serializer=lambda r: r)
+        await ResearchReportService.update_report(
+            object(),
+            user_id=viewer_id,
+            owner_name='用户',
+            report_id=22,
+            payload=SimpleNamespace(),
+            report_serializer=lambda r: r,
+        )
     assert owned.await_args.args[2] == viewer_id
     assert owned.await_args.kwargs == {'lock': True}
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('identity,permissions,expected', [
-    (None, [], 401), ('user', ['pipeline:report:list'], 403),
-    ('admin', [], 403), ('admin', ['pipeline:report:list'], 200),
-])
+@pytest.mark.parametrize(
+    'identity,permissions,expected',
+    [
+        (None, [], 401),
+        ('user', ['pipeline:report:list'], 403),
+        ('admin', [], 403),
+        ('admin', ['pipeline:report:list'], 200),
+    ],
+)
 async def test_management_http_boundary_uses_real_guards(
-    monkeypatch: pytest.MonkeyPatch, identity: str | None, permissions: list[str], expected: int,
+    monkeypatch: pytest.MonkeyPatch,
+    identity: str | None,
+    permissions: list[str],
+    expected: int,
 ) -> None:
     app = FastAPI()
     app.include_router(controller)
@@ -126,14 +141,28 @@ def result_rows(values: list[object]) -> MagicMock:
 async def test_dashboard_returns_source_names_actual_counts_and_distinct_run_ids() -> None:
     run = SimpleNamespace(id=12, source_id=8, status='success', fetched_count=180, saved_count=150, failed_count=0)
     # The selected run includes its source name; no source ID is displayed as a title.
-    db = SimpleNamespace(execute=AsyncMock(side_effect=[
-        result_rows([]), result_rows([]), result_rows([(run, '科技来源')]),
-        MagicMock(scalar_one=lambda: 2), MagicMock(scalar_one=lambda: 3), MagicMock(scalar_one=lambda: 4)
-    ]))
+    db = SimpleNamespace(
+        execute=AsyncMock(
+            side_effect=[
+                result_rows([]),
+                result_rows([]),
+                result_rows([(run, '科技来源')]),
+                MagicMock(scalar_one=lambda: 2),
+                MagicMock(scalar_one=lambda: 3),
+                MagicMock(scalar_one=lambda: 4),
+            ]
+        )
+    )
     result = await IntelligenceDashboardService.summary(db, date_formatter=str)
-    assert result['collect_status'] == [{
-        'id': '12', 'name': '科技来源', 'status': 'success',
-        'fetched_count': 180, 'saved_count': 150, 'failed_count': 0,
-    }]
+    assert result['collect_status'] == [
+        {
+            'id': '12',
+            'name': '科技来源',
+            'status': 'success',
+            'fetched_count': 180,
+            'saved_count': 150,
+            'failed_count': 0,
+        }
+    ]
     sql = str(db.execute.await_args_list[2].args[0])
     assert 'JOIN data_sources' in sql

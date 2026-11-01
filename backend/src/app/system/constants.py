@@ -1,5 +1,6 @@
 """系统管理领域常量。"""
 
+
 class MenuConstant:
     """
     菜单常量

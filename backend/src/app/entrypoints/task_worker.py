@@ -6,16 +6,16 @@ FastAPI 或系统定时任务，避免 API 进程承担长任务调度和执行�
 
 from __future__ import annotations
 
-import asyncio
 import argparse
+import asyncio
 import signal
 
+from app.business_ids import parse_business_id
 from app.infrastructure.models.registry import register_sqlalchemy_models
 from app.infrastructure.services.logging_support import logger
 from app.intelligence.tasks.operational_scheduler import run_operational_scheduler
 from app.research.tasks.research_job_scheduler import run_persistent_recovery_loop
 from config.get_db import close_async_engine, init_create_table
-from app.business_ids import parse_business_id
 
 # 独立进程同样只使用已迁移结构，不借助 API 导入顺序或自动建表修补依赖。
 
@@ -53,8 +53,12 @@ def main() -> None:
     """启动 PipeSight 持久任务 Worker。"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--env', default='dev')
-    parser.add_argument('--digest-schedule-id', type=parse_business_id, action='append',
-                        help='仅处理指定自动计划及其生成任务；可重复，不运行其他队列')
+    parser.add_argument(
+        '--digest-schedule-id',
+        type=parse_business_id,
+        action='append',
+        help='仅处理指定自动计划及其生成任务；可重复，不运行其他队列',
+    )
     args = parser.parse_args()
     try:
         asyncio.run(_run_worker(schedule_ids=args.digest_schedule_id))

@@ -68,8 +68,11 @@ def template_writing_prompt(template: dict, report_type: str = '') -> str:
         legacy = None
     if isinstance(legacy, dict) and isinstance(legacy.get('sections'), list):
         # 保留管理员在旧配置中明确填写的写作文本；章节由 generation_outline 独立传入。
-        prompt = '\n'.join(value.strip() for key in ('prompt', 'instructions', 'description')
-                           if isinstance(value := legacy.get(key), str) and value.strip())
+        prompt = '\n'.join(
+            value.strip()
+            for key in ('prompt', 'instructions', 'description')
+            if isinstance(value := legacy.get(key), str) and value.strip()
+        )
     purpose = template.get('purpose') or report_type
     if purpose in {'research', 'article', 'project'}:
         prompt += '\n' + ARTICLE_WRITING_RULES

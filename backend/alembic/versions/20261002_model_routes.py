@@ -34,9 +34,15 @@ def _create_table() -> None:
         sa.CheckConstraint('temperature BETWEEN 0 AND 2', name='ck_pipeline_model_routes_temperature'),
         sa.CheckConstraint('daily_limit >= 0', name='ck_pipeline_model_routes_daily_limit'),
         sa.CheckConstraint('version_no >= 1', name='ck_pipeline_model_routes_version'),
-        sa.ForeignKeyConstraint(['primary_model_id'], ['ai_models.model_id'], ondelete='RESTRICT', name='fk_pipeline_route_primary_model'),
-        sa.ForeignKeyConstraint(['fallback_model_id'], ['ai_models.model_id'], ondelete='RESTRICT', name='fk_pipeline_route_fallback_model'),
-        sa.ForeignKeyConstraint(['operator_id'], ['sys_user.user_id'], ondelete='SET NULL', name='fk_pipeline_route_operator'),
+        sa.ForeignKeyConstraint(
+            ['primary_model_id'], ['ai_models.model_id'], ondelete='RESTRICT', name='fk_pipeline_route_primary_model'
+        ),
+        sa.ForeignKeyConstraint(
+            ['fallback_model_id'], ['ai_models.model_id'], ondelete='RESTRICT', name='fk_pipeline_route_fallback_model'
+        ),
+        sa.ForeignKeyConstraint(
+            ['operator_id'], ['sys_user.user_id'], ondelete='SET NULL', name='fk_pipeline_route_operator'
+        ),
     )
     op.create_index('idx_pipeline_model_routes_enabled', 'pipeline_model_routes', ['enabled', 'scene'])
 

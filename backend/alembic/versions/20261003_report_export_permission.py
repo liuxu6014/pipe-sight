@@ -20,10 +20,7 @@ def upgrade() -> None:
     if 'sys_menu' not in inspect(connection).get_table_names():
         return
     exists = connection.execute(
-        sa.text(
-            'SELECT menu_id FROM sys_menu '
-            'WHERE menu_id = :menu_id OR perms = :perms LIMIT 1'
-        ),
+        sa.text('SELECT menu_id FROM sys_menu WHERE menu_id = :menu_id OR perms = :perms LIMIT 1'),
         {'menu_id': MENU_ID, 'perms': PERMISSION},
     ).scalar()
     if exists is not None:

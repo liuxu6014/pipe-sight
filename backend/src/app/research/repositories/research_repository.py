@@ -1,6 +1,7 @@
 """研究专属 SQL；所有权限沿 reports.user_id，不依赖旧主 DAO。"""
 
-from datetime import timedelta
+from datetime import datetime, timedelta
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import func, or_, select
@@ -34,7 +35,7 @@ from app.research.models.research_models import (
 
 class ResearchDao:
     @staticmethod
-    async def add(db, item):
+    async def add(db, item) -> Any:
         db.add(item)
         await db.flush()
         return item
@@ -48,7 +49,7 @@ class ResearchDao:
     add_template = add
 
     @staticmethod
-    async def get_report(db, report_id, user_id=None, *, lock=False):
+    async def get_report(db, report_id, user_id=None, *, lock=False) -> Report | None:
         report_id = parse_business_id(report_id)
         query = select(Report).where(Report.id == report_id)
         if user_id is not None:
@@ -58,7 +59,7 @@ class ResearchDao:
         return await db.scalar(query.execution_options(populate_existing=True))
 
     @staticmethod
-    async def list_reports(db, user_id, **_):
+    async def list_reports(db, user_id, **_) -> list[Report]:
         return list(
             await db.scalars(select(Report).where(Report.user_id == user_id).order_by(Report.updated_at.desc()))
         )
@@ -69,7 +70,7 @@ class ResearchDao:
         return list(await db.scalars(select(Report).order_by(Report.updated_at.desc(), Report.id.desc())))
 
     @staticmethod
-    async def get_research_job(db, job_id, user_id=None, *, lock=False):
+    async def get_research_job(db, job_id, user_id=None, *, lock=False) -> Job | None:
         job_id = parse_business_id(job_id)
         query = select(Job).join(Report, Report.id == Job.report_id).where(Job.id == job_id)
         if user_id is not None:
@@ -79,12 +80,12 @@ class ResearchDao:
         return await db.scalar(query.execution_options(populate_existing=True))
 
     @staticmethod
-    async def get_research_job_by_request_id(db, request_id, user_id=None):
+    async def get_research_job_by_request_id(db, request_id, user_id=None) -> Job | None:
         # 全局查找后由服务校验所有者和请求指纹；不得用用户过滤隐藏冲突。
         return await db.scalar(select(Job).where(Job.request_id == request_id))
 
     @staticmethod
-    async def list_research_jobs(db, user_id):
+    async def list_research_jobs(db, user_id) -> list[Job]:
         return list(
             await db.scalars(
                 select(Job)
@@ -95,14 +96,16 @@ class ResearchDao:
         )
 
     @staticmethod
-    async def get_report_by_task(db, task_id, user_id):
+    async def get_report_by_task(db, task_id, user_id) -> Report | None:
         task_id = parse_business_id(task_id)
         return await db.scalar(
             select(Report).join(Job, Job.report_id == Report.id).where(Job.id == task_id, Report.user_id == user_id)
         )
 
     @classmethod
-    async def claim_research_job(cls, db, job_id, user_id, *, worker_id='', lease_seconds=900, max_attempts=3):
+    async def claim_research_job(
+        cls, db, job_id, user_id, *, worker_id='', lease_seconds=900, max_attempts=3
+    ) -> Job | None:
         job = await cls.get_research_job(db, job_id, user_id, lock=True)
         now = utcnow()
         if not job or job.status not in {'queued', 'running'}:
@@ -124,13 +127,13 @@ class ResearchDao:
         return job
 
     @staticmethod
-    def aware(value):
-        from datetime import timezone
+    def aware(value) -> datetime:
+        from datetime import timezone  # noqa: PLC0415
 
         return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
 
     @classmethod
-    async def lock_running_research_job(cls, db, job_id, user_id, token):
+    async def lock_running_research_job(cls, db, job_id, user_id, token) -> Job | None:
         job = await cls.get_research_job(db, job_id, user_id, lock=True)
         if (
             not job
@@ -143,7 +146,7 @@ class ResearchDao:
         return job
 
     @classmethod
-    async def touch_research_job(cls, db, job_id, user_id, *, execution_token, lease_seconds=900):
+    async def touch_research_job(cls, db, job_id, user_id, *, execution_token, lease_seconds=900) -> bool:
         job = await cls.lock_running_research_job(db, job_id, user_id, execution_token)
         if not job:
             return False
@@ -152,47 +155,48 @@ class ResearchDao:
         return True
 
     @staticmethod
-    async def list_research_job_ids_for_dispatch(db, *, now, max_attempts=3, schedule_ids=None):
-        query = (select(Job.id, Report.user_id).join(Report, Report.id == Job.report_id)
-                 .where(or_(Job.status == 'queued', (Job.status == 'running') & (Job.lease_expires_at <= now))))
+    async def list_research_job_ids_for_dispatch(
+        db, *, now, max_attempts=3, schedule_ids=None
+    ) -> list[tuple[int, int, str]]:
+        query = (
+            select(Job.id, Report.user_id)
+            .join(Report, Report.id == Job.report_id)
+            .where(or_(Job.status == 'queued', (Job.status == 'running') & (Job.lease_expires_at <= now)))
+        )
         if schedule_ids is not None:
             query = query.where(Job.schedule_id.in_([parse_business_id(value) for value in schedule_ids]))
-        rows = (
-            await db.execute(
-                query
-            )
-        ).all()
+        rows = (await db.execute(query)).all()
         return [(row[0], row[1], '') for row in rows]
 
     @staticmethod
-    async def list_report_versions(db, report_id):
+    async def list_report_versions(db, report_id) -> list[Version]:
         report_id = parse_business_id(report_id)
         return list(
             await db.scalars(select(Version).where(Version.report_id == report_id).order_by(Version.version.desc()))
         )
 
     @staticmethod
-    async def get_report_version(db, report_id, version):
+    async def get_report_version(db, report_id, version) -> Version | None:
         report_id = parse_business_id(report_id)
         return await db.scalar(select(Version).where(Version.report_id == report_id, Version.version == version))
 
     @staticmethod
-    async def get_template(db, template_id):
+    async def get_template(db, template_id) -> Template | None:
         return await db.get(Template, parse_business_id(template_id)) if template_id is not None else None
 
     @staticmethod
-    async def list_templates(db, purpose=None):
+    async def list_templates(db, purpose=None) -> list[Template]:
         query = select(Template).order_by(Template.updated_at.desc())
         if purpose:
             query = query.where(Template.purpose == purpose)
         return list(await db.scalars(query))
 
     @staticmethod
-    async def get_model(db, model_id):
+    async def get_model(db, model_id) -> AiModels | None:
         return await db.get(AiModels, parse_business_id(model_id)) if model_id is not None else None
 
     @staticmethod
-    async def get_asset(db, asset_id, user_id=None, *, lock=False):
+    async def get_asset(db, asset_id, user_id=None, *, lock=False) -> Asset | None:
         asset_id = parse_business_id(asset_id)
         query = select(Asset).join(Report, Report.id == Asset.report_id).where(Asset.id == asset_id)
         if user_id is not None:
@@ -202,7 +206,7 @@ class ResearchDao:
         return await db.scalar(query.execution_options(populate_existing=True))
 
     @staticmethod
-    async def list_assets(db, report_id, asset_type=None):
+    async def list_assets(db, report_id, asset_type=None) -> list[Asset]:
         report_id = parse_business_id(report_id)
         query = select(Asset).where(Asset.report_id == report_id).order_by(Asset.created_at)
         if asset_type:
@@ -210,15 +214,15 @@ class ResearchDao:
         return list(await db.scalars(query))
 
     @staticmethod
-    async def list_report_export_ids_for_dispatch(db, **_):
+    async def list_report_export_ids_for_dispatch(db, **_) -> list[int]:
         return list(await db.scalars(select(Asset.id).where(Asset.status == 'queued')))
 
     @staticmethod
-    async def list_workspace_items(db, user_id):
+    async def list_workspace_items(db, user_id) -> list[Basket]:
         return list(await db.scalars(select(Basket).where(Basket.user_id == user_id)))
 
     @staticmethod
-    async def get_workspace_item(db, user_id, item_type, item_id, action):
+    async def get_workspace_item(db, user_id, item_type, item_id, action) -> Basket | None:
         item_id = parse_business_id(item_id)
         field = {
             'article': Basket.article_id,
@@ -232,9 +236,9 @@ class ResearchDao:
         )
 
     @staticmethod
-    async def delete_workspace_item(db, user_id, item_id, action):
+    async def delete_workspace_item(db, user_id, item_id, action) -> None:
         item_id = parse_business_id(item_id)
-        from sqlalchemy import delete
+        from sqlalchemy import delete  # noqa: PLC0415
 
         await db.execute(
             delete(Basket).where(
@@ -250,23 +254,30 @@ class ResearchDao:
         )
 
     @staticmethod
-    async def list_digest_schedules(db, user_id):
+    async def list_digest_schedules(db, user_id) -> list[Schedule]:
         return list(await db.scalars(select(Schedule).where(Schedule.user_id == user_id)))
 
     @staticmethod
-    async def latest_schedule_jobs(db, user_id, schedule_ids):
+    async def latest_schedule_jobs(db, user_id, schedule_ids) -> dict[int, tuple[Job, Report]]:
         if not schedule_ids:
             return {}
-        latest = (select(func.max(Job.id).label('id')).join(Report, Report.id == Job.report_id)
-                  .join(Schedule, Schedule.id == Job.schedule_id)
-                  .where(Schedule.user_id == user_id, Report.user_id == user_id,
-                         Schedule.id.in_(schedule_ids)).group_by(Job.schedule_id).subquery())
-        pairs = (await db.execute(select(Job, Report).join(latest, latest.c.id == Job.id)
-                                 .join(Report, Report.id == Job.report_id))).all()
+        latest = (
+            select(func.max(Job.id).label('id'))
+            .join(Report, Report.id == Job.report_id)
+            .join(Schedule, Schedule.id == Job.schedule_id)
+            .where(Schedule.user_id == user_id, Report.user_id == user_id, Schedule.id.in_(schedule_ids))
+            .group_by(Job.schedule_id)
+            .subquery()
+        )
+        pairs = (
+            await db.execute(
+                select(Job, Report).join(latest, latest.c.id == Job.id).join(Report, Report.id == Job.report_id)
+            )
+        ).all()
         return {job.schedule_id: (job, report) for job, report in pairs}
 
     @staticmethod
-    async def lock_digest_schedule_for_update(db, schedule_id, user_id):
+    async def lock_digest_schedule_for_update(db, schedule_id, user_id) -> Schedule | None:
         schedule_id = parse_business_id(schedule_id)
         return await db.scalar(
             select(Schedule)
@@ -276,28 +287,24 @@ class ResearchDao:
         )
 
     @staticmethod
-    async def list_due_schedules(db, now, schedule_ids=None):
+    async def list_due_schedules(db, now, schedule_ids=None) -> list[Schedule]:
         query = select(Schedule).where(Schedule.is_enabled.is_(True), Schedule.next_run_at <= now)
         if schedule_ids is not None:
             query = query.where(Schedule.id.in_([parse_business_id(value) for value in schedule_ids]))
-        return list(
-            await db.scalars(
-                query.with_for_update(skip_locked=True)
-            )
-        )
+        return list(await db.scalars(query.with_for_update(skip_locked=True)))
 
     @staticmethod
-    async def load_content(db, kind, item_id):
+    async def load_content(db, kind, item_id) -> Any:
         # 跨域只读取规范内容实体；不经过旧查询的 approved/发布/分类层。
-        from app.intelligence.models.content import PipelineArticle, PipelinePaper
+        from app.intelligence.models.content import PipelineArticle, PipelinePaper  # noqa: PLC0415
 
         model = {'article': PipelineArticle, 'paper': PipelinePaper}[kind]
         return await db.get(model, parse_business_id(item_id))
 
     @staticmethod
-    def candidate_query(start, end, config):
-        from app.intelligence.models.collection import PipelineSource
-        from app.intelligence.models.content import PipelineArticle, PipelineCategory
+    def candidate_query(start, end, config) -> Any:
+        from app.intelligence.models.collection import PipelineSource  # noqa: PLC0415
+        from app.intelligence.models.content import PipelineArticle, PipelineCategory  # noqa: PLC0415
 
         query = (
             select(PipelineArticle)
@@ -333,21 +340,21 @@ class ResearchDao:
         return query
 
     @classmethod
-    async def digest_candidates(cls, db, start, end, config):
-        from app.intelligence.models.content import PipelineArticle
+    async def digest_candidates(cls, db, start, end, config) -> list[Any]:
+        from app.intelligence.models.content import PipelineArticle  # noqa: PLC0415
 
         query = cls.candidate_query(start, end, config)
         return list(await db.scalars(query.order_by(PipelineArticle.published_at.desc(), PipelineArticle.id)))
 
     @classmethod
-    async def search_digest_candidates(cls, db, filters):
-        from datetime import datetime, timedelta
-        from zoneinfo import ZoneInfo
+    async def search_digest_candidates(cls, db, filters) -> tuple[list[Any], int]:
+        from datetime import datetime, timedelta  # noqa: PLC0415
+        from zoneinfo import ZoneInfo  # noqa: PLC0415
 
-        from sqlalchemy import func
-        from sqlalchemy.orm import load_only
+        from sqlalchemy import func  # noqa: PLC0415
+        from sqlalchemy.orm import load_only  # noqa: PLC0415
 
-        from app.intelligence.models.content import PipelineArticle
+        from app.intelligence.models.content import PipelineArticle  # noqa: PLC0415
 
         zone = ZoneInfo('Asia/Shanghai')
         start = datetime.combine(filters.period[0], datetime.min.time(), zone)

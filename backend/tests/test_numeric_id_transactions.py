@@ -110,45 +110,77 @@ def offline_migration(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Simple
     tables = set(migration.TABLE_COMMENTS)
     source = {table: [] for table in tables}
     source['categories'] = [{'id': 'old-category', 'parent_id': None}]
-    foreign_keys = [{
-        'table': 'categories', 'columns': ['parent_id'], 'target': 'categories',
-        'target_columns': ['id'], 'name': 'fk_offline_parent',
-    }]
-    definitions = [{
-        'table_name': 'categories', 'name': 'fk_offline_parent', 'type': 'f',
-        'definition': 'FOREIGN KEY (parent_id) REFERENCES categories(id) ON DELETE RESTRICT',
-        'validated': True,
-    }]
+    foreign_keys = [
+        {
+            'table': 'categories',
+            'columns': ['parent_id'],
+            'target': 'categories',
+            'target_columns': ['id'],
+            'name': 'fk_offline_parent',
+        }
+    ]
+    definitions = [
+        {
+            'table_name': 'categories',
+            'name': 'fk_offline_parent',
+            'type': 'f',
+            'definition': 'FOREIGN KEY (parent_id) REFERENCES categories(id) ON DELETE RESTRICT',
+            'validated': True,
+        }
+    ]
     manifest = {
-        'revision': '20261025_restore_ruoyi_names', 'sha256': sha256(dump).hexdigest(),
+        'revision': '20261025_restore_ruoyi_names',
+        'sha256': sha256(dump).hexdigest(),
         'tables': sorted(tables),
         'fingerprints': {table: [0, 'offline-backup-fingerprint'] for table in tables},
     }
-    context = SimpleNamespace(bind=bind, root=root, manifest=manifest, source=source, phases=[], corrupt=False,
-                              index_drift=False, default_drift=False)
+    context = SimpleNamespace(
+        bind=bind,
+        root=root,
+        manifest=manifest,
+        source=source,
+        phases=[],
+        corrupt=False,
+        index_drift=False,
+        default_drift=False,
+    )
 
     class Inspector:
         def get_columns(self, table: str, *, schema: str) -> list[dict]:
             assert schema == 'public'
             names = ['id', 'parent_id'] if table == 'categories' else ['id']
-            return [{
-                'name': column,
-                'type': sa.BigInteger() if (table, column) in bind.state['columns'] else (
-                    sa.String() if table in migration.BUSINESS_ID_TABLES else sa.Integer()
-                ),
-                'nullable': column != 'id',
-                'default': (
-                    "nextval('business_id_seq'::regclass)"
-                    if bind.state['sequence'] and table in migration.BUSINESS_ID_TABLES and column == 'id'
-                    else '0' if context.default_drift and bind.state['sequence'] and column == 'parent_id' else None
-                ),
-            } for column in names]
+            return [
+                {
+                    'name': column,
+                    'type': sa.BigInteger()
+                    if (table, column) in bind.state['columns']
+                    else (sa.String() if table in migration.BUSINESS_ID_TABLES else sa.Integer()),
+                    'nullable': column != 'id',
+                    'default': (
+                        "nextval('business_id_seq'::regclass)"
+                        if bind.state['sequence'] and table in migration.BUSINESS_ID_TABLES and column == 'id'
+                        else '0'
+                        if context.default_drift and bind.state['sequence'] and column == 'parent_id'
+                        else None
+                    ),
+                }
+                for column in names
+            ]
 
         def get_foreign_keys(self, table: str, *, schema: str) -> list[dict]:
-            return [{
-                'name': 'fk_offline_parent', 'constrained_columns': ['parent_id'],
-                'referred_table': 'categories', 'referred_columns': ['id'], 'referred_schema': 'public',
-            }] if table == 'categories' else []
+            return (
+                [
+                    {
+                        'name': 'fk_offline_parent',
+                        'constrained_columns': ['parent_id'],
+                        'referred_table': 'categories',
+                        'referred_columns': ['id'],
+                        'referred_schema': 'public',
+                    }
+                ]
+                if table == 'categories'
+                else []
+            )
 
     def rows(connection: OfflinePG, selected_tables: set[str], *, phase: str = 'source') -> dict:
         assert connection is bind and selected_tables == tables
@@ -165,10 +197,19 @@ def offline_migration(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Simple
     monkeypatch.setattr(migration, '_inventory', lambda connection: tables)
     monkeypatch.setattr(migration, '_constraints', lambda connection: deepcopy(definitions))
     monkeypatch.setattr(migration, '_owners', lambda connection: [(123, 'categories', 456, None)])
-    monkeypatch.setattr(migration, '_indexes', lambda connection: [
-        ('categories', 'offline_index', 'changed' if context.index_drift and bind.state['sequence'] else 'original',
-         True, True),
-    ])
+    monkeypatch.setattr(
+        migration,
+        '_indexes',
+        lambda connection: [
+            (
+                'categories',
+                'offline_index',
+                'changed' if context.index_drift and bind.state['sequence'] else 'original',
+                True,
+                True,
+            ),
+        ],
+    )
     monkeypatch.setattr(migration, '_rows', rows)
     context.run = lambda: migration.migrate_numeric_ids(bind, manifest=manifest, backup_dir=root)
     return context
@@ -225,10 +266,13 @@ def test_target_projection_mismatch_rolls_back_after_ddl(offline_migration: Simp
     assert case.bind.events[-1] == 'rollback_savepoint'
 
 
-@pytest.mark.parametrize('drift,message', [('index_drift', 'semantics changed'),
-                                          ('default_drift', 'Unrelated column default changed')])
+@pytest.mark.parametrize(
+    'drift,message', [('index_drift', 'semantics changed'), ('default_drift', 'Unrelated column default changed')]
+)
 def test_index_or_nonprimary_default_drift_is_rejected_and_rolled_back(
-    offline_migration: SimpleNamespace, drift: str, message: str,
+    offline_migration: SimpleNamespace,
+    drift: str,
+    message: str,
 ) -> None:
     case = offline_migration
     before = deepcopy(case.bind.state)
@@ -240,12 +284,21 @@ def test_index_or_nonprimary_default_drift_is_rejected_and_rolled_back(
     assert case.bind.in_transaction()
 
 
-@pytest.mark.parametrize('gate,message', [
-    ('transaction', 'caller-owned'), ('host', 'explicit'), ('permissions', 'private'),
-    ('revision', 'revision'), ('sha', 'SHA-256'), ('tables', 'table contract'),
-])
+@pytest.mark.parametrize(
+    'gate,message',
+    [
+        ('transaction', 'caller-owned'),
+        ('host', 'explicit'),
+        ('permissions', 'private'),
+        ('revision', 'revision'),
+        ('sha', 'SHA-256'),
+        ('tables', 'table contract'),
+    ],
+)
 def test_preflight_gate_rejects_before_any_savepoint_or_sql(
-    offline_migration: SimpleNamespace, gate: str, message: str,
+    offline_migration: SimpleNamespace,
+    gate: str,
+    message: str,
 ) -> None:
     case = offline_migration
     if gate == 'transaction':
@@ -278,7 +331,8 @@ def test_changed_source_fingerprint_refuses_ddl_and_mapping_archive(offline_migr
 
 
 def test_archive_is_required_before_first_mutating_ddl(
-    offline_migration: SimpleNamespace, monkeypatch: pytest.MonkeyPatch,
+    offline_migration: SimpleNamespace,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     case = offline_migration
 
@@ -294,7 +348,8 @@ def test_archive_is_required_before_first_mutating_ddl(
 
 @pytest.mark.parametrize('empty', [False, True])
 def test_shared_sequence_setval_called_flag_distinguishes_empty_dataset(
-    offline_migration: SimpleNamespace, empty: bool,
+    offline_migration: SimpleNamespace,
+    empty: bool,
 ) -> None:
     case = offline_migration
     if empty:

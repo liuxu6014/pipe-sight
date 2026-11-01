@@ -119,14 +119,14 @@
   transition: border-color 180ms ease, color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
 }
 
-.pipeline-page .el-button--primary:not(.is-link):not(.is-text) {
+.pipeline-page .el-button--primary:not(.is-link):not(.is-text):not(.is-plain) {
   border-color: var(--pipeline-blue);
   background: var(--pipeline-blue);
   box-shadow: 0 5px 12px rgba(0, 84, 135, 0.16);
 }
 
-.pipeline-page .el-button--primary:not(.is-link):not(.is-text):hover,
-.pipeline-page .el-button--primary:not(.is-link):not(.is-text):focus-visible {
+.pipeline-page .el-button--primary:not(.is-link):not(.is-text):not(.is-plain):hover,
+.pipeline-page .el-button--primary:not(.is-link):not(.is-text):not(.is-plain):focus-visible {
   border-color: var(--pipeline-blue-deep);
   background: var(--pipeline-blue-deep);
 }

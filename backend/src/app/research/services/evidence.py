@@ -10,12 +10,12 @@ from exceptions.exception import ServiceException
 
 class ResearchEvidenceService:
     @staticmethod
-    def effective_text(item):
+    def effective_text(item) -> str:
         return item.edited_text if item.edited_text is not None else (item.extracted_text or '')
 
     @classmethod
-    async def resolve(cls, db, user_id, selected_ids, payload=None, **_):
-        if not selected_ids or len(selected_ids) > 50:
+    async def resolve(cls, db, user_id, selected_ids, payload=None, **_) -> list[dict]:
+        if not selected_ids or len(selected_ids) > 50:  # noqa: PLR2004
             raise ServiceException(message='请选择 1 至 50 条资料，超限不会截断')
         result, seen = [], set()
         for selection in selected_ids:
@@ -73,8 +73,16 @@ class ResearchEvidenceService:
                         title = item.title
                     if not content.strip():
                         raise ServiceException(message='所选内容没有可用正文或论文摘要')
+                    category = getattr(getattr(item, 'category', None), 'name', None)
                     matches.append(
-                        {'type': kind, 'id': wire_id(item.id), 'title': title, 'content': content, 'source': source}
+                        {
+                            'type': kind,
+                            'id': wire_id(item.id),
+                            'title': title,
+                            'content': content,
+                            'source': source,
+                            'category': category,
+                        }
                     )
                 else:
                     raise ServiceException(message='选材类型只能为 article、paper、file')

@@ -8,6 +8,7 @@ const MODULES = [
   { key: 'reports', title: '报告管理', icon: 'documentation', direct: true },
   { key: 'digests', title: '简报管理', icon: 'documentation', direct: true },
   { key: 'templates', title: '模板管理', icon: 'documentation', direct: true },
+  { key: 'model', title: '模型与类别提示词', icon: 'ai-model', direct: true },
   { key: 'settings', title: '系统配置', icon: 'system' },
   { key: 'logs', title: '运行日志', icon: 'log' }
 ]
@@ -26,8 +27,8 @@ const ENTRIES = {
   '/pipeline/manuscript': ['reports', '论文生成'],
   '/pipeline/digest': ['digests', '简报管理'],
   '/pipeline/template': ['templates', '模板管理'],
-  '/pipeline/model': ['settings', '模型与类别提示词'],
-  '/ai/model': ['settings', '模型管理'],
+  '/pipeline/model': ['model', '模型与类别提示词'],
+  '/ai/model': ['model', '模型与类别提示词'],
   '/system/menu': ['settings', '菜单配置'],
   '/system/config': ['settings', '系统参数'],
   '/system/dict': ['settings', '字典管理']
@@ -37,7 +38,7 @@ const ENTRIES = {
 const TEMPLATE_MENU_PATHS = new Set(['/tool/swagger', '/monitor/druid'])
 // Reject stale backend snapshots; the retired components and routes no longer exist.
 const RETIRED_PIPELINE_PATHS = new Set(['/pipeline/filter', '/pipeline/governance', '/ai/chat'])
-const SETTINGS_ENTRY_ORDER = ['/pipeline/model', '/ai/model', '/system/config', '/system/dict', '/system/menu']
+const SETTINGS_ENTRY_ORDER = ['/system/config', '/system/dict', '/system/menu']
 
 function isTemplateLink(path = '') {
   if (!/^https?:\/\//i.test(path)) return false
@@ -154,7 +155,7 @@ export function buildManagementNavigation(routes = [], {
     }
     if (!children.length) return []
     if (module.direct && children.length === 1) {
-      return [{ ...children[0], meta: { ...children[0].meta, title: module.title } }]
+      return [{ ...children[0], meta: { ...children[0].meta, title: module.title, icon: module.icon } }]
     }
     // 分组只供 el-sub-menu 展示，不添加到 Vue Router，也不是链接。
     return [{

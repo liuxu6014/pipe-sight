@@ -26,7 +26,7 @@
           <el-form-item label="指定节假日"><el-date-picker v-model="form.holidayDates" aria-label="计划节假日日期" type="dates" value-format="YYYY-MM-DD" placeholder="自行选择需要跳过的日期" /></el-form-item>
           <el-form-item label="生成要求" class="is-wide"><el-input v-model="form.requirements" aria-label="计划生成要求" type="textarea" :rows="2" maxlength="5000" placeholder="可选，不编造资料没有支持的结论" /></el-form-item>
         </div>
-        <div class="ps-schedule-switches"><el-checkbox v-model="form.hotAnalysis">包含热点分析</el-checkbox><el-checkbox v-model="form.duplicateMerge">合并重复事件</el-checkbox><el-switch v-model="form.enabled" aria-label="保存后启用计划" active-text="保存后启用" inactive-text="停用保存" /></div>
+        <div class="ps-schedule-switches"><el-checkbox v-model="form.hotAnalysis">包含热点分析</el-checkbox><el-checkbox v-model="form.duplicateMerge">合并重复事件</el-checkbox><span class="ps-schedule-switch-label">是否启用</span><el-switch v-model="form.enabled" aria-label="是否启用自动计划" /></div>
       </el-form>
       <p class="ps-schedule-summary">{{ scheduleSummary(form) }} · {{ periodDescription }}</p>
     </div>
@@ -103,6 +103,7 @@ onBeforeUnmount(() => { disposed = true; epoch++ })
 .ps-schedule-form h3 { font-size: 15px; margin: 8px 0 14px; }
 .ps-schedule-switches { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; }
 .ps-schedule-switches :deep(.el-checkbox) { margin-right: 0; }
+.ps-schedule-switch-label { color: var(--ps-ink); font-size: 13px; }
 .ps-schedule-summary { padding-top: 12px; margin: 12px 0 0; border-top: 1px solid var(--ps-line); }
 @media (max-width: 560px) { .ps-schedule-fields { grid-template-columns: minmax(0, 1fr); } .ps-schedule-form { max-height: 64dvh; } }
 </style>

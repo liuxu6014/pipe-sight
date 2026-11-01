@@ -49,9 +49,7 @@ def test_custom_outline_is_normalized_for_research_report_builder() -> None:
 
     payload = ManuscriptApiService.to_research_payload(body)
 
-    assert payload.outline == [
-        {'title': '数据质量控制', 'level': 1, 'words': 800, 'description': '说明校验方法。'}
-    ]
+    assert payload.outline == [{'title': '数据质量控制', 'level': 1, 'words': 800, 'description': '说明校验方法。'}]
 
 
 def test_suggest_titles_uses_keywords_and_domain_language() -> None:

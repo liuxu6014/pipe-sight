@@ -61,7 +61,7 @@ def record(kind='website'):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('kind', ['website', 'wechat', 'paper'])
-async def test_no_translation_model_leaves_originals_and_never_calls_provider(env, translation, kind):
+async def test_no_translation_model_leaves_originals_and_never_calls_provider(env, translation, kind) -> None:
     e = env
     s = await source(e, type=kind)
     original = record(kind)
@@ -77,7 +77,9 @@ async def test_no_translation_model_leaves_originals_and_never_calls_provider(en
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('kind', ['website', 'wechat', 'paper'])
-async def test_translates_only_body_or_abstract_with_frozen_model_and_preserved_metadata(env, translation, kind):
+async def test_translates_only_body_or_abstract_with_frozen_model_and_preserved_metadata(
+    env, translation, kind
+) -> None:
     e = env
     s, model = await configured_source(e, kind=kind)
     original = record(kind)
@@ -119,7 +121,7 @@ async def test_translates_only_body_or_abstract_with_frozen_model_and_preserved_
     'body,existing',
     [('Already translated body', '已有译文'), ('Already translated body', ''), ('这是中文原文。', None)],
 )
-async def test_existing_translations_and_chinese_originals_are_not_replaced(env, translation, body, existing):
+async def test_existing_translations_and_chinese_originals_are_not_replaced(env, translation, body, existing) -> None:
     e = env
     s, _ = await configured_source(e)
     item = {**record(), 'content': body, 'content_zh': existing}
@@ -140,7 +142,7 @@ async def test_existing_translations_and_chinese_originals_are_not_replaced(env,
         {'parameters': {'api_key': 'MUST_NOT_FREEZE'}},
     ],
 )
-async def test_invalid_model_rejected_before_enqueue_or_provider(env, translation, override):
+async def test_invalid_model_rejected_before_enqueue_or_provider(env, translation, override) -> None:
     e = env
     s, _ = await configured_source(e, **override)
     with pytest.raises(e.collection.ConfigurationError):
@@ -150,7 +152,7 @@ async def test_invalid_model_rejected_before_enqueue_or_provider(env, translatio
 
 
 @pytest.mark.asyncio
-async def test_model_identity_change_after_enqueue_never_calls_provider(env, translation):
+async def test_model_identity_change_after_enqueue_never_calls_provider(env, translation) -> None:
     e = env
     s, model = await configured_source(e)
     r = await enqueue(e, s['id'])
@@ -174,7 +176,7 @@ async def test_model_identity_change_after_enqueue_never_calls_provider(env, tra
         '{"content_zh":"中文","title":"changed"}',
     ],
 )
-async def test_invalid_output_fails_truthfully_and_retry_preserves_snapshot(env, translation, reply):
+async def test_invalid_output_fails_truthfully_and_retry_preserves_snapshot(env, translation, reply) -> None:
     e = env
     s, _ = await configured_source(e)
     r = await enqueue(e, s['id'])
@@ -195,7 +197,7 @@ async def test_invalid_output_fails_truthfully_and_retry_preserves_snapshot(env,
 
 
 @pytest.mark.asyncio
-async def test_input_bound_fails_before_any_paid_call_without_truncating_original(env, translation):
+async def test_input_bound_fails_before_any_paid_call_without_truncating_original(env, translation) -> None:
     e = env
     s, _ = await configured_source(e)
     item = {**record(), 'content': 'English ' * (translation.MAX_INPUT_CHARS // 8 + 1)}
@@ -207,7 +209,7 @@ async def test_input_bound_fails_before_any_paid_call_without_truncating_origina
 
 
 @pytest.mark.asyncio
-async def test_provider_failure_is_safe_failed_run_with_retry_not_fake_translation(env, translation):
+async def test_provider_failure_is_safe_failed_run_with_retry_not_fake_translation(env, translation) -> None:
     e = env
     s, _ = await configured_source(e)
     e.state.batches = [e.batch([record()], {})]
@@ -222,12 +224,12 @@ async def test_provider_failure_is_safe_failed_run_with_retry_not_fake_translati
 
 
 @pytest.mark.asyncio
-async def test_provider_timeout_is_bounded_and_cleans_cancelled_call(env, translation, monkeypatch):
+async def test_provider_timeout_is_bounded_and_cleans_cancelled_call(env, translation, monkeypatch) -> None:
     e = env
     s, _ = await configured_source(e)
     closed = []
 
-    async def blocked(db):
+    async def blocked(db) -> None:
         try:
             await asyncio.Event().wait()
         finally:
@@ -242,13 +244,13 @@ async def test_provider_timeout_is_bounded_and_cleans_cancelled_call(env, transl
 
 
 @pytest.mark.asyncio
-async def test_stop_during_translation_acknowledges_provider_cleanup_before_cancelled(env, translation):
+async def test_stop_during_translation_acknowledges_provider_cleanup_before_cancelled(env, translation) -> None:
     e = env
     s, _ = await configured_source(e)
     r = await enqueue(e, s['id'])
     closed = []
 
-    async def stopped(db):
+    async def stopped(db) -> None:
         async with AsyncMemorySession(e.engine) as control:
             result = await e.service.stop_collection_run(control, r['id'], clock=e.clock)
             assert result['status'] == 'stopping' and result['finishedAt'] is None
@@ -268,13 +270,13 @@ async def test_stop_during_translation_acknowledges_provider_cleanup_before_canc
 
 
 @pytest.mark.asyncio
-async def test_translation_return_after_lease_expiry_cannot_write_content(env, translation):
+async def test_translation_return_after_lease_expiry_cannot_write_content(env, translation) -> None:
     e = env
     s, _ = await configured_source(e)
     r = await enqueue(e, s['id'])
     current = [NOW]
 
-    async def expired(db):
+    async def expired(db) -> str:
         current[0] += timedelta(seconds=10)
         return '{"content_zh":"过期执行器不能写入。"}'
 
@@ -288,7 +290,7 @@ async def test_translation_return_after_lease_expiry_cannot_write_content(env, t
 
 
 @pytest.mark.asyncio
-async def test_schedule_freezes_model_and_manual_replay_does_not_revalidate_active_snapshot(env, translation):
+async def test_schedule_freezes_model_and_manual_replay_does_not_revalidate_active_snapshot(env, translation) -> None:
     e = env
     s, model = await configured_source(e)
     s = await source(e, source_id=s['id'], model_id=1, cron='0 8 * * *')
@@ -305,7 +307,7 @@ async def test_schedule_freezes_model_and_manual_replay_does_not_revalidate_acti
 
 
 @pytest.mark.asyncio
-async def test_later_source_model_change_does_not_change_queued_run(env, translation):
+async def test_later_source_model_change_does_not_change_queued_run(env, translation) -> None:
     e = env
     s, _ = await configured_source(e)
     r = await enqueue(e, s['id'])
@@ -331,7 +333,7 @@ async def test_later_source_model_change_does_not_change_queued_run(env, transla
 @pytest.mark.asyncio
 async def test_category_classification_consumes_translation_and_still_sets_single_category(
     env, translation, monkeypatch
-):
+) -> None:
     e = env
     s, _ = await configured_source(e)
     e.db.add(
@@ -342,7 +344,7 @@ async def test_category_classification_consumes_translation_and_still_sets_singl
     await e.db.commit()
     prompts = []
 
-    async def gateway(db, snapshot, **kwargs):
+    async def gateway(db, snapshot, **kwargs) -> str:
         prompts.append(kwargs['prompt'])
         if kwargs['system_prompt'].startswith('你是忠实的'):
             return '{"content_zh":"中文译文供分类使用。"}'
@@ -358,7 +360,7 @@ async def test_category_classification_consumes_translation_and_still_sets_singl
 
 
 @pytest.mark.asyncio
-async def test_legacy_run_without_model_snapshot_is_not_silently_backfilled(env, translation):
+async def test_legacy_run_without_model_snapshot_is_not_silently_backfilled(env, translation) -> None:
     e = env
     s, _ = await configured_source(e)
     r = await e.repo.enqueue(
@@ -377,7 +379,7 @@ async def test_legacy_run_without_model_snapshot_is_not_silently_backfilled(env,
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('keep_model', [True, False])
-async def test_recrawl_reuses_existing_translation_for_unchanged_original(env, translation, keep_model):
+async def test_recrawl_reuses_existing_translation_for_unchanged_original(env, translation, keep_model) -> None:
     e = env
     s, _ = await configured_source(e)
     e.state.category_reply = '{"content_zh":"已有可信译文，不应覆盖。"}'
@@ -393,7 +395,7 @@ async def test_recrawl_reuses_existing_translation_for_unchanged_original(env, t
 
 
 @pytest.mark.asyncio
-async def test_effective_model_timeout_and_output_limits_are_frozen_before_call(env, translation):
+async def test_effective_model_timeout_and_output_limits_are_frozen_before_call(env, translation) -> None:
     e = env
     s, _ = await configured_source(
         e, parameters={'timeout_seconds': 120, 'max_tokens': 32768, 'max_response_bytes': 32 * 1024 * 1024}
@@ -405,13 +407,13 @@ async def test_effective_model_timeout_and_output_limits_are_frozen_before_call(
 
 
 @pytest.mark.asyncio
-async def test_unacknowledged_translation_cancellation_leaves_stopping_and_fences_writes(env, translation):
+async def test_unacknowledged_translation_cancellation_leaves_stopping_and_fences_writes(env, translation) -> None:
     e = env
     s, _ = await configured_source(e)
     r = await enqueue(e, s['id'])
     started, release, finished = asyncio.Event(), asyncio.Event(), asyncio.Event()
 
-    async def stubborn(db):
+    async def stubborn(db) -> str | None:
         started.set()
         try:
             await asyncio.Event().wait()

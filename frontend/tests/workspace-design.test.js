@@ -15,6 +15,7 @@ test('news toolbar keeps desktop search and filters on one row while narrow scre
   assert.match(css, /flex: 1 1 280px;\s*min-width: 180px;/)
   assert.match(css, /flex: 0 0 160px;/)
   assert.match(css, /\.ps-toolbar > \.ps-search-inline \{\s*flex: 1 1 100%;/)
+  assert.match(portal, /\.ps-news-list > \.ps-empty-state \{\s*grid-column: 1 \/ -1;\s*width: 100%;/)
 })
 
 test('portal searches share one subtle outer focus without suppressing form or button focus', () => {
@@ -25,7 +26,9 @@ test('portal searches share one subtle outer focus without suppressing form or b
   assert.ok(css.includes(`.ps-portal[data-page] :is(${containers}):focus-within`))
   assert.match(workspace, /box-shadow: 0 0 0 2px #00548712;/)
   assert.match(css, /\.ps-search-input \.el-input__wrapper.is-focus/)
-  assert.match(css, /:is\(button, a, input, summary\):focus-visible/)
+  assert.match(css, /:is\(button, a, summary\):focus-visible/)
+  assert.match(css, /:is\(input, textarea\):not\(:where\(\.el-input__inner, \.el-textarea__inner, \.el-select__input, \.el-input-tag__input\)\):focus-visible/)
+  assert.match(workspace, /\.el-input-tag\.is-focused\s*\{\s*box-shadow: 0 0 0 1px color-mix\(in srgb, var\(--ps-blue\), #fff 38%\) inset, 0 0 0 2px #00548712;/)
   for (const page of ['ResearchWorkbenchView', 'MyReportsView', 'MyWorkspaceView']) {
     const source = read(`../src/views/portal/pages/${page}.vue`)
     assert.doesNotMatch(source, /<el-input(?! class="ps-search-input")[^>]*aria-label="搜索/)
@@ -50,13 +53,14 @@ test('content adaptation is shared by both shells and never attached to login', 
   assert.match(css, /\.ps-workspace-surface :is\(\.ps-page, \.pipeline-page\) \.ws-card-grid/)
   assert.match(css, /repeat\(auto-fit, minmax\(min\(100%, var\(--ws-card-min, 280px\)\), 1fr\)\)/)
   assert.doesNotMatch(workspace, /(?:^|\n)\s*(?:body|:root|\.pipeline-user-login)\s*\{/)
+  assert.match(workspace, /\.el-message-box \{ width: 420px; max-width: calc\(100vw - 32px\); \}/)
 })
 
 test('login keeps its existing visual layout outside the workspace redesign', () => {
   const login = read('../src/views/login.vue')
   assert.doesNotMatch(login, /class="calm-nav-link"|class="calm-start-secondary"/)
   assert.match(login, /class="calm-start-primary"/)
-  assert.match(login, /height: clamp\(270px, 43vh, 430px\)/)
+  assert.match(login, /height: clamp\(300px, 52vh, 660px\)/)
   assert.match(login, /\.calm-value-grid \{[^}]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/)
   assert.doesNotMatch(login, /class="calm-intro"|class="calm-brand-copy"|class="calm-access-note"/)
 })

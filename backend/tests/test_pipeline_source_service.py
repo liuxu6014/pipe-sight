@@ -11,7 +11,7 @@ env = collection_support.env
 
 
 @pytest.mark.asyncio
-async def test_save_source_persists_new_contract_and_returns_stable_camelcase_ids(env):
+async def test_save_source_persists_new_contract_and_returns_stable_camelcase_ids(env) -> None:
     e = env
     s = await source(e, name='新增来源', cron='0 */4 * * *')
     assert s['sourceId'] == s['id'] == s['source_code']
@@ -32,19 +32,19 @@ async def test_save_source_persists_new_contract_and_returns_stable_camelcase_id
     ],
 )
 @pytest.mark.asyncio
-async def test_save_source_rejects_invalid_configuration(env, overrides):
+async def test_save_source_rejects_invalid_configuration(env, overrides) -> None:
     with pytest.raises(env.collection.ConfigurationError):
         await source(env, **overrides)
 
 
 @pytest.mark.asyncio
-async def test_update_source_rejects_missing_source(env):
+async def test_update_source_rejects_missing_source(env) -> None:
     with pytest.raises(env.conflict, match='数据源不存在'):
         await source(env, source_id='999999')
 
 
 @pytest.mark.asyncio
-async def test_source_type_is_immutable_but_rules_can_change_without_changing_run_snapshot(env):
+async def test_source_type_is_immutable_but_rules_can_change_without_changing_run_snapshot(env) -> None:
     e = env
     s = await source(e, config={'revision': 'old'})
     r = await enqueue(e, s['id'])
@@ -56,7 +56,7 @@ async def test_source_type_is_immutable_but_rules_can_change_without_changing_ru
 
 
 @pytest.mark.asyncio
-async def test_disable_cancels_queue_and_enable_recalculates_cursor_without_reviving(env):
+async def test_disable_cancels_queue_and_enable_recalculates_cursor_without_reviving(env) -> None:
     e = env
     s = await source(e, cron='0 8 * * *')
     r = await enqueue(e, s['id'])
@@ -71,7 +71,7 @@ async def test_disable_cancels_queue_and_enable_recalculates_cursor_without_revi
 
 
 @pytest.mark.asyncio
-async def test_disabling_running_source_requires_separate_stop_request(env):
+async def test_disabling_running_source_requires_separate_stop_request(env) -> None:
     e = env
     s = await source(e)
     r = await enqueue(e, s['id'])
@@ -83,7 +83,7 @@ async def test_disabling_running_source_requires_separate_stop_request(env):
 
 
 @pytest.mark.asyncio
-async def test_manual_collection_is_persisted_without_running_adapter_in_api(env):
+async def test_manual_collection_is_persisted_without_running_adapter_in_api(env) -> None:
     e = env
     s = await source(e)
     r = await enqueue(e, s['id'])
@@ -92,7 +92,7 @@ async def test_manual_collection_is_persisted_without_running_adapter_in_api(env
 
 
 @pytest.mark.asyncio
-async def test_disable_and_admission_from_two_sessions_cannot_leave_startable_task(env):
+async def test_disable_and_admission_from_two_sessions_cannot_leave_startable_task(env) -> None:
     e = env
     s = await source(e)
 
@@ -114,7 +114,7 @@ async def test_disable_and_admission_from_two_sessions_cannot_leave_startable_ta
 
 
 @pytest.mark.asyncio
-async def test_retry_new_record_preserves_failed_parent_and_counts(env):
+async def test_retry_new_record_preserves_failed_parent_and_counts(env) -> None:
     e = env
     s = await source(e)
     r = await enqueue(e, s['id'])
@@ -127,7 +127,7 @@ async def test_retry_new_record_preserves_failed_parent_and_counts(env):
 
 
 @pytest.mark.asyncio
-async def test_successful_or_cancelled_runs_are_not_retry_parents(env):
+async def test_successful_or_cancelled_runs_are_not_retry_parents(env) -> None:
     e = env
     s = await source(e)
     r = await enqueue(e, s['id'])
@@ -141,7 +141,7 @@ async def test_successful_or_cancelled_runs_are_not_retry_parents(env):
 
 
 @pytest.mark.asyncio
-async def test_task_list_explains_source_state_and_latest_run_without_review_dependencies(env):
+async def test_task_list_explains_source_state_and_latest_run_without_review_dependencies(env) -> None:
     e = env
     s = await source(e)
     r = await enqueue(e, s['id'])

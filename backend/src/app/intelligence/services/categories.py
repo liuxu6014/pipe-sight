@@ -14,7 +14,7 @@ from exceptions.exception import ServiceException
 
 class CategoryService:
     @staticmethod
-    def public(row):
+    def public(row) -> dict:
         return {
             'id': wire_id(row.id),
             'name': row.name,
@@ -28,7 +28,7 @@ class CategoryService:
         }
 
     @classmethod
-    async def list(cls, db):
+    async def list(cls, db) -> dict:
         rows = (
             (await db.execute(select(PipelineCategory).order_by(PipelineCategory.sort_order, PipelineCategory.id)))
             .scalars()
@@ -37,7 +37,7 @@ class CategoryService:
         return {'rows': [cls.public(row) for row in rows], 'total': len(rows)}
 
     @classmethod
-    async def save(cls, db, payload, identity=None):
+    async def save(cls, db, payload, identity=None) -> dict:
         identity = parse_business_id(identity) if identity is not None else None
         row = await db.get(PipelineCategory, identity) if identity is not None else None
         if identity and row is None:
@@ -60,7 +60,7 @@ class CategoryService:
         return cls.public(row)
 
     @staticmethod
-    async def remove(db, identity):
+    async def remove(db, identity) -> None:
         identity = parse_business_id(identity)
         try:
             result = await db.execute(delete(PipelineCategory).where(PipelineCategory.id == identity))
@@ -72,13 +72,13 @@ class CategoryService:
             raise ServiceException(message='类别仍被文章引用，请停用或先调整文章类别') from None
 
     @staticmethod
-    async def classify(db, *, title, content, kind, gateway=None):
+    async def classify(db, *, title, content, kind, gateway=None) -> int | None:
         """Require an unambiguous single match; failures are never fake matches.
 
         Only the response's explicit boolean is accepted. Source content remains
         untrusted text, never concatenated into the administrator instructions.
         """
-        from app.research.services.model_generation import ModelGateway
+        from app.research.services.model_generation import ModelGateway  # noqa: PLC0415
 
         call = gateway or ModelGateway.call
         rows = (

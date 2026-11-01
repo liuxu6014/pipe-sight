@@ -13,11 +13,18 @@ class SchemaPrerequisiteError(ValueError):
 
 DEFAULT_CONTRACT_VERSION = 'v6'
 FOUNDATION_TABLE_RENAMES = {
-    'users': 'sys_user', 'roles': 'sys_role', 'menus': 'sys_menu',
-    'user_roles': 'sys_user_role', 'role_menus': 'sys_role_menu',
-    'settings': 'sys_config', 'dict_types': 'sys_dict_type', 'dict_items': 'sys_dict_data',
-    'login_logs': 'sys_logininfor', 'operation_logs': 'sys_oper_log',
-    'scheduled_jobs': 'sys_job', 'job_logs': 'sys_job_log',
+    'users': 'sys_user',
+    'roles': 'sys_role',
+    'menus': 'sys_menu',
+    'user_roles': 'sys_user_role',
+    'role_menus': 'sys_role_menu',
+    'settings': 'sys_config',
+    'dict_types': 'sys_dict_type',
+    'dict_items': 'sys_dict_data',
+    'login_logs': 'sys_logininfor',
+    'operation_logs': 'sys_oper_log',
+    'scheduled_jobs': 'sys_job',
+    'job_logs': 'sys_job_log',
 }
 
 

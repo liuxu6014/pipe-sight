@@ -29,11 +29,7 @@ async def test_upload_strips_path_components_from_client_filename(
     assert '..' not in stored.new_file_name
     assert stored.file_size == len(b'protected content')
     assert stored.file_hash == hashlib.sha256(b'protected content').hexdigest()
-    files = [
-        os.path.join(root, name)
-        for root, _, names in os.walk(tmp_path)
-        for name in names
-    ]
+    files = [os.path.join(root, name) for root, _, names in os.walk(tmp_path) for name in names]
     assert len(files) == 1
     async with aiofiles.open(files[0], 'rb') as stored_file:
         assert await stored_file.read() == b'protected content'
@@ -54,9 +50,7 @@ async def test_upload_rejects_empty_file_and_leaves_no_upload_artifact(
 
 
 @pytest.mark.asyncio
-async def test_upload_rejects_content_disguised_as_pdf(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+async def test_upload_rejects_content_disguised_as_pdf(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(UploadConfig, 'UPLOAD_PATH', str(tmp_path))
     upload = UploadFile(file=io.BytesIO(b'plain text'), filename='fake.pdf')
 
@@ -68,9 +62,7 @@ async def test_upload_rejects_content_disguised_as_pdf(
 
 
 @pytest.mark.asyncio
-async def test_upload_rejects_file_over_configured_limit(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+async def test_upload_rejects_file_over_configured_limit(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(UploadConfig, 'UPLOAD_PATH', str(tmp_path))
     monkeypatch.setattr(UploadConfig, 'MAX_UPLOAD_BYTES', 4)
     upload = UploadFile(file=io.BytesIO(b'12345'), filename='too-large.txt')
@@ -83,9 +75,7 @@ async def test_upload_rejects_file_over_configured_limit(
 
 
 @pytest.mark.asyncio
-async def test_upload_supports_route_specific_limit(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+async def test_upload_supports_route_specific_limit(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(UploadConfig, 'UPLOAD_PATH', str(tmp_path))
     upload = UploadFile(file=io.BytesIO(b'12345'), filename='too-large-for-route.txt')
 

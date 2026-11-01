@@ -1,7 +1,5 @@
 """Offline scheduler behavior and personal-chat retirement checks."""
 
-# ruff: noqa: ANN001, ANN201, ANN202, PLR2004
-
 import ast
 import socket
 import subprocess

@@ -1,4 +1,5 @@
 """Integrity-checked, non-HTML article blocks served after detail access checks."""
+
 import base64
 import hashlib
 import io
@@ -17,6 +18,7 @@ MAX_COVER_SOURCE_BYTES = 20 * 1024 * 1024
 MAX_COVER_PIXELS = 20_000_000
 MAX_COVER_URI_BYTES = 100_000
 
+
 def read_authorized_article_cover(metadata: Any) -> str:
     """Read only the first attested photo; never load full blocks for a list card."""
     if not isinstance(metadata, dict):
@@ -27,8 +29,12 @@ def read_authorized_article_cover(metadata: Any) -> str:
     if not isinstance(images, list) or not images or not isinstance(images[0], dict):
         return ''
     filename, digest = images[0].get('file'), images[0].get('sha256')
-    if (not isinstance(digest, str) or not re.fullmatch(r'[a-f0-9]{64}', digest)
-        or not isinstance(filename, str) or not re.fullmatch(digest + r'\.(?:jpeg|jpg|png|gif|webp)', filename)):
+    if (
+        not isinstance(digest, str)
+        or not re.fullmatch(r'[a-f0-9]{64}', digest)
+        or not isinstance(filename, str)
+        or not re.fullmatch(digest + r'\.(?:jpeg|jpg|png|gif|webp)', filename)
+    ):
         return ''
     root = Path(UploadConfig.UPLOAD_PATH) / 'authorized_articles'
     directory, limit = root / key, MAX_COVER_SOURCE_BYTES
@@ -37,7 +43,11 @@ def read_authorized_article_cover(metadata: Any) -> str:
         if root.is_symlink() or directory.is_symlink() or path.is_symlink():
             return ''
         info = path.stat()
-        if not path.resolve().is_relative_to(root.resolve()) or not stat.S_ISREG(info.st_mode) or not 0 < info.st_size <= limit:
+        if (
+            not path.resolve().is_relative_to(root.resolve())
+            or not stat.S_ISREG(info.st_mode)
+            or not 0 < info.st_size <= limit
+        ):
             return ''
         with path.open('rb') as stream:
             raw = stream.read(limit + 1)
@@ -62,7 +72,7 @@ def read_authorized_article_cover(metadata: Any) -> str:
         return ''
 
 
-def read_authorized_article(metadata):
+def read_authorized_article(metadata) -> list:  # noqa: PLR0911
     if not isinstance(metadata, dict):
         return []
     key = metadata.get('asset_key', '')
@@ -74,11 +84,11 @@ def read_authorized_article(metadata):
         path = directory / 'article.json'
         if root.is_symlink() or directory.is_symlink() or path.is_symlink():
             return []
-        if not path.resolve().is_relative_to(root.resolve()) or not path.is_file() or path.stat().st_size > 50_000_000:
+        if not path.resolve().is_relative_to(root.resolve()) or not path.is_file() or path.stat().st_size > 50_000_000:  # noqa: PLR2004
             return []
         with path.open('rb') as stream:
             raw = stream.read(50_000_001)
-        if len(raw) > 50_000_000:
+        if len(raw) > 50_000_000:  # noqa: PLR2004
             return []
         if hashlib.sha256(raw).hexdigest() != metadata.get('sha256'):
             return []
@@ -90,7 +100,11 @@ def read_authorized_article(metadata):
                 return []
             if block.get('type') == 'paragraph' and isinstance(block.get('text'), str):
                 continue
-            if block.get('type') == 'image' and isinstance(block.get('src'), str) and re.fullmatch(r'data:image/(?:png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+', block['src']):
+            if (
+                block.get('type') == 'image'
+                and isinstance(block.get('src'), str)
+                and re.fullmatch(r'data:image/(?:png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+', block['src'])
+            ):
                 continue
             return []
         return blocks

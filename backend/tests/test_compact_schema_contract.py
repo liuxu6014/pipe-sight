@@ -1,7 +1,6 @@
 """Approved compact schema: fail before changing data when prerequisites are absent."""
 
 # Literal counts assert the approved contracts independently of implementation.
-# ruff: noqa: PLR2004
 
 import hashlib
 import json
@@ -19,12 +18,12 @@ from app.schema_contract import (
 from app.schema_migration import CONTRACT_SHA256, _contract
 
 
-def test_v6_adds_only_nullable_schedule_history_and_preserves_every_prior_field():
+def test_v6_adds_only_nullable_schedule_history_and_preserves_every_prior_field() -> None:
     old, new = load_contract('v5'), load_contract('v6')
-    before = {table['name']:table for table in old['tables']}
-    after = {table['name']:table for table in new['tables']}
+    before = {table['name']: table for table in old['tables']}
+    after = {table['name']: table for table in new['tables']}
     assert before.keys() == after.keys()
-    extra = {'last_run_at','last_status','last_error'}
+    extra = {'last_run_at', 'last_status', 'last_error'}
     for name, table in before.items():
         if name != 'digest_schedules':
             assert table == after[name]
@@ -58,10 +57,20 @@ def test_papers_have_no_full_text_and_single_category_reference() -> None:
 
 def test_v2_changes_exactly_twelve_foundation_names_and_no_fields() -> None:
     v1, v2 = load_contract('v1'), load_contract('v2')
-    expected = {'users': 'sys_user', 'roles': 'sys_role', 'menus': 'sys_menu',
-        'user_roles': 'sys_user_role', 'role_menus': 'sys_role_menu', 'settings': 'sys_config',
-        'dict_types': 'sys_dict_type', 'dict_items': 'sys_dict_data', 'login_logs': 'sys_logininfor',
-        'operation_logs': 'sys_oper_log', 'scheduled_jobs': 'sys_job', 'job_logs': 'sys_job_log'}
+    expected = {
+        'users': 'sys_user',
+        'roles': 'sys_role',
+        'menus': 'sys_menu',
+        'user_roles': 'sys_user_role',
+        'role_menus': 'sys_role_menu',
+        'settings': 'sys_config',
+        'dict_types': 'sys_dict_type',
+        'dict_items': 'sys_dict_data',
+        'login_logs': 'sys_logininfor',
+        'operation_logs': 'sys_oper_log',
+        'scheduled_jobs': 'sys_job',
+        'job_logs': 'sys_job_log',
+    }
     assert expected == FOUNDATION_TABLE_RENAMES
     assert v2['version'] == '20261025-compact-v2'
     old, new = {t['name']: t for t in v1['tables']}, {t['name']: t for t in v2['tables']}
@@ -69,8 +78,10 @@ def test_v2_changes_exactly_twelve_foundation_names_and_no_fields() -> None:
     assert set(new) == {expected.get(n, n) for n in old}
     for name, spec in old.items():
         assert new[expected.get(name, name)]['columns'] == spec['columns']
-    changed = [dict(f, table=expected.get(f['table'], f['table']), target=expected.get(f['target'], f['target']))
-               for f in v1['foreign_keys']]
+    changed = [
+        dict(f, table=expected.get(f['table'], f['table']), target=expected.get(f['target'], f['target']))
+        for f in v1['foreign_keys']
+    ]
     assert v2['foreign_keys'] == changed
     assert v2['optional_tables'] == v1['optional_tables'] == ['model_calls', 'report_versions']
     assert sum(len(t['columns']) for t in new.values()) == 317
@@ -79,7 +90,9 @@ def test_v2_changes_exactly_twelve_foundation_names_and_no_fields() -> None:
 
 def test_v1_remains_frozen_and_cannot_silently_resolve_to_runtime_v2() -> None:
     value = load_contract('v1')
-    digest = hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
+    digest = hashlib.sha256(
+        json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()
+    ).hexdigest()
     assert digest == CONTRACT_SHA256 == 'b476a7cb7b9366c6f139ea2fc8318826db5c9d5c8e4402e8884b0cc753170b51'
     assert _contract() == value and 'users' in {t['name'] for t in value['tables']}
     with pytest.raises(ValueError, match='Unsupported'):
@@ -88,19 +101,25 @@ def test_v1_remains_frozen_and_cannot_silently_resolve_to_runtime_v2() -> None:
 
 def test_v2_stays_frozen_when_runtime_default_advances() -> None:
     value = load_contract('v2')
-    digest = hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
+    digest = hashlib.sha256(
+        json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()
+    ).hexdigest()
     assert digest == 'ce0c17988cdfaaf528315ef1bd8a087bb8959922d50d2e5acd5753385af710fd'
 
 
 def test_v3_stays_frozen_when_runtime_default_advances() -> None:
     value = load_contract('v3')
-    digest = hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
+    digest = hashlib.sha256(
+        json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()
+    ).hexdigest()
     assert digest == 'ea009e6a104eb8b54e42e12cb45ae369bb3add9db6a198dcb1343629df635b78'
 
 
 def test_v4_stays_frozen_when_beijing_audit_runtime_v5_becomes_default() -> None:
     value = load_contract('v4')
-    digest = hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
+    digest = hashlib.sha256(
+        json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()
+    ).hexdigest()
     assert digest == '88491613e027bcdc0058837512053d68eae7a757d9ebcadad16e46e92316b8bc'
     assert load_contract() == load_contract('v6')
     assert load_contract()['version'] == '20261028-compact-v6'
@@ -108,8 +127,14 @@ def test_v4_stays_frozen_when_beijing_audit_runtime_v5_becomes_default() -> None
 
 def test_v4_preserves_v3_physical_core_without_freezing_unstable_orm_ddl() -> None:
     v3, v4 = load_contract('v3'), load_contract('v4')
-    for key in ('tables', 'optional_tables', 'optional_table_definitions', 'foreign_keys',
-                'optional_foreign_keys', 'sequences'):
+    for key in (
+        'tables',
+        'optional_tables',
+        'optional_table_definitions',
+        'foreign_keys',
+        'optional_foreign_keys',
+        'sequences',
+    ):
         assert v4[key] == v3[key], key
     assert len(v4['tables']) == 27 and len(v4['optional_table_definitions']) == 2
     assert sum(len(t['columns']) for t in v4['tables'] + v4['optional_table_definitions']) == 340
@@ -120,8 +145,17 @@ def test_v4_preserves_v3_physical_core_without_freezing_unstable_orm_ddl() -> No
     assert policy['absent_column_default'] == 'unspecified-not-no-default'
     assert policy['startup_guard_owner'] == 'main'
     assert set(policy['startup_compare']) == {
-        'table_inventory', 'column_inventory', 'types', 'nullable', 'primary_keys',
-        'foreign_keys', 'server_defaults', 'identity', 'sequences', 'indices', 'checks',
+        'table_inventory',
+        'column_inventory',
+        'types',
+        'nullable',
+        'primary_keys',
+        'foreign_keys',
+        'server_defaults',
+        'identity',
+        'sequences',
+        'indices',
+        'checks',
     }
     assert not {'indices', 'checks', 'identities'} & v4.keys()
 
@@ -135,8 +169,11 @@ def test_v4_distinguishes_opaque_values_from_explicit_semantic_references() -> N
     assert policy['opaque_values']['ordinary_request_id'] == 'preserve-exact'
     assert policy['opaque_values']['execution_token'] == 'preserve-exact'
     rules = {(rule['table'], rule['kind']): rule for rule in policy['system_request_keys']}
-    assert set(rules) == {('generation_tasks', 'schedule'), ('collection_runs', 'schedule'),
-                          ('collection_runs', 'retry')}
+    assert set(rules) == {
+        ('generation_tasks', 'schedule'),
+        ('collection_runs', 'schedule'),
+        ('collection_runs', 'retry'),
+    }
     assert rules['generation_tasks', 'schedule']['reference_column'] == 'schedule_id'
     assert rules['collection_runs', 'schedule']['reference_column'] == 'source_id'
     assert rules['collection_runs', 'retry']['reference_column'] == 'parent_id'
@@ -149,8 +186,14 @@ def test_v4_distinguishes_opaque_values_from_explicit_semantic_references() -> N
     assert refs['typed_item_id']['requires_entity_context'] is True
     assert refs['opaque_precedence'] == 'declared-free-text-and-external-values-before-key-matching'
     fingerprint = policy['semantic_fingerprints']
-    assert fingerprint['generation_tasks.config_snapshot.request_fingerprint']['action'] == 'recompute-from-mapped-request-and-materials'
-    assert fingerprint['generation_tasks.config_snapshot.request_fingerprint']['algorithm'] == 'app.business_ids.generation_request_fingerprint'
+    assert (
+        fingerprint['generation_tasks.config_snapshot.request_fingerprint']['action']
+        == 'recompute-from-mapped-request-and-materials'
+    )
+    assert (
+        fingerprint['generation_tasks.config_snapshot.request_fingerprint']['algorithm']
+        == 'app.business_ids.generation_request_fingerprint'
+    )
     assert policy['verification']['retain_mapping_and_rewrite_audit'] is True
     assert policy['verification']['compare_all_nonreference_values'] == 'exact'
 
@@ -214,8 +257,20 @@ def test_v5_beijing_timestamp_policy_is_explicit_and_dialect_ddl_is_second_preci
 
 def test_v3_exactly_twelve_business_primary_keys_share_bigint_sequence() -> None:
     contract = load_contract('v3')
-    expected = {'categories', 'collection_runs', 'data_sources', 'digest_schedules', 'generation_tasks',
-                'knowledge_files', 'model_calls', 'news_articles', 'papers', 'report_assets', 'reports', 'templates'}
+    expected = {
+        'categories',
+        'collection_runs',
+        'data_sources',
+        'digest_schedules',
+        'generation_tasks',
+        'knowledge_files',
+        'model_calls',
+        'news_articles',
+        'papers',
+        'report_assets',
+        'reports',
+        'templates',
+    }
     assert set(BUSINESS_ID_TABLES) == expected == set(contract['business_id_policy']['tables'])
     tables = {t['name']: t for t in contract['tables'] + contract['optional_table_definitions']}
     assert len(tables) == 29 and sum(len(t['columns']) for t in tables.values()) == 340
@@ -271,7 +326,8 @@ def test_v3_all_fk_types_match_and_payload_identifiers_are_not_numericized() -> 
 
 def test_missing_models_preserves_templates_without_inventing_model_ids() -> None:
     result = validate_target_prerequisites(
-        templates=[{'template_id': 'existing-template', 'name': 'Existing'}], models=[],
+        templates=[{'template_id': 'existing-template', 'name': 'Existing'}],
+        models=[],
     )
     assert result['default_text_model_id'] is None
     assert result['generation_ready'] is False

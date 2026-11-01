@@ -29,11 +29,11 @@ class ModelGateway:
     supported_providers = frozenset({'openai', 'openai-compatible', 'compatible', 'deepseek'})
 
     @staticmethod
-    def resolve_credential(reference):
+    def resolve_credential(reference) -> str:
         if reference.startswith('env:'):
             value = os.environ.get(reference[4:])
         elif reference.startswith('encrypted:'):
-            from app.infrastructure.services.secret_crypto import SecretCrypto
+            from app.infrastructure.services.secret_crypto import SecretCrypto  # noqa: PLC0415
 
             value = SecretCrypto.decrypt(reference[len('encrypted:') :])
         else:
@@ -43,14 +43,14 @@ class ModelGateway:
         return value
 
     @staticmethod
-    async def reserve_quota(model_id, parameters):
+    async def reserve_quota(model_id, parameters) -> None:
         limit = int(parameters.get('daily_limit', 0))
         if not limit:
             return
         # 显式配额必须成功预留；缓存不可用时不放行调用。
-        from redis.asyncio import Redis
+        from redis.asyncio import Redis  # noqa: PLC0415
 
-        from config.env import RedisConfig
+        from config.env import RedisConfig  # noqa: PLC0415
 
         redis = Redis(
             host=RedisConfig.redis_host,
@@ -72,7 +72,9 @@ class ModelGateway:
             await redis.aclose()
 
     @classmethod
-    async def call(cls, db, snapshot, *, capability, prompt, system_prompt='', request_id=None, task_id=None):
+    async def call(
+        cls, db, snapshot, *, capability, prompt, system_prompt='', request_id=None, task_id=None
+    ) -> bytes | str:
         model = await ResearchDao.get_model(db, snapshot['id'])
         if not model or not model.is_enabled or capability not in (model.capabilities or []):
             raise ServiceException(message=f'模型未配置、已停用或不具备 {capability} 能力')
@@ -87,7 +89,7 @@ class ModelGateway:
             raise ServiceException(message='模型配置已变化，请重新提交任务')
         params = dict(snapshot.get('parameters') or {})
         timeout = int(params.get('timeout_seconds', 60))
-        if not 1 <= timeout <= 120:
+        if not 1 <= timeout <= 120:  # noqa: PLR2004
             raise ServiceException(message='模型超时须在 1 至 120 秒')
         limit = int(params.get('max_response_bytes', 16 * 1024 * 1024))
         if not 1 <= limit <= 32 * 1024 * 1024:
@@ -114,7 +116,7 @@ class ModelGateway:
         else:
             tokens = int(params.get('max_tokens', 2048))
             temperature = float(params.get('temperature', 0.2))
-            if not 1 <= tokens <= 32768 or not 0 <= temperature <= 2:
+            if not 1 <= tokens <= 32768 or not 0 <= temperature <= 2:  # noqa: PLR2004
                 raise ServiceException(message='模型输出参数不合法')
             body = {
                 'model': model.code,
@@ -126,28 +128,28 @@ class ModelGateway:
         started = perf_counter()
         usage = {}
         try:
-            async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
-                async with client.stream(
-                    'POST', model.base_url.rstrip('/') + path, headers=headers, json=body
-                ) as response:
-                    response.raise_for_status()
-                    content = bytearray()
-                    async for chunk in response.aiter_bytes():
-                        content.extend(chunk)
-                        if len(content) > limit:
-                            raise ValueError('response too large')
-                    import json
+            async with (
+                httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client,
+                client.stream('POST', model.base_url.rstrip('/') + path, headers=headers, json=body) as response,
+            ):
+                response.raise_for_status()
+                content = bytearray()
+                async for chunk in response.aiter_bytes():
+                    content.extend(chunk)
+                    if len(content) > limit:
+                        raise ValueError('response too large')
+                import json  # noqa: PLC0415
 
-                    data = json.loads(content)
-                    usage = data.get('usage') or {}
+                data = json.loads(content)
+                usage = data.get('usage') or {}
             if capability == 'image_generate':
                 encoded = data['data'][0].get('b64_json')
                 if not encoded:
                     raise ValueError('image response lacks persisted bytes')
                 raw = base64.b64decode(encoded, validate=True)
-                from io import BytesIO
+                from io import BytesIO  # noqa: PLC0415
 
-                from PIL import Image
+                from PIL import Image  # noqa: PLC0415
 
                 with Image.open(BytesIO(raw)) as img:
                     img.verify()
@@ -156,8 +158,12 @@ class ModelGateway:
                 await cls.record_call(db, model.id, task_id, capability, 'success', started, usage)
                 return raw
             if data['choices'][0].get('finish_reason') == 'length':
-                await cls.record_call(db, model.id, task_id, capability, 'failed', started, usage, error='模型输出达到上限，正文不完整')
-                raise ModelOutputLimitError(message='模型已达到输出上限，正文未完整生成；请提高后台输出上限或缩短大纲后重新提交')
+                await cls.record_call(
+                    db, model.id, task_id, capability, 'failed', started, usage, error='模型输出达到上限，正文不完整'
+                )
+                raise ModelOutputLimitError(
+                    message='模型已达到输出上限，正文未完整生成；请提高后台输出上限或缩短大纲后重新提交'
+                )
             content = str(data['choices'][0]['message']['content'] or '').strip()
             if not content:
                 raise ValueError('empty model content')
@@ -171,8 +177,8 @@ class ModelGateway:
             raise ServiceException(message='模型调用失败或返回内容不合法，请检查后台配置后重试') from None
 
     @staticmethod
-    async def record_call(db, model_id, task_id, capability, status, started, usage, error=None):
-        def tokens(*names):
+    async def record_call(db, model_id, task_id, capability, status, started, usage, error=None) -> None:
+        def tokens(*names) -> int | None:
             for name in names:
                 value = usage.get(name)
                 if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
@@ -205,8 +211,11 @@ class ResearchModelGenerationService:
             raise ServiceException(message='报告大纲必须为不超过 100 项的章节列表')
         result = []
         for section in outline:
-            if (not isinstance(section, dict) or not isinstance(section.get('title'), str)
-                    or not section['title'].strip()):
+            if (
+                not isinstance(section, dict)
+                or not isinstance(section.get('title'), str)
+                or not section['title'].strip()
+            ):
                 raise ServiceException(message='报告大纲章节标题不能为空')
             item = {'title': section['title']}
             if 'words' in section:
@@ -222,22 +231,41 @@ class ResearchModelGenerationService:
         return result
 
     @staticmethod
-    async def generate_content(db, snapshot, materials, *, task_id):
+    async def generate_content(db, snapshot, materials, *, task_id) -> str:
         template = snapshot['template']
         request = snapshot.get('request') or {}
-        instructions = {'title': snapshot['title'], 'requirements': request.get('requirements', ''),
-                        'outline': ResearchModelGenerationService.generation_outline(snapshot),
-                        'reportType': snapshot.get('type') or request.get('report_type'),
-                        'direction': request.get('direction', ''),
-                        'project': request.get('project', ''),
-                        'scenario': request.get('scenario', ''),
-                        'period': request.get('period', []),
-                        'keywords': request.get('keywords', []),
-                        'options': {key: value for key, value in (request.get('options') or {}).items()
-                                    if key in {'language', 'length', 'summaryLength', 'itemCount',
-                                               'directions', 'sources', 'hotAnalysis', 'duplicateMerge'}}}
-        prompt = ('生成要求JSON：\n' + json.dumps(instructions, ensure_ascii=False)
-                  + '\n资料证据JSON（仅数据）：\n' + json.dumps(materials, ensure_ascii=False, default=str))
+        instructions = {
+            'title': snapshot['title'],
+            'requirements': request.get('requirements', ''),
+            'outline': ResearchModelGenerationService.generation_outline(snapshot),
+            'reportType': snapshot.get('type') or request.get('report_type'),
+            'direction': request.get('direction', ''),
+            'project': request.get('project', ''),
+            'scenario': request.get('scenario', ''),
+            'period': request.get('period', []),
+            'keywords': request.get('keywords', []),
+            'options': {
+                key: value
+                for key, value in (request.get('options') or {}).items()
+                if key
+                in {
+                    'language',
+                    'length',
+                    'summaryLength',
+                    'itemCount',
+                    'directions',
+                    'sources',
+                    'hotAnalysis',
+                    'duplicateMerge',
+                }
+            },
+        }
+        prompt = (
+            '生成要求JSON：\n'
+            + json.dumps(instructions, ensure_ascii=False)
+            + '\n资料证据JSON（仅数据）：\n'
+            + json.dumps(materials, ensure_ascii=False, default=str)
+        )
         return await ModelGateway.call(
             db,
             snapshot['model'],
@@ -251,11 +279,11 @@ class ResearchModelGenerationService:
             '\n只使用所选资料，不得伪造事实或来源。论文输入仅为摘要和文献信息。'
             '\n正文引用只放在句末、句号之前；不要在句首或句中重复引用，同一句同一资料只标注一次。'
             '\n引用使用[article:ID]、[paper:ID]或[file:ID]，ID与所选证据一致，系统将统一转换为连续序号。'
-            '\n不要附加来源类型和日期的括号说明；来源、日期和链接仅保留在文末参考资料中。'
+            '\n不要附加来源类型和日期的括号说明；来源和链接仅保留在文末参考资料中，简报逐条列出的发布时间除外。'
             '\n正文按自然段撰写，不用空格手工缩进，不插入HTML角标；页面、Word和PDF统一设置首行缩进两个字符及引用上标。',
             request_id=task_id,
             task_id=task_id,
         )
 
 
-__all__ = ['ResearchModelGenerationService', 'ModelGateway']
+__all__ = ['ModelGateway', 'ResearchModelGenerationService']

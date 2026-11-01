@@ -14,7 +14,7 @@ from sqlalchemy.exc import IntegrityError
 
 
 @pytest.mark.asyncio
-async def test_ready_queue_keeps_disabled_sources_for_terminal_cleanup(env):
+async def test_ready_queue_keeps_disabled_sources_for_terminal_cleanup(env) -> None:
     e = env
     s = await source(e)
     r = await enqueue(e, s['id'])
@@ -27,7 +27,7 @@ async def test_ready_queue_keeps_disabled_sources_for_terminal_cleanup(env):
 
 
 @pytest.mark.asyncio
-async def test_queued_stop_is_immediate_and_never_claimed(env):
+async def test_queued_stop_is_immediate_and_never_claimed(env) -> None:
     e = env
     s = await source(e)
     r = await enqueue(e, s['id'])
@@ -37,7 +37,7 @@ async def test_queued_stop_is_immediate_and_never_claimed(env):
 
 
 @pytest.mark.asyncio
-async def test_running_stop_fences_new_batches_until_executor_confirms(env):
+async def test_running_stop_fences_new_batches_until_executor_confirms(env) -> None:
     e = env
     s = await source(e)
     r = await enqueue(e, s['id'])
@@ -61,7 +61,7 @@ async def test_running_stop_fences_new_batches_until_executor_confirms(env):
 
 
 @pytest.mark.asyncio
-async def test_database_partial_unique_index_rejects_second_active_source(env):
+async def test_database_partial_unique_index_rejects_second_active_source(env) -> None:
     e = env
     s = await source(e)
     await enqueue(e, s['id'])
@@ -84,7 +84,7 @@ async def test_database_partial_unique_index_rejects_second_active_source(env):
 
 
 @pytest.mark.asyncio
-async def test_concurrent_retry_clicks_have_one_child_and_parent_remains_failed(env):
+async def test_concurrent_retry_clicks_have_one_child_and_parent_remains_failed(env) -> None:
     e = env
     s = await source(e, config={'retry': {'backoff_seconds': 10}})
     r = await enqueue(e, s['id'])
@@ -107,7 +107,7 @@ async def test_concurrent_retry_clicks_have_one_child_and_parent_remains_failed(
 
 
 @pytest.mark.asyncio
-async def test_expired_token_cannot_finish_or_write_after_recovery(env):
+async def test_expired_token_cannot_finish_or_write_after_recovery(env) -> None:
     e = env
     s = await source(e)
     r = await enqueue(e, s['id'])

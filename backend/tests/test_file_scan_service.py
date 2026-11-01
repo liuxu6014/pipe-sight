@@ -8,7 +8,7 @@ from app.system.services.file_scan import FileScanService
 from config.env import UploadConfig, UploadSettings
 
 
-def test_scan_settings_read_environment_at_instantiation(monkeypatch, tmp_path):
+def test_scan_settings_read_environment_at_instantiation(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(UploadSettings, 'UPLOAD_PATH', str(tmp_path / 'uploads'))
     monkeypatch.setattr(UploadSettings, 'DOWNLOAD_PATH', str(tmp_path / 'downloads'))
     monkeypatch.setenv('FILE_SCAN_MODE', ' BASIC ')
@@ -80,9 +80,7 @@ def test_basic_scan_marks_document_clean_with_explicit_capability_boundary(
     assert '病毒库' in result.message
 
 
-def test_basic_scan_quarantines_common_executable_signature(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_basic_scan_quarantines_common_executable_signature(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     source = tmp_path / '伪装资料.txt'
     source.write_bytes(b'MZ' + b'\x00' * 20)
     monkeypatch.setattr(UploadConfig, 'FILE_SCAN_MODE', 'basic')

@@ -1,7 +1,6 @@
 """Canonical 29-table/340-column comments across metadata, SQL and migration DDL."""
 
 # Literal counts and limits are independent assertions of the approved schema.
-# ruff: noqa: PLR2004
 
 import ast
 import hashlib
@@ -48,9 +47,9 @@ COMMENT_RE = re.compile(
     r'(?:\."(?P<column>[a-z_][a-z_0-9]*)")? IS \'(?P<comment>(?:[^\']|\'\')*)\';'
 )
 OPTIONAL_BLOCK_RE = re.compile(
-    r"DO \$pipesight_(?P<table>[a-z_0-9]+)_comments\$\s*BEGIN\s*"
+    r'DO \$pipesight_(?P<table>[a-z_0-9]+)_comments\$\s*BEGIN\s*'
     r"IF to_regclass\('public\.(?P=table)'\) IS NOT NULL THEN\s*"
-    r"(?P<body>.*?)\s*END IF;\s*END;\s*\$pipesight_(?P=table)_comments\$;",
+    r'(?P<body>.*?)\s*END IF;\s*END;\s*\$pipesight_(?P=table)_comments\$;',
     re.DOTALL,
 )
 
@@ -191,7 +190,9 @@ def test_migration_metadata_and_compiled_ddl_use_canonical_comments() -> None:
 
 def test_historical_v1_comments_and_ddl_are_frozen_independently_of_runtime_v2() -> None:
     data = [schema_comments_v1.TABLE_COMMENTS, schema_comments_v1.COLUMN_COMMENTS, schema_comments_v1.VIEW_COMMENTS]
-    digest = hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
+    digest = hashlib.sha256(
+        json.dumps(data, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()
+    ).hexdigest()
     assert digest == 'c5ead2912a8f0381eb411ff328b0a362ea181b68cb8c157335114bc4e6f2b5a4'
     assert historical_migration.TABLE_COMMENTS is schema_comments_v1.TABLE_COMMENTS
     assert historical_migration.COLUMN_COMMENTS is schema_comments_v1.COLUMN_COMMENTS
@@ -207,7 +208,9 @@ def test_historical_v1_comments_and_ddl_are_frozen_independently_of_runtime_v2()
 
 def test_ruoyi_name_revision_uses_frozen_v2_comments_not_numeric_runtime_comments() -> None:
     data = [schema_comments_v2.TABLE_COMMENTS, schema_comments_v2.COLUMN_COMMENTS, schema_comments_v2.VIEW_COMMENTS]
-    digest = hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
+    digest = hashlib.sha256(
+        json.dumps(data, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()
+    ).hexdigest()
     assert digest == '6dfa82e96f5cfcc33af44bec583975d5f7e3bd769aff3e15b4df4f8ee812b9d9'
     assert ruoyi_table_names.COLUMN_COMMENTS is schema_comments_v2.COLUMN_COMMENTS
     assert ruoyi_table_names.TABLE_COMMENTS is schema_comments_v2.TABLE_COMMENTS
@@ -218,7 +221,9 @@ def test_ruoyi_name_revision_uses_frozen_v2_comments_not_numeric_runtime_comment
 
 def test_v3_comment_snapshot_is_frozen_independently_of_v4_semantic_policy() -> None:
     data = [schema_comments_v3.TABLE_COMMENTS, schema_comments_v3.COLUMN_COMMENTS, schema_comments_v3.VIEW_COMMENTS]
-    digest = hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
+    digest = hashlib.sha256(
+        json.dumps(data, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()
+    ).hexdigest()
     assert digest == '6f9beed5e8e895b6729214ac23546f1a26c3609136e5856d2f07dad82700b8fd'
     assert schema_comments_v3.COLUMN_COMMENTS is not COLUMN_COMMENTS
     assert schema_comments_v3.TABLE_COMMENTS == TABLE_COMMENTS
@@ -237,7 +242,9 @@ def test_runtime_comments_distinguish_opaque_tokens_semantic_json_and_system_key
         assert '保留原业务字符串' in c[name]['execution_token']
     assert all(word in c['generation_tasks']['materials'] for word in ('type', '十进制字符串', '歧义', '正文'))
     assert '历史业务字符串原样保留' not in c['generation_tasks']['materials']
-    assert all(word in c['generation_tasks']['config_snapshot'] for word in ('request_fingerprint', '重新计算', 'materials'))
+    assert all(
+        word in c['generation_tasks']['config_snapshot'] for word in ('request_fingerprint', '重新计算', 'materials')
+    )
     assert 'retry:父运行ID' in c['collection_runs']['request_id']
     assert '采集来源' in c['report_versions']['citations']
     assert 'compact-' + load_contract()['runtime_version'] in render_comment_sql()
@@ -256,9 +263,17 @@ def test_v5_only_business_audit_comments_change_from_frozen_v4() -> None:
             if current != column['comment']:
                 changed.add(key)
             if key in fields:
-                assert all(word in current for word in (
-                    '北京时间', 'Asia/Shanghai', 'timestamp(0)', '无时区', '精度到秒', 'YYYY-MM-DD HH:mm:ss',
-                )), key
+                assert all(
+                    word in current
+                    for word in (
+                        '北京时间',
+                        'Asia/Shanghai',
+                        'timestamp(0)',
+                        '无时区',
+                        '精度到秒',
+                        'YYYY-MM-DD HH:mm:ss',
+                    )
+                ), key
                 assert '带时区' not in current and 'UTC写入' not in current, key
             else:
                 assert current == column['comment'], key
@@ -287,7 +302,10 @@ def test_status_password_units_dates_and_json_snapshot_semantics() -> None:
     assert '毫秒' in c['sys_oper_log']['duration_ms'] and '毫秒' in c['model_calls']['duration_ms']
     assert '字节' in c['knowledge_files']['size']
     assert '0至100' in c['generation_tasks']['progress']
-    assert '原文发布时间' in c['news_articles']['published_at'] and '旧published_time' in c['news_articles']['published_at']
+    assert (
+        '原文发布时间' in c['news_articles']['published_at']
+        and '旧published_time' in c['news_articles']['published_at']
+    )
     assert all(v in c['papers']['published_date'] for v in ('YYYY', 'YYYY-MM', 'YYYY-MM-DD', '精度'))
     assert 'timestamp(0)' in c['sys_user']['created_at'] and '无时区' in c['sys_user']['created_at']
     assert '不覆盖' in c['knowledge_files']['extracted_text']
@@ -304,7 +322,9 @@ def test_status_password_units_dates_and_json_snapshot_semantics() -> None:
         assert all(v in c[table][col] for v in values), f'{table}.{col}'
 
 
-@pytest.mark.skipif(os.environ.get('PIPESIGHT_COMPACT_COMMENT_REHEARSE') != '1', reason='Explicit canonical local rehearsal only')
+@pytest.mark.skipif(
+    os.environ.get('PIPESIGHT_COMPACT_COMMENT_REHEARSE') != '1', reason='Explicit canonical local rehearsal only'
+)
 def test_comment_only_pg18_updates_preserve_every_business_row() -> None:
     database = os.environ.get('PIPESIGHT_V3_COMMENT_DATABASE')
     if not database:
@@ -315,24 +335,40 @@ def test_comment_only_pg18_updates_preserve_every_business_row() -> None:
     assert connection['host'] == '127.0.0.1' and connection['port'] == 19432
     assert connection['dbname'] == 'pipesight_rehearsal'
     container = 'pipesight-schema-rehearsal-ythnjxpi'
-    labels = subprocess.run(['docker', 'inspect', '--format', '{{json .Config.Labels}}', container],
-                            check=True, capture_output=True)
+    labels = subprocess.run(
+        ['docker', 'inspect', '--format', '{{json .Config.Labels}}', container], check=True, capture_output=True
+    )
     assert json.loads(labels.stdout)['pipesight.schema-rollout'] == 'ythNjXpI'
-    ports = subprocess.run(['docker', 'inspect', '--format', '{{json .NetworkSettings.Ports}}', container],
-                           check=True, capture_output=True)
+    ports = subprocess.run(
+        ['docker', 'inspect', '--format', '{{json .NetworkSettings.Ports}}', container], check=True, capture_output=True
+    )
     assert {'HostIp': '127.0.0.1', 'HostPort': '19432'} in json.loads(ports.stdout)['5432/tcp']
-    url = sa.URL.create('postgresql+psycopg2', username=connection['user'], password=connection['password'],
-                        host=connection['host'], port=connection['port'], database=database)
+    url = sa.URL.create(
+        'postgresql+psycopg2',
+        username=connection['user'],
+        password=connection['password'],
+        host=connection['host'],
+        port=connection['port'],
+        database=database,
+    )
     engine = sa.create_engine(url, hide_parameters=True)
     try:
         with engine.begin() as bind:
             # Briefly prevent concurrent API writes from invalidating the row
             # comparison; readers remain allowed. This test changes comments only.
             bind.exec_driver_sql("SET LOCAL lock_timeout='5s'")
-            bind.exec_driver_sql('LOCK TABLE ' + ','.join('public."' + n + '"' for n in sorted(PUBLIC_TABLES)) + ' IN SHARE MODE')
+            bind.exec_driver_sql(
+                'LOCK TABLE ' + ','.join('public."' + n + '"' for n in sorted(PUBLIC_TABLES)) + ' IN SHARE MODE'
+            )
+
             def rows() -> dict:
-                return {n: fingerprint([dict(r) for r in bind.execute(sa.text('SELECT * FROM public."' + n + '"')).mappings()])
-                        for n in PUBLIC_TABLES}
+                return {
+                    n: fingerprint(
+                        [dict(r) for r in bind.execute(sa.text('SELECT * FROM public."' + n + '"')).mappings()]
+                    )
+                    for n in PUBLIC_TABLES
+                }
+
             before = rows()
             assert apply_schema_comments(bind, allow_live=True) == {'tables': 29, 'columns': 343, 'views': 2}
             assert rows() == before

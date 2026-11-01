@@ -1,5 +1,5 @@
 # 构建阶段
-FROM node:20-slim AS builder
+FROM node:20-alpine AS builder
 WORKDIR /app
 
 # 设置npm镜像源
@@ -16,7 +16,7 @@ COPY . .
 RUN npm run build:docker
 
 # 运行阶段
-FROM nginx:latest
+FROM nginx:alpine
 WORKDIR /usr/share/nginx/html
 
 # 复制构建产物

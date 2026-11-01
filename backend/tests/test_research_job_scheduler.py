@@ -6,13 +6,16 @@ from app.research.tasks import research_job_scheduler
 
 
 @pytest.mark.asyncio
-async def test_scoped_loop_never_runs_unrelated_export_or_parse_queues(monkeypatch):
+async def test_scoped_loop_never_runs_unrelated_export_or_parse_queues(monkeypatch) -> None:
     from unittest.mock import AsyncMock
+
     stop = asyncio.Event()
     research, dispatch = AsyncMock(), AsyncMock()
-    async def scoped_dispatch(**kwargs):
+
+    async def scoped_dispatch(**kwargs) -> None:
         await dispatch(**kwargs)
         stop.set()
+
     monkeypatch.setattr(research_job_scheduler, 'recover_research_jobs', research)
     monkeypatch.setattr(research_job_scheduler, 'dispatch_digest_schedules', scoped_dispatch)
     exports, parses = AsyncMock(), AsyncMock()

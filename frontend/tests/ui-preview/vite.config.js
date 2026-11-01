@@ -20,7 +20,8 @@ export default {
       resolveId(id) { if (id === '@/api/pipeline/intelligence' || id === apiPath || id === apiPath.slice(0, -3)) return '\0ui-preview-api' },
       load(id) {
         if (id !== '\0ui-preview-api') return
-        return `import { fixtureRequest } from '${fileURLToPath(new URL('./fixtures.js', import.meta.url))}';\n` + exports.map(name => `export const ${name} = (...args) => fixtureRequest('${name}', args);`).join('\n')
+        const fixtureModule = JSON.stringify(new URL('./fixtures.js', import.meta.url).href)
+        return `import { fixtureRequest } from ${fixtureModule};\n` + exports.map(name => `export const ${name} = (...args) => fixtureRequest('${name}', args);`).join('\n')
       }
     },
     ...base.plugins

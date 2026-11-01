@@ -6,7 +6,7 @@ from app.entrypoints import task_worker
 
 
 @pytest.mark.asyncio
-async def test_scoped_worker_entrypoint_never_starts_operational_queues(monkeypatch):
+async def test_scoped_worker_entrypoint_never_starts_operational_queues(monkeypatch) -> None:
     monkeypatch.setattr(task_worker, 'register_sqlalchemy_models', Mock())
     monkeypatch.setattr(task_worker, 'init_create_table', AsyncMock())
     close, operational, recovery = AsyncMock(), AsyncMock(), AsyncMock()
@@ -21,7 +21,7 @@ async def test_scoped_worker_entrypoint_never_starts_operational_queues(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_empty_scope_fails_closed(monkeypatch):
+async def test_empty_scope_fails_closed(monkeypatch) -> None:
     monkeypatch.setattr(task_worker, 'register_sqlalchemy_models', Mock())
     monkeypatch.setattr(task_worker, 'init_create_table', AsyncMock())
     close, operational, recovery = AsyncMock(), AsyncMock(), AsyncMock()

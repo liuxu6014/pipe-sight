@@ -257,7 +257,7 @@ class IntelligenceSearchService:
         return row
 
     @classmethod
-    async def search(  # noqa: PLR0912, PLR0913, PLR0915
+    async def search(  # noqa: PLR0913
         cls,
         db: Any,
         *,

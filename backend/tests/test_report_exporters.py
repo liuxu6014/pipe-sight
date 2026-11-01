@@ -17,7 +17,7 @@ from app.research.services.exporters import build_docx, build_pdf, safe_file_ste
 MINIMUM_PDF_BYTES = 1000
 
 
-def test_word_preserves_inline_emphasis_and_citation_superscript():
+def test_word_preserves_inline_emphasis_and_citation_superscript() -> None:
     report = _report()
     report.content = '## 分析\n\n**关键结论**与*限定说明*均需保留[1]。'
     _, _, data = build_docx(report, is_draft=False)
@@ -28,7 +28,7 @@ def test_word_preserves_inline_emphasis_and_citation_superscript():
     assert '**' not in paragraph.text
 
 
-def test_word_uses_a4_and_semantic_body_heading_levels():
+def test_word_uses_a4_and_semantic_body_heading_levels() -> None:
     report = _report()
     report.content = '## 研究背景\n\n实际正文。\n\n### 技术边界\n\n实际分析。'
     _, _, data = build_docx(report, is_draft=False)
@@ -42,13 +42,16 @@ def test_word_uses_a4_and_semantic_body_heading_levels():
     assert document.styles['Normal'].paragraph_format.line_spacing == 1.25
 
 
-def test_pdf_keeps_heading_with_body_not_a_blank_spacer(monkeypatch):
+def test_pdf_keeps_heading_with_body_not_a_blank_spacer(monkeypatch) -> None:
     from app.research.services import exporters
+
     captured = []
     original = exporters.SimpleDocTemplate.build
+
     def inspect(self, flowables, *args, **kwargs):
         captured.extend(flowables)
         return original(self, flowables, *args, **kwargs)
+
     monkeypatch.setattr(exporters.SimpleDocTemplate, 'build', inspect)
     report = _report()
     report.content = '## 研究背景\n\n实际正文。'
@@ -58,14 +61,18 @@ def test_pdf_keeps_heading_with_body_not_a_blank_spacer(monkeypatch):
     assert getattr(captured[heading_index + 1], 'text', '') == '实际正文。'
 
 
-def test_pdf_repeated_editor_blank_lines_do_not_create_extra_layout_gaps(monkeypatch):
+def test_pdf_repeated_editor_blank_lines_do_not_create_extra_layout_gaps(monkeypatch) -> None:
     from app.research.services import exporters
+
     captured = []
     original = exporters.SimpleDocTemplate.build
+
     def inspect(self, flowables, *args, **kwargs):
-        captured.append([(type(item).__name__, getattr(item, 'height', None), getattr(item, 'text', ''))
-                         for item in flowables])
+        captured.append(
+            [(type(item).__name__, getattr(item, 'height', None), getattr(item, 'text', '')) for item in flowables]
+        )
         return original(self, flowables, *args, **kwargs)
+
     monkeypatch.setattr(exporters.SimpleDocTemplate, 'build', inspect)
     report = _report()
     report.citations = []
@@ -101,6 +108,7 @@ def test_docx_export_contains_report_snapshot() -> None:
 
 def test_export_metadata_does_not_expose_internal_version_numbers() -> None:
     from app.research.services.exporters import _metadata_line
+
     report = _report()
     assert '版本' not in _metadata_line(report)
     assert 'V3' not in _metadata_line(report)
@@ -121,9 +129,11 @@ def test_export_filename_removes_path_separators() -> None:
 
 def test_export_body_citations_indent_superscript_and_no_duplicate_reference_section() -> None:
     report = _report()
-    report.content = ('# ' + report.title + '\n\n## 研究内容\n\n一、研究背景\n\n'
-                      '[2]新闻正文报道，系统已上线[2]（新闻正文，2025-02-09）。\n\n'
-                      '## 参考资料\n\n[2] 新闻来源；2025-02-09；https://example.org')
+    report.content = (
+        '# ' + report.title + '\n\n## 研究内容\n\n一、研究背景\n\n'
+        '[2]新闻正文报道，系统已上线[2]（新闻正文，2025-02-09）。\n\n'
+        '## 参考资料\n\n[2] 新闻来源；2025-02-09；https://example.org'
+    )
     _, _, data = build_docx(report, is_draft=False)
     doc = Document(BytesIO(data))
     paragraphs = doc.paragraphs
@@ -132,7 +142,10 @@ def test_export_body_citations_indent_superscript_and_no_duplicate_reference_sec
     assert '\u2060[2]\u2060' in body.text
     assert any(run.text == '[2]' and run.font.superscript for run in body.runs)
     indent = body._p.find('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}ind')
-    assert indent is not None and indent.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}firstLineChars') == '200'
+    assert (
+        indent is not None
+        and indent.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}firstLineChars') == '200'
+    )
     reference = next(p for p in paragraphs if '新闻来源' in p.text)
     assert all(not run.font.superscript for run in reference.runs)
     assert sum(p.text == '参考资料' for p in paragraphs) == 1
@@ -141,15 +154,20 @@ def test_export_body_citations_indent_superscript_and_no_duplicate_reference_sec
 
 def test_pdf_citation_markup_and_indent_are_real_layout_instructions(monkeypatch) -> None:
     from app.research.services import exporters
+
     calls = []
     original = exporters.Paragraph
+
     def capture(text, style, *args, **kwargs):
         calls.append((text, style))
         return original(text, style, *args, **kwargs)
+
     monkeypatch.setattr(exporters, 'Paragraph', capture)
     monkeypatch.setattr(exporters, 'CitationParagraph', capture)
     report = _report()
-    report.content = '## 研究内容\n\n[2]新闻正文报道，系统已上线[2]（新闻正文，2025-02-09）。\n\n## 参考资料\n\n[2] 新闻；2025-02-09'
+    report.content = (
+        '## 研究内容\n\n[2]新闻正文报道，系统已上线[2]（新闻正文，2025-02-09）。\n\n## 参考资料\n\n[2] 新闻；2025-02-09'
+    )
     build_pdf(report, is_draft=False)
     text, style = next(item for item in calls if '系统已上线' in item[0])
     assert text == '新闻正文报道，系统已上线<super>[2]</super>。'
@@ -160,12 +178,14 @@ def test_pdf_citation_markup_and_indent_are_real_layout_instructions(monkeypatch
 
 def test_cjk_pdf_citations_cannot_be_stranded_on_a_line_without_their_claim() -> None:
     from app.research.services import exporters
+
     font = exporters._pdf_font()
     paragraph_class = getattr(exporters, 'CitationParagraph', exporters.Paragraph)
     for width in range(42, 180, 3):
-        paragraph = paragraph_class('检测方法需要验证<super>[1][2]</super>。后续继续研究。',
-                                    ParagraphStyle('CitationWrap', fontName=font, fontSize=10.5,
-                                                   leading=18, wordWrap='CJK'))
+        paragraph = paragraph_class(
+            '检测方法需要验证<super>[1][2]</super>。后续继续研究。',
+            ParagraphStyle('CitationWrap', fontName=font, fontSize=10.5, leading=18, wordWrap='CJK'),
+        )
         paragraph.wrap(width, 800)
         lines = [''.join(fragment.text for fragment in line.words) for line in paragraph.blPara.lines]
         assert all(not line.startswith(('[', ']')) for line in lines), (width, lines)

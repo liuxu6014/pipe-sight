@@ -106,9 +106,7 @@ class PipelineDataProcessingService:
 
     @classmethod
     def content_hash(cls, title: Any, body: Any, summary: Any = '') -> str:
-        normalized = '\n'.join(
-            [cls.normalize_text(title).casefold(), cls.normalize_text(body or summary).casefold()]
-        )
+        normalized = '\n'.join([cls.normalize_text(title).casefold(), cls.normalize_text(body or summary).casefold()])
         return hashlib.sha256(normalized.encode('utf-8')).hexdigest()
 
     @classmethod
@@ -117,8 +115,8 @@ class PipelineDataProcessingService:
         tokens: list[str] = []
         for chunk in re.findall(r'[\u4e00-\u9fff]+|[a-z0-9]+', text):
             if re.fullmatch(r'[\u4e00-\u9fff]+', chunk):
-                tokens.extend(chunk[index:index + 2] for index in range(max(0, len(chunk) - 1)))
-                tokens.extend(chunk[index:index + 3] for index in range(max(0, len(chunk) - 2)))
+                tokens.extend(chunk[index : index + 2] for index in range(max(0, len(chunk) - 1)))
+                tokens.extend(chunk[index : index + 3] for index in range(max(0, len(chunk) - 2)))
             else:
                 tokens.append(chunk)
         if not tokens:
@@ -245,10 +243,7 @@ class PipelineDataProcessingService:
             'reason': reason,
             'fallback': {
                 'used': True,
-                'reason': (
-                    '采集阶段按固定规则完成预过滤；InsightHub Worker 将继续执行'
-                    '快照中的管理端提示词。'
-                ),
+                'reason': ('采集阶段按固定规则完成预过滤；InsightHub Worker 将继续执行快照中的管理端提示词。'),
             },
         }
 

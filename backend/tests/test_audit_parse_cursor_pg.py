@@ -1,7 +1,6 @@
 """Opt-in PG19432 Beijing audit fencing/cursors; all 29 table rows roll back."""
 
 # Explicit regression data and fixture args follow the PG rehearsal suite.
-# ruff: noqa: ANN001, ANN201, PLR2004
 
 import json
 import os
@@ -10,7 +9,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import URL, select, text
+from sqlalchemy import URL, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 
@@ -18,10 +17,16 @@ async def fingerprints(connection, names):
     result = {}
     for name in sorted(names):
         assert name.replace('_', '').isalnum()
-        result[name] = tuple((await connection.execute(text(
-            "SELECT count(*),md5(coalesce(string_agg(h,'' ORDER BY h),'')) FROM "
-            f'(SELECT md5(row_to_json(t)::text) h FROM public."{name}" t) s'
-        ))).one())
+        result[name] = tuple(
+            (
+                await connection.execute(
+                    text(
+                        "SELECT count(*),md5(coalesce(string_agg(h,'' ORDER BY h),'')) FROM "
+                        f'(SELECT md5(row_to_json(t)::text) h FROM public."{name}" t) s'
+                    )
+                )
+            ).one()
+        )
     return result
 
 
@@ -33,20 +38,29 @@ async def test_real_pg_xmin_same_second_and_audit_search_cursors_rollback_all_ro
     from app.infrastructure.models.registry import register_sqlalchemy_models
     from app.intelligence.models.collection import PipelineSource
     from app.intelligence.models.content import PipelineArticle, PipelineCategory
+    from app.intelligence.services.application import IntelligenceApplicationService
     from app.library.models.materials import PipelineMaterial
     from app.library.repositories import material_repository
     from app.research.services.application import ResearchApplicationService  # noqa: F401
-    from app.intelligence.services.application import IntelligenceApplicationService
     from app.schema_comments import TABLE_COMMENTS
 
     register_sqlalchemy_models()
-    root = Path(__file__).resolve().parents[2]
+    root = Path(__file__).resolve().parents[2]  # noqa: ASYNC240
     info = json.loads((root / '.runtime/schema-rollout-ythNjXpI/rehearsal-connection.json').read_text())
     assert (info['host'], int(info['port'])) == ('127.0.0.1', 19432)
-    engine = create_async_engine(URL.create(
-        'postgresql+asyncpg', username=info['user'], password=info['password'],
-        host='127.0.0.1', port=19432, database='pipesight_beijing_initial',
-    ), echo=False, hide_parameters=True, connect_args={'timeout': 5})
+    engine = create_async_engine(
+        URL.create(
+            'postgresql+asyncpg',
+            username=info['user'],
+            password=info['password'],
+            host='127.0.0.1',
+            port=19432,
+            database='pipesight_beijing_initial',
+        ),
+        echo=False,
+        hide_parameters=True,
+        connect_args={'timeout': 5},
+    )
     # Explicit large IDs avoid nontransactional nextval calls in this rehearsal.
     base = 9223372036854700000
     marker = 'audit-cursor-' + uuid4().hex
@@ -69,11 +83,22 @@ async def test_real_pg_xmin_same_second_and_audit_search_cursors_rollback_all_ro
                 await connection.execute(text("SELECT set_config('TimeZone', :zone, true)"), {'zone': zone})
                 user = await connection.scalar(text('SELECT id FROM sys_user ORDER BY id LIMIT 1'))
                 assert user is not None
-                async with AsyncSession(bind=connection, expire_on_commit=False,
-                                        join_transaction_mode='create_savepoint') as session:
-                    row = PipelineMaterial(id=base, user_id=user, name='Parse attempt', filename='original.txt',
-                        storage_key='opaque-storage-key', mime_type='text/plain', size=1, hash='1' * 64,
-                        status='queued', version=1, updated_at=stamp)
+                async with AsyncSession(
+                    bind=connection, expire_on_commit=False, join_transaction_mode='create_savepoint'
+                ) as session:
+                    row = PipelineMaterial(
+                        id=base,
+                        user_id=user,
+                        name='Parse attempt',
+                        filename='original.txt',
+                        storage_key='opaque-storage-key',
+                        mime_type='text/plain',
+                        size=1,
+                        hash='1' * 64,
+                        status='queued',
+                        version=1,
+                        updated_at=stamp,
+                    )
                     session.add(row)
                     await session.commit()
                     first = await material_repository.MaterialDao.claim_material_parse(session, base)
@@ -86,35 +111,79 @@ async def test_real_pg_xmin_same_second_and_audit_search_cursors_rollback_all_ro
                     token2 = second._parse_token
                     assert token1 != token2
                     assert not await material_repository.MaterialDao.finish_material_parse(
-                        session, base, parse_token=token1, status='ready', extracted_text='STALE',
+                        session,
+                        base,
+                        parse_token=token1,
+                        status='ready',
+                        extracted_text='STALE',
                     )
                     assert await material_repository.MaterialDao.finish_material_parse(
-                        session, base, parse_token=token2, status='ready', extracted_text='Fresh extraction',
+                        session,
+                        base,
+                        parse_token=token2,
+                        status='ready',
+                        extracted_text='Fresh extraction',
                     )
                     await session.refresh(second)
                     assert second.edited_text == 'User edit' and second.version == 2
                     assert second.extracted_text == 'Fresh extraction'
-                    raw_time = await session.scalar(text('SELECT updated_at FROM knowledge_files WHERE id=:id'), {'id': base})
+                    raw_time = await session.scalar(
+                        text('SELECT updated_at FROM knowledge_files WHERE id=:id'), {'id': base}
+                    )
                     assert raw_time == datetime(2026, 10, 25, 20)
 
                     session.add(PipelineCategory(id=base + 3, name=marker, prompt='test', is_enabled=False))
-                    session.add(PipelineSource(id=base + 4, name=marker, type='website', adapter='manual',
-                                               config={}, is_enabled=False))
+                    session.add(
+                        PipelineSource(
+                            id=base + 4, name=marker, type='website', adapter='manual', config={}, is_enabled=False
+                        )
+                    )
                     await session.flush()
                     for identity in (base + 1, base + 2):
-                        session.add(PipelineMaterial(id=identity, user_id=user, name=marker, filename='file.txt',
-                            storage_key='opaque-key', mime_type='text/plain', size=1, hash=str(identity),
-                            status='ready', version=1, extracted_text=marker, updated_at=stamp))
-                    session.add(PipelineArticle(id=base + 5, source_id=base + 4, category_id=base + 3,
-                        title=marker, content='news', url='https://example.invalid/' + marker,
-                        published_at=datetime(2026, 10, 25, 15, tzinfo=timezone.utc)))
+                        session.add(
+                            PipelineMaterial(
+                                id=identity,
+                                user_id=user,
+                                name=marker,
+                                filename='file.txt',
+                                storage_key='opaque-key',
+                                mime_type='text/plain',
+                                size=1,
+                                hash=str(identity),
+                                status='ready',
+                                version=1,
+                                extracted_text=marker,
+                                updated_at=stamp,
+                            )
+                        )
+                    session.add(
+                        PipelineArticle(
+                            id=base + 5,
+                            source_id=base + 4,
+                            category_id=base + 3,
+                            title=marker,
+                            content='news',
+                            url='https://example.invalid/' + marker,
+                            published_at=datetime(2026, 10, 25, 15, tzinfo=timezone.utc),
+                        )
+                    )
                     await session.commit()
-                    params = dict(user_id=user, keyword=None, content_type='all', source='all', date_range='all',
-                                  directions=marker, page_size=1)
+                    params = {
+                        'user_id': user,
+                        'keyword': None,
+                        'content_type': 'all',
+                        'source': 'all',
+                        'date_range': 'all',
+                        'directions': marker,
+                        'page_size': 1,
+                    }
                     seen, cursor = [], None
                     for page in (1, 2, 3):
                         result = await IntelligenceApplicationService.search_intelligence(
-                            session, **params, page_num=page, cursor=cursor,
+                            session,
+                            **params,
+                            page_num=page,
+                            cursor=cursor,
                         )
                         assert result['total'] == 3 and len(result['rows']) == 1
                         seen.append(result['rows'][0]['id'])

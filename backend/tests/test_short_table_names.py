@@ -1,7 +1,6 @@
 """Short names must remain semantic, collision-free, and resolvable by the ORM."""
 
 # Literal counts assert the approved baseline and its four optional foreign keys.
-# ruff: noqa: PLR2004
 
 import importlib.util
 import re
@@ -33,15 +32,26 @@ def test_short_names_and_foreign_keys_are_complete() -> None:
         if table.name in baseline:
             fields = baseline[table.name]['columns']
             assert set(table.c.keys()) == {column['name'] for column in fields}
-            assert [column.name for column in table.primary_key] == [column['name'] for column in fields if column['primary_key']]
+            assert [column.name for column in table.primary_key] == [
+                column['name'] for column in fields if column['primary_key']
+            ]
         for column in table.c:
             for foreign_key in column.foreign_keys:
                 assert foreign_key.column is not None
-    actual_fks = {(table.name, tuple(fk.column_keys), fk.referred_table.name,
-                   tuple(element.column.name for element in fk.elements))
-                  for table in Base.metadata.tables.values() for fk in table.foreign_key_constraints}
-    baseline_fks = {(fk['table'], tuple(fk['columns']), fk['target'], tuple(fk['target_columns']))
-                    for fk in contract['foreign_keys']}
+    actual_fks = {
+        (
+            table.name,
+            tuple(fk.column_keys),
+            fk.referred_table.name,
+            tuple(element.column.name for element in fk.elements),
+        )
+        for table in Base.metadata.tables.values()
+        for fk in table.foreign_key_constraints
+    }
+    baseline_fks = {
+        (fk['table'], tuple(fk['columns']), fk['target'], tuple(fk['target_columns']))
+        for fk in contract['foreign_keys']
+    }
     assert baseline_fks <= actual_fks
     assert len(actual_fks - baseline_fks) == 4
 
@@ -53,7 +63,9 @@ def test_migration_frozen_map_matches_runtime_contract() -> None:
     spec = importlib.util.spec_from_file_location('short_names_migration', path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    assert {old: APPLICATION_INTERMEDIATE_RENAMES.get(new, new) for old, new in module.RENAMES.items()} == APPLICATION_TABLE_RENAMES
+    assert {
+        old: APPLICATION_INTERMEDIATE_RENAMES.get(new, new) for old, new in module.RENAMES.items()
+    } == APPLICATION_TABLE_RENAMES
     assert module.short_name('idx_pipeline_quality_issue_status_time') == 'idx_quality_issue_status_time'
     assert module.short_name('pipeline_model_route_usage_pkey') == 'route_usage_pkey'
     assert module.identifier('a"b') == '"a""b"'

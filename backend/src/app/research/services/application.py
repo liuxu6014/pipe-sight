@@ -14,7 +14,11 @@ from app.research.services.digest_schedules import DigestScheduleService
 from app.research.services.execution import ResearchExecutionService
 from app.research.services.exports import ResearchReportExportService
 from app.research.services.jobs import ResearchJobService
-from app.research.services.report_content import normalize_generated_report, number_report_citations, sections_from_markdown
+from app.research.services.report_content import (
+    normalize_generated_report,
+    number_report_citations,
+    sections_from_markdown,
+)
 from app.research.services.report_revision import report_revision
 from app.research.services.reports import ResearchReportService
 from app.research.services.workspace import ResearchWorkspaceService
@@ -54,23 +58,33 @@ class ResearchApplicationService:
         return format_business_time(value)
 
     @classmethod
-    def _execution_display(cls, job, apply_conflict=False):
+    def _execution_display(cls, job, apply_conflict=False) -> dict:
         """Expose only persisted lifecycle facts, not an invented fine-grained pipeline."""
         status = job.status
         terminal = status in {'completed', 'failed', 'cancelled'}
         has_result = bool((job.result_content or '').strip())
-        result_status = ('completed' if has_result else 'failed') if status == 'completed' else (
-            'skipped' if terminal else 'waiting'
+        result_status = (
+            ('completed' if has_result else 'failed')
+            if status == 'completed'
+            else ('skipped' if terminal else 'waiting')
         )
-        result_description = ('生成结果已保存；当前报告内容与本次结果不同' if apply_conflict
-                              else '生成结果已保存' if has_result else '等待生成结果保存')
+        result_description = (
+            '生成结果已保存；当前报告内容与本次结果不同'
+            if apply_conflict
+            else '生成结果已保存'
+            if has_result
+            else '等待生成结果保存'
+        )
         if terminal and not has_result:
             result_description = '没有已保存的生成结果'
         stages = [
-            {'key': 'submitted', 'label': '任务提交', 'status': 'completed',
-             'description': '任务及输入资料快照已保存'},
-            {'key': 'execution', 'label': '后台执行', 'status': 'waiting' if status == 'queued' else status,
-             'description': '按提交配置执行正文生成与结果保存'},
+            {'key': 'submitted', 'label': '任务提交', 'status': 'completed', 'description': '任务及输入资料快照已保存'},
+            {
+                'key': 'execution',
+                'label': '后台执行',
+                'status': 'waiting' if status == 'queued' else status,
+                'description': '按提交配置执行正文生成与结果保存',
+            },
             {'key': 'result', 'label': '结果保存', 'status': result_status, 'description': result_description},
         ]
         logs = []
@@ -79,16 +93,30 @@ class ResearchApplicationService:
         if job.started_at:
             logs.append({'time': cls._datetime_text(job.started_at), 'type': 'info', 'message': '后台已开始执行'})
         if terminal:
-            message = ({'completed': result_description, 'failed': job.error or '任务生成失败',
-                        'cancelled': '任务已取消，不再等待执行结果'})[status]
-            logs.append({'time': cls._datetime_text(job.finished_at or job.updated_at),
-                         'type': 'error' if status == 'failed' else 'info', 'message': message})
-        return {'stages': stages, 'logs': logs,
-                'generationMode': 'model' if (job.config_snapshot or {}).get('model') else 'unrecorded',
-                'startedAt': cls._datetime_text(job.started_at), 'finishedAt': cls._datetime_text(job.finished_at)}
+            message = (
+                {
+                    'completed': result_description,
+                    'failed': job.error or '任务生成失败',
+                    'cancelled': '任务已取消，不再等待执行结果',
+                }
+            )[status]
+            logs.append(
+                {
+                    'time': cls._datetime_text(job.finished_at or job.updated_at),
+                    'type': 'error' if status == 'failed' else 'info',
+                    'message': message,
+                }
+            )
+        return {
+            'stages': stages,
+            'logs': logs,
+            'generationMode': 'model' if (job.config_snapshot or {}).get('model') else 'unrecorded',
+            'startedAt': cls._datetime_text(job.started_at),
+            'finishedAt': cls._datetime_text(job.finished_at),
+        }
 
     @classmethod
-    def job_dict(cls, job, report_id=None, report=None):
+    def job_dict(cls, job, report_id=None, report=None) -> dict:
         snapshot = job.config_snapshot or {}
         request = snapshot.get('request') or {}
         # Match generation_outline: an explicitly submitted outline takes precedence,
@@ -104,7 +132,9 @@ class ResearchApplicationService:
         normalized_result = job.result_content
         if job.result_content:
             try:
-                normalized_result = normalize_generated_report(job.result_content, job.materials, delivery=True)['content']
+                normalized_result = normalize_generated_report(job.result_content, job.materials, delivery=True)[
+                    'content'
+                ]
             except ValueError:
                 # Keep malformed raw output inspectable; never call it applied.
                 pass
@@ -139,10 +169,13 @@ class ResearchApplicationService:
         }
 
     @classmethod
-    def report_dict(cls, report):
+    def report_dict(cls, report) -> dict:
         # 旧 status 只为 API 展示派生，不存在 reports.status 列。
-        normalized = (normalize_generated_report(report.content) if report.content.strip()
-                      else {'content': '', 'sections': sections_from_markdown('')})
+        normalized = (
+            normalize_generated_report(report.content)
+            if report.content.strip()
+            else {'content': '', 'sections': sections_from_markdown('')}
+        )
         history = ResearchReportService.current_history(report)
         citations = deepcopy(history.citations or []) if history else []
         normalized['content'] = number_report_citations(normalized['content'], citations)
@@ -152,8 +185,9 @@ class ResearchApplicationService:
             section['content'] = number_report_citations(str(section.get('content') or ''), citations)
         # Empty legacy metadata must not hide a real article. Content-only edits
         # may inherit provenance, but old section bodies cannot replace new text.
-        if not raw_sections or any(str(section.get('content') or '').strip() not in normalized['content']
-                                   for section in raw_sections):
+        if not raw_sections or any(
+            str(section.get('content') or '').strip() not in normalized['content'] for section in raw_sections
+        ):
             raw_sections = normalized['sections']
         sections = cls._editor_sections(raw_sections, citations)
         metadata = ResearchReportService.export_snapshot(report, history)['metadata'] if history else {}
@@ -195,10 +229,14 @@ class ResearchApplicationService:
                 by_source.setdefault(str(citation['sourceId']), []).append(citation)
         for section in sections:
             body = str(section.get('content') or '')
-            ids = [available[str(identity)] for identity in section.get('citationIds', [])
-                   if str(identity) in available]
-            ordinals = {str(index): citation['id'] for index, citation in enumerate(citations, 1)
-                        if citation.get('id') is not None}
+            ids = [
+                available[str(identity)] for identity in section.get('citationIds', []) if str(identity) in available
+            ]
+            ordinals = {
+                str(index): citation['id']
+                for index, citation in enumerate(citations, 1)
+                if citation.get('id') is not None
+            }
             ids.extend(ordinals[identity] for identity in re.findall(r'\[(\d+)\]', body) if identity in ordinals)
             for identity in re.findall(r'\[资料(\d+)\]', body):
                 matches = by_source.get(identity, [])
@@ -276,9 +314,10 @@ class ResearchApplicationService:
         return await DigestScheduleService.list(db, user_id)
 
     @classmethod
-    async def update_digest_schedule(cls, db, user_id, schedule_id, payload):
-        return await DigestScheduleService.update(db, user_id=user_id, schedule_id=schedule_id,
-                                                 payload=payload, template_service=PipelineTemplateService)
+    async def update_digest_schedule(cls, db, user_id, schedule_id, payload) -> dict:
+        return await DigestScheduleService.update(
+            db, user_id=user_id, schedule_id=schedule_id, payload=payload, template_service=PipelineTemplateService
+        )
 
     @classmethod
     async def set_digest_schedule_enabled(
@@ -331,7 +370,7 @@ class ResearchApplicationService:
         return {'rows': result, 'total': len(result)}
 
     @classmethod
-    async def get_job(cls, db, user_id, job_id):
+    async def get_job(cls, db, user_id, job_id) -> dict:
         job = await PipelineDao.get_research_job(db, job_id, user_id)
         if not job:
             raise ServiceException(message='任务不存在或无权访问')
@@ -437,7 +476,9 @@ class ResearchApplicationService:
         )
 
     @staticmethod
-    async def list_report_exports(db: AsyncSession, user_id: int, report_id: str, *, include_all: bool = False) -> dict[str, Any]:
+    async def list_report_exports(
+        db: AsyncSession, user_id: int, report_id: str, *, include_all: bool = False
+    ) -> dict[str, Any]:
         return await ResearchReportExportService.list(db, user_id=user_id, report_id=report_id, include_all=include_all)
 
     @staticmethod
@@ -487,7 +528,9 @@ class ResearchApplicationService:
         )
 
     @classmethod
-    async def list_report_versions(cls, db: AsyncSession, user_id: int, report_id: str, *, include_all: bool = False) -> dict[str, Any]:
+    async def list_report_versions(
+        cls, db: AsyncSession, user_id: int, report_id: str, *, include_all: bool = False
+    ) -> dict[str, Any]:
         return await ResearchReportService.list_versions(
             db,
             user_id,
@@ -503,7 +546,8 @@ class ResearchApplicationService:
         user_id: int,
         report_id: str,
         version_no: int,
-        *, include_all: bool = False,
+        *,
+        include_all: bool = False,
     ) -> dict[str, Any]:
         return await ResearchReportService.get_version(
             db,

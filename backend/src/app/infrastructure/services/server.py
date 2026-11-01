@@ -19,7 +19,9 @@ class ServerService:
     async def get_server_monitor_info() -> ServerMonitorModel:
         cpu_num = psutil.cpu_count(logical=True)
         cpu_usage_percent = psutil.cpu_times_percent()
-        cpu = CpuInfo(cpuNum=cpu_num, used=cpu_usage_percent.user, sys=cpu_usage_percent.system, free=cpu_usage_percent.idle)
+        cpu = CpuInfo(
+            cpuNum=cpu_num, used=cpu_usage_percent.user, sys=cpu_usage_percent.system, free=cpu_usage_percent.idle
+        )
 
         memory_info = psutil.virtual_memory()
         mem = MemoryInfo(

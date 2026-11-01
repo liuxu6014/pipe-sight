@@ -82,7 +82,7 @@ export const constantRoutes = [
       { path: 'research/reports/:id/diagram', name: 'PortalDiagramEditor', component: () => import('@/views/portal/pages/DiagramEditorView.vue'), meta: { title: '图形编辑器' } },
       { path: 'digests', name: 'PortalDigests', component: () => import('@/views/portal/pages/DigestListView.vue'), meta: { title: '情报简报' } },
       { path: 'digests/create', name: 'PortalDigestCreate', component: () => import('@/views/portal/pages/DigestCreateView.vue'), meta: { title: '新建简报' } },
-      { path: 'digests/:id', name: 'PortalDigestEditor', component: () => import('@/views/portal/pages/DigestEditorView.vue'), meta: { title: '简报编辑' } },
+      { path: 'digests/:id', name: 'PortalDigestEditor', component: () => import('@/views/portal/pages/ReportEditorView.vue'), meta: { title: '报告编辑器' } },
       { path: 'reports/:itemId?', redirect: to => to.params.itemId ? `/portal/digests/${to.params.itemId}` : '/portal/digests' },
       { path: 'knowledge', name: 'PortalKnowledge', redirect: to => ({ path: '/portal/basket', query: to.query, hash: to.hash }) },
       { path: 'knowledge/:id', name: 'PortalKnowledgeDetail', component: () => import('@/views/portal/pages/KnowledgeDetailView.vue'), meta: { title: '资料详情' } },
@@ -239,7 +239,7 @@ export const dynamicRoutes = [
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory('/pipesight/'),
   routes: constantRoutes,
   scrollBehavior(to, from, savedPosition) {
     if (savedPosition) {

@@ -103,7 +103,7 @@ def archive(path: Path, data: dict) -> None:
 
 
 # Keep backup checks, protected snapshots, DDL and verification in one savepoint.
-def migrate_business_consistency(connection: sa.Connection, *, backup_dir: Path, allow_live: bool = False) -> dict:  # noqa: PLR0912, PLR0915
+def migrate_business_consistency(connection: sa.Connection, *, backup_dir: Path, allow_live: bool = False) -> dict:
     """Caller-owned transaction and savepoint; any failed invariant rolls back."""
     if not connection.in_transaction() or connection.dialect.name != 'postgresql':
         raise RuntimeError('A PostgreSQL caller-owned transaction is required')

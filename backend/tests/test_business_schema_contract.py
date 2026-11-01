@@ -1,7 +1,6 @@
 """A complete business guard must not mistake names alone for schema parity."""
 
 # Literal counts independently assert the approved table/field/FK inventory.
-# ruff: noqa: PLR2004
 from copy import deepcopy
 
 import pytest

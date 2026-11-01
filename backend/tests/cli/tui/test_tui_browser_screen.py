@@ -1,5 +1,4 @@
 from types import SimpleNamespace
-from typing import Any
 
 import pytest
 from pytest import MonkeyPatch

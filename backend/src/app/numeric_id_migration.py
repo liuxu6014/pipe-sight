@@ -155,9 +155,7 @@ class NumericPlan:
 
 
 # Keep projection and validation together so no partial rewrite plan can escape.
-def build_plan(  # noqa: PLR0912, PLR0915
-    rows: dict[str, list[dict[str, object]]], foreign_keys: list[dict[str, object]]
-) -> NumericPlan:
+def build_plan(rows: dict[str, list[dict[str, object]]], foreign_keys: list[dict[str, object]]) -> NumericPlan:
     """Only PKs, real FKs and explicitly structural JSON references may change."""
     mappings, number = {}, 0
     for table in BUSINESS_ID_TABLES:
@@ -488,7 +486,7 @@ def _archive(plan: NumericPlan, root: Path, source_rows: dict[str, list[dict[str
 
 
 # Preserve a single savepoint for backup checks, DDL, row and catalog verification.
-def migrate_numeric_ids(  # noqa: PLR0912, PLR0915
+def migrate_numeric_ids(
     bind: sa.Connection, *, manifest: dict[str, object], backup_dir: str | Path, allow_live: bool = False
 ) -> dict[str, int | bool]:
     if not bind.in_transaction():
@@ -688,7 +686,10 @@ def migrate_numeric_ids(  # noqa: PLR0912, PLR0915
                     raise RuntimeError('Unrelated column default changed')
             comment = TABLE_COMMENTS[table].replace("'", "''")
             bind.exec_driver_sql(f"COMMENT ON TABLE public.{_q(table)} IS '{comment}'")
-            for column, raw_comment in COLUMN_COMMENTS[table].items():
+            for column in columns[table]:
+                raw_comment = COLUMN_COMMENTS[table].get(column)
+                if raw_comment is None:
+                    continue
                 comment = raw_comment.replace("'", "''")
                 bind.exec_driver_sql(f"COMMENT ON COLUMN public.{_q(table)}.{_q(column)} IS '{comment}'")
         return {

@@ -1,5 +1,6 @@
 """HTTP 接口命名空间及缓存失效分组契约。"""
 
+
 class ApiNamespace:
     """
     接口注解通用命名空间常量
@@ -143,6 +144,7 @@ class ApiNamespace:
     AI_MODEL_ALL = 'ai:model:all'
     AI_MODEL_DETAIL = 'ai:model:detail'
 
+
 class ApiGroup:
     """
     接口命名空间分组常量
@@ -276,4 +278,3 @@ class ApiGroup:
         ApiNamespace.AI_MODEL_ALL,
         ApiNamespace.AI_MODEL_DETAIL,
     )
-

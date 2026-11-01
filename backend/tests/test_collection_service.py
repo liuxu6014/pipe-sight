@@ -10,7 +10,7 @@ env = collection_support.env
 from sqlalchemy import select
 
 
-def test_default_registry_contains_existing_real_collectors_and_separates_types(env):
+def test_default_registry_contains_existing_real_collectors_and_separates_types(env) -> None:
     registry = env.collection.ADAPTERS
     assert registry.get('pipechina_group_news').source_types == ('website',)
     assert registry.get('crossref_works').source_types == ('paper',)
@@ -19,7 +19,7 @@ def test_default_registry_contains_existing_real_collectors_and_separates_types(
 
 
 @pytest.mark.asyncio
-async def test_registration_does_not_create_or_reactivate_admin_sources(env):
+async def test_registration_does_not_create_or_reactivate_admin_sources(env) -> None:
     e = env
     assert (await e.service.list_sources(e.db))['total'] == 0
     s = await source(e, is_enabled=False, name='管理员保留来源')
@@ -31,7 +31,7 @@ async def test_registration_does_not_create_or_reactivate_admin_sources(env):
 
 
 @pytest.mark.asyncio
-async def test_empty_configured_source_is_success_without_fabricated_article(env):
+async def test_empty_configured_source_is_success_without_fabricated_article(env) -> None:
     e = env
     s = await source(e)
     r = await enqueue(e, s['id'])
@@ -42,7 +42,7 @@ async def test_empty_configured_source_is_success_without_fabricated_article(env
 
 
 @pytest.mark.asyncio
-async def test_article_processing_uses_new_fields_without_review_or_handoff(env):
+async def test_article_processing_uses_new_fields_without_review_or_handoff(env) -> None:
     e = env
     s = await source(e)
     r = await enqueue(e, s['id'])
@@ -59,7 +59,7 @@ async def test_article_processing_uses_new_fields_without_review_or_handoff(env)
 
 
 @pytest.mark.asyncio
-async def test_retry_persists_idempotently_and_does_not_overwrite_parent_failure(env):
+async def test_retry_persists_idempotently_and_does_not_overwrite_parent_failure(env) -> None:
     e = env
     s = await source(e)
     r = await enqueue(e, s['id'])

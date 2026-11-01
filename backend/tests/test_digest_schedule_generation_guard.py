@@ -1,7 +1,6 @@
 """Schedule generation parameters cannot replace automatic evidence or model policy."""
 
 # Shared offline fixture doubles and business examples follow research tests.
-# ruff: noqa: ANN001, ANN201, ANN204, PLR2004
 
 import importlib
 from contextlib import asynccontextmanager
@@ -97,7 +96,17 @@ class DispatchWindow:
             yield
 
 
-async def dispatch_fixture(env, db, monkeypatch, generation_config, *, candidates=None, selection_config=None, candidate_loader=None, frequency='daily'):
+async def dispatch_fixture(
+    env,
+    db,
+    monkeypatch,
+    generation_config,
+    *,
+    candidates=None,
+    selection_config=None,
+    candidate_loader=None,
+    frequency='daily',
+):
     now = datetime(2026, 10, 25, tzinfo=timezone.utc)
     row = env.models.PipelineDigestSchedule(
         id=501,
@@ -118,7 +127,9 @@ async def dispatch_fixture(env, db, monkeypatch, generation_config, *, candidate
     await db.commit()
     monkeypatch.setattr(env.schedules, 'AsyncSessionLocal', lambda: DispatchWindow(db))
     monkeypatch.setattr(env.repo.ResearchDao, 'list_due_schedules', AsyncMock(return_value=[row]))
-    candidate_query = AsyncMock(side_effect=candidate_loader) if candidate_loader else AsyncMock(return_value=candidates or [])
+    candidate_query = (
+        AsyncMock(side_effect=candidate_loader) if candidate_loader else AsyncMock(return_value=candidates or [])
+    )
     monkeypatch.setattr(env.repo.ResearchDao, 'digest_candidates', candidate_query)
     enqueue = AsyncMock(return_value={})
     monkeypatch.setattr(env.schedules.ResearchJobService, 'queue', enqueue)
@@ -271,10 +282,13 @@ async def test_dispatch_rechecks_configuration_before_enqueue(env, db, monkeypat
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('requirements', [
-    'Original requirements',
-    '报告周期：2020-01-01 至 2020-01-02；Original requirements',
-])
+@pytest.mark.parametrize(
+    'requirements',
+    [
+        'Original requirements',
+        '报告周期：2020-01-01 至 2020-01-02；Original requirements',
+    ],
+)
 async def test_dispatch_keeps_filtered_candidate_order_and_fifty_limit(env, db, monkeypatch, requirements):
     await setup_template(env, db)
     candidates = [

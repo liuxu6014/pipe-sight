@@ -15,7 +15,7 @@ PAGE_IDS = (2001, 2002, 2003, 2004, 2005, 2006, 2008, 2009)
 def _pipeline_root(connection: sa.Connection) -> int | None:
     return connection.execute(
         sa.text(
-            "SELECT menu_id FROM sys_menu "
+            'SELECT menu_id FROM sys_menu '
             "WHERE parent_id = 0 AND menu_type = 'M' AND path = 'pipeline' "
             'ORDER BY menu_id LIMIT 1'
         )
@@ -33,23 +33,16 @@ def upgrade() -> None:
         return
     connection.execute(
         sa.text(
-            'UPDATE sys_menu SET parent_id = :root_id '
-            'WHERE menu_id IN :menu_ids AND parent_id IN (0, 2000)'
+            'UPDATE sys_menu SET parent_id = :root_id WHERE menu_id IN :menu_ids AND parent_id IN (0, 2000)'
         ).bindparams(sa.bindparam('menu_ids', expanding=True)),
         {'root_id': root_id, 'menu_ids': PAGE_IDS},
     )
     connection.execute(
-        sa.text(
-            'UPDATE sys_menu SET parent_id = :parent_id '
-            'WHERE menu_id IN (2015, 2016, 2017, 2018)'
-        ),
+        sa.text('UPDATE sys_menu SET parent_id = :parent_id WHERE menu_id IN (2015, 2016, 2017, 2018)'),
         {'parent_id': 2009},
     )
     connection.execute(
-        sa.text(
-            'UPDATE sys_menu SET parent_id = :parent_id '
-            'WHERE menu_id IN (2019, 2020, 2021)'
-        ),
+        sa.text('UPDATE sys_menu SET parent_id = :parent_id WHERE menu_id IN (2019, 2020, 2021)'),
         {'parent_id': 2008},
     )
 
@@ -66,9 +59,5 @@ def downgrade() -> None:
         ),
         {'menu_ids': PAGE_IDS},
     )
-    connection.execute(
-        sa.text('UPDATE sys_menu SET parent_id = 118 WHERE menu_id IN (2015, 2016, 2017, 2018)')
-    )
-    connection.execute(
-        sa.text('UPDATE sys_menu SET parent_id = 2000 WHERE menu_id IN (2019, 2020, 2021)')
-    )
+    connection.execute(sa.text('UPDATE sys_menu SET parent_id = 118 WHERE menu_id IN (2015, 2016, 2017, 2018)'))
+    connection.execute(sa.text('UPDATE sys_menu SET parent_id = 2000 WHERE menu_id IN (2019, 2020, 2021)'))

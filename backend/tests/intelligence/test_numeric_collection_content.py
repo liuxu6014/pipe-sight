@@ -29,7 +29,7 @@ LARGE_ID = 9007199254740993
 NOW = datetime(2026, 10, 25, tzinfo=timezone.utc)
 
 
-def test_production_intelligence_pk_share_sequence_and_business_fks_are_bigint():
+def test_production_intelligence_pk_share_sequence_and_business_fks_are_bigint() -> None:
     register_sqlalchemy_models()
     for model in (
         PipelineSource,
@@ -56,7 +56,7 @@ def test_production_intelligence_pk_share_sequence_and_business_fks_are_bigint()
     'invalid', ['legacy-uuid', '检测技术', '', '1.0', '１', '9223372036854775808', 0, -1, True, 1.5]
 )
 @pytest.mark.asyncio
-async def test_invalid_entity_reference_is_rejected_before_any_query(invalid):
+async def test_invalid_entity_reference_is_rejected_before_any_query(invalid) -> None:
     db = SimpleNamespace(execute=AsyncMock(), get=AsyncMock(), rollback=AsyncMock())
     for operation in (
         CollectionRepository.source,
@@ -76,13 +76,13 @@ async def test_invalid_entity_reference_is_rejected_before_any_query(invalid):
 
 
 @pytest.mark.asyncio
-async def test_wire_id_is_parsed_to_integer_before_lookup():
+async def test_wire_id_is_parsed_to_integer_before_lookup() -> None:
     db = SimpleNamespace(get=AsyncMock(return_value=None))
     await ContentDao.get_article(db, str(LARGE_ID))
     db.get.assert_awaited_once_with(PipelineArticle, LARGE_ID)
 
 
-def test_source_snapshot_preserves_large_decimal_reference_and_opaque_config():
+def test_source_snapshot_preserves_large_decimal_reference_and_opaque_config() -> None:
     config = {
         'query': '9007199254740993',
         'upstream_cursor': '123',
@@ -102,7 +102,7 @@ def test_source_snapshot_preserves_large_decimal_reference_and_opaque_config():
 
 @pytest.mark.parametrize('filter_name', ['category_id', 'tag', 'legacy_tag', 'tags', 'directions'])
 @pytest.mark.parametrize('model', [PipelineArticle, PipelinePaper])
-def test_category_text_and_mixed_filters_never_bind_names_to_bigint(filter_name, model):
+def test_category_text_and_mixed_filters_never_bind_names_to_bigint(filter_name, model) -> None:
     values = ['检测技术', str(LARGE_ID), '完整性管理', '9223372036854775808']
     filters = {filter_name: values if filter_name in {'tags', 'directions'} else values[0]}
     statement, _, _ = ContentDao.query(model, **filters)
@@ -122,7 +122,7 @@ def test_category_text_and_mixed_filters_never_bind_names_to_bigint(filter_name,
 
 
 @pytest.mark.parametrize('filter_name', ['tag', 'legacy_tag'])
-def test_category_numeric_single_filter_uses_integer_id_and_text_name(filter_name):
+def test_category_numeric_single_filter_uses_integer_id_and_text_name(filter_name) -> None:
     statement, _, _ = ContentDao.query(PipelineArticle, **{filter_name: str(LARGE_ID)})
     compiled = statement.compile(dialect=postgresql.dialect())
     assert LARGE_ID in compiled.params.values()
@@ -130,7 +130,7 @@ def test_category_numeric_single_filter_uses_integer_id_and_text_name(filter_nam
     assert all(type(value) is int for key, value in compiled.params.items() if key.startswith('id_'))
 
 
-def test_search_cursor_numeric_tie_break_and_wire_bigint_are_exact():
+def test_search_cursor_numeric_tie_break_and_wire_bigint_are_exact() -> None:
     rows = [
         {'id': str(identity), 'type': 'news', '_search_rank': 4, '_cursor_date': NOW.isoformat()}
         for identity in (9, 100, 10, LARGE_ID)
@@ -148,7 +148,7 @@ def test_search_cursor_numeric_tie_break_and_wire_bigint_are_exact():
 
 
 @pytest.mark.asyncio
-async def test_search_merge_reuses_sql_score_date_and_numeric_cursor_predicate():
+async def test_search_merge_reuses_sql_score_date_and_numeric_cursor_predicate() -> None:
     article = SimpleNamespace(id=LARGE_ID)
     result = SimpleNamespace(all=lambda: [(article, 1, NOW)])
     db = SimpleNamespace(execute=AsyncMock(return_value=result))

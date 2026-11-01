@@ -4,7 +4,6 @@ import sqlalchemy as sa
 from alembic import context, op
 from sqlalchemy import inspect
 
-
 revision = '20260814_fix_version_width'
 down_revision = '20260814_remove_unused_platform'
 branch_labels = None
@@ -26,7 +25,7 @@ def upgrade() -> None:
         return
     columns = {item['name']: item for item in inspector.get_columns('alembic_version')}
     column = columns.get('version_num')
-    if column is None or (getattr(column['type'], 'length', None) or 0) >= 64:
+    if column is None or (getattr(column['type'], 'length', None) or 0) >= 64:  # noqa: PLR2004
         return
     op.alter_column(
         'alembic_version',

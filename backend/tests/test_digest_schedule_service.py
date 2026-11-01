@@ -14,18 +14,25 @@ no_external_network = refactor_no_external_network
 
 
 @pytest.mark.asyncio
-async def test_scoped_dispatch_queries_ignore_other_due_plans_and_queued_jobs(env, db):
+async def test_scoped_dispatch_queries_ignore_other_due_plans_and_queued_jobs(env, db) -> None:
     from datetime import timedelta
+
     template, _ = seed(env, db)
     template.purpose, template.name = 'digest', '日报模板'
     await db.commit()
     service = env.schedules.DigestScheduleService
     rows = []
     for name in ['指定计划', '其他计划']:
-        result = await service.create(db, user_id=7, owner_name='用户',
+        result = await service.create(
+            db,
+            user_id=7,
+            owner_name='用户',
             template_service=env.template.PipelineTemplateService,
-            payload={'name': name, 'report_type': 'daily', 'template_id': '201', 'enabled': False})
-        row = next(item for item in await env.repo.ResearchDao.list_digest_schedules(db, 7) if str(item.id) == result['id'])
+            payload={'name': name, 'report_type': 'daily', 'template_id': '201', 'enabled': False},
+        )
+        row = next(
+            item for item in await env.repo.ResearchDao.list_digest_schedules(db, 7) if str(item.id) == result['id']
+        )
         row.is_enabled = True
         row.next_run_at = datetime.now(timezone.utc) - timedelta(minutes=1)
         rows.append(row)
@@ -39,29 +46,56 @@ async def test_scoped_dispatch_queries_ignore_other_due_plans_and_queued_jobs(en
     db.add(report)
     await db.commit()
     for ident, schedule_id in [(902, rows[0].id), (903, rows[1].id), (904, None)]:
-        db.add(env.models.PipelineResearchJob(id=ident, report_id=report.id, schedule_id=schedule_id,
-            request_id=f'scope-{ident}', status='queued', config_snapshot={}, materials=[]))
+        db.add(
+            env.models.PipelineResearchJob(
+                id=ident,
+                report_id=report.id,
+                schedule_id=schedule_id,
+                request_id=f'scope-{ident}',
+                status='queued',
+                config_snapshot={},
+                materials=[],
+            )
+        )
     await db.commit()
-    assert await env.repo.ResearchDao.list_research_job_ids_for_dispatch(db, now=now, schedule_ids=[rows[0].id]) == [(902, 7, '')]
+    assert await env.repo.ResearchDao.list_research_job_ids_for_dispatch(db, now=now, schedule_ids=[rows[0].id]) == [
+        (902, 7, '')
+    ]
     assert await env.repo.ResearchDao.list_research_job_ids_for_dispatch(db, now=now, schedule_ids=[]) == []
 
 
 @pytest.mark.asyncio
-async def test_independent_schedule_edit_preserves_identity_and_never_enqueues(env, db, monkeypatch):
+async def test_independent_schedule_edit_preserves_identity_and_never_enqueues(env, db, monkeypatch) -> None:
     from unittest.mock import AsyncMock
+
     template, _ = seed(env, db)
     template.purpose, template.name = 'digest', '日报模板'
     await db.commit()
     service = env.schedules.DigestScheduleService
-    original = await service.create(db, user_id=7, owner_name='用户', template_service=env.template.PipelineTemplateService,
-        payload={'name': '单独计划', 'report_type': 'daily', 'template_id': '201', 'enabled': False})
+    original = await service.create(
+        db,
+        user_id=7,
+        owner_name='用户',
+        template_service=env.template.PipelineTemplateService,
+        payload={'name': '单独计划', 'report_type': 'daily', 'template_id': '201', 'enabled': False},
+    )
     enqueue = AsyncMock()
     monkeypatch.setattr(env.schedules.ResearchJobService, 'queue', enqueue)
-    changed = await service.update(db, user_id=7, schedule_id=original['id'],
-        payload={'name': '已编辑', 'report_type': 'daily', 'template_id': '201', 'enabled': False,
-                 'schedule_time': '14:15', 'keywords': ['腐蚀'],
-                 'options': {'sources': ['新闻网站'], 'directions': ['检测']}},
-        template_service=env.template.PipelineTemplateService)
+    changed = await service.update(
+        db,
+        user_id=7,
+        schedule_id=original['id'],
+        payload={
+            'name': '已编辑',
+            'report_type': 'daily',
+            'template_id': '201',
+            'enabled': False,
+            'schedule_time': '14:15',
+            'keywords': ['腐蚀'],
+            'options': {'sources': ['新闻网站'], 'directions': ['检测']},
+        },
+        template_service=env.template.PipelineTemplateService,
+    )
     assert changed['id'] == original['id'] and changed['name'] == '已编辑'
     assert changed['scheduleTime'] == '14:15:00' and changed['nextRunTime'] == ''
     assert changed['config']['keywords'] == ['腐蚀']
@@ -69,15 +103,16 @@ async def test_independent_schedule_edit_preserves_identity_and_never_enqueues(e
     assert len(await env.repo.ResearchDao.list_digest_schedules(db, 7)) == 1
     enqueue.assert_not_awaited()
     with raises(env, '无权'):
-        await service.update(db, user_id=8, schedule_id=original['id'], payload={},
-                             template_service=env.template.PipelineTemplateService)
+        await service.update(
+            db, user_id=8, schedule_id=original['id'], payload={}, template_service=env.template.PipelineTemplateService
+        )
 
 
 @pytest.mark.parametrize(
     'frequency,expected',
     [('daily', datetime(2026, 10, 4, 8)), ('weekly', datetime(2026, 10, 5, 8)), ('monthly', datetime(2026, 11, 1, 8))],
 )
-def test_next_occurrence_boundaries(env, frequency, expected):
+def test_next_occurrence_boundaries(env, frequency, expected) -> None:
     assert (
         env.schedules.DigestScheduleService._next_occurrence(datetime(2026, 10, 3, 9), frequency, '08:00') == expected
     )
@@ -94,7 +129,7 @@ def test_next_occurrence_boundaries(env, frequency, expected):
         (datetime(2026, 12, 31, 8), 31, datetime(2027, 1, 31, 8)),
     ],
 )
-def test_monthly_selected_day_and_short_month(env, reference, month_day, expected):
+def test_monthly_selected_day_and_short_month(env, reference, month_day, expected) -> None:
     assert (
         env.schedules.DigestScheduleService._next_occurrence(
             reference, 'monthly', '08:00', schedule_month_day=month_day
@@ -111,14 +146,14 @@ def test_monthly_selected_day_and_short_month(env, reference, month_day, expecte
         (datetime(2026, 10, 4, 8), 6, datetime(2026, 10, 11, 8)),
     ],
 )
-def test_weekly_selected_weekday(env, reference, weekday, expected):
+def test_weekly_selected_weekday(env, reference, weekday, expected) -> None:
     assert (
         env.schedules.DigestScheduleService._next_occurrence(reference, 'weekly', '08:00', schedule_weekday=weekday)
         == expected
     )
 
 
-def test_holiday_skip_preserves_month_day(env):
+def test_holiday_skip_preserves_month_day(env) -> None:
     assert env.schedules.DigestScheduleService._next_occurrence(
         datetime(2026, 1, 31, 9),
         'monthly',
@@ -129,12 +164,12 @@ def test_holiday_skip_preserves_month_day(env):
     ) == datetime(2026, 3, 31, 8)
 
 
-def test_invalid_holiday_dates_are_rejected(env):
+def test_invalid_holiday_dates_are_rejected(env) -> None:
     with raises(env, 'YYYY-MM-DD'):
         env.schedules.DigestScheduleService._holiday_dates({'holidayDates': ['国庆节']})
 
 
-def test_period_is_complete_previous_digest_window(env):
+def test_period_is_complete_previous_digest_window(env) -> None:
     service = env.schedules.DigestScheduleService
     run = datetime(2026, 10, 5, 8)
     assert service._period_for_run(run, 'daily') == ['2026-10-04']
@@ -143,7 +178,7 @@ def test_period_is_complete_previous_digest_window(env):
 
 
 @pytest.mark.asyncio
-async def test_create_persists_canonical_fields_and_legacy_selection_options(env, db, monkeypatch):
+async def test_create_persists_canonical_fields_and_legacy_selection_options(env, db, monkeypatch) -> None:
     template, _ = seed(env, db)
     template.purpose = 'digest'
     template.name = '周报模板'
@@ -183,7 +218,7 @@ async def test_create_persists_canonical_fields_and_legacy_selection_options(env
         ('monthly', 'schedule_month_day', 32),
     ],
 )
-async def test_create_rejects_invalid_calendar_fields(env, db, frequency, field, value):
+async def test_create_rejects_invalid_calendar_fields(env, db, frequency, field, value) -> None:
     template, _ = seed(env, db)
     template.purpose = 'digest'
     template.name = {'weekly': '周报模板', 'monthly': '月报模板'}[frequency]
@@ -199,7 +234,7 @@ async def test_create_rejects_invalid_calendar_fields(env, db, frequency, field,
 
 
 @pytest.mark.asyncio
-async def test_schedule_is_private_and_disable_clears_cursor(env, db):
+async def test_schedule_is_private_and_disable_clears_cursor(env, db) -> None:
     template, _ = seed(env, db)
     template.purpose = 'digest'
     template.name = '日报模板'
@@ -218,15 +253,20 @@ async def test_schedule_is_private_and_disable_clears_cursor(env, db):
 
 
 @pytest.mark.asyncio
-async def test_partial_selection_config_keeps_page_keyword_category_and_source_filters(env, db):
+async def test_partial_selection_config_keeps_page_keyword_category_and_source_filters(env, db) -> None:
     template, _ = seed(env, db)
     template.purpose = 'digest'
     template.name = '日报模板'
     await db.commit()
     await env.schedules.DigestScheduleService.create(
-        db, user_id=7, owner_name='用户', template_service=env.template.PipelineTemplateService,
+        db,
+        user_id=7,
+        owner_name='用户',
+        template_service=env.template.PipelineTemplateService,
         payload={
-            'name': '筛选计划', 'report_type': 'daily', 'template_id': '201',
+            'name': '筛选计划',
+            'report_type': 'daily',
+            'template_id': '201',
             'keywords': [' 管道 ', '腐蚀', '管道'],
             'options': {'sources': ['微信公众号'], 'directions': ['后台类别']},
             'selection_config': {'limit': 5},

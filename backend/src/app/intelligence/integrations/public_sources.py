@@ -76,7 +76,9 @@ def _parse_pipechina_detail(url: str) -> dict:
     source_html = _fetch_text(url)
     title_match = re.search(r'<div class=["\']title[^>]*>(.*?)</div>', source_html, flags=re.I | re.S)
     date_match = re.search(r'<span class=["\']span3["\'][^>]*>(.*?)</span>', source_html, flags=re.I | re.S)
-    meta_match = re.search(r'<meta\s+name=["\']description["\']\s+content=["\'](.*?)["\']', source_html, flags=re.I | re.S)
+    meta_match = re.search(
+        r'<meta\s+name=["\']description["\']\s+content=["\'](.*?)["\']', source_html, flags=re.I | re.S
+    )
     content_match = re.search(r'class=["\']text\s+content_class["\'][^>]*>(.*?)</div>', source_html, flags=re.I | re.S)
     body = _clean_text(content_match.group(1)) if content_match else ''
     summary = html.unescape(meta_match.group(1)).strip() if meta_match else body[:400]
@@ -100,7 +102,9 @@ def collect_pipechina_records(endpoint: str, config: dict) -> list[dict]:
             detail = _parse_pipechina_detail(candidate['url'])
         except Exception:
             detail = {}
-        records.append({**candidate, **detail, 'url': candidate['url'], 'title': detail.get('title') or candidate['title']})
+        records.append(
+            {**candidate, **detail, 'url': candidate['url'], 'title': detail.get('title') or candidate['title']}
+        )
     return records
 
 
@@ -119,7 +123,7 @@ def collect_crossref_records(endpoint: str, config: dict) -> list[dict]:
             continue
         published = item.get('published', {}).get('date-parts', [[]])[0]
         year = int(published[0]) if published else None
-        authors = [f"{a.get('given', '')} {a.get('family', '')}".strip() for a in item.get('author', [])]
+        authors = [f'{a.get("given", "")} {a.get("family", "")}'.strip() for a in item.get('author', [])]
         abstract = _clean_text(str(item.get('abstract') or ''))
         records.append(
             {
@@ -137,4 +141,9 @@ def collect_crossref_records(endpoint: str, config: dict) -> list[dict]:
     return records
 
 
-__all__ = ['DEFAULT_CROSSREF_ENDPOINT', 'DEFAULT_PIPECHINA_ENDPOINT', 'collect_crossref_records', 'collect_pipechina_records']
+__all__ = [
+    'DEFAULT_CROSSREF_ENDPOINT',
+    'DEFAULT_PIPECHINA_ENDPOINT',
+    'collect_crossref_records',
+    'collect_pipechina_records',
+]

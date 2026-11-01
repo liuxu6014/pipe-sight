@@ -16,7 +16,7 @@ from config.database import Base
 from exceptions.exception import ServiceException
 
 
-def test_registered_models_match_approved_columns_without_retired_tables():
+def test_registered_models_match_approved_columns_without_retired_tables() -> None:
     register_sqlalchemy_models()
     configure_mappers()
     contract = load_contract()
@@ -29,14 +29,14 @@ def test_registered_models_match_approved_columns_without_retired_tables():
     )
 
 
-def test_startup_refuses_schema_mismatch_without_creating_tables(monkeypatch):
+def test_startup_refuses_schema_mismatch_without_creating_tables(monkeypatch) -> None:
     inspector = SimpleNamespace(has_table=lambda *args, **kwargs: False)
     monkeypatch.setattr(get_db, 'inspect', lambda connection: inspector)
     with pytest.raises(RuntimeError, match='备份和迁移'):
         get_db.validate_schema(object())
 
 
-def test_news_display_is_source_derived_and_has_no_review_gate():
+def test_news_display_is_source_derived_and_has_no_review_gate() -> None:
     row = SimpleNamespace(
         id=1001,
         source=SimpleNamespace(name='某公众号', type='wechat'),
@@ -56,7 +56,7 @@ def test_news_display_is_source_derived_and_has_no_review_gate():
     assert not {'status', 'processing_status', 'review_status'} & result.keys()
 
 
-def test_paper_keeps_year_precision_and_only_abstract():
+def test_paper_keeps_year_precision_and_only_abstract() -> None:
     row = SimpleNamespace(
         id=2001,
         category=None,
@@ -80,7 +80,7 @@ def test_paper_keeps_year_precision_and_only_abstract():
     assert 'full_text' not in result
 
 
-def test_search_uses_all_content_and_owner_scope_in_sql():
+def test_search_uses_all_content_and_owner_scope_in_sql() -> None:
     query, _, _ = ContentDao.query(PipelineMaterial, user_id=7, keyword='100%_test')
     sql = str(query.compile(dialect=postgresql.dialect()))
     assert 'knowledge_files.user_id =' in sql
@@ -91,7 +91,7 @@ def test_search_uses_all_content_and_owner_scope_in_sql():
 
 
 @pytest.mark.asyncio
-async def test_classification_never_silently_takes_first_of_multiple_categories():
+async def test_classification_never_silently_takes_first_of_multiple_categories() -> None:
     categories = [SimpleNamespace(id=n, name=str(n), model_id=1, prompt='规则') for n in (1, 2)]
     result = SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: categories))
     model = SimpleNamespace(
@@ -112,7 +112,7 @@ async def test_classification_never_silently_takes_first_of_multiple_categories(
 
 
 @pytest.mark.asyncio
-async def test_classification_requires_actual_boolean_not_truthy_string():
+async def test_classification_requires_actual_boolean_not_truthy_string() -> None:
     category = SimpleNamespace(id=501, name='C', model_id=1, prompt='规则')
     model = SimpleNamespace(
         id=1,

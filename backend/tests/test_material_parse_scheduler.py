@@ -4,6 +4,7 @@ import asyncio
 import importlib
 from datetime import timedelta
 from types import SimpleNamespace as NS
+from typing import NoReturn
 
 import pytest
 from sqlalchemy.orm import Session
@@ -29,7 +30,7 @@ def scheduler_context(env, db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_recover_dispatches_once_and_forgets_finished_tasks(env, db, monkeypatch):
+async def test_recover_dispatches_once_and_forgets_finished_tasks(env, db, monkeypatch) -> None:
     _, row = seed(env, db)
     row.status = 'queued'
     other = env.material.PipelineMaterial(
@@ -49,7 +50,7 @@ async def test_recover_dispatches_once_and_forgets_finished_tasks(env, db, monke
     scheduler = scheduler_context(env, db, monkeypatch)
     calls = []
 
-    async def process(material_id, worker_id=''):
+    async def process(material_id, worker_id='') -> None:
         calls.append(material_id)
 
     monkeypatch.setattr(scheduler, 'process_material_parse', process)
@@ -62,7 +63,7 @@ async def test_recover_dispatches_once_and_forgets_finished_tasks(env, db, monke
 
 
 @pytest.mark.asyncio
-async def test_recovery_requeues_expired_parse_before_dispatch(env, db, monkeypatch):
+async def test_recovery_requeues_expired_parse_before_dispatch(env, db, monkeypatch) -> None:
     _, row = seed(env, db)
     row.status = 'parsing'
     row.updated_at = env.material.utcnow() - timedelta(minutes=16)
@@ -70,7 +71,7 @@ async def test_recovery_requeues_expired_parse_before_dispatch(env, db, monkeypa
     scheduler = scheduler_context(env, db, monkeypatch)
     calls = []
 
-    async def process(material_id, worker_id=''):
+    async def process(material_id, worker_id='') -> None:
         calls.append(material_id)
 
     monkeypatch.setattr(scheduler, 'process_material_parse', process)
@@ -83,7 +84,7 @@ async def test_recovery_requeues_expired_parse_before_dispatch(env, db, monkeypa
 
 
 @pytest.mark.asyncio
-async def test_worker_parses_original_filename_and_preserves_edited_text(env, db, tmp_path, monkeypatch):
+async def test_worker_parses_original_filename_and_preserves_edited_text(env, db, tmp_path, monkeypatch) -> None:
     _, row = seed(env, db)
     row.status = 'queued'
     row.edited_text = '用户编辑正文'
@@ -102,7 +103,7 @@ async def test_worker_parses_original_filename_and_preserves_edited_text(env, db
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('status', ['pending', 'quarantined', 'failed'])
-async def test_worker_never_parses_or_marks_ready_before_clean_scan(env, db, tmp_path, monkeypatch, status):
+async def test_worker_never_parses_or_marks_ready_before_clean_scan(env, db, tmp_path, monkeypatch, status) -> None:
     _, row = seed(env, db)
     row.status = 'queued'
     row.edited_text = '用户编辑正文'
@@ -112,7 +113,7 @@ async def test_worker_never_parses_or_marks_ready_before_clean_scan(env, db, tmp
     scheduler = scheduler_context(env, db, monkeypatch)
     monkeypatch.setattr(scheduler.FileScanService, 'scan', lambda *_: NS(status=status))
 
-    def forbidden(*args, **kwargs):
+    def forbidden(*args, **kwargs) -> NoReturn:
         raise AssertionError('unscanned file reached parser')
 
     monkeypatch.setattr(scheduler.MaterialFileService, 'parse', forbidden)
@@ -124,11 +125,11 @@ async def test_worker_never_parses_or_marks_ready_before_clean_scan(env, db, tmp
 
 
 @pytest.mark.asyncio
-async def test_stop_cancels_inflight_tasks(env):
+async def test_stop_cancels_inflight_tasks(env) -> None:
     scheduler = importlib.import_module('app.library.tasks.material_parse_scheduler')
     started, release = asyncio.Event(), asyncio.Event()
 
-    async def pending():
+    async def pending() -> None:
         started.set()
         await release.wait()
 

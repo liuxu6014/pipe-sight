@@ -32,8 +32,10 @@ def upgrade() -> None:
             sa.Column('to_status', sa.String(32), nullable=False),
             sa.Column('action', sa.String(32), nullable=False),
             sa.Column('reason', sa.Text(), nullable=True),
-                sa.Column('operator_id', sa.BigInteger(), nullable=True),
-                sa.ForeignKeyConstraint(['operator_id'], ['sys_user.user_id'], ondelete='SET NULL', name='fk_pipeline_review_event_operator'),
+            sa.Column('operator_id', sa.BigInteger(), nullable=True),
+            sa.ForeignKeyConstraint(
+                ['operator_id'], ['sys_user.user_id'], ondelete='SET NULL', name='fk_pipeline_review_event_operator'
+            ),
             sa.Column('operator_name', sa.String(64), nullable=False, server_default=''),
             sa.Column('snapshot_json', sa.JSON(), nullable=False),
             sa.Column('create_time', sa.DateTime(), nullable=False),
@@ -81,7 +83,9 @@ def upgrade() -> None:
             sa.Column('action', sa.String(32), nullable=False),
             sa.Column('reason', sa.Text(), nullable=True),
             sa.Column('operator_id', sa.BigInteger(), nullable=True),
-            sa.ForeignKeyConstraint(['operator_id'], ['sys_user.user_id'], ondelete='SET NULL', name='fk_pipeline_review_event_operator'),
+            sa.ForeignKeyConstraint(
+                ['operator_id'], ['sys_user.user_id'], ondelete='SET NULL', name='fk_pipeline_review_event_operator'
+            ),
             sa.Column('operator_name', sa.String(64), nullable=False, server_default=''),
             sa.Column('snapshot_json', sa.JSON(), nullable=False, server_default=sa.text("'{}'")),
             sa.Column('create_time', sa.DateTime(), nullable=False),

@@ -52,10 +52,9 @@ def _execute_schema_file(filename: str) -> None:
                         continue
                     table_columns = {item['name'] for item in inspector.get_columns(table_name)}
                     parts = [column.strip() for column in columns_sql.split(',')]
-                    if (
-                        all(re.fullmatch(r'[`"]?\w+[`"]?(?:\s+(?:ASC|DESC))?', part, re.IGNORECASE) for part in parts)
-                        and any(part.split()[0].strip('`"') not in table_columns for part in parts)
-                    ):
+                    if all(
+                        re.fullmatch(r'[`"]?\w+[`"]?(?:\s+(?:ASC|DESC))?', part, re.IGNORECASE) for part in parts
+                    ) and any(part.split()[0].strip('`"') not in table_columns for part in parts):
                         continue
                     if op.get_bind().dialect.name == 'mysql':
                         statement = re.sub(r'IF NOT EXISTS\s+', '', statement, count=1, flags=re.IGNORECASE)
@@ -99,7 +98,7 @@ def _add_column(table_name: str, column: sa.Column) -> None:
             # MySQL versions used by existing deployments reject JSON defaults.
             # Backfill after adding the nullable column, then enforce NOT NULL.
             op.add_column(table_name, sa.Column(column.name, column.type, nullable=True))
-            default_value = str(column.server_default.arg).strip("'\"")
+            default_value = str(column.server_default.arg).strip('\'"')
             expression = 'JSON_ARRAY()' if default_value == '[]' else 'JSON_OBJECT()'
             op.execute(f'UPDATE {table_name} SET {column.name} = {expression} WHERE {column.name} IS NULL')
             op.alter_column(table_name, column.name, existing_type=column.type, nullable=False)
@@ -124,11 +123,7 @@ def _constraint_names(table_name: str) -> set[str]:
 
 
 def _check_constraint_names(table_name: str) -> set[str]:
-    return {
-        item.get('name')
-        for item in inspect(op.get_bind()).get_check_constraints(table_name)
-        if item.get('name')
-    }
+    return {item.get('name') for item in inspect(op.get_bind()).get_check_constraints(table_name) if item.get('name')}
 
 
 def _has_duplicates(table_name: str, columns: list[str]) -> bool:
@@ -379,7 +374,9 @@ def _finalize_constraints() -> None:
     connection = op.get_bind()
     # Older RuoYi seeds used 2/3/4 for department-scoped roles. Departments
     # are intentionally removed, so map those legacy scopes to "own data".
-    connection.execute(text("UPDATE sys_role SET data_scope = '5' WHERE data_scope IS NULL OR data_scope NOT IN ('1', '5')"))
+    connection.execute(
+        text("UPDATE sys_role SET data_scope = '5' WHERE data_scope IS NULL OR data_scope NOT IN ('1', '5')")
+    )
     if connection.execute(text('SELECT 1 FROM ai_models WHERE user_id IS NULL LIMIT 1')).first():
         raise RuntimeError('ai_models.user_id contains NULL values; assign an owner before migration')
 
@@ -406,23 +403,51 @@ def _finalize_constraints() -> None:
         ('ai_models', 'ck_ai_models_support_images', "support_images IN ('Y', 'N')"),
         ('ai_models', 'ck_ai_models_status', "status IN ('0', '1')"),
         ('knowledge_files', 'ck_knowledge_files_permission_scope', "permission_scope IN ('private', 'public')"),
-        ('knowledge_files', 'ck_knowledge_files_parse_status', "parse_status IN ('queued', 'parsing', 'indexed', 'failed')"),
+        (
+            'knowledge_files',
+            'ck_knowledge_files_parse_status',
+            "parse_status IN ('queued', 'parsing', 'indexed', 'failed')",
+        ),
         ('knowledge_files', 'ck_knowledge_files_file_size', 'file_size >= 0'),
         ('knowledge_files', 'ck_knowledge_files_version_no', 'version_no >= 1'),
-        ('user_saved_items', 'ck_user_saved_items_item_type', "item_type IN ('material', 'article', 'paper', 'report')"),
+        (
+            'user_saved_items',
+            'ck_user_saved_items_item_type',
+            "item_type IN ('material', 'article', 'paper', 'report')",
+        ),
         ('user_saved_items', 'ck_user_saved_items_action', "action IN ('favorite', 'basket')"),
-        ('generation_tasks', 'ck_generation_tasks_status', "status IN ('queued', 'running', 'completed', 'failed', 'cancelled')"),
+        (
+            'generation_tasks',
+            'ck_generation_tasks_status',
+            "status IN ('queued', 'running', 'completed', 'failed', 'cancelled')",
+        ),
         ('generation_tasks', 'ck_generation_tasks_progress', 'progress BETWEEN 0 AND 100'),
         ('reports', 'ck_reports_status', "status IN ('draft', 'reviewing', 'completed', 'published', 'archived')"),
         ('reports', 'ck_reports_version_no', 'version_no >= 1'),
         ('reports', 'ck_reports_word_count', 'word_count >= 0'),
         ('report_versions', 'ck_report_versions_version_no', 'version_no >= 1'),
-        ('report_versions', 'ck_report_versions_source', "source IN ('generated', 'retry', 'manual', 'autosave', 'publish', 'restored')"),
+        (
+            'report_versions',
+            'ck_report_versions_source',
+            "source IN ('generated', 'retry', 'manual', 'autosave', 'publish', 'restored')",
+        ),
         ('data_sources', 'ck_data_sources_status', "status IN ('active', 'inactive')"),
-        ('data_sources', 'ck_data_sources_counters', 'success_count >= 0 AND failure_count >= 0 AND consecutive_failures >= 0'),
+        (
+            'data_sources',
+            'ck_data_sources_counters',
+            'success_count >= 0 AND failure_count >= 0 AND consecutive_failures >= 0',
+        ),
         ('collection_runs', 'ck_collection_runs_trigger_type', "trigger_type IN ('schedule', 'manual', 'retry')"),
-        ('collection_runs', 'ck_collection_runs_status', "status IN ('queued', 'running', 'success', 'failed', 'cancelled')"),
-        ('collection_runs', 'ck_collection_runs_counters', 'fetched_count >= 0 AND inserted_count >= 0 AND updated_count >= 0 AND duplicate_count >= 0 AND failed_count >= 0'),
+        (
+            'collection_runs',
+            'ck_collection_runs_status',
+            "status IN ('queued', 'running', 'success', 'failed', 'cancelled')",
+        ),
+        (
+            'collection_runs',
+            'ck_collection_runs_counters',
+            'fetched_count >= 0 AND inserted_count >= 0 AND updated_count >= 0 AND duplicate_count >= 0 AND failed_count >= 0',
+        ),
         ('news_articles', 'ck_news_articles_type', "article_type IN ('news', 'wechat')"),
         ('news_articles', 'ck_news_articles_relevance', 'relevance_score BETWEEN 0 AND 100'),
         ('news_articles', 'ck_news_articles_review_status', "review_status IN ('pending', 'approved', 'rejected')"),

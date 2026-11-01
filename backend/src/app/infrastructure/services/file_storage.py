@@ -11,14 +11,17 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import aiofiles
 
 from app.infrastructure.services.file_upload import FileUploadSupport
-from common.ports.files import UploadFilePort
 from config.env import UploadConfig
 from exceptions.exception import ServiceException
+
+if TYPE_CHECKING:
+    from common.ports.files import UploadFilePort
 
 
 @dataclass(frozen=True, slots=True)

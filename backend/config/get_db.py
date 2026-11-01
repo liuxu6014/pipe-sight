@@ -43,7 +43,7 @@ def validate_schema(connection) -> None:
             continue
         # Numeric-ID rollout changes types without changing field names. Never
         # accept the pre-migration VARCHAR schema simply because names match.
-        from app.business_ids import BUSINESS_ID_TABLES
+        from app.business_ids import BUSINESS_ID_TABLES  # noqa: PLC0415
 
         for column in table.columns:
             numeric_id = (table.name in BUSINESS_ID_TABLES and column.name == 'id') or any(
@@ -55,7 +55,7 @@ def validate_schema(connection) -> None:
                     mismatches.append(table.name + '.' + column.name)
     if mismatches:
         raise RuntimeError('数据库结构与当前代码不一致，请先完成备份和迁移：' + ', '.join(mismatches))
-    from app.business_schema import validate_business_schema
+    from app.business_schema import validate_business_schema  # noqa: PLC0415
 
     validate_business_schema(connection, Base.metadata)
 

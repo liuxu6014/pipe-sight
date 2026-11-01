@@ -140,6 +140,7 @@ def CurrentUserDependency() -> params.Depends:  # noqa: N802
 
     :return: 当前登录用户信息依赖
     """
+
     async def resolve_current_user(
         request: Request,
         token: str = Depends(oauth2_scheme),

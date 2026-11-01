@@ -28,10 +28,7 @@ def upgrade() -> None:
         return
     for menu_id, menu_name, parent_id, order_num, perms, remark in MENU_ROWS:
         exists = connection.execute(
-            sa.text(
-                'SELECT menu_id FROM sys_menu '
-                'WHERE menu_id = :menu_id OR perms = :perms LIMIT 1'
-            ),
+            sa.text('SELECT menu_id FROM sys_menu WHERE menu_id = :menu_id OR perms = :perms LIMIT 1'),
             {'menu_id': menu_id, 'perms': perms},
         ).scalar()
         if exists is not None:

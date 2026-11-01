@@ -9,7 +9,9 @@ from app.research.models.research_models import PipelineReportVersion, utcnow
 from app.research.repositories.research_repository import ResearchDao
 from app.research.services.model_generation import ModelOutputLimitError, ResearchModelGenerationService
 from app.research.services.report_content import (
-    ManuscriptValidationError, normalize_generated_report, validate_generated_article,
+    ManuscriptValidationError,
+    normalize_generated_report,
+    validate_generated_article,
 )
 from config.database import AsyncSessionLocal
 
@@ -20,7 +22,7 @@ MAX_ATTEMPTS = 3
 
 class ResearchExecutionService:
     @staticmethod
-    async def _heartbeat(job_id, user_id, token):
+    async def _heartbeat(job_id, user_id, token) -> None:
         while True:
             await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
             async with AsyncSessionLocal() as db:
@@ -30,7 +32,7 @@ class ResearchExecutionService:
                     return
 
     @classmethod
-    async def process(cls, *, job_id, user_id, owner_name='', stage_labels=(), worker_id='research-worker'):
+    async def process(cls, *, job_id, user_id, owner_name='', stage_labels=(), worker_id='research-worker') -> None:
         async with AsyncSessionLocal() as db:
             job = await ResearchDao.claim_research_job(
                 db, job_id, user_id, worker_id=worker_id, lease_seconds=LEASE_SECONDS, max_attempts=MAX_ATTEMPTS
@@ -73,22 +75,31 @@ class ResearchExecutionService:
                         'documentIntegrity': {'status': 'passed', 'factsVerified': False},
                         'citation': {
                             'requested': request.get('citation_check', request.get('citationCheck', True)),
-                            'status': 'not_run', 'reason': 'normalization_only',
-                            'normalization': 'completed', 'version': report.version,
+                            'status': 'not_run',
+                            'reason': 'normalization_only',
+                            'normalization': 'completed',
+                            'version': report.version,
                         },
                         'quality': {'status': 'not_run', 'version': report.version},
                     }
                     # 请求/模型仍保持冻结；将真实执行元数据同步到任务和成果版本。
                     job.config_snapshot = deepcopy(result_snapshot)
                     await cls.save_version(
-                        result_db, report, 'generated', user_id, owner_name, result_snapshot,
-                        sections=article['sections'], citations=cls.material_citations(materials), quality_issues=[],
+                        result_db,
+                        report,
+                        'generated',
+                        user_id,
+                        owner_name,
+                        result_snapshot,
+                        sections=article['sections'],
+                        citations=cls.material_citations(materials),
+                        quality_issues=[],
                     )
                 job.status, job.progress, job.finished_at = 'completed', 100, utcnow()
                 job.execution_token = job.lease_expires_at = None
                 job.error = None
                 # 配图作为独立持久资源，失败不会覆盖正文。
-                from app.research.services.exports import ResearchReportExportService
+                from app.research.services.exports import ResearchReportExportService  # noqa: PLC0415
 
                 await ResearchReportExportService.queue_images(result_db, job, report)
                 await result_db.commit()
@@ -101,9 +112,13 @@ class ResearchExecutionService:
                     # 不自动重发可能已经计费的未知结果；明确重试由用户决定。
                     job.status, job.error, job.finished_at = (
                         'failed',
-                        (str(error) if isinstance(error, ManuscriptValidationError)
-                         else error.message if isinstance(error, ModelOutputLimitError)
-                         else '生成未完成，请检查模型配置或稍后明确重试'),
+                        (
+                            str(error)
+                            if isinstance(error, ManuscriptValidationError)
+                            else error.message
+                            if isinstance(error, ModelOutputLimitError)
+                            else '生成未完成，请检查模型配置或稍后明确重试'
+                        ),
                         utcnow(),
                     )
                     if isinstance(error, ManuscriptValidationError):
@@ -118,25 +133,40 @@ class ResearchExecutionService:
     def material_citations(materials: list[dict] | None) -> list[dict]:
         """真实冻结选材的来源，不将模型输出或模板章节伪装成已核实证据。"""
         return [
-            {'id': index, 'type': item['type'], 'sourceId': wire_id(item['id']),
-             'title': item.get('title', ''), 'source': deepcopy(item.get('source') or {})}
+            {
+                'id': index,
+                'type': item['type'],
+                'sourceId': wire_id(item['id']),
+                'title': item.get('title', ''),
+                'source': deepcopy(item.get('source') or {}),
+            }
             for index, item in enumerate(materials or [], 1)
         ]
 
     @staticmethod
     async def save_version(
-        db: Any, report: Any, source: str, user_id: int, owner_name: str, snapshot: dict | None = None, *,
-        sections: list[dict] | None = None, citations: list[dict] | None = None,
+        db: Any,
+        report: Any,
+        source: str,
+        user_id: int,
+        owner_name: str,
+        snapshot: dict | None = None,
+        *,
+        sections: list[dict] | None = None,
+        citations: list[dict] | None = None,
         quality_issues: list[dict] | None = None,
     ) -> None:
         if await ResearchDao.get_report_version(db, report.id, report.version):
             return
-        previous = (await ResearchDao.get_report_version(db, report.id, report.version - 1)
-                    if report.version > 1 else None)
+        previous = (
+            await ResearchDao.get_report_version(db, report.id, report.version - 1) if report.version > 1 else None
+        )
         # Missing metadata means preserve; explicit [] means deliberately clear.
         if snapshot is None:
-            snapshot = previous.model_snapshot if previous else (
-                {'template': {'id': wire_id(report.template_id)}} if report.template_id is not None else {}
+            snapshot = (
+                previous.model_snapshot
+                if previous
+                else ({'template': {'id': wire_id(report.template_id)}} if report.template_id is not None else {})
             )
 
         def metadata(value: list[dict] | None, name: str) -> list[dict]:

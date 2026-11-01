@@ -1,4 +1,5 @@
 """Legacy source-page rendering utility; not used by the text reader."""
+
 from __future__ import annotations
 
 import hashlib
@@ -35,7 +36,11 @@ def main() -> None:
         directory.mkdir(parents=True, exist_ok=True)
         digest = hashlib.sha256()
         with tempfile.TemporaryDirectory(prefix='pipesight-paper-preview-') as temporary:
-            subprocess.run(['pdftoppm', '-scale-to', '1800', '-png', str(source), str(Path(temporary) / 'page')], check=True, capture_output=True)
+            subprocess.run(
+                ['pdftoppm', '-scale-to', '1800', '-png', str(source), str(Path(temporary) / 'page')],
+                check=True,
+                capture_output=True,
+            )
             images = sorted(Path(temporary).glob('page-*.png'), key=lambda path: int(path.stem.split('-')[-1]))
             if len(images) != record['pages']:
                 raise ValueError('Incomplete page rendering')
@@ -44,7 +49,10 @@ def main() -> None:
                 with Image.open(image) as page:
                     page.convert('RGB').save(target, 'WEBP', quality=88, method=4)
                 digest.update(target.read_bytes())
-        print(json.dumps({'doi': doi, 'asset_key': key, 'pages_sha256': digest.hexdigest(), 'pages': len(images)}), flush=True)
+        print(
+            json.dumps({'doi': doi, 'asset_key': key, 'pages_sha256': digest.hexdigest(), 'pages': len(images)}),
+            flush=True,
+        )
 
 
 if __name__ == '__main__':

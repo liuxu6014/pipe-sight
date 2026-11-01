@@ -3,6 +3,7 @@
 import hashlib
 import importlib
 from types import SimpleNamespace as NS
+from typing import NoReturn
 
 import pytest
 from sqlalchemy.orm import Session
@@ -30,23 +31,39 @@ async def report_and_export(env, db, *, with_history=False):
     db.add(report)
     await db.flush()
     if with_history:
-        db.add(env.models.PipelineReportVersion(
-            report_id=report.id, version=4, title=report.title, content=report.content, source='manual',
-            operator_id=7, operator_name='历史编辑者',
-            sections=[{'title': '结论', 'content': '导出提交时的真实正文'}],
-            citations=[{'id': 1, 'type': 'file', 'sourceId': str(material.id), 'title': material.name,
-                        'source': {'filename': material.filename}}],
-            quality_issues=[{'message': '人工待核对'}],
-            model_snapshot={'template': {'id': str(template.id), 'name': template.name},
-                            'request': {'period': ['2026-01-01', '2026-03-31']}},
-        ))
+        db.add(
+            env.models.PipelineReportVersion(
+                report_id=report.id,
+                version=4,
+                title=report.title,
+                content=report.content,
+                source='manual',
+                operator_id=7,
+                operator_name='历史编辑者',
+                sections=[{'title': '结论', 'content': '导出提交时的真实正文'}],
+                citations=[
+                    {
+                        'id': 1,
+                        'type': 'file',
+                        'sourceId': str(material.id),
+                        'title': material.name,
+                        'source': {'filename': material.filename},
+                    }
+                ],
+                quality_issues=[{'message': '人工待核对'}],
+                model_snapshot={
+                    'template': {'id': str(template.id), 'name': template.name},
+                    'request': {'period': ['2026-01-01', '2026-03-31']},
+                },
+            )
+        )
     await db.commit()
     module = importlib.import_module('app.research.services.exports')
     result = await module.ResearchReportExportService.create(db, user_id=7, report_id=report.id, file_format='pdf')
     return module, report, result
 
 
-def export_context(module, env, db, tmp_path, monkeypatch):
+def export_context(module, env, db, tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(env.cfg.UploadConfig, 'UPLOAD_PATH', str(tmp_path))
 
     def factory():
@@ -56,8 +73,8 @@ def export_context(module, env, db, tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_create_export_persists_exact_snapshot_without_deleted_entity_columns(env, db):
-    module, report, result = await report_and_export(env, db)
+async def test_create_export_persists_exact_snapshot_without_deleted_entity_columns(env, db) -> None:
+    _module, report, result = await report_and_export(env, db)
     record = await env.repo.ResearchDao.get_asset(db, result['id'], 7)
     assert result['status'] == 'queued' and result['reportVersionNo'] == 4
     assert record.type == 'export' and record.task_id is None and record.mime_type == 'application/pdf'
@@ -83,28 +100,38 @@ async def test_create_export_persists_exact_snapshot_without_deleted_entity_colu
 
 
 @pytest.mark.asyncio
-async def test_create_export_preserves_exact_actual_history_metadata_without_inventing_model_or_owner(env, db):
+async def test_create_export_preserves_exact_actual_history_metadata_without_inventing_model_or_owner(env, db) -> None:
     _, _, result = await report_and_export(env, db, with_history=True)
     record = await env.repo.ResearchDao.get_asset(db, result['id'], 7)
     assert record.config_snapshot == {
         'version': 4,
         'report': {
-            'title': '年度报告', 'content': '# 结论\n\n导出提交时的真实正文',
-            'version_no': 4, 'report_type': 'research', 'owner_name': '',
+            'title': '年度报告',
+            'content': '# 结论\n\n导出提交时的真实正文',
+            'version_no': 4,
+            'report_type': 'research',
+            'owner_name': '',
             'sections': [{'title': '结论', 'content': '导出提交时的真实正文'}],
-            'citations': [{'id': 1, 'type': 'file', 'sourceId': '101', 'title': '资料',
-                           'source': {'filename': 'a.txt'}}],
+            'citations': [
+                {'id': 1, 'type': 'file', 'sourceId': '101', 'title': '资料', 'source': {'filename': 'a.txt'}}
+            ],
             'metadata': {
-                'modelSnapshot': {'template': {'id': '201', 'name': '模板'},
-                                  'request': {'period': ['2026-01-01', '2026-03-31']}},
-                'source': 'manual', 'operator': '历史编辑者', 'qualityIssues': [{'message': '人工待核对'}],
-                'templateId': '201', 'templateVersion': '模板', 'period': ['2026-01-01', '2026-03-31'],
+                'modelSnapshot': {
+                    'template': {'id': '201', 'name': '模板'},
+                    'request': {'period': ['2026-01-01', '2026-03-31']},
+                },
+                'source': 'manual',
+                'operator': '历史编辑者',
+                'qualityIssues': [{'message': '人工待核对'}],
+                'templateId': '201',
+                'templateVersion': '模板',
+                'period': ['2026-01-01', '2026-03-31'],
             },
         },
     }
 
 
-def test_export_render_metadata_reads_explicit_renderer_dto(env):
+def test_export_render_metadata_reads_explicit_renderer_dto(env) -> None:
     exporter = importlib.import_module('app.research.services.exporters')
     snapshot = NS(
         report_type='research-demand',
@@ -112,13 +139,13 @@ def test_export_render_metadata_reads_explicit_renderer_dto(env):
         owner_name='测试用户',
         metadata={'templateVersion': 'V2.0', 'period': ['2026-01-01', '2026-03-31']},
     )
-    assert exporter._metadata_line(snapshot) == (
-        '类型：科研需求报告　负责人：测试用户　周期：2026-01-01 至 2026-03-31'
-    )
+    assert exporter._metadata_line(snapshot) == ('类型：科研需求报告　负责人：测试用户　周期：2026-01-01 至 2026-03-31')
 
 
 @pytest.mark.asyncio
-async def test_process_export_writes_real_pdf_and_download_preserves_exact_bytes(env, db, tmp_path, monkeypatch):
+async def test_process_export_writes_real_pdf_and_download_preserves_exact_bytes(
+    env, db, tmp_path, monkeypatch
+) -> None:
     module, report, result = await report_and_export(env, db)
     export_context(module, env, db, tmp_path, monkeypatch)
     report.content = '导出排队之后编辑的正文'
@@ -144,10 +171,10 @@ async def test_process_export_writes_real_pdf_and_download_preserves_exact_bytes
 
 
 @pytest.mark.asyncio
-async def test_export_and_download_require_report_owner_before_touching_file(env, db, monkeypatch):
+async def test_export_and_download_require_report_owner_before_touching_file(env, db, monkeypatch) -> None:
     module, report, result = await report_and_export(env, db)
 
-    def forbidden(*args, **kwargs):
+    def forbidden(*args, **kwargs) -> NoReturn:
         raise AssertionError('unauthorized user reached file storage')
 
     monkeypatch.setattr(module.ReportExportStorage, 'read', forbidden)
@@ -158,14 +185,14 @@ async def test_export_and_download_require_report_owner_before_touching_file(env
 
 
 @pytest.mark.asyncio
-async def test_queued_export_is_not_downloadable(env, db):
+async def test_queued_export_is_not_downloadable(env, db) -> None:
     module, _, result = await report_and_export(env, db)
     with raises(env, '尚未完成'):
         await module.ResearchReportExportService.download(db, user_id=7, export_id=result['id'])
 
 
 @pytest.mark.asyncio
-async def test_recovery_reuses_existing_file_without_rendering_again(env, db, tmp_path, monkeypatch):
+async def test_recovery_reuses_existing_file_without_rendering_again(env, db, tmp_path, monkeypatch) -> None:
     module, _, result = await report_and_export(env, db)
     export_context(module, env, db, tmp_path, monkeypatch)
     record = await env.repo.ResearchDao.get_asset(db, result['id'], 7)
@@ -174,7 +201,7 @@ async def test_recovery_reuses_existing_file_without_rendering_again(env, db, tm
     )
     module.ReportExportStorage.write(key, b'%PDF-previously-written')
 
-    def forbidden(*args, **kwargs):
+    def forbidden(*args, **kwargs) -> NoReturn:
         raise AssertionError('persisted file was regenerated')
 
     monkeypatch.setattr(module, 'build_file', forbidden)
@@ -186,11 +213,11 @@ async def test_recovery_reuses_existing_file_without_rendering_again(env, db, tm
 
 
 @pytest.mark.asyncio
-async def test_export_failure_is_safe_and_can_be_explicitly_retried(env, db, tmp_path, monkeypatch):
+async def test_export_failure_is_safe_and_can_be_explicitly_retried(env, db, tmp_path, monkeypatch) -> None:
     module, _, result = await report_and_export(env, db)
     export_context(module, env, db, tmp_path, monkeypatch)
 
-    def failed(*args, **kwargs):
+    def failed(*args, **kwargs) -> NoReturn:
         raise RuntimeError('private filesystem path and secret must not escape')
 
     monkeypatch.setattr(module, 'build_file', failed)
@@ -202,7 +229,7 @@ async def test_export_failure_is_safe_and_can_be_explicitly_retried(env, db, tmp
     assert (await module.ResearchReportExportService.retry(db, 7, record.id))['status'] == 'queued'
 
 
-def test_export_storage_rejects_path_traversal(env, tmp_path, monkeypatch):
+def test_export_storage_rejects_path_traversal(env, tmp_path, monkeypatch) -> None:
     module = importlib.import_module('app.research.services.export_storage')
     monkeypatch.setattr(env.cfg.UploadConfig, 'UPLOAD_PATH', str(tmp_path))
     for key in ('../outside.pdf', 'report_exports/../../outside.pdf', '/tmp/outside.pdf'):
@@ -212,7 +239,7 @@ def test_export_storage_rejects_path_traversal(env, tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('state', ['missing', 'disabled', 'wrong_capability', 'unsupported_provider', 'enabled'])
-async def test_image_retry_validates_model_before_mutating_failed_asset(env, db, monkeypatch, state):
+async def test_image_retry_validates_model_before_mutating_failed_asset(env, db, monkeypatch, state) -> None:
     module, report, _ = await report_and_export(env, db)
     model = env.ai.AiModels(
         id=2,
@@ -241,7 +268,7 @@ async def test_image_retry_validates_model_before_mutating_failed_asset(env, db,
     db.add(record)
     if state == 'missing':
 
-        async def missing(*args):
+        async def missing(*args) -> None:
             return None
 
         monkeypatch.setattr(env.repo.ResearchDao, 'get_model', missing)

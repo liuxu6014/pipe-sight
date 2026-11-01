@@ -5,7 +5,6 @@ never executed; authentication/cache/scheduler dependencies are mocked.
 """
 
 # Fixture adapters deliberately accept varied SQLAlchemy result types.
-# ruff: noqa: ANN001, ANN201, ANN202, ANN204, PLR2004, PLC0415
 
 import re
 import socket

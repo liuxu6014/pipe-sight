@@ -70,9 +70,7 @@ class TransportCryptoMiddleware:
 
         if request_required and not request_encrypted:
             await TransportCryptoMonitorUtil.record_plain_request(redis)
-            await TransportCryptoMonitorUtil.record_required_rejected(
-                redis, str(scope.get('method', '')).upper(), path
-            )
+            await TransportCryptoMonitorUtil.record_required_rejected(redis, str(scope.get('method', '')).upper(), path)
             await TransportCryptoMonitorUtil.record_plain_response(redis)
             await self._send_error_response(
                 scope,

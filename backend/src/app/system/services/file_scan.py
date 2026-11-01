@@ -86,7 +86,13 @@ class FileScanService:
         if completed.returncode == 0:
             return FileScanResult('clean', '文件已通过恶意文件扫描。', scanner_name, output or None, datetime.now())
         if completed.returncode == 1:
-            return FileScanResult('quarantined', '扫描发现风险，文件已禁止解析、下载和 AI 使用。', scanner_name, output or None, datetime.now())
+            return FileScanResult(
+                'quarantined',
+                '扫描发现风险，文件已禁止解析、下载和 AI 使用。',
+                scanner_name,
+                output or None,
+                datetime.now(),
+            )
         return FileScanResult(
             'failed',
             f'恶意文件扫描未完成{f"：{output}" if output else ""}，资料暂不可用。',
@@ -112,7 +118,10 @@ class FileScanService:
                 header = source.read(16)
         except OSError as exc:
             return FileScanResult(
-                'failed', f'基础文件检查失败：{str(exc)[: cls._output_limit]}', 'builtin-basic', scanned_at=datetime.now()
+                'failed',
+                f'基础文件检查失败：{str(exc)[: cls._output_limit]}',
+                'builtin-basic',
+                scanned_at=datetime.now(),
             )
 
         if any(header.startswith(signature) for signature in cls._executable_signatures):

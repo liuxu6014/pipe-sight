@@ -15,18 +15,14 @@ _STATUS_SQL = "processing_status IN ('pending', 'processing', 'completed', 'reje
 def _replace_constraint(status_sql: str) -> None:
     if context.is_offline_mode():
         op.execute(f'ALTER TABLE news.hp_news DROP CONSTRAINT IF EXISTS {_STATUS_CONSTRAINT}')
-        op.execute(
-            f'ALTER TABLE news.hp_news ADD CONSTRAINT {_STATUS_CONSTRAINT} CHECK ({status_sql})'
-        )
+        op.execute(f'ALTER TABLE news.hp_news ADD CONSTRAINT {_STATUS_CONSTRAINT} CHECK ({status_sql})')
         return
 
     bind = op.get_bind()
     inspector = inspect(bind)
     if 'hp_news' not in inspector.get_table_names(schema='news'):
         return
-    constraints = {
-        item['name'] for item in inspector.get_check_constraints('hp_news', schema='news')
-    }
+    constraints = {item['name'] for item in inspector.get_check_constraints('hp_news', schema='news')}
     if _STATUS_CONSTRAINT in constraints:
         op.drop_constraint(
             _STATUS_CONSTRAINT,

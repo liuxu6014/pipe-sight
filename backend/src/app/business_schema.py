@@ -130,7 +130,7 @@ def model_ddl(metadata: sa.MetaData) -> dict:
 
 
 # Keep columns, relations and optional sequence metadata in one coherent snapshot.
-def catalog(connection: sa.Connection, tables: tuple[str, ...] = BUSINESS_TABLES) -> dict:  # noqa: PLR0912
+def catalog(connection: sa.Connection, tables: tuple[str, ...] = BUSINESS_TABLES) -> dict:
     """Snapshot actual types, defaults, identity, CHECKs, indexes and relations."""
     selected = set(tables)
     output = {name: {'columns': [], 'checks': [], 'indexes': [], 'foreign_keys': [], 'unique': []} for name in tables}
@@ -252,6 +252,7 @@ def catalog(connection: sa.Connection, tables: tuple[str, ...] = BUSINESS_TABLES
 def canonical_catalog(value: dict) -> dict:
     result = json.loads(json.dumps(value))
     for table in result.values():
+        table['columns'].sort(key=lambda column: column['name'])
         for kind in ('checks', 'indexes'):
             for item in table[kind]:
                 item['definition'] = canonical_catalog_sql(item['definition'])

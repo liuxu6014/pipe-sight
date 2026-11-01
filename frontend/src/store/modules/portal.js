@@ -43,6 +43,11 @@ function resolveRows(fallbackRows, liveRows) {
   return demoDataEnabled ? mergeById(fallbackRows, liveRows) : liveRows
 }
 
+function isSessionFailure(reason) {
+  const message = typeof reason === 'string' ? reason : reason?.message || reason?.msg || ''
+  return /登录|会话|session|token/i.test(message)
+}
+
 function buildWorkspaceSnapshot(item) {
   return workspaceSnapshotFields.reduce((snapshot, field) => {
     if (item?.[field] !== undefined && item?.[field] !== null) snapshot[field] = item[field]
@@ -211,8 +216,9 @@ const usePortalStore = defineStore('portal-workspace', {
         if (epoch !== this.workspaceEpoch) return
         const [paperResult, intelligenceResult, documentResult, workspaceResult, jobResult, researchReportResult] = results
         const sectionNames = ['papers', 'news', 'documents', 'workspace', 'tasks', 'reports']
+        const sessionExpired = results.every(item => item.status === 'rejected' && isSessionFailure(item.reason))
         this.sectionErrors = Object.fromEntries(results.map((result, index) => [
-          sectionNames[index], result.status === 'rejected' ? '服务暂时无法加载，请重试' : ''
+          sectionNames[index], result.status === 'rejected' && !sessionExpired ? '服务暂时无法加载，请重试' : ''
         ]))
         const previousPapers = this.liveIntelligence.filter(item => item.category === 'paper')
         const previousArticles = this.liveIntelligence.filter(item => item.category !== 'paper')
@@ -247,7 +253,7 @@ const usePortalStore = defineStore('portal-workspace', {
           this.tasks = demoDataEnabled ? mergeById(recentTasks, liveTasks) : liveTasks
         }
         const failedCount = results.filter(item => item.status === 'rejected').length
-        if (failedCount) {
+        if (failedCount && !sessionExpired) {
           this.dataError = failedCount === results.length
             ? (demoDataEnabled ? '实时数据暂不可用，当前为显式演示模式' : '实时数据暂不可用，请检查后端服务')
             : `部分实时数据暂不可用（${failedCount}/${results.length}）`

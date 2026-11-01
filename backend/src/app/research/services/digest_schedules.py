@@ -145,7 +145,7 @@ class DigestScheduleService:
             terms = config[field]
             if not isinstance(terms, list) or any(not isinstance(term, str) for term in terms):
                 raise ServiceException(message=f'选材 {field} 必须为文本数组')
-            if len(terms) > maximum or any(len(term) > 200 for term in terms):
+            if len(terms) > maximum or any(len(term) > 200 for term in terms):  # noqa: PLR2004
                 raise ServiceException(message=f'选材 {field} 数量或长度超出限制')
             config[field] = list(dict.fromkeys(term.strip() for term in terms if term.strip()))
         if 'source_types' in config:
@@ -390,7 +390,7 @@ class DigestScheduleService:
         }
 
     @staticmethod
-    def safe_error(message):
+    def safe_error(message) -> str:
         text = str(message or '')
         text = re.sub(r'(?i)\bBearer\s+\S+|\bsk-[a-zA-Z0-9_-]+', '[已隐藏密钥]', text)
         text = re.sub(r'(?i)((?:api[_-]?key|token|password|secret)\s*[=:]\s*)[^\s,;]+', r'\1[已隐藏]', text)
@@ -489,9 +489,10 @@ class DigestScheduleService:
         return row
 
     @classmethod
-    async def create(cls, db, *, user_id, owner_name, payload, template_service):
-        row = await cls._prepare(db, user_id=user_id, owner_name=owner_name, payload=payload,
-                                 template_service=template_service)
+    async def create(cls, db, *, user_id, owner_name, payload, template_service) -> dict:
+        row = await cls._prepare(
+            db, user_id=user_id, owner_name=owner_name, payload=payload, template_service=template_service
+        )
         enabled = row.is_enabled
         row.next_run_at = cls.next_run(row, research_models.utcnow()) if enabled else None
         await ResearchDao.add_digest_schedule(db, row)
@@ -499,15 +500,26 @@ class DigestScheduleService:
         return cls.serialize(row)
 
     @classmethod
-    async def update(cls, db, *, user_id, schedule_id, payload, template_service):
+    async def update(cls, db, *, user_id, schedule_id, payload, template_service) -> dict:
         row = await ResearchDao.lock_digest_schedule_for_update(db, schedule_id, user_id)
         if not row:
             raise ServiceException(message='自动计划不存在或无权访问')
         # Validate a detached candidate before changing the locked persistent row.
-        candidate = await cls._prepare(db, user_id=user_id, owner_name='', payload=payload,
-                                       template_service=template_service)
-        for field in ('name', 'template_id', 'frequency', 'weekday', 'month_day', 'run_time', 'timezone',
-                      'selection_config', 'generation_config', 'is_enabled'):
+        candidate = await cls._prepare(
+            db, user_id=user_id, owner_name='', payload=payload, template_service=template_service
+        )
+        for field in (
+            'name',
+            'template_id',
+            'frequency',
+            'weekday',
+            'month_day',
+            'run_time',
+            'timezone',
+            'selection_config',
+            'generation_config',
+            'is_enabled',
+        ):
             setattr(row, field, getattr(candidate, field))
         row.next_run_at = cls.next_run(row, research_models.utcnow()) if row.is_enabled else None
         await db.commit()
@@ -517,8 +529,15 @@ class DigestScheduleService:
     async def list(cls, db: Any, user_id: int) -> dict[str, Any]:
         rows = await ResearchDao.list_digest_schedules(db, user_id)
         history = await ResearchDao.latest_schedule_jobs(db, user_id, [row.id for row in rows])
-        return {'rows': [cls.serialize(row, latest_job=history.get(row.id, (None,None))[0],
-            report=history.get(row.id, (None,None))[1]) for row in rows], 'total': len(rows)}
+        return {
+            'rows': [
+                cls.serialize(
+                    row, latest_job=history.get(row.id, (None, None))[0], report=history.get(row.id, (None, None))[1]
+                )
+                for row in rows
+            ],
+            'total': len(rows),
+        }
 
     @classmethod
     async def set_enabled(
@@ -661,7 +680,10 @@ class DigestScheduleService:
                     result['failed'] += 1
                     # 保存摘要，但保留原游标；保存点回滚不抹掉失败原因。
                     row.last_run_at, row.last_status = checked_at, 'failed'
-                    row.last_error = cls.safe_error(getattr(exc, 'message', None)) or f'计划派发异常（{type(exc).__name__}），请联系管理员检查任务日志。'
+                    row.last_error = (
+                        cls.safe_error(getattr(exc, 'message', None))
+                        or f'计划派发异常（{type(exc).__name__}），请联系管理员检查任务日志。'
+                    )
                     logger.exception('周期简报派发失败；计划游标未推进')
             await db.commit()
         return result

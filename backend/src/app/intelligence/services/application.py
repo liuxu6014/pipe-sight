@@ -8,25 +8,25 @@ from app.intelligence.services.search import IntelligenceSearchService
 
 class IntelligenceApplicationService:
     @staticmethod
-    def _datetime_text(value):
+    def _datetime_text(value) -> str | None:
         return format_business_time(value)
 
     @classmethod
-    async def dashboard_summary(cls, db):
+    async def dashboard_summary(cls, db) -> dict:
         return await IntelligenceDashboardService.summary(db, date_formatter=cls._datetime_text)
 
     @staticmethod
-    async def portal_overview(db, *, user_id):
+    async def portal_overview(db, *, user_id) -> dict:
         return await IntelligenceCatalogService.portal_overview(db, user_id=user_id)
 
     @classmethod
-    async def list_intelligence(cls, db, **kwargs):
+    async def list_intelligence(cls, db, **kwargs) -> dict:
         return await IntelligenceCatalogService.list_intelligence(db, **kwargs, date_formatter=cls._datetime_text)
 
     @classmethod
-    async def get_intelligence_detail(cls, db, item_id):
+    async def get_intelligence_detail(cls, db, item_id) -> dict:
         return await IntelligenceCatalogService.get_detail(db, item_id, date_formatter=cls._datetime_text)
 
     @classmethod
-    async def search_intelligence(cls, db, **kwargs):
+    async def search_intelligence(cls, db, **kwargs) -> dict:
         return await IntelligenceSearchService.search(db, **kwargs, date_formatter=cls._datetime_text)

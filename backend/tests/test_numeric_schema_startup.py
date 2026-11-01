@@ -10,7 +10,7 @@ from config import get_db
 
 
 @pytest.mark.parametrize('wrong', [('reports', 'id'), ('report_versions', 'report_id')])
-def test_startup_rejects_varchar_business_primary_or_foreign_key(monkeypatch, wrong):
+def test_startup_rejects_varchar_business_primary_or_foreign_key(monkeypatch, wrong) -> None:
     metadata = MetaData()
     Table('reports', metadata, Column('id', BigInteger, primary_key=True))
     Table(

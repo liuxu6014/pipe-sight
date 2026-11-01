@@ -85,7 +85,7 @@ class FileTransferService:
         prefix = f'{UploadConfig.UPLOAD_PREFIX}/'
         if not resource.startswith(prefix):
             raise ServiceException(message='文件名称不合法')
-        relative_resource = resource[len(prefix):]
+        relative_resource = resource[len(prefix) :]
         filepath = cls._safe_path(UploadConfig.UPLOAD_PATH, relative_resource)
         filename = Path(relative_resource).name
         if (

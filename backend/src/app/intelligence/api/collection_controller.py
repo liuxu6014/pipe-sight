@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import HTTPException, Request
+from fastapi import HTTPException, Request, Response
 from pydantic import BeforeValidator
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,7 +29,7 @@ DB = Annotated[AsyncSession, DBSessionDependency()]
 BusinessId = Annotated[int, BeforeValidator(parse_business_id)]
 
 
-async def response(operation):
+async def response(operation) -> Response:
     try:
         return ResponseUtil.success(data=await operation)
     except ConfigurationError as exc:
@@ -41,19 +41,19 @@ async def response(operation):
 
 
 @collection_controller.get('/sources', dependencies=[UserInterfaceAuthDependency('pipeline:source:list')])
-async def list_sources(request: Request, query_db: DB):
+async def list_sources(request: Request, query_db: DB) -> Response:
     return await response(Sources.list_sources(query_db))
 
 
 @collection_controller.post('/sources', dependencies=[UserInterfaceAuthDependency('pipeline:source:save')])
 @Log(title='采集来源', business_type=BusinessType.INSERT, request_log_mode='summary', response_log_mode='summary')
-async def create_source(request: Request, payload: SourceSave, query_db: DB):
+async def create_source(request: Request, payload: SourceSave, query_db: DB) -> Response:
     return await response(Sources.save(query_db, **payload.model_dump()))
 
 
 @collection_controller.put('/sources/{source_id}', dependencies=[UserInterfaceAuthDependency('pipeline:source:save')])
 @Log(title='采集来源', business_type=BusinessType.UPDATE, request_log_mode='summary', response_log_mode='summary')
-async def save_source(request: Request, source_id: BusinessId, payload: SourceSave, query_db: DB):
+async def save_source(request: Request, source_id: BusinessId, payload: SourceSave, query_db: DB) -> Response:
     return await response(Sources.save(query_db, source_id=source_id, **payload.model_dump()))
 
 
@@ -61,25 +61,27 @@ async def save_source(request: Request, source_id: BusinessId, payload: SourceSa
     '/sources/{source_id}/enabled', dependencies=[UserInterfaceAuthDependency('pipeline:source:save')]
 )
 @Log(title='采集启停', business_type=BusinessType.UPDATE, request_log_mode='summary', response_log_mode='summary')
-async def set_enabled(request: Request, source_id: BusinessId, payload: SourceEnabled, query_db: DB):
+async def set_enabled(request: Request, source_id: BusinessId, payload: SourceEnabled, query_db: DB) -> Response:
     return await response(Sources.set_enabled(query_db, source_id, payload.is_enabled))
 
 
 @collection_controller.post('/tasks/{source_id}/run', dependencies=[UserInterfaceAuthDependency('pipeline:task:run')])
 @Log(title='采集入队', business_type=BusinessType.INSERT, request_log_mode='summary', response_log_mode='summary')
-async def enqueue(request: Request, source_id: BusinessId, query_db: DB, payload: CollectionRequest | None = None):
+async def enqueue(
+    request: Request, source_id: BusinessId, query_db: DB, payload: CollectionRequest | None = None
+) -> Response:
     return await response(
         Sources.queue_collection_run(query_db, source_id, request_id=payload.request_id if payload else None)
     )
 
 
 @collection_controller.get('/tasks', dependencies=[UserInterfaceAuthDependency('pipeline:task:list')])
-async def list_runs(request: Request, query_db: DB):
+async def list_runs(request: Request, query_db: DB) -> Response:
     return await response(Sources.list_collection_tasks(query_db))
 
 
 @collection_controller.get('/tasks/runs/{run_id}', dependencies=[UserInterfaceAuthDependency('pipeline:task:list')])
-async def detail(request: Request, run_id: BusinessId, query_db: DB):
+async def detail(request: Request, run_id: BusinessId, query_db: DB) -> Response:
     return await response(Sources.get_collection_run_detail(query_db, run_id))
 
 
@@ -87,7 +89,7 @@ async def detail(request: Request, run_id: BusinessId, query_db: DB):
     '/tasks/runs/{run_id}/stop', dependencies=[UserInterfaceAuthDependency('pipeline:task:run')]
 )
 @Log(title='采集停止', business_type=BusinessType.UPDATE, request_log_mode='summary', response_log_mode='summary')
-async def stop(request: Request, run_id: BusinessId, query_db: DB):
+async def stop(request: Request, run_id: BusinessId, query_db: DB) -> Response:
     return await response(Sources.stop_collection_run(query_db, run_id))
 
 
@@ -95,7 +97,9 @@ async def stop(request: Request, run_id: BusinessId, query_db: DB):
     '/tasks/runs/{run_id}/retry', dependencies=[UserInterfaceAuthDependency('pipeline:task:run')]
 )
 @Log(title='采集重试', business_type=BusinessType.INSERT, request_log_mode='summary', response_log_mode='summary')
-async def retry(request: Request, run_id: BusinessId, query_db: DB, payload: CollectionRequest | None = None):
+async def retry(
+    request: Request, run_id: BusinessId, query_db: DB, payload: CollectionRequest | None = None
+) -> Response:
     return await response(
         Sources.retry_collection_run(query_db, run_id, request_id=payload.request_id if payload else None)
     )
@@ -110,7 +114,7 @@ async def retry(request: Request, run_id: BusinessId, query_db: DB, payload: Col
     request_log_mode='summary',
     response_log_mode='summary',
 )
-async def confirm_stop(request: Request, run_id: BusinessId, payload: IsolationConfirmation, query_db: DB):
+async def confirm_stop(request: Request, run_id: BusinessId, payload: IsolationConfirmation, query_db: DB) -> Response:
     return await response(Sources.confirm_isolated_stop(query_db, run_id, worker_isolated=payload.worker_isolated))
 
 
@@ -118,5 +122,5 @@ async def confirm_stop(request: Request, run_id: BusinessId, payload: IsolationC
     '/sources/{source_id}', dependencies=[UserInterfaceAuthDependency('pipeline:source:save')]
 )
 @Log(title='采集停用', business_type=BusinessType.UPDATE, request_log_mode='summary', response_log_mode='summary')
-async def disable_source(request: Request, source_id: BusinessId, query_db: DB):
+async def disable_source(request: Request, source_id: BusinessId, query_db: DB) -> Response:
     return await response(Sources.set_enabled(query_db, source_id, False))
