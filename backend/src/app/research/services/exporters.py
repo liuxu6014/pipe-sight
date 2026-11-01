@@ -20,13 +20,14 @@ from reportlab.lib.textsplit import ALL_CANNOT_START
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
-from reportlab.pdfbase.ttfonts import TTFont, TTFError
+from reportlab.pdfbase.ttfonts import TTFError, TTFont
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 from reportlab.platypus.paragraph import ParaLines, cjkU, makeCJKParaLine
 
 from app.research.services.citation_format import REFERENCE_TITLES, clean_report_citations
 
 _HEADING_RE = re.compile(r'^(#{1,6})\s+(.+?)\s*$')
+_BOLD_HEADING_RE = re.compile(r'^\*\*(.+?)\*\*\s*$')
 _BULLET_RE = re.compile(r'^\s*[-*+]\s+(.+?)\s*$')
 _NUMBERED_RE = re.compile(r'^\s*\d+[.)]\s+(.+?)\s*$')
 _INLINE_LINK_RE = re.compile(r'\[([^\]]+)\]\(([^)]+)\)')
@@ -34,6 +35,17 @@ _INLINE_BOLD_RE = re.compile(r'\*\*(.+?)\*\*')
 _INLINE_ITALIC_RE = re.compile(r'(?<!\*)\*([^*]+)\*(?!\*)')
 _CITATION_RE = re.compile(r'\[[1-9]\d*\](?!\()')
 _SUBHEADING_RE = re.compile(r'^[一二三四五六七八九十百]+[、．]')
+
+
+def _heading_parts(line: str) -> tuple[int, str] | None:
+    """Level and title for a bold or legacy Markdown heading line."""
+    bold = _BOLD_HEADING_RE.match(line)
+    if bold:
+        return 2, bold.group(1).strip()
+    legacy = _HEADING_RE.match(line)
+    if legacy:
+        return len(legacy.group(1)), legacy.group(2).strip()
+    return None
 
 
 class CitationParagraph(Paragraph):
@@ -44,10 +56,13 @@ class CitationParagraph(Paragraph):
     preceding character, citation group and closing punctuation as one unit.
     """
 
-    def breakLinesCJK(self, maxWidths):
-        if (getattr(self, '_splitpara', False) and hasattr(self, 'blPara')
-                or self.bulletText or any(hasattr(f, 'cbDefn') or hasattr(f, 'lineBreak') for f in self.frags)
-                or not any(getattr(f, 'rise', 0) > 0 for f in self.frags)):
+    def breakLinesCJK(self, maxWidths) -> ParaLines:  # noqa: N802, N803 (ReportLab override)
+        if (
+            (getattr(self, '_splitpara', False) and hasattr(self, 'blPara'))
+            or self.bulletText
+            or any(hasattr(f, 'cbDefn') or hasattr(f, 'lineBreak') for f in self.frags)
+            or not any(getattr(f, 'rise', 0) > 0 for f in self.frags)
+        ):
             return super().breakLinesCJK(maxWidths)
         widths = list(maxWidths) if isinstance(maxWidths, (list, tuple)) else [maxWidths]
         self.height = 0
@@ -61,7 +76,7 @@ class CitationParagraph(Paragraph):
                     units.append([glyph])
         lines, glyphs, used = [], [], 0
 
-        def finish():
+        def finish() -> None:
             limit = widths[min(len(lines), len(widths) - 1)]
             lines.append(makeCJKParaLine(glyphs, limit, used, limit - used, False, True))
 
@@ -103,8 +118,11 @@ def _pdf_font() -> str:
 
 
 def _has_reference_section(content: str) -> bool:
-    return any(match and match.group(2).strip().casefold() in REFERENCE_TITLES
-               for line in content.splitlines() if (match := _HEADING_RE.match(line.strip())))
+    return any(
+        parts and parts[1].casefold() in REFERENCE_TITLES
+        for line in content.splitlines()
+        if (parts := _heading_parts(line.strip()))
+    )
 
 
 def _docx_body(document: Any, text: str, *, reference: bool = False, style: str | None = None) -> None:
@@ -115,10 +133,11 @@ def _docx_body(document: Any, text: str, *, reference: bool = False, style: str 
         paragraph.paragraph_format.first_line_indent = Pt(22)
         indent = paragraph._p.get_or_add_pPr().find(qn('w:ind'))
         indent.set(qn('w:firstLineChars'), '200')
-    def add_text(value: str, *, bold=False, italic=False):
+
+    def add_text(value: str, *, bold=False, italic=False) -> None:
         offset = 0
-        for match in ([] if reference else _CITATION_RE.finditer(value)):
-            run = paragraph.add_run(value[offset:match.start()] + '\u2060')
+        for match in [] if reference else _CITATION_RE.finditer(value):
+            run = paragraph.add_run(value[offset : match.start()] + '\u2060')
             run.bold, run.italic = bold, italic
             run = paragraph.add_run(match[0])
             run.font.superscript = True
@@ -130,7 +149,7 @@ def _docx_body(document: Any, text: str, *, reference: bool = False, style: str 
 
     offset = 0
     for match in re.finditer(r'\*\*(.+?)\*\*|(?<!\*)\*([^*]+)\*(?!\*)', text):
-        add_text(text[offset:match.start()])
+        add_text(text[offset : match.start()])
         add_text(match[1] or match[2], bold=match[1] is not None, italic=match[2] is not None)
         offset = match.end()
     add_text(text[offset:])
@@ -158,8 +177,7 @@ def _report_body(report: Any) -> str:
         return content
     sections = getattr(report, 'sections', None) or []
     return '\n\n'.join(
-        f'{"#" * max(1, min(int(section.get("level") or 2), 6))} {section.get("title", "")}\n\n'
-        f'{section.get("content", "")}'
+        f'**{section.get("title", "")}**\n\n{section.get("content", "")}'
         for section in sections
         if isinstance(section, dict) and str(section.get('title') or '').strip()
     )
@@ -272,12 +290,13 @@ def build_docx(report: Any, *, is_draft: bool) -> tuple[str, str, bytes]:
         line = raw_line.strip()
         if not line:
             continue
-        heading = _HEADING_RE.match(line)
+        heading = _heading_parts(line)
         if heading:
-            reference = heading.group(2).strip().casefold() in REFERENCE_TITLES
-            if len(heading.group(1)) == 1 and heading.group(2).strip() == title:
+            level, name = heading
+            reference = name.casefold() in REFERENCE_TITLES
+            if level == 1 and name == title:
                 continue
-            document.add_heading(_plain_inline(heading.group(2)), min(max(len(heading.group(1)) - 1, 1), 6))
+            document.add_heading(_plain_inline(name), min(max(level - 1, 1), 6))
             continue
         if not reference and _SUBHEADING_RE.match(line):
             document.add_heading(_plain_inline(line), 3)
@@ -341,11 +360,18 @@ def build_pdf(report: Any, *, is_draft: bool) -> tuple[str, str, bytes]:
         for level in range(1, 7)
     }
     body_style = ParagraphStyle(
-        'PipeSightBody', parent=styles['BodyText'], fontName=font_name, fontSize=10.5, leading=18, spaceAfter=6,
-        firstLineIndent=21, wordWrap='CJK'
+        'PipeSightBody',
+        parent=styles['BodyText'],
+        fontName=font_name,
+        fontSize=10.5,
+        leading=18,
+        spaceAfter=6,
+        firstLineIndent=21,
+        wordWrap='CJK',
     )
-    reference_style = ParagraphStyle('PipeSightReference', parent=body_style, firstLineIndent=0,
-                                     fontSize=9.5, leading=14, spaceAfter=4)
+    reference_style = ParagraphStyle(
+        'PipeSightReference', parent=body_style, firstLineIndent=0, fontSize=9.5, leading=14, spaceAfter=4
+    )
     bullet_style = ParagraphStyle(
         'PipeSightBullet', parent=body_style, leftIndent=14, firstLineIndent=-10, bulletIndent=0
     )
@@ -375,13 +401,13 @@ def build_pdf(report: Any, *, is_draft: bool) -> tuple[str, str, bytes]:
             # Semantic paragraphs already have spaceAfter. Browser-edited content
             # may contain several blank lines; don't multiply them into layout gaps.
             continue
-        heading = _HEADING_RE.match(line)
+        heading = _heading_parts(line)
         if heading:
-            reference = heading.group(2).strip().casefold() in REFERENCE_TITLES
-            if len(heading.group(1)) == 1 and heading.group(2).strip() == title:
+            level, name = heading
+            reference = name.casefold() in REFERENCE_TITLES
+            if level == 1 and name == title:
                 continue
-            level = min(len(heading.group(1)), 6)
-            story.append(Paragraph(_pdf_inline(heading.group(2)), heading_styles[level]))
+            story.append(Paragraph(_pdf_inline(name), heading_styles[min(level, 6)]))
             continue
         if not reference and _SUBHEADING_RE.match(line):
             story.append(Paragraph(_pdf_inline(line), heading_styles[3]))
@@ -391,14 +417,16 @@ def build_pdf(report: Any, *, is_draft: bool) -> tuple[str, str, bytes]:
         if bullet:
             story.append(Paragraph(_pdf_inline(bullet.group(1), citation=not reference), bullet_style, bulletText='•'))
             continue
-        story.append(CitationParagraph(_pdf_inline(line, citation=not reference), reference_style if reference else body_style))
+        story.append(
+            CitationParagraph(_pdf_inline(line, citation=not reference), reference_style if reference else body_style)
+        )
 
     citation_lines = _citation_lines(report)
     if citation_lines and not _has_reference_section(content):
         story.append(Paragraph('参考资料', heading_styles[1]))
         story.extend(Paragraph(_pdf_inline(line), reference_style) for line in citation_lines)
 
-    def page_number(canvas, doc):
+    def page_number(canvas, doc) -> None:
         canvas.saveState()
         canvas.setFont(font_name, 9)
         canvas.setFillColorRGB(0.4, 0.4, 0.4)

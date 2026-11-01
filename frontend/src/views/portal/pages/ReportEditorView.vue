@@ -8,7 +8,7 @@
     </div>
     <template v-else-if="loaded">
     <header class="ps-editor-topbar">
-      <div class="ps-editor-title"><el-button class="ps-ui-action" aria-label="返回科研工作台" @click="router.push('/portal/research')"><ArrowLeft /></el-button><span><strong>{{ report.title }}</strong><small>{{ reportTypeLabel }}</small></span></div>
+      <div class="ps-editor-title"><el-button class="ps-ui-action" :aria-label="isDigest ? '返回情报简报' : '返回科研工作台'" @click="router.push(isDigest ? '/portal/digests' : '/portal/research')"><ArrowLeft /></el-button><span><strong>{{ report.title }}</strong><small>{{ reportTypeLabel }}</small></span></div>
       <div class="ps-save-state"><span :class="{ 'is-saving': saving }"></span>{{ saveLabel }}<b>{{ wordCount.toLocaleString() }} 字</b></div>
       <div class="ps-editor-actions">
         <el-button :aria-pressed="outlineVisible" @click="outlineVisible = !outlineVisible">目录</el-button>
@@ -79,6 +79,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { getToken } from '@/utils/auth'
 import { openPortalContent } from '@/utils/portal/openContent'
 import { getCitationPath } from '@/utils/portal/citationRouting'
+import { isDigestType } from '../utils/routing'
 import { buildReportMarkdown, cleanReportCitationNotes, reportCitationParts } from '@/utils/portal/reportDocument'
 import { vStableCaret } from '@/utils/portal/stableCaret'
 import { makeRewriteDraft, applyRewriteDraft, rewriteRequest } from '@/utils/portal/reportRewrite'
@@ -91,7 +92,8 @@ import { createPipelineResearchReportExport, downloadPipelineResearchReportExpor
 const route = useRoute()
 const router = useRouter()
 const portalStore = usePortalStore()
-const report = ref(portalStore.researchReports.find(item => item.id === route.params.id) || { id: String(route.params.id), title: '报告标题待补充', type: 'research-demand', words: 0 })
+const isDigest = computed(() => route.path.startsWith('/portal/digests/'))
+const report = ref([...portalStore.researchReports, ...portalStore.digestReports].find(item => item.id === route.params.id) || { id: String(route.params.id), title: '报告标题待补充', type: isDigest.value ? 'daily' : 'research-demand', words: 0 })
 const loading = ref(false)
 const loaded = ref(false)
 const loadError = ref('')
@@ -228,7 +230,11 @@ function syncVisibleSection() {
   if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2) active = sections.value.at(-1)?.id
   if (active != null && active !== currentSectionId.value) activateSection(active)
 }
-const reportTypeLabel = computed(() => ({ research: '科研报告', 'research-demand': '科研需求报告', 'technology-route': '技术路线报告', 'project-demand': '科技项目需求填报表' })[report.value.type] || report.value.type || '科研报告')
+const reportTypeLabel = computed(() => {
+  const type = report.value.reportType || report.value.type
+  if (isDigestType(type)) return ({ daily: '日报', weekly: '周报', monthly: '月报' })[type] || '情报简报'
+  return ({ research: '科研报告', 'research-demand': '科研需求报告', 'technology-route': '技术路线报告', 'project-demand': '科技项目需求填报表' })[type] || type || '科研报告'
+})
 const reportDateLabel = computed(() => {
   const value = report.value.createdAt || report.value.created_at || report.value.updatedAt || report.value.updated_at || ''
   return value ? String(value).slice(0, 10) : '编制日期待补充'
@@ -302,8 +308,8 @@ function updateSectionContent(event, section = currentSection.value) { if (isRea
 function formatToolLabel(tool) { return ({ H1: '一级标题', H2: '二级标题', B: '粗体', I: '斜体', '•': '无序列表', '1.': '有序列表' })[tool] || tool }
 function formatText(value, tool) {
   const text = String(value || '').trim() || ({ H1: '一级标题', H2: '二级标题', B: '粗体文本', I: '斜体文本', '•': '列表项', '1.': '列表项' })[tool] || '请输入内容'
-  if (tool === 'H1') return `# ${text.replace(/^#{1,6}\s+/, '')}`
-  if (tool === 'H2') return `## ${text.replace(/^#{1,6}\s+/, '')}`
+  if (tool === 'H1') return `**${text.replace(/^\*+|\*+$/g, '')}**`
+  if (tool === 'H2') return `**${text.replace(/^\*+|\*+$/g, '')}**`
   if (tool === 'B') return text.startsWith('**') && text.endsWith('**') ? text.slice(2, -2) : `**${text}**`
   if (tool === 'I') return text.startsWith('*') && text.endsWith('*') ? text.slice(1, -1) : `*${text}*`
   if (tool === '•') return text.split(/\n+/).map(line => /^\s*[-*+]\s+/.test(line) ? line : `- ${line}`).join('\n')
@@ -436,6 +442,7 @@ async function loadReport() {
     if (editorDisposed || sequence !== reportLoadSequence) return
     loaded.value = true
     isEditing.value = route.query?.mode === 'edit' && !isReadOnly.value
+    if (route.query?.panel === 'sources') { inspectorVisible.value = true; activeRightTab.value = '引用来源' }
   } catch (error) {
     if (editorDisposed || sequence !== reportLoadSequence) return
     loadError.value = error?.msg || '报告加载失败，请确认后端服务和访问权限。'

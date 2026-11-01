@@ -2,12 +2,73 @@
 
 import json
 import re
+from typing import NoReturn
 
 from app.business_time import format_business_time
 from app.research.services.citation_format import REFERENCE_TITLES, clean_report_citations
 
 MAX_SECTIONS = 100
 DELIVERY_REFERENCE_TITLES = REFERENCE_TITLES | {'来源清单', '资料来源'}
+
+_BOLD_HEADING_RE = re.compile(r'^\*\*(.+?)\*\*\s*$')
+_LEGACY_HEADING_RE = re.compile(r'^(#{1,6})\s+(.+?)\s*#*$')
+
+
+def _section_heading(line: str) -> str | None:
+    """Return the section title if the line is a section heading, else None.
+
+    Section headings are the bold form ``**标题**`` or the legacy Markdown
+    ``## 标题`` (kept so previously saved reports still parse into sections).
+    """
+    bold = _BOLD_HEADING_RE.match(line)
+    if bold:
+        return _heading(bold.group(1))
+    legacy = re.match(r'^##\s+(.+?)\s*#*$', line)
+    if legacy:
+        return _heading(legacy.group(1))
+    return None
+
+
+def _heading_info(line: str) -> tuple[int, str] | None:
+    """Level and cleaned title for a bold or legacy Markdown heading line."""
+    bold = _BOLD_HEADING_RE.match(line)
+    if bold:
+        return 2, _heading(bold.group(1))
+    legacy = _LEGACY_HEADING_RE.match(line)
+    if legacy:
+        return len(legacy.group(1)), _heading(legacy.group(2))
+    return None
+
+
+def _strip_item_heading(line: str) -> str:
+    """Legacy ``### item`` (and deeper) becomes a plain-text subheading."""
+    match = re.match(r'^#{3,6}\s+(.+?)\s*#*$', line)
+    return _heading(match.group(1)) if match else line
+
+
+def _strip_item_headings(text: str) -> str:
+    return '\n'.join(_strip_item_heading(line) for line in text.splitlines())
+
+
+def _normalize_headings(text: str) -> str:
+    """Convert Markdown ``#`` headings to the hash-free article convention.
+
+    ``## 标题`` becomes a bold section line ``**标题**``; ``### 标题`` and
+    deeper become plain subheadings; the single-hash report title is dropped
+    because the editor and exporters render the title separately.
+    """
+    lines: list[str] = []
+    for line in text.splitlines():
+        match = _LEGACY_HEADING_RE.match(line)
+        if not match:
+            lines.append(line)
+            continue
+        level = len(match.group(1))
+        name = _heading(match.group(2))
+        if level == 1:
+            continue
+        lines.append(f'**{name}**' if level == 2 else name)
+    return '\n'.join(lines)
 
 
 class ManuscriptValidationError(ValueError):
@@ -20,7 +81,8 @@ def validate_generated_article(content: str, materials: list[dict] | None = None
     Draft edits intentionally do not pass this gate. An invalid generated
     result must not replace a user's saved article or be labelled complete.
     """
-    def reject(reason):
+
+    def reject(reason) -> NoReturn:
         raise ManuscriptValidationError(f'文稿检查未通过：{reason}；请调整资料或大纲后重试')
 
     if not content.strip():
@@ -32,16 +94,16 @@ def validate_generated_article(content: str, materials: list[dict] | None = None
     body_lines, reference_level = [], None
     sections = []
     for line in content.splitlines():
-        heading = re.match(r'^(#{1,6})\s+(.+?)\s*#*$', line)
+        heading = _heading_info(line)
         if heading:
-            level, name = len(heading[1]), _heading(heading[2]).casefold()
+            level, name = heading[0], heading[1].casefold()
             if reference_level is not None and level > reference_level:
                 continue
             reference_level = level if name in DELIVERY_REFERENCE_TITLES else None
             while sections and sections[-1]['level'] >= level:
                 if not sections.pop()['has_body']:
                     reject('存在空章节')
-            if reference_level is None and level >= 2:
+            if reference_level is None and level >= 2:  # noqa: PLR2004
                 sections.append({'level': level, 'has_body': False})
             continue
         if reference_level is None:
@@ -77,9 +139,9 @@ def _without_model_references(text: str) -> str:
                 fence = token
             elif token[0] == fence[0] and len(token) >= len(fence):
                 fence = None
-        heading = re.match(r'^(#{1,6})\s+(.+?)\s*#*$', line) if fence is None else None
+        heading = _heading_info(line) if fence is None else None
         if heading:
-            level, name = len(heading[1]), _heading(heading[2]).casefold()
+            level, name = heading[0], heading[1].casefold()
             if reference_level is not None and level <= reference_level:
                 reference_level = None
             if name in DELIVERY_REFERENCE_TITLES:
@@ -108,6 +170,7 @@ def number_report_citations(content: str, citations: list[dict]) -> str:
         return ''.join(f'[{number}]' for number in numbers) + (f'（{note}）' if note else '')
 
     numbered = re.sub(r'\[([^\]\n]+)\]', replace, content)
+
     # Models also mention evidence IDs in prose (e.g. 资料18新闻正文).
     # Do not rewrite an unresolved bracket a second time.
     def prose(match: re.Match[str]) -> str:
@@ -146,15 +209,18 @@ def sections_from_markdown(content: str) -> list[dict]:
                 fence = None
             lines.append(line)
             continue
-        match = re.match(r'^##\s+(.+?)\s*#*$', line) if fence is None else None
-        if match:
+        if fence is not None:
+            lines.append(line)
+            continue
+        name = _section_heading(line)
+        if name is not None:
             finish()
-            title, lines = _heading(match.group(1)), []
+            title, lines = name, []
         elif title is None and not lines and re.match(r'^#\s+', line):
             # The report title is rendered separately by the editor/exporter.
             continue
         else:
-            lines.append(line)
+            lines.append(_strip_item_heading(line))
     finish()
     if not sections:
         return [{'id': 1, 'title': '正文', 'content': ''}]
@@ -171,8 +237,11 @@ def _bibliography(materials: list[dict]) -> str:
         title = ' '.join(str(material.get('title') or '').split())
         identity = str(material['id'])
         kind = material.get('type')
-        label = source.get('journal') or source.get('publisher') or source.get('name') or (
-            '论文摘要' if kind == 'paper' else '新闻正文' if kind == 'article' else '用户资料'
+        label = (
+            source.get('journal')
+            or source.get('publisher')
+            or source.get('name')
+            or ('论文摘要' if kind == 'paper' else '新闻正文' if kind == 'article' else '用户资料')
         )
         published = source.get('published_date') or ''
         if not published and source.get('published_at'):
@@ -186,7 +255,7 @@ def _bibliography(materials: list[dict]) -> str:
     return '\n\n'.join(rows)
 
 
-def normalize_generated_report(content: str, materials: list[dict] | None = None, *, delivery: bool = False) -> dict:  # noqa: PLR0912
+def normalize_generated_report(content: str, materials: list[dict] | None = None, *, delivery: bool = False) -> dict:
     """Accept Markdown or a validated JSON article, never display transport JSON.
 
     Bibliographic rows come from the selected evidence, not model-proposed URLs
@@ -222,17 +291,19 @@ def normalize_generated_report(content: str, materials: list[dict] | None = None
                 raise ValueError('Invalid section title')
             if not isinstance(body, str) or not body.strip():
                 raise ValueError('Section requires actual text')
-            sections.append({'title': _heading(title), 'content': body.strip()})
-        text = '\n\n'.join(f'## {section["title"]}\n\n{section["content"]}' for section in sections)
+            sections.append({'title': _heading(title), 'content': _strip_item_headings(body.strip())})
+        text = '\n\n'.join(f'**{section["title"]}**\n\n{section["content"]}' for section in sections)
     elif wrapper:
         # A JSON-labeled transport block cannot be accepted as an article body.
         raise ValueError('Structured report is not a document object')
+    else:
+        text = _normalize_headings(text)
     if delivery:
         # Remove only parameter rows in the generated preamble. Do not redact
         # narrative limitations or rewrite historical/user-authored reports.
         lines, in_preamble = [], True
         for line in text.splitlines():
-            if re.match(r'^##\s+', line):
+            if _section_heading(line) is not None:
                 in_preamble = False
             if in_preamble and re.match(
                 r'^\s*(?:报告周期|研究方向|关键词|条目数|来源范围|报告模板|生成设置)\s*[：:]', line
@@ -242,16 +313,16 @@ def normalize_generated_report(content: str, materials: list[dict] | None = None
         text = '\n'.join(lines).strip()
         if materials:
             sections = sections_from_markdown(_without_model_references(text))
-            text = '\n\n'.join(f'## {section["title"]}\n\n{section["content"]}' for section in sections)
-            text += '\n\n## 参考资料\n\n' + _bibliography(materials)
+            text = '\n\n'.join(f'**{section["title"]}**\n\n{section["content"]}' for section in sections)
+            text += '\n\n**参考资料**\n\n' + _bibliography(materials)
     sections = sections_from_markdown(text)
     if materials and is_structured and not any(section['title'].casefold() in REFERENCE_TITLES for section in sections):
-        text += '\n\n## 参考资料\n\n' + _bibliography(materials)
+        text += '\n\n**参考资料**\n\n' + _bibliography(materials)
         sections = sections_from_markdown(text)
     if materials:
-        text = number_report_citations(text, [
-            {'sourceId': str(material['id']), 'type': material.get('type')} for material in materials
-        ])
+        text = number_report_citations(
+            text, [{'sourceId': str(material['id']), 'type': material.get('type')} for material in materials]
+        )
         sections = sections_from_markdown(text)
     # Store the canonical article, not merely a presentation-time cleanup.
     # Raw provider output remains intact on the generation task for diagnosis.

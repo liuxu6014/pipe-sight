@@ -2,7 +2,7 @@
 
 from copy import deepcopy
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, NoReturn
 
 from sqlalchemy import select
 
@@ -14,7 +14,9 @@ from app.research.repositories.research_repository import ResearchDao
 from app.research.services.execution import ResearchExecutionService
 from app.research.services.exporters import build_file, safe_file_stem
 from app.research.services.report_content import (
-    normalize_generated_report, number_report_citations, validate_generated_article,
+    normalize_generated_report,
+    number_report_citations,
+    validate_generated_article,
 )
 from app.research.services.report_revision import report_revision
 from exceptions.exception import ServiceException
@@ -24,8 +26,12 @@ class ResearchReportService:
     @staticmethod
     def current_history(report: Any) -> Any:
         history = getattr(report, '_display_history', None)
-        if history and (history.report_id != report.id or history.version != report.version
-                        or history.title != report.title or history.content != report.content):
+        if history and (
+            history.report_id != report.id
+            or history.version != report.version
+            or history.title != report.title
+            or history.content != report.content
+        ):
             return None
         return history
 
@@ -42,38 +48,41 @@ class ResearchReportService:
         identity = parse_business_id(identity)
         # Keep an extant template from being deleted between validation and FK
         # update. This does not require it to remain enabled or re-run a model.
-        return await db.scalar(select(PipelineTemplateVersion.id).where(
-            PipelineTemplateVersion.id == identity).with_for_update(read=True, key_share=True))
+        return await db.scalar(
+            select(PipelineTemplateVersion.id)
+            .where(PipelineTemplateVersion.id == identity)
+            .with_for_update(read=True, key_share=True)
+        )
 
     @staticmethod
-    async def _owned(db, user_id, report_id, lock=False, include_all=False):
+    async def _owned(db, user_id, report_id, lock=False, include_all=False) -> Any:
         row = await ResearchDao.get_report(db, report_id, None if include_all else user_id, lock=lock)
         if not row:
             raise ServiceException(message='成果不存在或无权访问')
         return row
 
     @classmethod
-    async def list_reports(cls, db, user_id, *, report_serializer, include_all=False):
+    async def list_reports(cls, db, user_id, *, report_serializer, include_all=False) -> dict:
         rows = await ResearchDao.list_reports(db, user_id)
         for row in rows:
             await cls._load_display_history(db, row)
         return {'rows': [report_serializer(row) for row in rows], 'total': len(rows)}
 
     @classmethod
-    async def get_report(cls, db, user_id, report_id, *, report_serializer, include_all=False):
+    async def get_report(cls, db, user_id, report_id, *, report_serializer, include_all=False) -> dict:
         row = await cls._owned(db, user_id, report_id, include_all=include_all)
         await cls._load_display_history(db, row)
         return {**report_serializer(row), 'readOnly': str(row.user_id) != str(user_id)}
 
     @staticmethod
-    def _check_version(report, expected_version, expected_revision=None):
+    def _check_version(report, expected_version, expected_revision=None) -> None:
         if expected_version is None or expected_version != report.version:
             raise ServiceException(message='成果版本已变化，请刷新后保存')
         if expected_revision and report_revision(report) != expected_revision:
             raise ServiceException(message='成果修订已变化，请刷新后保存')
 
     @classmethod
-    async def update_report(cls, db, *, user_id, owner_name, report_id, payload, report_serializer):
+    async def update_report(cls, db, *, user_id, owner_name, report_id, payload, report_serializer) -> dict:
         report = await cls._owned(db, user_id, report_id, lock=True)
         cls._check_version(
             report, getattr(payload, 'expected_version', None), getattr(payload, 'expected_revision', None)
@@ -84,7 +93,7 @@ class ResearchReportService:
             raise ServiceException(message='标题不能为空')
         content = data.get('content')
         if content is None and data.get('sections') is not None:
-            content = '\n\n'.join(f'## {s.get("title", "")}\n\n{s.get("content", "")}' for s in data['sections'])
+            content = '\n\n'.join(f'**{s.get("title", "")}**\n\n{s.get("content", "")}' for s in data['sections'])
         await ResearchExecutionService.save_version(db, report, 'before_edit', user_id, owner_name)
         report.title = title
         if content is not None:
@@ -92,15 +101,21 @@ class ResearchReportService:
         report.version += 1
         report.updated_at = utcnow()
         await ResearchExecutionService.save_version(
-            db, report, 'manual', user_id, owner_name,
-            sections=data.get('sections'), citations=data.get('citations'), quality_issues=data.get('quality_issues'),
+            db,
+            report,
+            'manual',
+            user_id,
+            owner_name,
+            sections=data.get('sections'),
+            citations=data.get('citations'),
+            quality_issues=data.get('quality_issues'),
         )
         await db.commit()
         await cls._load_display_history(db, report, refresh=True)
         return report_serializer(report)
 
     @classmethod
-    async def _get_export_report(cls, db, user_id, report_id, *, allow_draft=False):
+    async def _get_export_report(cls, db, user_id, report_id, *, allow_draft=False) -> tuple[Any, bool]:
         row = await cls._owned(db, user_id, report_id)
         if not row.content.strip():
             raise ServiceException(message='成果正文为空，不能导出')
@@ -110,7 +125,7 @@ class ResearchReportService:
         return row, False
 
     @classmethod
-    async def apply_task_result(cls, db, *, user_id, owner_name, job_id, expected_version, report_serializer):
+    async def apply_task_result(cls, db, *, user_id, owner_name, job_id, expected_version, report_serializer) -> dict:
         job = await ResearchDao.get_research_job(db, job_id, user_id, lock=True)
         if not job or job.status != 'completed' or not job.result_content:
             raise ServiceException(message='任务未完成、结果为空或无权访问')
@@ -135,8 +150,14 @@ class ResearchReportService:
         report.version += 1
         report.updated_at = utcnow()
         await ResearchExecutionService.save_version(
-            db, report, 'applied', user_id, owner_name, job.config_snapshot,
-            sections=normalized['sections'], citations=ResearchExecutionService.material_citations(job.materials),
+            db,
+            report,
+            'applied',
+            user_id,
+            owner_name,
+            job.config_snapshot,
+            sections=normalized['sections'],
+            citations=ResearchExecutionService.material_citations(job.materials),
             quality_issues=[],
         )
         await db.commit()
@@ -144,7 +165,7 @@ class ResearchReportService:
         return report_serializer(report)
 
     @classmethod
-    async def export_markdown(cls, db, user_id, report_id, *, allow_draft=False):
+    async def export_markdown(cls, db, user_id, report_id, *, allow_draft=False) -> dict:
         report, _ = await cls._get_export_report(db, user_id, report_id, allow_draft=allow_draft)
         filename = safe_file_stem(report.title, is_draft=False) + '.md'
         return {
@@ -156,18 +177,25 @@ class ResearchReportService:
         }
 
     @staticmethod
-    def export_snapshot(report, history=None):
+    def export_snapshot(report, history=None) -> dict:
         # 仅为现有文件渲染器适配 DTO，不是旧 ORM 列。
         history = history if history is not None else getattr(report, '_export_history', None)
-        if history and (history.report_id != report.id or history.version != report.version
-                        or history.title != report.title or history.content != report.content):
+        if history and (
+            history.report_id != report.id
+            or history.version != report.version
+            or history.title != report.title
+            or history.content != report.content
+        ):
             history = None
         snapshot = deepcopy(history.model_snapshot or {}) if history else {}
         template = snapshot.get('template') or {}
         metadata = {'modelSnapshot': snapshot} if history else {}
         if history:
-            metadata.update(source=history.source, operator=history.operator_name,
-                            qualityIssues=deepcopy(history.quality_issues or []))
+            metadata.update(
+                source=history.source,
+                operator=history.operator_name,
+                qualityIssues=deepcopy(history.quality_issues or []),
+            )
         if template.get('id') is not None:
             metadata['templateId'] = template['id']
             metadata['templateVersion'] = template.get('name') or str(template['id'])
@@ -190,18 +218,18 @@ class ResearchReportService:
         }
 
     @classmethod
-    async def export_file(cls, db, user_id, report_id, file_format, *, allow_draft=False):
+    async def export_file(cls, db, user_id, report_id, file_format, *, allow_draft=False) -> tuple[str, str, bytes]:
         report, _ = await cls._get_export_report(db, user_id, report_id, allow_draft=allow_draft)
         return build_file(SimpleNamespace(**cls.export_snapshot(report)), file_format, is_draft=False)
 
     @classmethod
-    async def list_versions(cls, db, user_id, report_id, *, date_formatter=None, include_all=False):
+    async def list_versions(cls, db, user_id, report_id, *, date_formatter=None, include_all=False) -> dict:
         await cls._owned(db, user_id, report_id, include_all=include_all)
         rows = await ResearchDao.list_report_versions(db, report_id)
         return {'rows': [cls.version_dict(row) for row in rows], 'total': len(rows)}
 
     @staticmethod
-    def version_dict(row):
+    def version_dict(row) -> dict:
         return {
             'id': wire_id(row.id),
             'reportId': wire_id(row.report_id),
@@ -218,7 +246,7 @@ class ResearchReportService:
         }
 
     @classmethod
-    async def get_version(cls, db, user_id, report_id, version_no, *, date_formatter=None, include_all=False):
+    async def get_version(cls, db, user_id, report_id, version_no, *, date_formatter=None, include_all=False) -> dict:
         await cls._owned(db, user_id, report_id, include_all=include_all)
         row = await ResearchDao.get_report_version(db, report_id, version_no)
         if not row:
@@ -228,7 +256,7 @@ class ResearchReportService:
     @classmethod
     async def restore_version(
         cls, db, *, user_id, owner_name, report_id, version_no, report_serializer, expected_version=None
-    ):
+    ) -> dict:
         report = await cls._owned(db, user_id, report_id, lock=True)
         if expected_version is not None:
             cls._check_version(report, expected_version)
@@ -245,15 +273,22 @@ class ResearchReportService:
         report.version += 1
         report.updated_at = utcnow()
         await ResearchExecutionService.save_version(
-            db, report, 'restored', user_id, owner_name, old.model_snapshot,
-            sections=old.sections, citations=old.citations, quality_issues=old.quality_issues,
+            db,
+            report,
+            'restored',
+            user_id,
+            owner_name,
+            old.model_snapshot,
+            sections=old.sections,
+            citations=old.citations,
+            quality_issues=old.quality_issues,
         )
         await db.commit()
         await cls._load_display_history(db, report, refresh=True)
         return report_serializer(report)
 
     @classmethod
-    async def get_diagram(cls, db, user_id, report_id):
+    async def get_diagram(cls, db, user_id, report_id) -> dict:
         await cls._owned(db, user_id, report_id)
         rows = await ResearchDao.list_assets(db, report_id, 'image')
         return {
@@ -271,6 +306,6 @@ class ResearchReportService:
         }
 
     @classmethod
-    async def update_diagram(cls, db, *, user_id, report_id, payload):
+    async def update_diagram(cls, db, *, user_id, report_id, payload) -> NoReturn:
         await cls._owned(db, user_id, report_id)
         raise ServiceException(message='请使用图片资源独立重试接口；旧图形占位数据不再保存')

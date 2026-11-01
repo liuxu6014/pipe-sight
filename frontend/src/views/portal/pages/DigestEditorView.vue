@@ -137,7 +137,7 @@ function citationPath(text) {
   const id = String(text || '').replace(/^\[|\]$/g, '')
   return getCitationPath(citations.value.find(item => String(item.id) === id))
 }
-function buildMarkdown() { return [`# ${digest.value.title}`, '', ...sections.value.flatMap((section, index) => [`## ${index + 1}. ${section.title}`, '', cleanReportCitationNotes(section.content || '', section.title), '']), '## 参考资料', '', ...citations.value.map(item => `[${item.id}] ${item.title}（${citationSourceLabel(item)}，${item.location || '来源条目'}）`)].join('\n') }
+function buildMarkdown() { return [`**${digest.value.title}**`, '', ...sections.value.flatMap((section, index) => [`**${index + 1}. ${section.title}**`, '', cleanReportCitationNotes(section.content || '', section.title), '']), '**参考资料**', '', ...citations.value.map(item => `[${item.id}] ${item.title}（${citationSourceLabel(item)}，${item.location || '来源条目'}）`)].join('\n') }
 function markSaving() {
   if (!active || isReadOnly.value) return
   editRevision += 1

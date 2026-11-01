@@ -20,10 +20,13 @@ export function cleanReportCitationNotes(content, title = '') {
       return line
     }
     if (fence !== null) return line
-    const heading = line.match(/^(#{1,6})\s+(.+?)\s*#*$/)
-    if (heading) {
-      if (referenceLevel !== null && heading[1].length <= referenceLevel) referenceLevel = null
-      if (isReferenceSection(heading[2])) referenceLevel = heading[1].length
+    const boldHeading = line.match(/^\*\*(.+?)\*\*\s*$/)
+    const legacyHeading = line.match(/^(#{1,6})\s+(.+?)\s*#*$/)
+    if (boldHeading || legacyHeading) {
+      const level = boldHeading ? 2 : legacyHeading[1].length
+      const name = boldHeading ? boldHeading[1] : legacyHeading[2]
+      if (referenceLevel !== null && level <= referenceLevel) referenceLevel = null
+      if (isReferenceSection(name)) referenceLevel = level
       return line
     }
     if (referenceLevel !== null) return line
@@ -109,8 +112,8 @@ export function buildReportMarkdown({ title = '', sections = [], citations = [] 
     const heading = sectionTitle(section.title)
     // An authored reference section is authoritative; never append a second copy.
     const content = isReferenceSection(heading) && !String(section.content || '').trim() ? references : cleanReportCitationNotes(numberedCitations(section.content, citations), heading)
-    return `## ${heading}\n\n${content}`
+    return `**${heading}**\n\n${content}`
   })
-  if (!hasReferences && references) blocks.push(`## 参考资料\n\n${references}`)
-  return [`# ${title}`, ...blocks].join('\n\n')
+  if (!hasReferences && references) blocks.push(`**参考资料**\n\n${references}`)
+  return [`**${title}**`, ...blocks].join('\n\n')
 }
