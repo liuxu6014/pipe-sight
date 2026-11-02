@@ -17,6 +17,9 @@
           <div v-if="article.tags.length" class="ps-article-head-bottom">
           <div class="ps-tag-row"><span v-for="tag in article.tags" :key="tag" class="ps-tag">{{ tag }}</span></div>
           </div>
+          <div v-if="article.entities && article.entities.length" class="ps-article-head-bottom">
+          <div class="ps-tag-row ps-entity-row"><span v-for="entity in article.entities" :key="`${entity.type}-${entity.name}`" class="ps-entity-chip"><em>{{ entity.type }}</em>{{ entity.name }}</span></div>
+          </div>
         </header>
         <section v-if="showSummary" id="article-summary" class="ps-ai-summary" role="button" tabindex="0" aria-label="复制文章摘要，双击或按回车、空格键" title="双击复制摘要" @dblclick="copySummary" @keydown.enter.prevent="copySummary" @keydown.space.prevent="copySummary"><p>{{ summaryText }}</p></section>
         <div v-if="articleAnalysis.length" class="ps-impact-grid"><section v-for="item in articleAnalysis" :id="item.id" :key="item.id"><span>{{ item.label }}</span><strong>{{ item.value }}</strong></section></div>

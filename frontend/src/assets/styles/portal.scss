@@ -1213,6 +1213,31 @@ body:has(.ps-portal) {
   margin-top: 14px;
 }
 
+.ps-entity-row {
+  gap: 8px;
+}
+
+.ps-entity-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid #d8e2f0;
+  border-radius: 5px;
+  background: #f0f5fb;
+  color: #41546d;
+  font-size: 13px;
+}
+
+.ps-entity-chip em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--ps-blue);
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #dbeafe;
+}
+
 .ps-tag,
 .ps-keyword-cloud button {
   padding: 4px 8px;

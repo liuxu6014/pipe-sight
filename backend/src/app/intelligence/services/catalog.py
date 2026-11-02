@@ -32,6 +32,7 @@ class IntelligenceCatalogService:
             'source_url': item.url,
             'sourceUrl': item.url,
             'author': item.author or '',
+            'entities': item.entities if isinstance(getattr(item, 'entities', None), list) else [],
             'is_pushed': item.is_pushed,
         }
         if detail:

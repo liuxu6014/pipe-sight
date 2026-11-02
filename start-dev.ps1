@@ -681,7 +681,7 @@ if (
     Write-Host 'Port 9099 is serving an outdated PipeSight API; switching this session to port 9100.' -ForegroundColor Yellow
 }
 $reuseBackend = Test-PipeSightBackend -BaseUrl $backendBaseUrl
-$reuseFrontend = $BackendPort -eq 9099 -and $FrontendPort -eq 5173 -and (Test-HttpEndpoint -Url "$frontendBaseUrl/login")
+$reuseFrontend = $BackendPort -eq 9099 -and $FrontendPort -eq 5173 -and (Test-HttpEndpoint -Url "$frontendBaseUrl/pipesight/login")
 if (-not $reuseFrontend -and (Test-TcpPort -HostName '127.0.0.1' -Port $FrontendPort)) {
     $requestedFrontendPort = $FrontendPort
     $FrontendPort = Select-AvailableFrontendPort -PreferredPort ($FrontendPort + 1)
@@ -746,7 +746,7 @@ try {
         }
         $frontendProcess = Start-Process @frontendStartArguments
         Set-Content -LiteralPath $FrontendPidFile -Value $frontendProcess.Id -Encoding ascii
-        Wait-HttpProcess -Process $frontendProcess -Url "$frontendBaseUrl/portal" -TimeoutSeconds 60 -LogPaths @($FrontendStderr, $FrontendStdout)
+        Wait-HttpProcess -Process $frontendProcess -Url "$frontendBaseUrl/pipesight/portal" -TimeoutSeconds 60 -LogPaths @($FrontendStderr, $FrontendStdout)
     }
 }
 catch {
@@ -762,7 +762,7 @@ catch {
 }
 
 Write-Host "`nPipeSight is ready." -ForegroundColor Green
-Write-Host "Frontend: $frontendBaseUrl/portal"
+Write-Host "Frontend: $frontendBaseUrl/pipesight/portal"
 Write-Host "Backend:  $backendBaseUrl/docs"
 Write-Host "Logs:     $RuntimeRoot"
 Write-Host 'Stop:     powershell -ExecutionPolicy Bypass -File .\stop-dev.ps1'

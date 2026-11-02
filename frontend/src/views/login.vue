@@ -178,7 +178,7 @@ defineOptions({ name: 'UnifiedPlatformLogin' })
 const CALM_MOUNTAIN_LAKE_URL = pipechinaLoginBackgroundUrl
 const PIPECHINA_LOGO_SOURCE_URL = 'https://www.pipechina.com.cn/Uploads/Picture/2023/09/05/s64f6d50827d73.png'
 const PIPECHINA_LOGO_URL = pipechinaEmblemUrl
-const PLATFORM_NAME = import.meta.env.VITE_APP_TITLE || '国家管网科技情报与科研辅助平台'
+const PLATFORM_NAME = import.meta.env.VITE_APP_TITLE || '科技情报与科研辅助平台'
 
 const route = useRoute()
 const router = useRouter()

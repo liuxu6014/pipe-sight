@@ -33,7 +33,7 @@ BUSINESS_TABLES = (
     'reports',
     'templates',
 )
-FROZEN_PATH = Path(__file__).resolve().parents[2] / 'data/schema/business-v6.json'
+FROZEN_PATH = Path(__file__).resolve().parents[2] / 'data/schema/business-v7.json'
 
 
 def quote_identifier(value: str) -> str:

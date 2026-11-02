@@ -35,10 +35,24 @@ def test_v6_adds_only_nullable_schedule_history_and_preserves_every_prior_field(
     assert old['optional_table_definitions'] == new['optional_table_definitions']
 
 
-def test_contract_has_exact_approved_tables_and_fields() -> None:
+def test_v7_adds_only_nullable_entities_to_news_articles_and_preserves_every_prior_field() -> None:
+    old, new = load_contract('v6'), load_contract('v7')
+    before = {table['name']: table for table in old['tables']}
+    after = {table['name']: table for table in new['tables']}
+    assert before.keys() == after.keys()
+    extra = {'entities'}
+    for name, table in before.items():
+        if name != 'news_articles':
+            assert table == after[name]
+        else:
+            assert table['columns'] == [c for c in after[name]['columns'] if c['name'] not in extra]
+            added = [c for c in after[name]['columns'] if c['name'] in extra]
+            assert len(added) == 1 and all(c['nullable'] and not c['primary_key'] for c in added)
+    assert old['foreign_keys'] == new['foreign_keys']
+    assert old['optional_table_definitions'] == new['optional_table_definitions']
     contract = load_contract()
     assert len(contract['tables']) == 27
-    assert sum(len(t['columns']) for t in contract['tables']) == 320
+    assert sum(len(t['columns']) for t in contract['tables']) == 321
     assert {t['name'] for t in contract['tables']} >= {'sys_user', 'papers', 'collection_runs'}
     for table in contract['tables']:
         if table['name'] not in FOUNDATION_TABLE_RENAMES.values():
@@ -121,8 +135,8 @@ def test_v4_stays_frozen_when_beijing_audit_runtime_v5_becomes_default() -> None
         json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()
     ).hexdigest()
     assert digest == '88491613e027bcdc0058837512053d68eae7a757d9ebcadad16e46e92316b8bc'
-    assert load_contract() == load_contract('v6')
-    assert load_contract()['version'] == '20261028-compact-v6'
+    assert load_contract() == load_contract('v7')
+    assert load_contract()['version'] == '20261102-compact-v7'
 
 
 def test_v4_preserves_v3_physical_core_without_freezing_unstable_orm_ddl() -> None:

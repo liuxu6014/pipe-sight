@@ -1,7 +1,7 @@
--- compact-v6中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；若依表字段不变。
+-- compact-v7中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；若依表字段不变。
 -- 27个业务created_at/updated_at为北京时间timestamp(0)无时区；其他运行时间字段保持原类型。
 -- 普通不透明令牌保留；系统幂等键内嵌ID、显式JSON引用及语义指纹按实体映射核验。
--- 27张基线表320字段，2张保留功能表23字段；共29张物理表343字段。
+-- 27张基线表321字段，2张保留功能表23字段；共29张物理表344字段。
 -- 仅COMMENT及存在性保护块；调用方管理事务，不修改字段、约束或业务数据。
 
 COMMENT ON TABLE public."news_articles" IS '网站与公众号新闻原文及中文译文；每篇最多关联一个类别，无人工审核流程';
@@ -13,6 +13,7 @@ COMMENT ON COLUMN public."news_articles"."author" IS '原作者名单文本；�
 COMMENT ON COLUMN public."news_articles"."published_at" IS '原文发布时间，保留到秒；由旧published_time迁入，非平台审核或入库时间；带时区';
 COMMENT ON COLUMN public."news_articles"."content" IS '抓取的原文正文；未取得正文时允许为空，不以导读摘要冒充全文';
 COMMENT ON COLUMN public."news_articles"."content_zh" IS '中文正文或译文；为空时展示回退content，不重复复制中文原文';
+COMMENT ON COLUMN public."news_articles"."entities" IS '实体抽取结果JSON数组；每项含type(地点/时间/政策/人物/机构/技术)与name；排除国家管网等平台自身机构，为空表示未抽取或无实体';
 COMMENT ON COLUMN public."news_articles"."category_id" IS '唯一类别ID，关联categories.id；未分类或未命中为空，不以空值推断审核失败；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串';
 COMMENT ON COLUMN public."news_articles"."is_pushed" IS '推送成功标志；true仅表示收到真实渠道成功回执，默认false';
 COMMENT ON COLUMN public."news_articles"."created_at" IS '新闻平台入库时间，不代替原文发表时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss';

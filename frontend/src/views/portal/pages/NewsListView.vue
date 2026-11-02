@@ -33,8 +33,9 @@
           <router-link class="ps-news-title" :to="`/portal/news/${item.id}`">{{ item.title }}</router-link>
           <p>{{ cleanSummary(item.summary) }}</p>
           <div class="ps-tag-row"><button v-for="tag in item.tags" :key="tag" type="button" class="ps-tag" :aria-pressed="activeTags.includes(tag)" @click="toggleTag(tag)">{{ tag }}</button></div>
+          <div v-if="item.entities && item.entities.length" class="ps-tag-row ps-entity-row"><span v-for="entity in item.entities" :key="`${entity.type}-${entity.name}`" class="ps-entity-chip"><em>{{ entity.type }}</em>{{ entity.name }}</span></div>
           </div></div>
-          <div class="ps-news-card-footer"><span>{{ item.source }} · {{ item.category }}</span><div><el-button type="primary" plain :loading="busy(item)" :disabled="busy(item)" @click="addToBasket(item)">{{ inBasket(item) ? '取消加入资料库' : '加入资料库' }}</el-button></div></div>
+          <div class="ps-news-card-footer"><span v-if="item.source">{{ item.source }}</span><div><el-button type="primary" plain :loading="busy(item)" :disabled="busy(item)" @click="addToBasket(item)">{{ inBasket(item) ? '取消加入资料库' : '加入资料库' }}</el-button></div></div>
         </article>
         <PortalEmptyState v-if="loadError && !loading" title="资讯加载失败" :description="loadError" action-label="重新加载" @action="reload" />
         <PortalEmptyState v-else-if="!newsItems.length && !loading" title="没有匹配的资讯" description="请调整标签、来源或搜索关键词。" action-label="重置筛选" @action="resetFilters" />

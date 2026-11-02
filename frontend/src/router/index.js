@@ -61,13 +61,13 @@ export const constantRoutes = [
       query: { redirect: to.query?.redirect || '/portal' }
     }),
     hidden: true,
-    meta: { title: '国家管网科技情报与科研辅助平台用户端登录' }
+    meta: { title: '科技情报与科研辅助平台用户端登录' }
   },
   {
     path: '/portal',
     component: () => import('@/views/portal/index.vue'),
     hidden: true,
-    meta: { title: '国家管网科技情报与科研辅助平台用户端' },
+    meta: { title: '科技情报与科研辅助平台用户端' },
     children: [
       { path: '', name: 'PortalHome', component: () => import('@/views/portal/pages/HomeView.vue'), meta: { title: '首页' } },
       { path: 'search', name: 'PortalSearch', component: () => import('@/views/portal/pages/SearchView.vue'), meta: { title: '全局搜索' } },

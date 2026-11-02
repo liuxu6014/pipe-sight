@@ -2,7 +2,7 @@ export default {
   /**
    * 网页标题
    */
-  title: import.meta.env.VITE_APP_TITLE || '国家管网科技情报与科研辅助平台',
+  title: import.meta.env.VITE_APP_TITLE || '科技情报与科研辅助平台',
 
   /**
    * 侧边栏主题 深色主题theme-dark，浅色主题theme-light
@@ -52,5 +52,5 @@ export default {
   /**
    * 底部版权文本内容
    */
-  footerContent: 'Copyright © 2026 国家管网科技情报与科研辅助平台'
+  footerContent: 'Copyright © 2026 科技情报与科研辅助平台'
 }

@@ -4,8 +4,7 @@
       <button class="ps-brand" type="button" aria-label="返回首页" @click="router.push('/portal')">
         <img :src="logoUrl" alt="国家管网标识" />
         <span>
-          <strong>国家管网</strong>
-          <small>科技情报与科研辅助平台</small>
+          <strong>科技情报与科研辅助平台</strong>
         </span>
       </button>
 

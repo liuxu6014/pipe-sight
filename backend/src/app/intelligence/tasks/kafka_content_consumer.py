@@ -50,6 +50,7 @@ from app.intelligence.services.collection_translation import (
     TranslationConfigurationError,
     TranslationFailure,
 )
+from app.intelligence.services.entities import EntityExtractionService
 from config.database import AsyncSessionLocal
 from config.env import DataBaseConfig, KafkaConfig
 from config.get_db import close_async_engine, init_create_table
@@ -247,6 +248,18 @@ async def _process_and_save(db, message: KafkaContentMessage, now) -> str:
     except Exception as exc:
         logger.warning('分类失败，按未分类入库：%s', exc)
         category_id = None
+
+    # 处理：实体抽取（来源配置了模型且非论文时），失败或缺结果不阻塞入库。
+    if source.type != 'paper':
+        entity_content = record.get('content_zh') or record.get('content') or ''
+        try:
+            entity_list = await EntityExtractionService.extract(
+                db, title=record['title'], content=entity_content, model_id=source.model_id
+            )
+            if entity_list:
+                record['entities'] = entity_list
+        except Exception as exc:
+            logger.warning('实体抽取跳过：%s', exc)
 
     try:
         saved = await CollectionPersistenceService.save_record(db, source, record, now, category_id=category_id)

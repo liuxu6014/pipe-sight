@@ -59,18 +59,35 @@ function normalizeSourceType(value) {
   return ({ website: '新闻网站', news: '新闻网站', wechat: '微信公众号', paper: '论文数据库' })[value] || value || '公开来源'
 }
 
+// 标题里若爬虫把原文链接当成了标题前缀（如“https://buff.ly/xxx - 正文”），剥离链接，只保留可读正文。
+function stripLeadingUrl(value) {
+  if (typeof value !== 'string') return value
+  const match = value.match(/^https?:\/\/\S+(?:\s*[-—–]\s*)?(.*)$/i)
+  return match && match[1].trim() ? match[1].trim() : value
+}
+
+// 来源名若本身就是一个裸链接，不在界面展示（来源类型徽标已经说明来源）。
+function cleanSourceName(value) {
+  if (typeof value !== 'string') return value
+  const v = value.trim()
+  return /^https?:\/\//i.test(v) || /^www\./i.test(v) ? '' : v
+}
+
 export function normalizePortalIntelligence(item) {
   item = normalizeBusinessData(item)
   const publishTime = formatBusinessTime(item.publishedAt || item.published_at || item.publish_time || item.publishTime || item.time || '')
   return {
     ...item,
+    title: stripLeadingUrl(item.title),
     time: publishTime,
     publishTime,
     sourceUrl: item.url || item.source_url || item.sourceUrl || item.canonical_url || item.canonicalUrl || '',
+    source: cleanSourceName(item.source || item.source_name || ''),
     sourceType: normalizeSourceType(item.source_type || item.sourceType),
     importance: Number(item.relevance || 0) >= 90 ? '重点' : '一般',
     category: item.category === 'wechat' || item.category === 'news' ? (item.categoryName || item.tags?.[0] || '未分类') : item.category,
     tags: item.tags || [],
+    entities: item.entities || [],
     body: item.body || ((item.contentZh || item.content_zh || item.content) ? [item.contentZh || item.content_zh || item.content] : item.summary ? [item.summary] : [])
   }
 }

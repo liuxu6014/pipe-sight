@@ -96,6 +96,10 @@ class CollectionPersistenceService:
                 if not isinstance(published, datetime) or published.tzinfo is None:
                     raise ValueError('发布时间必须为真实带时区时间点')
             values = {key: record.get(key) for key in ('author', 'content', 'content_zh')}
+            # Only overwrite when a fresh extraction produced a result; re-ingesting
+            # without a configured model must not wipe previously stored entities.
+            if 'entities' in record:
+                values['entities'] = record.get('entities')
             values.update(title=title.strip(), url=url, published_at=published)
         else:
             raise ValueError('来源内容类型无效')

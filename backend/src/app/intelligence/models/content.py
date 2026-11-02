@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Boolean,
     CheckConstraint,
@@ -17,6 +18,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
 from app.business_ids import business_pk
@@ -82,6 +84,11 @@ class PipelineArticle(Base):
     published_at = Column(DateTime(timezone=True), nullable=True, comment='来源原文发布时间，不是平台入库时间')
     content = Column(Text, nullable=True, comment='原文正文')
     content_zh = Column(Text, nullable=True, comment='中文译文，原文已中文则无需重复保存')
+    entities = Column(
+        JSON().with_variant(JSONB(), 'postgresql'),
+        nullable=True,
+        comment='实体抽取结果JSON数组；每项含type(地点/时间/政策/人物/机构/技术)与name；排除国家管网等平台自身机构，为空表示未抽取或无实体',
+    )
     category_id = Column(
         BigInteger,
         ForeignKey('categories.id', ondelete='RESTRICT'),
