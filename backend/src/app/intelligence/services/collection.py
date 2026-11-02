@@ -11,6 +11,11 @@ from urllib.parse import parse_qsl, urlsplit
 
 from app.business_ids import parse_business_id, wire_id
 from app.intelligence.integrations.public_source_bridge import register_builtin_adapters
+from app.intelligence.integrations.wechat_rss import (
+    WECHAT_FEED_HOSTS,
+    validate_wechat_rss_config,
+    wechat_rss_batches,
+)
 from app.intelligence.repositories.collection_repository import CollectionRepository, LeaseLost
 from app.intelligence.services.collection_persistence import CollectionPersistenceService
 from app.intelligence.services.collection_translation import (
@@ -139,6 +144,11 @@ ADAPTERS = AdapterRegistry()
 # Only registration occurs here: no HTTP request, DB access or source bootstrap.
 # Existing public collectors use an async transport bridge, not urllib threads.
 register_builtin_adapters(ADAPTERS)
+# 公众号 RSS 走内部 HTTP feed，入口地址只允许落在 config.feed_url（见 wechat_rss.py）。
+ADAPTERS.register(
+    'wechat_rss',
+    Adapter(wechat_rss_batches, ('wechat',), WECHAT_FEED_HOSTS, validate_config=validate_wechat_rss_config),
+)
 
 
 def classification_session_factory(db) -> Any:

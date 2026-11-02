@@ -58,9 +58,10 @@
         <div class="source-form-grid">
           <el-form-item label="数据源名称"><el-input v-model="sourceForm.name" placeholder="例如：国家管网集团要闻" /></el-form-item>
 
-          <el-form-item label="来源类型"><el-select v-model="sourceForm.sourceType"><el-option label="新闻源" value="website" /><el-option label="公众号（采集待接入）" value="wechat" disabled /><el-option label="论文库" value="paper" /></el-select></el-form-item>
+          <el-form-item label="来源类型"><el-select v-model="sourceForm.sourceType"><el-option label="新闻源" value="website" /><el-option label="公众号" value="wechat" /><el-option label="论文库" value="paper" /></el-select></el-form-item>
           <el-form-item label="采集适配器"><el-select v-model="sourceForm.adapterKey" :disabled="!availableAdapters.length" placeholder="当前类型暂无采集适配器"><el-option v-for="adapter in availableAdapters" :key="adapter.key" :label="adapter.label" :value="adapter.key" /></el-select></el-form-item>
-          <el-form-item label="入口地址" class="is-full"><el-input v-model="sourceForm.endpoint" placeholder="https://..." /></el-form-item>
+          <el-form-item v-if="sourceForm.adapterKey !== 'wechat_rss'" label="入口地址" class="is-full"><el-input v-model="sourceForm.endpoint" placeholder="https://..." /></el-form-item>
+          <el-form-item v-if="sourceForm.adapterKey === 'wechat_rss'" label="RSS 链接（公众号 feed）" class="is-full"><el-input v-model="sourceForm.feedUrl" placeholder="http://172.16.4.181:8081/feed/{bizid}.xml" /></el-form-item>
           <el-form-item label="调度表达式"><el-input v-model="sourceForm.scheduleCron" placeholder="留空表示仅手动运行" /></el-form-item>
 
           <el-form-item label="时区"><el-input v-model="sourceForm.timezone" /></el-form-item>
@@ -101,7 +102,7 @@ const canTaskRun = computed(() => checkPermi(['pipeline:task:run']))
 const runningSourceId = ref('')
 const models = ref([])
 const textModels = computed(() => modelsFor(models.value, 'text_generate'))
-const sourceForm = reactive({ name: '', sourceType: 'website', adapterKey: 'pipechina_group_news', endpoint: '', scheduleCron: '', timezone: 'Asia/Shanghai', modelId: null, limit: 12, query: '', isEnabled: true })
+const sourceForm = reactive({ name: '', sourceType: 'website', adapterKey: 'pipechina_group_news', endpoint: '', feedUrl: '', scheduleCron: '', timezone: 'Asia/Shanghai', modelId: null, limit: 12, query: '', isEnabled: true })
 const availableAdapters = computed(() => adaptersForSource(sourceForm.sourceType))
 const adapterSupported = computed(() => supportsSourceAdapter(sourceForm))
 watch(() => sourceForm.sourceType, () => {
@@ -137,7 +138,7 @@ function resetForm(source = null) {
  editingSource.value = source
  Object.assign(sourceForm, { name: source?.name || '', sourceType: source?.type === 'news' ? 'website' : source?.type || 'website',
   adapterKey: source?.adapter || source?.adapter_key || 'pipechina_group_news', endpoint: source?.url ?? source?.endpoint ?? '',
-  scheduleCron: source?.cron ?? source?.schedule_cron ?? '', timezone: source?.timezone || 'Asia/Shanghai',
+  feedUrl: source?.config?.feed_url || '', scheduleCron: source?.cron ?? source?.schedule_cron ?? '', timezone: source?.timezone || 'Asia/Shanghai',
   modelId: source?.modelId ?? source?.model_id ?? null, limit: Number(source?.config?.limit || 12), query: source?.config?.query || '',
   isEnabled: source ? sourceEnabled(source) : true })
 }
@@ -146,16 +147,25 @@ function openSourceDialog(source = null) {
  resetForm(source); dialogVisible.value = true
 }
 function sourcePayload() {
- return { name: sourceForm.name.trim(), type: sourceForm.sourceType, url: sourceForm.endpoint.trim() || null,
- adapter: sourceForm.adapterKey, cron: sourceForm.scheduleCron.trim() || null, timezone: sourceForm.timezone,
- modelId: sourceForm.modelId || null, isEnabled: sourceForm.isEnabled,
- config: { ...(editingSource.value?.config || {}), limit: sourceForm.limit, ...(sourceForm.adapterKey === 'crossref_works' ? { query: sourceForm.query } : {}) } }
+  const isWechat = sourceForm.adapterKey === 'wechat_rss'
+  return {
+    name: sourceForm.name.trim(), type: sourceForm.sourceType,
+    url: isWechat ? null : sourceForm.endpoint.trim() || null,
+    adapter: sourceForm.adapterKey, cron: sourceForm.scheduleCron.trim() || null, timezone: sourceForm.timezone,
+    modelId: sourceForm.modelId || null, isEnabled: sourceForm.isEnabled,
+    config: {
+      ...(editingSource.value?.config || {}), limit: sourceForm.limit,
+      ...(isWechat ? { feed_url: sourceForm.feedUrl.trim() } : {}),
+      ...(sourceForm.adapterKey === 'crossref_works' ? { query: sourceForm.query } : {})
+    }
+  }
 }
 async function saveSource() {
   if (!canSourceSave.value) return
   if (saving.value) return
   if (!adapterSupported.value) return ElMessage.warning('当前来源类型未接入可用采集适配器')
   if (!sourceForm.name.trim() || !sourceForm.adapterKey) return ElMessage.warning('请填写名称并选择采集适配器')
+  if (sourceForm.adapterKey === 'wechat_rss' && !sourceForm.feedUrl.trim()) return ElMessage.warning('请填写公众号 RSS 链接')
   saving.value = true
   try {
     const payload = sourcePayload()

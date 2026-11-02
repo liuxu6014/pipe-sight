@@ -21,13 +21,6 @@ LEGACY_VIEWS = (
 )
 
 
-def test_fresh_schema_does_not_recreate_legacy_views() -> None:
-    schema = (ROOT / 'sql/insighthub-schema.pg.sql').read_text()
-    for name in LEGACY_VIEWS:
-        assert f'CREATE OR REPLACE VIEW news.{name}' not in schema
-    assert 'news.sys_domain,' not in schema
-
-
 def load_migration() -> ModuleType:
     spec = importlib.util.spec_from_file_location(
         'retire_views_migration', ROOT / 'alembic/versions/20261025_retire_processing_compat_views.py'

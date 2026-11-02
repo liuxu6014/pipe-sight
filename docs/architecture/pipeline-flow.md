@@ -4,7 +4,7 @@
 
 ## 一句话总览
 
-> 三路采集 → 入库 →（规则预过滤 + 大模型分类）→ 平台浏览 → 用模板 + 大模型生成成果（需求填报 / 日报周报月报）。
+> 三路采集 → 翻译/分类 → 入库 → 平台浏览 → 用模板 + 大模型生成成果（需求填报 / 日报周报月报）。
 
 ```
 ┌─ 采集 ─────────────────────────────────────────────┐
@@ -12,11 +12,9 @@
 └───────────────────┬────────────────────────────────┘
                     ▼
         ┌──── 两条入库通道 ────┐
-        │ A. 外部爬虫(181) ─→ Kafka ─→ 消费端直写 raw 库
-        │ B. 站内定时采集(adapter) ─→ 规则预过滤 ─→ 写库
+        │ A. 外部爬虫(news-pipelines) ─→ Kafka(news_pipeline) ─→ 统一消费端 ─→ 处理写库
+        │ B. 站内定时采集(adapter) ─→ 翻译/分类 ─→ 写库
         └──────────┬──────────┘
-                   ▼
-          大模型分类/过滤（InsightHub Worker + 后台提示词）
                    ▼
               数据库（news_articles / papers / …）
                    ▼
@@ -32,7 +30,7 @@
 | 来源 | 类型 | 采集方式 | 关键代码 |
 |---|---|---|---|
 | 新闻网站 | `website` | 站内定时抓取国家管网 `pipechina.com.cn` | `intelligence/integrations/public_source_bridge.py`（`pipechina_group_news` adapter） |
-| 公众号 | `wechat` | 外部爬虫（181 InsightHub）推 Kafka，或 `import_wechat_feeds.py` | `intelligence/tasks/kafka_news_consumer.py`、`scripts/import_wechat_feeds.py` |
+| 公众号 | `wechat` | 管理员在来源管理添加公众号 RSS 链接，`wechat_rss` 适配器拉取内部 wechat2rss feed | `intelligence/integrations/wechat_rss.py` |
 | 论文 | `paper` | Crossref 抓取，**默认只有摘要**；全文靠授权 JATS / 出版方 PDF 预览 | `public_source_bridge.py`（`crossref_works`）、`intelligence/services/full_text.py`、`scripts/prepare_licensed_papers.py`、`scripts/prepare_publisher_paper_previews.py` |
 
 论文默认只入库摘要，全文（`full_text.py`）分两类可选项：
@@ -42,33 +40,25 @@
 
 ## 2. 入库的两条通道
 
-**A. 外部爬虫 → Kafka → 消费端（直写 raw 库）**
+**A. 外部爬虫（news-pipelines）经 Kafka 统一接入**
 
-181 的 InsightHub 爬虫把公众号/网站原文推送到 Kafka topic `news`，`intelligence/tasks/kafka_news_consumer.py` 消费后直接写入 `public.news_articles`：
-
-- `review_status='approved'`（不需审核，直接入库）。
-- 幂等：按 `url_hash` / `canonical_url` / `article_id` 去重。
-- 不调大模型、不评分、不构造交接结果。
-- `handoff_status='pending'`，留给后续大模型处理。
-- 目标库守卫：仅允许生产 `172.16.4.183/pipesight`。
+外部爬虫（`news-pipelines`，独立仓库）把采集内容发布到 Kafka 主题 `news_pipeline`（`172.16.4.182:9092`）。`pipesight-kafka-consumer`（`intelligence/tasks/kafka_content_consumer.py`）常驻订阅：先解析统一 envelope `KafkaContentMessage`，兼容爬虫历史格式 `{title,url,author,ctime,content,content_md,site_name,domain}`（映射进 envelope），再走与站内采集相同的翻译/分类/有效性裁决后写入 183 的 `public.news_articles`（与站内采集共用同一份紧凑内容契约）。
 
 **B. 站内定时采集（adapter 直接抓取）**
 
 `intelligence/tasks/collection_scheduler.py` 每 15 秒扫 `data_sources` 里到期的来源，执行对应 adapter；adapter 注册在 `public_source_bridge.py`：
 
 - `pipechina_group_news` → `website`（国家管网新闻）
+- `wechat_rss` → `wechat`（公众号 RSS，feed 地址放在 `config.feed_url`，`url` 列仍受全局 HTTPS 白名单约束）
 - `crossref_works` → `paper`（Crossref 论文）
 
-> 所以不是所有数据都走 Kafka：Kafka 只是外部爬虫这条通道；站内定时采集（管网新闻、Crossref 论文）是直接抓取的。
+采集正文经 `CollectionTranslationService`（按来源配置翻译 `content_zh`）与 `CategoryService.classify`（按类别提示词+模型给出唯一 `category_id`）后，由 `CollectionPersistenceService.save_batch` 写入 `news_articles` / `papers`。
 
-## 3. 过滤与分类（规则 + 大模型两段）
+## 3. 翻译与分类
 
-核心契约在 `intelligence/services/data_processing.py`，分两段：
-
-1. **规则预过滤（站内，低成本）**：`_classification` 用固定规则做初筛，同时把**后台发布的 Prompt 快照**写进 `processing.filter`。
-2. **大模型过滤（外部 InsightHub Worker）**：`intelligence/integrations/insighthub.py` 把记录交接给外部 Worker，Worker 按快照里的提示词执行真正的模型过滤/分类，回写 `filter_result`、`ai_title`、`summary`、`focus_risk`、`suggestion`、`event_keywords` 等。
-
-**提示词由管理员在后台配置**，落在 `templates` 表（`purpose` 区分用途），发布后即成为可审计的快照参与最终判定。
+- **翻译**：`intelligence/services/collection_translation.py` 按来源配置的翻译模型把正文/摘要翻译成 `content_zh` / `abstract_zh`（原文已中文则跳过）。
+- **分类**：`intelligence/services/categories.py` 的 `CategoryService.classify` 依据 `categories` 表里每个类别的过滤/分类提示词（`prompt`）与分类模型（`model_id`）给每条内容一个唯一 `category_id`；未命中则分类为空。
+- 管理员在后台维护 `categories`（`applies_to` 限定 `news/paper/all`），启用后即参与新内容的分类判定。
 
 ## 4. 数据库
 

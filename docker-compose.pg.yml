@@ -2,6 +2,7 @@ name: pipesight-pg
 
 services:
   # 数据库迁移：API 和持久任务 Worker 启动前必须完成 Alembic 迁移。
+  # 数据库统一使用 172.16.4.183 上的 pipesight 库；本项目不再随 docker 启动本地 PG。
   pipesight-db-migrate:
     build:
       context: ./backend
@@ -11,15 +12,13 @@ services:
     environment:
       APP_ENV: dockerpg
       DB_TYPE: postgresql
-      DB_HOST: ruoyi-pg
+      PYTHONPATH: /app/src:/app
+      DB_HOST: 172.16.4.183
       DB_PORT: 5432
       DB_USERNAME: postgres
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-root}
-      DB_DATABASE: ruoyi-fastapi
+      DB_PASSWORD: ${DATA_DB_PASSWORD}
+      DB_DATABASE: pipesight
       DB_ECHO: "false"
-    depends_on:
-      ruoyi-pg:
-        condition: service_healthy
     networks:
       - ruoyi-network
 
@@ -53,11 +52,12 @@ services:
     environment:
       APP_ENV: dockerpg
       DB_TYPE: postgresql
-      DB_HOST: ruoyi-pg
+      PYTHONPATH: /app/src:/app
+      DB_HOST: 172.16.4.183
       DB_PORT: 5432
       DB_USERNAME: postgres
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-root}
-      DB_DATABASE: ruoyi-fastapi
+      DB_PASSWORD: ${DATA_DB_PASSWORD}
+      DB_DATABASE: pipesight
       DB_ECHO: "false"
       REDIS_HOST: ruoyi-redis
       REDIS_PORT: 6379
@@ -66,14 +66,6 @@ services:
       PIPELINE_AUTO_BOOTSTRAP_SOURCES: "true"
       PIPELINE_TASK_SCHEDULER_ENABLED: "false"
       PIPELINE_INTERNAL_TOKEN: ${PIPELINE_INTERNAL_TOKEN:-pipesight-local-internal}
-      INSIGHTHUB_ENABLED: "true"
-      INSIGHTHUB_DB_HOST: ruoyi-pg
-      INSIGHTHUB_DB_PORT: 5432
-      INSIGHTHUB_DB_NAME: ruoyi-fastapi
-      INSIGHTHUB_DB_SCHEMA: news
-      INSIGHTHUB_DB_USER: postgres
-      INSIGHTHUB_DB_PASSWORD: ${POSTGRES_PASSWORD:-root}
-      INSIGHTHUB_DB_SSLMODE: disable
       # 本地验收默认使用基础检查；生产必须改为 external 并配置 ClamAV 等专业扫描器。
       FILE_SCAN_MODE: ${FILE_SCAN_MODE:-basic}
       FILE_SCAN_COMMAND: ${FILE_SCAN_COMMAND:-}
@@ -83,8 +75,6 @@ services:
     volumes:
       - ruoyi-upload-data:/app/vf_admin/upload_path
     depends_on:
-      ruoyi-pg:
-        condition: service_healthy
       ruoyi-redis:
         condition: service_healthy
       pipesight-db-migrate:
@@ -97,7 +87,7 @@ services:
     networks:
       - ruoyi-network
 
-  # PipeSight 任务 Worker：采集、InsightHub交接、科研任务、报告导出和资料解析独立于 API 进程运行。
+  # PipeSight 任务 Worker：采集、科研任务、报告导出和资料解析独立于 API 进程运行。
   pipesight-task-worker:
     build:
       context: ./backend
@@ -107,60 +97,26 @@ services:
     environment:
       APP_ENV: dockerpg
       DB_TYPE: postgresql
-      DB_HOST: ruoyi-pg
+      PYTHONPATH: /app/src:/app
+      DB_HOST: 172.16.4.183
       DB_PORT: 5432
       DB_USERNAME: postgres
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-root}
-      DB_DATABASE: ruoyi-fastapi
+      DB_PASSWORD: ${DATA_DB_PASSWORD}
+      DB_DATABASE: pipesight
       DB_ECHO: "false"
       PIPELINE_AUTO_BOOTSTRAP_SOURCES: "true"
       PIPELINE_TASK_SCHEDULER_ENABLED: "true"
-      INSIGHTHUB_ENABLED: "true"
-      INSIGHTHUB_DB_HOST: ruoyi-pg
-      INSIGHTHUB_DB_PORT: 5432
-      INSIGHTHUB_DB_NAME: ruoyi-fastapi
-      INSIGHTHUB_DB_SCHEMA: news
-      INSIGHTHUB_DB_USER: postgres
-      INSIGHTHUB_DB_PASSWORD: ${POSTGRES_PASSWORD:-root}
-      INSIGHTHUB_DB_SSLMODE: disable
-      INSIGHTHUB_POLL_INTERVAL_SECONDS: 30
       FILE_SCAN_MODE: ${FILE_SCAN_MODE:-basic}
       FILE_SCAN_COMMAND: ${FILE_SCAN_COMMAND:-}
       FILE_SCAN_TIMEOUT_SECONDS: ${FILE_SCAN_TIMEOUT_SECONDS:-30}
     volumes:
       - ruoyi-upload-data:/app/vf_admin/upload_path
     depends_on:
-      ruoyi-pg:
-        condition: service_healthy
       pipesight-db-migrate:
         condition: service_completed_successfully
     restart: unless-stopped
     networks:
       - ruoyi-network
-
-  # PostgreSQL服务
-  ruoyi-pg:
-    image: pgvector/pgvector:pg16
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-root}
-      POSTGRES_DB: ruoyi-fastapi
-      POSTGRES_INITDB_ARGS: --encoding=UTF8 --lc-collate=C --lc-ctype=C
-    ports:
-      - "15432:5432"
-    volumes:
-      - ruoyi-pg-data:/var/lib/postgresql/data
-      - ./backend/sql/ruoyi-fastapi-pg.sql:/docker-entrypoint-initdb.d/10-ruoyi-fastapi-pg.sql:ro
-      - ./backend/sql/pipeline-domain-pg.sql:/docker-entrypoint-initdb.d/20-pipeline-domain-pg.sql:ro
-      - ./backend/sql/pipeline-domain-enhancement-pg.sql:/docker-entrypoint-initdb.d/30-pipeline-domain-enhancement-pg.sql:ro
-      - ./backend/sql/insighthub-schema.pg.sql:/docker-entrypoint-initdb.d/40-insighthub-schema.sql:ro
-    networks:
-      - ruoyi-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d ruoyi-fastapi"]
-      interval: 5s
-      timeout: 10s
-      retries: 30
 
   # Redis服务
   ruoyi-redis:
@@ -175,99 +131,10 @@ services:
       timeout: 10s
       retries: 30
 
-  # InsightHub 处理 Worker，共用 ruoyi-pg 的 PostgreSQL 实例和 news schema。
-  # 这是 PostgreSQL 全链路的默认组成部分；不启用它时，external 数据源
-  # 会一直停留在 PipeSight 的交接队列，无法完成过滤、分类和结果回写。
-  insighthub-worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.processing.pg
-    environment:
-      INPUT_MODE: postgres
-      INSIGHTHUB_ENV: ${INSIGHTHUB_ENV:-development}
-      POSTGRES_HOST: ruoyi-pg
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: ruoyi-fastapi
-      POSTGRES_SCHEMA: news
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-root}
-      POSTGRES_PROCESSING_STALE_SECONDS: ${INSIGHTHUB_POSTGRES_PROCESSING_STALE_SECONDS:-3600}
-      REDIS_HOST: ruoyi-redis
-      REDIS_PORT: 6379
-      REDIS_DB: 15
-      ENABLE_DATABASE_DOMAINS: "true"
-      ENABLED_DOMAINS: ${INSIGHTHUB_ENABLED_DOMAINS:-tech}
-      BAIDU_TRANSLATE_APPID: ${INSIGHTHUB_BAIDU_TRANSLATE_APPID:-}
-      BAIDU_TRANSLATE_APPKEY: ${INSIGHTHUB_BAIDU_TRANSLATE_APPKEY:-}
-      TRANSLATION_SMALL_MODEL_URL: ${INSIGHTHUB_TRANSLATION_SMALL_MODEL_URL:-}
-      BAIDU_TRANSLATE_URL: ${INSIGHTHUB_BAIDU_TRANSLATE_URL:-https://fanyi-api.baidu.com/api/trans/vip/translate}
-      TRANSLATION_REQUEST_TIMEOUT_SECONDS: ${INSIGHTHUB_TRANSLATION_REQUEST_TIMEOUT_SECONDS:-30}
-      THREAT_ANALYSIS_URL: ${INSIGHTHUB_THREAT_ANALYSIS_URL:-}
-      THREAT_ANALYSIS_TIMEOUT_SECONDS: ${INSIGHTHUB_THREAT_ANALYSIS_TIMEOUT_SECONDS:-30}
-      LLM_MODEL: ${INSIGHTHUB_LLM_MODEL:-Qwen/Qwen2.5-72B-Instruct}
-      LLM_API_KEYS: ${INSIGHTHUB_LLM_API_KEYS:-}
-      LLM_BASE_URL: ${INSIGHTHUB_LLM_BASE_URL:-}
-      FILTER_MODEL: ${INSIGHTHUB_FILTER_MODEL:-}
-      FILTER_API_KEY: ${INSIGHTHUB_FILTER_API_KEY:-}
-      FILTER_BASE_URL: ${INSIGHTHUB_FILTER_BASE_URL:-}
-      EMBEDDING_MODEL: ${INSIGHTHUB_EMBEDDING_MODEL:-Pro/BAAI/bge-m3}
-      EMBEDDING_KEY: ${INSIGHTHUB_EMBEDDING_KEY:-}
-      EMBEDDING_URL: ${INSIGHTHUB_EMBEDDING_URL:-}
-      MINIO_ENDPOINT: insighthub-minio:9000
-      MINIO_ACCESS_KEY: ${INSIGHTHUB_MINIO_USER:-insighthub}
-      MINIO_SECRET_KEY: ${INSIGHTHUB_MINIO_PASSWORD:-}
-      MINIO_SECURE: "false"
-      MINIO_BUCKET_NAME: news-images
-      MINIO_PUBLIC_BASE_URL: ${INSIGHTHUB_MINIO_PUBLIC_BASE_URL:-}
-      ALERT_ENABLED: "false"
-      ALERT_CONFIG_SYNC_ENABLED: "false"
-      PIPESIGHT_BACKEND_URL: http://ruoyi-backend-pg:9099
-      PIPESIGHT_INTERNAL_TOKEN: ${PIPELINE_INTERNAL_TOKEN:-pipesight-local-internal}
-      PIPESIGHT_MODEL_PROXY_ENABLED: ${PIPESIGHT_MODEL_PROXY_ENABLED:-true}
-    ports:
-      - "18000:8000"
-    volumes:
-      - ./logs/insighthub:/app/logs
-    depends_on:
-      ruoyi-pg:
-        condition: service_healthy
-      ruoyi-redis:
-        condition: service_healthy
-    networks:
-      - ruoyi-network
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
-      interval: 10s
-      timeout: 5s
-      retries: 20
-
-  # 可选对象存储。Worker 的 PostgreSQL 主链路不依赖此服务。
-  insighthub-minio:
-    profiles: ["insighthub-storage"]
-    image: ${INSIGHTHUB_MINIO_IMAGE:-quay.io/minio/minio:latest}
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${INSIGHTHUB_MINIO_USER:-insighthub}
-      MINIO_ROOT_PASSWORD: ${INSIGHTHUB_MINIO_PASSWORD:-insighthub_dev_only}
-    ports:
-      - "19000:9000"
-      - "19001:9001"
-    volumes:
-      - insighthub-minio-data:/data
-    networks:
-      - ruoyi-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 20
-
 # 网络配置
 networks:
   ruoyi-network:
     driver: bridge
 
 volumes:
-  ruoyi-pg-data:
   ruoyi-upload-data:
-  insighthub-minio-data:

@@ -63,7 +63,7 @@ dependencies = [
 ruoyi = "cli.main:main"
 pipesight-api = "app.entrypoints.api:main"
 pipesight-task-worker = "app.entrypoints.task_worker:main"
-pipesight-kafka-consumer = "app.intelligence.tasks.kafka_news_consumer:main"
+pipesight-kafka-consumer = "app.intelligence.tasks.kafka_content_consumer:main"
 
 [dependency-groups]
 dev = [

@@ -5,7 +5,7 @@ import sys
 from typing import Literal
 
 from dotenv import load_dotenv
-from pydantic import Field, computed_field
+from pydantic import computed_field
 from pydantic_settings import BaseSettings
 
 
@@ -82,19 +82,14 @@ class RedisSettings(BaseSettings):
     redis_database: int = 2
 
 
-class InsightHubSettings(BaseSettings):
-    """InsightHub 外部新闻处理库连接配置。"""
+class KafkaSettings(BaseSettings):
+    """
+    Kafka 统一内容采集配置
+    """
 
-    insighthub_enabled: bool = False
-    insighthub_db_host: str = '127.0.0.1'
-    insighthub_db_port: int = 5432
-    insighthub_db_name: str = 'ruoyi-fastapi'
-    insighthub_db_schema: str = 'news'
-    insighthub_db_user: str = 'postgres'
-    insighthub_db_password: str = 'root'
-    insighthub_db_sslmode: Literal['disable', 'require'] = 'disable'
-    insighthub_db_timeout_seconds: int = 10
-    insighthub_poll_interval_seconds: int = Field(default=30, ge=5, le=3600)
+    kafka_bootstrap_servers: str = '172.16.4.182:9092'
+    kafka_topic: str = 'news_pipeline'
+    kafka_group_id: str = 'pipesight_news_consumer'
 
 
 class LogSettings(BaseSettings):
@@ -269,6 +264,13 @@ class GetConfig:
         # 实例化Redis配置模型
         return RedisSettings()
 
+    def get_kafka_config(self) -> KafkaSettings:
+        """
+        获取Kafka配置
+        """
+        # 实例化Kafka配置模型
+        return KafkaSettings()
+
     def get_log_config(self) -> LogSettings:
         """
         获取日志配置
@@ -333,8 +335,8 @@ JwtConfig = get_config.get_jwt_config()
 DataBaseConfig = get_config.get_database_config()
 # Redis配置
 RedisConfig = get_config.get_redis_config()
-# InsightHub 外部新闻处理库配置
-InsightHubConfig = InsightHubSettings()
+# Kafka配置
+KafkaConfig = get_config.get_kafka_config()
 # 日志配置
 LogConfig = get_config.get_log_config()
 # 传输层加解密配置

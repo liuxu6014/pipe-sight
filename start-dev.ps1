@@ -444,36 +444,38 @@ function Test-DockerEngine {
     return $process.ExitCode -eq 0
 }
 
+function Set-DatabaseEnvironment {
+    # 数据库统一使用 172.16.4.183 上的 pipesight 库（backend/.env.dev 的 DB_*），不再随 docker 启动本地 PG。
+    $databaseType = Get-DotEnvValue -Name 'DB_TYPE' -DefaultValue 'postgresql'
+    if ($databaseType -ne 'postgresql') {
+        throw "The one-click local initializer targets PostgreSQL, but backend/.env.dev has DB_TYPE=$databaseType. Use PostgreSQL configuration."
+    }
+
+    $env:DB_TYPE = $databaseType
+    $env:DB_HOST = Get-DotEnvValue -Name 'DB_HOST' -DefaultValue '127.0.0.1'
+    $env:DB_PORT = Get-DotEnvValue -Name 'DB_PORT' -DefaultValue '5432'
+    $env:DB_USERNAME = Get-DotEnvValue -Name 'DB_USERNAME' -DefaultValue 'postgres'
+    $env:DB_PASSWORD = Get-DotEnvValue -Name 'DB_PASSWORD' -DefaultValue 'root'
+    $env:DB_DATABASE = Get-DotEnvValue -Name 'DB_DATABASE' -DefaultValue 'ruoyi-fastapi'
+}
+
 function Start-DockerInfrastructure {
     param([string]$DockerPath)
 
-    Write-Host 'Local PostgreSQL/Redis are not both available; starting Docker infrastructure...'
+    Write-Host 'Local Redis is not available; starting Docker Redis...'
     if (-not (Test-DockerEngine -DockerPath $DockerPath)) {
         throw 'Docker is installed but the Docker engine is not running. Start Docker Desktop and retry, or use -Infrastructure Local.'
     }
 
-    & $DockerPath compose -p pipesight-pg -f (Join-Path $RepoRoot 'docker-compose.pg.yml') up -d ruoyi-pg ruoyi-redis
+    & $DockerPath compose -p pipesight-pg -f (Join-Path $RepoRoot 'docker-compose.pg.yml') up -d ruoyi-redis
     if ($LASTEXITCODE -ne 0) {
-        throw 'Docker Compose failed to start PostgreSQL and Redis.'
+        throw 'Docker Compose failed to start Redis.'
     }
 
-    Wait-TcpPort -HostName '127.0.0.1' -Port 15432 -TimeoutSeconds 90
     Wait-TcpPort -HostName '127.0.0.1' -Port 16379 -TimeoutSeconds 60
 
-    $env:DB_TYPE = 'postgresql'
-    $env:DB_HOST = '127.0.0.1'
-    $env:DB_PORT = '15432'
-    $env:DB_USERNAME = 'postgres'
-    $composeDbPassword = Get-DotEnvValue -Name 'POSTGRES_PASSWORD' -DefaultValue (Get-DotEnvValue -Name 'DB_PASSWORD' -DefaultValue 'root')
-    $env:DB_PASSWORD = $composeDbPassword
-    $env:DB_DATABASE = 'ruoyi-fastapi'
-    $env:INSIGHTHUB_DB_TYPE = 'postgresql'
-    $env:INSIGHTHUB_DB_HOST = '127.0.0.1'
-    $env:INSIGHTHUB_DB_PORT = '15432'
-    $env:INSIGHTHUB_DB_USERNAME = 'postgres'
-    $env:INSIGHTHUB_DB_PASSWORD = $composeDbPassword
-    $env:INSIGHTHUB_DB_DATABASE = 'ruoyi-fastapi'
-    $env:INSIGHTHUB_DB_SCHEMA = 'news'
+    Set-DatabaseEnvironment
+
     $env:REDIS_HOST = '127.0.0.1'
     $env:REDIS_PORT = '16379'
     $env:REDIS_USERNAME = ''
@@ -482,26 +484,13 @@ function Start-DockerInfrastructure {
 }
 
 function Use-LocalInfrastructure {
-    $databasePort = [int](Get-DotEnvValue -Name 'DB_PORT' -DefaultValue '5432')
     $redisPort = [int](Get-DotEnvValue -Name 'REDIS_PORT' -DefaultValue '6379')
-    if (-not (Test-TcpPort -HostName '127.0.0.1' -Port $databasePort)) {
-        throw "PostgreSQL is not listening on 127.0.0.1:$databasePort. Start it or use -Infrastructure Docker."
-    }
     if (-not (Test-TcpPort -HostName '127.0.0.1' -Port $redisPort)) {
         throw "Redis is not listening on 127.0.0.1:$redisPort. Start it or use -Infrastructure Docker."
     }
 
-    $databaseType = Get-DotEnvValue -Name 'DB_TYPE' -DefaultValue 'postgresql'
-    if ($databaseType -ne 'postgresql') {
-        throw "The one-click local initializer targets PostgreSQL, but backend/.env.dev has DB_TYPE=$databaseType. Use PostgreSQL configuration."
-    }
+    Set-DatabaseEnvironment
 
-    $env:DB_TYPE = $databaseType
-    $env:DB_HOST = Get-DotEnvValue -Name 'DB_HOST' -DefaultValue '127.0.0.1'
-    $env:DB_PORT = [string]$databasePort
-    $env:DB_USERNAME = Get-DotEnvValue -Name 'DB_USERNAME' -DefaultValue 'postgres'
-    $env:DB_PASSWORD = Get-DotEnvValue -Name 'DB_PASSWORD' -DefaultValue 'root'
-    $env:DB_DATABASE = Get-DotEnvValue -Name 'DB_DATABASE' -DefaultValue 'ruoyi-fastapi'
     $env:REDIS_HOST = Get-DotEnvValue -Name 'REDIS_HOST' -DefaultValue '127.0.0.1'
     $env:REDIS_PORT = [string]$redisPort
     $env:REDIS_USERNAME = Get-DotEnvValue -Name 'REDIS_USERNAME' -DefaultValue ''
@@ -513,7 +502,6 @@ function Initialize-Database {
     $baseSql = Join-Path $BackendRoot 'sql\ruoyi-fastapi-pg.sql'
     $pipelineSql = Join-Path $BackendRoot 'sql\pipeline-domain-pg.sql'
     $pipelineEnhancementSql = Join-Path $BackendRoot 'sql\pipeline-domain-enhancement-pg.sql'
-    $insightHubSql = Join-Path $RepoRoot 'backend\sql\insighthub-schema.pg.sql'
     $initScriptPath = Join-Path $RuntimeRoot 'initialize_postgresql.py'
     $initCode = @'
 import asyncio
@@ -564,9 +552,6 @@ async def main() -> None:
             print("Applying PipeSight baseline tables before Alembic migrations...")
             await execute_sql(connection, sys.argv[2])
             await execute_sql(connection, sys.argv[3])
-        if len(sys.argv) > 4 and Path(sys.argv[4]).exists():
-            print("Applying InsightHub PostgreSQL schema...")
-            await execute_sql(connection, sys.argv[4])
     finally:
         await connection.close()
 
@@ -575,7 +560,7 @@ asyncio.run(main())
 '@
 
     [System.IO.File]::WriteAllText($initScriptPath, $initCode, [System.Text.UTF8Encoding]::new($false))
-    & $BackendPython $initScriptPath $baseSql $pipelineSql $pipelineEnhancementSql $insightHubSql
+    & $BackendPython $initScriptPath $baseSql $pipelineSql $pipelineEnhancementSql
     if ($LASTEXITCODE -ne 0) {
         throw "Database initialization failed for $($env:DB_HOST):$($env:DB_PORT)/$($env:DB_DATABASE). Check credentials in backend/.env.dev or Docker health."
     }
@@ -662,19 +647,15 @@ Write-Step 'Preparing dependencies'
 Ensure-BackendDependencies -UvPath $uvPath
 Ensure-FrontendDependencies -NpmPath $npmPath
 
-Write-Step 'Checking PostgreSQL and Redis'
-$localDatabasePort = [int](Get-DotEnvValue -Name 'DB_PORT' -DefaultValue '5432')
+Write-Step 'Checking database configuration and Redis'
 $localRedisPort = [int](Get-DotEnvValue -Name 'REDIS_PORT' -DefaultValue '6379')
 $useDocker = $Infrastructure -eq 'Docker'
 if ($Infrastructure -eq 'Auto') {
-    $useDocker = -not (
-        (Test-TcpPort -HostName '127.0.0.1' -Port $localDatabasePort) -and
-        (Test-TcpPort -HostName '127.0.0.1' -Port $localRedisPort)
-    )
+    $useDocker = -not (Test-TcpPort -HostName '127.0.0.1' -Port $localRedisPort)
 }
 
 if ($useDocker) {
-    $dockerPath = Assert-Command -Name 'docker' -InstallHint 'Install Docker Desktop, or start local PostgreSQL and Redis and use -Infrastructure Local.'
+    $dockerPath = Assert-Command -Name 'docker' -InstallHint 'Install Docker Desktop, or start local Redis and use -Infrastructure Local.'
     Start-DockerInfrastructure -DockerPath $dockerPath
 }
 else {

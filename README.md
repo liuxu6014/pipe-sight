@@ -10,7 +10,7 @@
 |------|------|
 | **前端** | Vue 3.5 + Vite 6 + Element Plus 2 + Pinia + Vue Router 4 |
 | **后端** | FastAPI 0.128 + SQLAlchemy 2.0 (async) + Pydantic v2 |
-| **数据库** | PostgreSQL 16 + pgvector（默认运行时） |
+| **数据库** | PostgreSQL（统一使用 `172.16.4.183` 的 `pipesight` 库） |
 | **缓存** | Redis 7 |
 | **AI / LLM** | 多模型接入（OpenAI、Anthropic、Gemini、Groq、Ollama、LiteLLM 等） |
 | **容器化** | Docker + Docker Compose |
@@ -53,7 +53,6 @@ PipeSight/
 │   │   ├── entrypoints/         # API、任务 Worker 入口
 │   │   ├── system/              # 认证、RBAC、系统管理
 │   │   ├── intelligence/        # 情报、采集、处理、AI 编排
-│   │   │   └── processing/      # InsightHub 数据处理 Worker
 │   │   ├── library/             # 资料库与文件访问
 │   │   ├── research/            # 科研任务、证据与成果
 │   │   ├── health/              # 健康检查
@@ -82,7 +81,7 @@ PipeSight/
 │   └── project-structure.md    # 目录结构说明
 │
 ├── docker-compose.my.yml        # Legacy Docker Compose（MySQL，仅迁移参考）
-└── docker-compose.pg.yml        # 默认 Docker Compose（PostgreSQL + pgvector）
+└── docker-compose.pg.yml        # 默认 Docker Compose（连 172.16.4.183）
 ```
 
 ## 业务功能
@@ -93,12 +92,12 @@ PipeSight/
 |----------|------|
 | **情报工作台** | 有效资讯统计、采集状态、热点主题、待审核报告概览 |
 | **情报检索** | 按新闻/公众号/论文类别查看和检索管网相关内容，支持关键词搜索和分页 |
-| **数据源管理** | 查看采集源名称、类型、采集频率、运行状态和成功率 |
-| **采集任务** | 查看任务列表、运行状态、进度，支持手动触发采集任务 |
-| **报告管理** | 查看日报/周报/技术路线报告草稿，支持导出 Markdown、DOCX、PDF |
+| **数据源管理** | 新增/启停采集源、添加公众号 RSS 链接、设置采集周期，查看类型、运行状态和成功率 |
+| **采集任务** | 查看任务列表、运行状态、进度，支持手动触发/停止采集任务 |
+| **报告管理** | 查看科研报告与科技情报简报（日报/周报/月报），支持导出 Markdown、DOCX、PDF |
 | **内部资料** | 上传、解析、授权访问并将研究资料加入资料篮 |
 | **科研任务** | 从资料篮创建任务，执行资料处理、结果审核、重试/驳回并导出成果 |
-| **数据处理** | 采集结果进入 PostgreSQL `news` schema，由 InsightHub Worker 执行去重、过滤、分类、评分和回写 |
+| **数据处理** | 采集内容经 Kafka 统一接入后进入 `public.news_articles`，支持翻译、分类、有效性校验与去重 |
 | **模型与 Prompt** | 管理 `data-filter` 等场景的 Prompt、模型和路由；实际外部来源处理前必须具备已发布配置 |
 | **认证授权** | 基于 JWT 的登录认证、角色-菜单-按钮权限控制、动态路由 |
 | **系统管理** | 用户/角色/菜单/字典/参数管理；不包含部门、岗位和通知公告模块 |
@@ -107,13 +106,13 @@ PipeSight/
 
 ### 当前边界与后续工作
 
-- 本仓库提供采集任务、PostgreSQL 持久化、交接队列和处理 Worker；具体爬虫脚本、来源授权和生产级来源接入仍需按来源逐一验收。
-- 当前内置采集适配器仅支持国家管网新闻和 Crossref 论文。已有公众号文章可浏览和选材，但公众号自动采集尚未接入授权接口，不能视为已交付。
+- 本仓库提供采集任务、PostgreSQL 持久化和任务 Worker；具体爬虫脚本、来源授权和生产级来源接入仍需按来源逐一验收。
+- 当前内置采集适配器支持国家管网新闻（`pipechina_group_news`）、Crossref 论文（`crossref_works`）与公众号 RSS（`wechat_rss`，管理员在来源管理中添加公众号 feed 链接即可采集）。其余生产级来源仍需按来源逐一验收。
 - 当前默认检索使用 PostgreSQL 查询能力；Elasticsearch、Milvus 等外部基础设施不是默认运行时，不能在未完成数据一致性、权限和运维验收前作为已交付能力宣称。
 - MinIO/S3、Embedding 回填和语义检索属于可选能力，只有启用对应 Compose profile、密钥和验收数据后才生效。
 - 生产化仍需补齐备份恢复、容量压测、网络/模型/Redis/数据库故障演练和告警接入。
 - 证据词严格过滤依赖领域规则文件（如 `*_proofwords.txt`）；当前仓库未内置业务词表，未提供词表时不能把严格证据词过滤视为已启用。
-- 知识问答功能、Kafka Dashboard 和独立 `insighthub/` 运行目录不属于当前交付范围；InsightHub Worker 已并入 `backend/src/app/intelligence/processing/`。
+- 知识问答功能和 Kafka Dashboard 不属于当前交付范围；统一采集由 `pipesight-kafka-consumer` 常驻消费端处理（订阅爬虫侧 `news_pipeline` 主题，统一 envelope + 爬虫历史格式兼容），采集后处理由后端任务 Worker 承担。
 - 后端不再维护全局 `backend/utils/` 或 `module_*` 业务包；新的公共能力按职责进入 `common/`、`app.infrastructure` 或所属业务模块。
 
 ## 快速开始
@@ -123,9 +122,9 @@ PipeSight/
 - **Node.js** >= 18
 - **Python** >= 3.10
 - **uv**（后端虚拟环境与依赖安装）
-- **PostgreSQL** 16 + **pgvector**（推荐使用 Docker Compose）
+- **PostgreSQL**（统一使用 `172.16.4.183` 的 `pipesight` 库）
 - **Redis** >= 6
-- **Docker Desktop**（推荐；提供 PostgreSQL、pgvector 和 Redis）
+- **Docker Desktop**（可选；仅用于本机 Redis）
 
 ### 1. 一键启动（推荐）
 
@@ -139,8 +138,8 @@ cd PipeSight
 脚本会依次完成以下工作：
 
 1. 检查 `uv`、Node.js 与 npm；首次运行时自动创建 `backend/.venv` 并安装 PostgreSQL 专用依赖 `requirements-pg.txt`，同时按需执行 `npm ci`。
-2. 优先使用本机 PostgreSQL 和 Redis；本机基础设施没有同时就绪时，使用根目录 `docker-compose.pg.yml` 启动统一的 PostgreSQL + pgvector + Redis。
-3. 数据库不存在时自动创建；若缺少若依基础表则导入 `ruoyi-fastapi-pg.sql`，并幂等补齐 PostgreSQL 版管网业务表与 InsightHub `news` schema。
+2. 数据库统一连 `172.16.4.183`；Redis 优先使用本机，未就绪时用根目录 `docker-compose.pg.yml` 启动 Redis。
+3. 数据库不存在时自动创建；若缺少若依基础表则导入 `ruoyi-fastapi-pg.sql`，并幂等补齐 PostgreSQL 版管网业务表。
 4. 检查 `9099`/`5173` 端口。仅当监听进程能够明确识别为当前 PipeSight 项目时才会停止旧进程；不会直接终止无关程序。若端口被无法确认归属的旧服务占用，会自动为本次前端会话选择下一个可用端口。
 5. 使用 uv 启动后端、使用 Vite 启动前端，并等待健康检查通过后输出访问地址。
 
@@ -159,10 +158,10 @@ cd PipeSight
 常用启动选项：
 
 ```powershell
-# 强制使用 Docker 中的 PostgreSQL + pgvector 和 Redis
+# 强制使用 Docker 中的 Redis
 .\start-dev.cmd -Infrastructure Docker
 
-# 强制使用 backend/.env.dev 指向的本地 PostgreSQL 和 Redis
+# 使用本机 Redis（数据库统一连 183）
 .\start-dev.cmd -Infrastructure Local
 
 # 禁止自动安装依赖（依赖缺失或过期时直接报错）
@@ -174,26 +173,17 @@ cd PipeSight
 
 ### 2. 手动启动基础设施
 
-#### 方式 A：使用本地安装的服务
+#### 方式 A：使用本地安装的 Redis
 
-确保 PostgreSQL 和 Redis 已在本地运行，然后配置 `backend/.env.dev` 中的连接信息（默认配置见下文）。
+确保 Redis 已在本地运行；数据库统一连 `172.16.4.183`，在 `backend/.env.dev` 配置 `DB_*`。
 
-#### 方式 B：使用 Docker 启动服务
+#### 方式 B：使用 Docker 启动 Redis
 
 ```bash
-# PostgreSQL + pgvector 版本
-docker compose -p pipesight-pg -f docker-compose.pg.yml up -d ruoyi-pg ruoyi-redis
+docker compose -p pipesight-pg -f docker-compose.pg.yml up -d ruoyi-redis
 ```
 
-> Docker 启动后，PostgreSQL 端口映射为 `15432`，Redis 端口映射为 `16379`。请确保 `backend/.env.dev` 中的数据库连接信息与 Docker 端口一致。
-
-新建 Docker 数据卷时，Compose 会按顺序自动导入：
-
-- `10-ruoyi-fastapi-pg.sql`：若依基础表和种子数据
-- `20-pipeline-domain-pg.sql`：知识文件与切块、资料篮、模板与 Prompt、生成任务、报告版本、引用和导出表
-- `30-pipeline-domain-enhancement-pg.sql`：数据来源、采集运行、原始记录、资讯、论文和分类标签表
-
-Docker 已存在旧数据卷时，入口初始化脚本不会再次运行；执行 `.\start-dev.cmd -Infrastructure Docker` 会额外执行一次幂等的管网业务表初始化。
+> Docker 启动后，Redis 端口映射为 `16379`；数据库统一连 `172.16.4.183`，不随 Docker 启动本地 PostgreSQL。
 
 ### 3. 手动启动后端
 
@@ -229,13 +219,14 @@ uv run --no-sync python scripts/bootstrap_real_pipeline.py
 
 该脚本默认保留管理员对内置来源的启用/停用状态，并逐个来源执行、逐个报告失败。只有确认需要恢复已停用内置来源时，才显式增加 `--reactivate`。外部来源执行前还必须在管理端完成已发布 `data-filter` Prompt、可用模型和场景路由配置。
 
-如果本地 `.env` 已配置 `INSIGHTHUB_LLM_MODEL`、`INSIGHTHUB_LLM_BASE_URL` 和 `INSIGHTHUB_LLM_API_KEYS`，可以将 DeepSeek 安全注册到 PostgreSQL 的管理模型表，并启用 `data-filter` 路由：
+如果本地 `.env` 已配置 `INSIGHTHUB_LLM_MODEL`、`INSIGHTHUB_LLM_BASE_URL` 和 `INSIGHTHUB_LLM_API_KEYS`（或对应的 `PIPELINE_DEEPSEEK_*`），可以将 DeepSeek 安全注册到管理模型表，并启用 `data-filter` 路由：
 
 ```bash
 cd backend
-DB_HOST=127.0.0.1 DB_PORT=15432 DB_USERNAME=postgres DB_PASSWORD=root DB_DATABASE=ruoyi-fastapi \
-  uv run --no-sync python scripts/bootstrap_deepseek_route.py --env=dockerpg
+uv run --no-sync python scripts/bootstrap_deepseek_route.py --env=dockerpg
 ```
+
+数据库连接由 `--env=dockerpg` 对应的环境文件提供，统一指向 `172.16.4.183` 的 `pipesight` 库。
 
 脚本只创建缺失的模型和路由，API Key 会按平台密钥格式加密保存且不会打印；已有管理端路由不会被脚本覆盖。执行后仍可在“模型与 Prompt → 场景路由”中查看和维护配置。
 
@@ -255,7 +246,7 @@ npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
 
 ## 项目级验证
 
-PipeSight API、任务 Worker 和 InsightHub 处理 Worker 统一使用 `backend/` 的 Python 项目环境；InsightHub 的测试已经归入 `backend/tests/intelligence/processing/`，不能再切换到已移除的独立 `insighthub/` 目录。建议按项目级脚本执行：
+PipeSight API 和任务 Worker 统一使用 `backend/` 的 Python 项目环境。建议按项目级脚本执行：
 
 ```bash
 # 一键执行全部本地验证
@@ -267,10 +258,6 @@ PipeSight API、任务 Worker 和 InsightHub 处理 Worker 统一使用 `backend
 cd backend
 uv run pytest tests -q
 
-# InsightHub Worker（已包含在 backend/tests/intelligence/processing/）
-cd ../backend
-uv run pytest tests/intelligence/processing -q
-
 # 前端行为测试
 cd ../frontend
 npm test
@@ -279,7 +266,7 @@ npm test
 npm run check
 ```
 
-后端测试覆盖 API、数据访问、权限、任务和报告逻辑；InsightHub 测试覆盖处理器、Kafka/Redis 适配、数据库边界和端到端模拟流程。需要真实数据库、Kafka 或外部模型的用例会明确标记为集成/跳过，不以单元测试通过替代运行态验收。
+后端测试覆盖 API、数据访问、权限、任务和报告逻辑；需要真实数据库、Kafka 或外部模型的用例会明确标记为集成/跳过，不以单元测试通过替代运行态验收。
 
 ### 5. 初始化菜单数据
 
@@ -315,12 +302,11 @@ npm run check
 ```ini
 # 数据库（统一使用 PostgreSQL）
 DB_TYPE = 'postgresql'
-DB_HOST = '127.0.0.1'
-# 本机直连 PostgreSQL 使用 5432；根 Compose 对宿主机映射为 15432
+DB_HOST = '172.16.4.183'
 DB_PORT = 5432
 DB_USERNAME = 'postgres'
-DB_PASSWORD = 'root'
-DB_DATABASE = 'ruoyi-fastapi'
+DB_PASSWORD = '<数据库密码>'
+DB_DATABASE = 'pipesight'
 
 # Redis
 REDIS_HOST = '127.0.0.1'
@@ -332,7 +318,7 @@ JWT_SECRET_KEY = '<your-secret-key>'
 JWT_EXPIRE_MINUTES = 1440
 ```
 
-> 多环境配置文件：`.env.dev`（开发，默认 PostgreSQL）、`.env.dockermy`（旧版 Docker+MySQL，仅迁移参考）、`.env.dockerpg`（Docker+PostgreSQL）、`.env.prod`（生产）。线上和本地默认运行链路均使用 PostgreSQL；MySQL 配置仅保留用于历史数据迁移。
+> 多环境配置文件：`.env.dev`（开发）、`.env.dockermy`（旧版 Docker+MySQL，仅迁移参考）、`.env.dockerpg`（连接 183 的 PostgreSQL 环境）、`.env.prod`（生产）。线上和本地默认运行链路均使用 PostgreSQL；MySQL 配置仅保留用于历史数据迁移。
 
 ### 前端配置
 
@@ -347,7 +333,7 @@ JWT_EXPIRE_MINUTES = 1440
 
 ## Docker 部署
 
-### 全栈 Docker 部署（PostgreSQL + pgvector）
+### 全栈 Docker 部署
 
 ```bash
 docker compose -p pipesight-pg -f docker-compose.pg.yml up -d --build
@@ -357,8 +343,9 @@ docker compose -p pipesight-pg -f docker-compose.pg.yml up -d --build
 |------|------|
 | 前端 (Nginx) | `12580` |
 | 后端 (FastAPI) | `19099` |
-| PostgreSQL + pgvector | `15432` |
 | Redis | `16379` |
+
+数据库统一使用 `172.16.4.183` 的 `pipesight` 库（不随 Compose 启动）。
 
 ## 生产构建
 
@@ -408,8 +395,6 @@ gunicorn -w 4 -k uvicorn.workers.UvicornWorker 'app.bootstrap:create_app()'
 | `GET` | `/pipeline/knowledge/documents` | 查询内部资料 |
 | `POST` | `/pipeline/knowledge/documents` | 上传内部资料 |
 | `POST` | `/pipeline/reviews/{content_type}/{content_id}/reprocess` | 重新处理被驳回或达到重试上限的资讯 |
-| `POST` | `/pipeline/tasks/runs/{run_id}/handoff` | 将采集结果交接给 InsightHub Worker |
-| `POST` | `/pipeline/tasks/runs/{run_id}/handoff/sync` | 同步交接处理结果 |
 
 ## 数据库迁移 (Alembic)
 
@@ -435,15 +420,13 @@ uv run alembic upgrade head
 
 设计说明见 [PipeSight 全系统数据库设计](docs/plans/2026-08-14-full-system-database-design.md)。最终结构共 23 张表：平台 14 张、采集与内容 4 张、知识与报告 5 张。部门、岗位、通知公告、代码生成持久化及未落地的预建业务表均不进入新库；数据权限仅保留“全部数据 / 仅本人”。历史未知试验表不会被自动删除，曾预建的业务表只有在空表时才由迁移清理。
 
-InsightHub 已作为同仓库子系统归入 [`backend/src/app/intelligence/processing/`](backend/src/app/intelligence/processing/)：新闻处理 Worker 源码、测试、PostgreSQL 设计和 pgvector 结构统一由后端项目交付。仓库不再把独立 `insighthub/` 目录作为运行时入口。PipeSight 与 InsightHub 共用根 Compose 中的 `ruoyi-pg` PostgreSQL 实例，PipeSight 使用 `public` schema，InsightHub 使用 `news` schema，不再依赖外部数据库。
-
-默认启动会创建 PostgreSQL + pgvector，并初始化 `ruoyi-fastapi.news` schema；需要真实新闻处理 Worker 时，先配置 LLM/Embedding 密钥，再运行：
+数据库统一使用 `172.16.4.183` 上的 `pipesight` 库（`public` schema），项目不再随 Compose 启动本地 PostgreSQL。根 Compose 只编排 `pipesight-db-migrate`（先执行 `alembic upgrade head`）、`ruoyi-backend-pg`、`ruoyi-frontend`、`pipesight-task-worker` 和 `ruoyi-redis`：
 
 ```bash
 docker compose -p pipesight-pg -f docker-compose.pg.yml up -d --build
 ```
 
-Compose 会先运行一次性的 `pipesight-db-migrate` 完成 `alembic upgrade head`，成功后才启动 PipeSight API、`pipesight-task-worker` 和 `insighthub-worker`。其中 `pipesight-task-worker` 负责数据源采集、交接回执、科研生成、报告导出和资料解析持久队列；`insighthub-worker` 负责从 `news` schema 领取交接资讯，执行领域过滤/分类/评分并把处理结果写回 PostgreSQL。API 通过 `PIPELINE_TASK_SCHEDULER_ENABLED=false` 不再重复调度。采集来源和 InsightHub 交接均使用 PostgreSQL 数据库租约，多个 Worker 实例不会同时领取同一个来源或交接任务。手工运行后端任务进程可使用 `cd backend && uv run pipesight-task-worker`。本地端口：PostgreSQL `15432`、PipeSight API `19099`、InsightHub 健康检查 `18000`。MinIO/S3 为可选对象存储 profile（预留 `19000/19001`）；启用图片缓存时必须配置 `INSIGHTHUB_MINIO_PASSWORD` 和浏览器可访问的 `INSIGHTHUB_MINIO_PUBLIC_BASE_URL`，Worker 不会再使用历史硬编码域名。若启用百度翻译，配置 `INSIGHTHUB_BAIDU_TRANSLATE_APPID`、`INSIGHTHUB_BAIDU_TRANSLATE_APPKEY`，可用 `INSIGHTHUB_BAIDU_TRANSLATE_URL` 覆盖服务地址；若启用本地小模型翻译，再配置 `INSIGHTHUB_TRANSLATION_SMALL_MODEL_URL`；翻译请求超时可用 `INSIGHTHUB_TRANSLATION_REQUEST_TIMEOUT_SECONDS` 调整。若启用生物安全分析上报，再配置 `INSIGHTHUB_THREAT_ANALYSIS_URL`，并按需调整 `INSIGHTHUB_THREAT_ANALYSIS_TIMEOUT_SECONDS`；未配置时均跳过外部调用并保留现有数据。完整边界和配置见 [PipeSight-InsightHub 数据交接适配说明](docs/handover/PipeSight-InsightHub-数据交接适配说明.md) 与 [InsightHub Worker 归并说明](docs/architecture/insighthub-processing-migration.md)。生产环境必须覆盖示例密码并使用密钥注入。
+其中 `pipesight-task-worker` 负责数据源采集、科研生成、报告导出和资料解析持久队列；API 通过 `PIPELINE_TASK_SCHEDULER_ENABLED=false` 不再重复调度。采集来源使用 PostgreSQL 数据库租约，多个 Worker 实例不会同时领取同一个来源。手工运行后端任务进程可使用 `cd backend && uv run pipesight-task-worker`。本地端口：PipeSight API `19099`、前端 `12580`、Redis `16379`。数据库连接凭据经 `DATA_DB_PASSWORD` 注入，生产环境必须覆盖示例密码并使用密钥注入。
 
 ## CLI 命令行工具
 
@@ -465,7 +448,7 @@ ruoyi --help
 - **操作日志**：通过装饰器切面自动记录操作日志
 - **定时任务**：基于 APScheduler 的任务调度
 - **AI 集成**：支持 OpenAI、Anthropic、Gemini、Groq、Ollama、LiteLLM 等多种 LLM 后端
-- **数据库运行时**：统一使用 PostgreSQL + pgvector；保留 MySQL 兼容配置用于历史数据迁移
+- **数据库运行时**：统一使用 `172.16.4.183` 的 PostgreSQL；保留 MySQL 兼容配置用于历史数据迁移
 
 ## 开发约定
 
@@ -477,6 +460,8 @@ ruoyi --help
 
 ## 相关文档
 
+- [项目全流程说明（面向领导）](docs/项目全流程说明.md)
+- [PipeSight 全流程（技术版）](docs/architecture/pipeline-flow.md)
 - [设计方案](docs/requirements/设计方案.docx)
 - [平台功能需求分析与进度规划](docs/requirements/平台功能需求分析与进度规划.pdf)
 - [平台设计文档](docs/plans/2026-07-13-pipeline-intelligence-platform-design.md)

@@ -12,10 +12,9 @@
 | --- | --- | --- |
 | 前端 | `frontend/` | Vue 3 管理端、管网用户门户、页面路由、API 封装和 UI 组件 |
 | 后端 | `backend/` | FastAPI 应用、系统管理、管网业务 API、AI 模块、调度和 CLI |
-| InsightHub Worker | `backend/src/app/intelligence/processing/` | PostgreSQL 新闻处理 Worker、领域处理器、Prompt、向量写入和测试 |
 | 文档 | `docs/` | 按架构、需求、参考、计划、交接和汇报分类的项目资料 |
 | 图片资产 | `images/` | 项目展示、方案或文档配图 |
-| 容器编排 | `docker-compose.pg.yml` | PostgreSQL + pgvector + Redis 的默认运行入口；`docker-compose.my.yml` 仅保留作历史迁移参考 |
+| 容器编排 | `docker-compose.pg.yml` | Redis 的默认运行入口（数据库统一连 `172.16.4.183`）；`docker-compose.my.yml` 仅保留作历史迁移参考 |
 
 顶层结构：
 
@@ -78,10 +77,10 @@ backend/
 |   |   |-- services/file_transfer.py # 通用文件上传、下载与路径校验
 |   |   `-- services/online.py     # 在线会话查询与强制下线
 |   |-- intelligence/              # 科技情报业务包
-|   |   |-- services/              # 数据处理、采集、交接、Prompt、模板等服务
+|   |   |-- services/              # 采集、分类、翻译、模板、检索等服务
 |   |   |-- api/                  # 情报 API 控制器和 DTO
-|   |   |-- integrations/          # InsightHub 等外部处理系统适配器
-|   |   |-- tasks/                 # 来源定时采集、外部回执轮询等后台任务
+|   |   |-- integrations/          # 公开来源等外部系统适配器
+|   |   |-- tasks/                 # 来源定时采集等后台任务
 |   |   |-- repositories/          # 情报业务数据访问层
 |   |   |-- models/                # 按业务领域拆分的 SQLAlchemy 持久化模型
 |   |   |   |-- collection.py      # 数据源与采集运行
@@ -89,7 +88,7 @@ backend/
 |   |   |   |-- content.py         # 资讯、论文与审核事件
 |   |   |   |-- governance.py      # 质量问题与重复内容治理
 |   |   |   `-- pipeline_models.py # 情报域模型聚合导出
-|   |   `-- api/                   # Pydantic API DTO
+|   |   `-- schemas/               # Pydantic API DTO
 |   |-- library/                   # 上传资料解析与受控访问
 |   |   |-- services/materials.py  # 资料文件解析与路径安全
 |   |   `-- tasks/material_parse_scheduler.py # 资料解析持久队列
@@ -111,9 +110,9 @@ backend/
 ```
 
 Compose 环境将职责拆成两个进程：`ruoyi-backend-pg` 只提供 HTTP API 和系统级定时任务，
-`pipesight-task-worker` 独立运行数据源 Cron、InsightHub 回执轮询，并扫描 `generation_tasks`、`report_exports` 与 `knowledge_files` 资料解析队列。
+`pipesight-task-worker` 独立运行数据源 Cron，并扫描 `generation_tasks`、`report_exports` 与 `knowledge_files` 资料解析队列。
 两者通过 PostgreSQL 租约、心跳和条件状态更新协作；API 侧使用
-`PIPELINE_TASK_SCHEDULER_ENABLED=false`，避免 API 与 Worker 重复运行采集、交接和持久队列恢复。Compose 由 `pipesight-db-migrate` 在 API/Worker 前执行 Alembic 迁移；采集来源和交接运行通过 PostgreSQL 租约做跨进程防重。
+`PIPELINE_TASK_SCHEDULER_ENABLED=false`，避免 API 与 Worker 重复运行采集和持久队列恢复。Compose 由 `pipesight-db-migrate` 在 API/Worker 前执行 Alembic 迁移；采集来源通过 PostgreSQL 租约做跨进程防重。
 
 后端请求流：
 
@@ -129,43 +128,15 @@ frontend axios
   -> dao / db / redis / external service
   -> ResponseUtil / DataResponseModel
 
-第一条纵向迁移样板是情报采集链路：数据处理实现位于
-`app.intelligence.services.data_processing`，公开来源采集实现位于
-`app.intelligence.services.collection`，Prompt 版本管理位于
-`app.intelligence.services.prompts`，模板版本管理位于
+第一条纵向迁移样板是情报采集链路：采集实现位于
+`app.intelligence.services.collection`（含 `collection_persistence` 与 `collection_translation`），
+分类实现位于 `app.intelligence.services.categories`，提示词与模板版本管理位于
 `app.intelligence.services.templates`，共享数据访问位于
-`app.intelligence.repositories.pipeline_repository`。
-数据源配置和采集运行状态位于 `app.intelligence.services.sources`，InsightHub 交接编排位于 `app.intelligence.services.handoff`，外部 PostgreSQL 适配器位于 `app.intelligence.integrations.insighthub`，定时采集和回执轮询位于 `app.intelligence.tasks`，独立 Worker 的编排入口位于 `app.intelligence.tasks.operational_scheduler`；采集来源租约和交接运行租约由 `PipelineDao` 统一维护。情报应用编排位于 `app.intelligence.services.application.IntelligenceApplicationService`，HTTP 控制器位于 `app.intelligence.api.controller`。资料 API 位于 `app.library.api.controller`；资料解析和路径安全位于 `app.library.services.materials.MaterialFileService`，资料查询、权限、事务和文件生命周期位于同文件的 `MaterialService`，API 应用策略组合位于 `MaterialApiService`；资料解析队列位于 `app.library.tasks.material_parse_scheduler`，由 `pipesight-task-worker` 统一执行。资料篮和科研 API 位于 `app.research.api.controller`，应用编排位于 `app.research.services.application.ResearchApplicationService`，任务状态位于 `app.research.services.jobs`，证据和报告编排分别位于 `app.research.services.evidence`、`app.research.services.report_builder`，后台执行用例位于 `app.research.services.execution`。
+`app.intelligence.repositories`（`content_repository` / `collection_repository` / `ai_model_repository`）。
+数据源配置和采集运行状态位于 `app.intelligence.services.sources`，公开来源适配器位于 `app.intelligence.integrations.public_sources` 与 `app.intelligence.integrations.public_source_bridge`，定时采集位于 `app.intelligence.tasks.collection_scheduler`，独立 Worker 的编排入口位于 `app.intelligence.tasks.operational_scheduler`；采集来源租约由 `CollectionRepository`（`collection_repository`）维护。情报应用编排位于 `app.intelligence.services.application.IntelligenceApplicationService`，HTTP 控制器位于 `app.intelligence.api.controller`。资料 API 位于 `app.library.api.controller`；资料解析和路径安全位于 `app.library.services.materials.MaterialFileService`，资料查询、权限、事务和文件生命周期位于同文件的 `MaterialService`，API 应用策略组合位于 `MaterialApiService`；资料解析队列位于 `app.library.tasks.material_parse_scheduler`，由 `pipesight-task-worker` 统一执行。资料篮和科研 API 位于 `app.research.api.controller`，应用编排位于 `app.research.services.application.ResearchApplicationService`，任务状态位于 `app.research.services.jobs`，证据和报告编排分别位于 `app.research.services.evidence`、`app.research.services.report_builder`，后台执行用例位于 `app.research.services.execution`。
 ```
 
-## 3. InsightHub Worker 结构
-
-InsightHub 是同仓库内与 PipeSight 共用 PostgreSQL 的处理 Worker，作为根 Compose 的默认服务运行；它保持独立进程以隔离长耗时处理。源码已经归入后端的 `app` 包，根 Compose 不再从独立 `insighthub` 包构建：
-
-```text
-backend/
-|-- src/app/intelligence/processing/
-|   |-- config/                  # Worker 配置
-|   |-- db/                      # PostgreSQL、pgvector、Redis 和兼容适配
-|   |-- domain/                  # 领域处理器和动态领域加载
-|   |-- email_support/           # 告警与邮件中转
-|   |-- models/                  # 新闻和处理结果模型
-|   |-- processors/              # 处理流程编排
-|   |-- prompts/                 # 各领域 Prompt
-|   |-- runtime/                 # PostgreSQL/Kafka 消费运行时
-|   |-- services/                # Kafka、领域配置和下游发布
-|   |-- supported_text/          # 停用词和领域文本
-|   `-- utils/                   # 健康检查、时间、日志和通用工具
-|-- Dockerfile.processing.pg    # 统一后端依赖的 Worker 镜像
-|-- tests/architecture/         # 包清单、资源和迁移边界测试
-`-- tests/intelligence/processing/ # Worker 单元、集成和端到端测试
-
-logs/insighthub/                 # Worker 运行日志，不作为源码
-```
-
-InsightHub 的历史交接资料统一归档在 `docs/handover/`；当前不再保留独立的 `insighthub/` Python 项目目录。
-
-## 4. 后端模块边界
+## 3. 后端模块边界
 
 | 模块 | 说明 |
 | --- | --- |
@@ -177,7 +148,7 @@ InsightHub 的历史交接资料统一归档在 `docs/handover/`；当前不再�
 | `config/` | `.env.*` 配置加载、数据库连接、Redis 连接、APScheduler 调度器 |
 | `cli/` | `ruoyi` 命令入口，覆盖应用、数据库、缓存、任务、运维和向导能力 |
 
-## 5. 管网业务模块
+## 4. 管网业务模块
 
 管网业务后端集中在 `backend/src/app/`，按业务边界拆分：
 
@@ -185,11 +156,11 @@ InsightHub 的历史交接资料统一归档在 `docs/handover/`；当前不再�
 backend/src/app/
 |-- intelligence/
 |   |-- api/                       # 情报、来源、采集和模板/Prompt接口
-|   |-- services/                  # 采集、处理、筛选、交接和应用编排
+|   |-- services/                  # 采集、处理、分类和应用编排
 |   |-- repositories/              # 情报业务数据访问
 |   |-- models/                    # 情报持久化模型
-|   |-- integrations/              # InsightHub PostgreSQL适配
-|   `-- tasks/                     # 采集和交接后台任务
+|   |-- integrations/              # 公开来源适配
+|   `-- tasks/                     # 采集后台任务
 |-- library/
 |   |-- api/                       # 资料查询、上传、下载和解析接口
 |   `-- services/                  # 文件解析、授权和生命周期
@@ -236,7 +207,7 @@ frontend/src/views/portal/
 ```
 
 
-## 6. 前端结构
+## 5. 前端结构
 
 前端是 Vue 3 + Vite + Element Plus + Pinia + Vue Router。`frontend/src/main.js` 创建应用并挂载路由、状态、插件、权限指令和全局组件；`frontend/src/permission.js` 负责登录态、门户访问和动态路由加载。
 
@@ -278,7 +249,7 @@ frontend/
 | `src/views/portal/` | 管网用户端门户页面 |
 | `src/views/system/`、`src/views/monitor/` | 后台管理与监控页面 |
 
-## 7. 配置与部署
+## 6. 配置与部署
 
 后端配置：
 
@@ -306,11 +277,11 @@ frontend/
 
 | 文件 | 数据库 | 前端端口 | 后端端口 | 数据库端口 | Redis 端口 |
 | --- | --- | --- | --- | --- | --- |
-| `docker-compose.pg.yml` | PostgreSQL 16 + pgvector | `12580` | `19099` | `15432` | `16379` |
+| `docker-compose.pg.yml` | `172.16.4.183` 的 PostgreSQL（不随容器启动） | `12580` | `19099` | —（连 183:5432） | `16379` |
 
 数据库初始化脚本在 `backend/sql/`，迁移目录在 `backend/alembic/`。
 
-## 8. 文档与设计资料
+## 7. 文档与设计资料
 
 ```text
 docs/
@@ -335,7 +306,7 @@ docs/
 
 具体归类和入口见 `docs/README.md`。`docs/project-structure.md` 用于维护当前代码结构，不替代业务设计文档。
 
-## 9. 生成目录与不建议纳入结构说明的内容
+## 8. 生成目录与不建议纳入结构说明的内容
 
 以下目录或文件主要是依赖、构建产物、缓存、运行日志或本地输出，整理结构时通常不作为源码模块：
 
@@ -352,9 +323,8 @@ docs/
 | `backend/build/` | 后端构建产物 |
 | `backend/ruoyi_fastapi_backend_cli.egg-info/` | Python 包元数据 |
 | `backend/vf_admin/` | 上传、下载和导出等运行期文件 |
-| `logs/insighthub/` | InsightHub Worker 运行日志 |
 
-## 10. 后续新增模块建议
+## 9. 后续新增模块建议
 
 新增后端业务模块时，优先保持现有分层：
 

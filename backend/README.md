@@ -16,13 +16,12 @@ src/app/
 │   ├── repositories/      # 系统管理数据访问
 │   └── services/          # 系统管理用例
 ├── intelligence/         # 科技情报业务包
-│   ├── services/          # 数据处理、数据源、采集、交接、Prompt、模板
+│   ├── services/          # 采集、分类、翻译、模板、检索等业务服务
 │   ├── api/               # 情报 API 控制器与 Pydantic DTO
-│   ├── integrations/      # InsightHub 等外部处理系统适配器
-│   ├── tasks/              # 来源定时采集、外部回执轮询等后台任务
+│   ├── integrations/      # 公开来源等外部系统适配器
+│   ├── tasks/              # 来源定时采集等后台任务
 │   ├── repositories/      # 情报业务数据访问层
-│   ├── models/            # SQLAlchemy 持久化模型
-│   └── processing/        # 已并入应用包的 InsightHub 数据处理 Worker
+│   └── models/            # SQLAlchemy 持久化模型
 ├── library/              # 资料库边界
 │   ├── api/controller.py  # 资料库 HTTP 接口
 │   ├── services/materials.py # 文件解析能力、API策略、权限、事务和文件生命周期
@@ -41,8 +40,6 @@ src/app/
 ```
 
 `server.py` 仅作为兼容启动入口，应用工厂位于 `app.bootstrap`，API/Worker 入口位于 `app.entrypoints`。`common/` 只承载 HTTP、依赖和注解等横切适配，其中 `common/http/schemas.py` 放置跨业务 HTTP 契约，`common/http/status.py` 放置 HTTP 状态码，`common/http/contracts.py` 放置接口命名空间与缓存分组，`common/http/responses.py` 放置响应构造器，`common/http/context.py` 和 `common/http/dependencies.py` 放置请求上下文与路由依赖；通用运行常量位于 `common/constants.py`，系统菜单常量位于 `app/system/constants.py`。CLI 的文本输出位于 `cli/output.py`，内部 CLI 子进程支持位于 `cli/runtime/nested_cli.py`，不再使用泛化的 `cli/utils.py`。`config/` 承载运行配置与 Alembic 模型发现。旧 `module_*` 业务包和全局 `utils/` 已从正式运行路径移除，新的代码必须按领域模块或基础设施职责放置。数据处理、公开来源采集、Prompt、模板服务、数据访问层、持久化模型和 API DTO 已迁入 `app.intelligence`；资料解析能力已迁入 `app.library.services.materials`，资料篮、任务状态、证据、报告编排和后台执行已分别迁入 `app.research.services`。
-
-InsightHub 处理子系统也按职责拆分，不再使用泛化的 `processing/utils`：领域常量位于 `processing/config/constants`，领域名称映射位于 `processing/domain`，过滤审计、地理编码和 SimHash 位于 `processing/processors`，Worker 健康/日志/时间支持位于 `processing/runtime`，模型调用适配位于 `processing/services/model_generation.py`。
 
 ### 分层放置规则
 
@@ -83,15 +80,15 @@ FILE_SCAN_MODE=basic
 
 ### 数据源调度
 
-数据源保存时会立即校验五段式 APScheduler Cron 表达式，并统一按 `Asia/Shanghai` 解析；空表达式表示仅允许手动触发。采集、手动运行队列和 InsightHub 回执由 `pipesight-task-worker` 执行，API 进程不会同步执行采集。错误的调度表达式会在配置阶段直接返回，不会保存成功后才被 Worker 跳过。
+数据源保存时会立即校验五段式 APScheduler Cron 表达式，并统一按 `Asia/Shanghai` 解析；空表达式表示仅允许手动触发。采集和手动运行队列由 `pipesight-task-worker` 执行，API 进程不会同步执行采集。错误的调度表达式会在配置阶段直接返回，不会保存成功后才被 Worker 跳过。
 
-`ruoyi app run` 仍作为兼容入口保留；运行环境需要先安装 `requirements-pg.txt` 或对应的锁定依赖。独立任务 Worker 可通过 `uv run pipesight-task-worker` 启动，统一负责数据源采集、InsightHub 交接回执、科研生成、报告导出和资料解析。Compose 环境由 `pipesight-db-migrate` 在 API/Worker 前执行 Alembic 迁移；采集来源和交接回执通过数据库租约实现跨进程防重。
+`ruoyi app run` 仍作为兼容入口保留；运行环境需要先安装 `requirements-pg.txt` 或对应的锁定依赖。独立任务 Worker 可通过 `uv run pipesight-task-worker` 启动，统一负责数据源采集、科研生成、报告导出和资料解析。Compose 环境由 `pipesight-db-migrate` 在 API/Worker 前执行 Alembic 迁移；采集来源通过数据库租约实现跨进程防重。
 
 ### 报告导出任务
 
 DOCX/PDF 导出先写入 PostgreSQL 的 `report_exports`，再由独立 `pipesight-task-worker` 按数据库租约领取。任务包含报告快照、版本/模板信息、尝试次数、租约到期时间、退避重试时间、文件大小和 SHA-256；Worker 重启后，过期租约会重新进入领取流程。导出文件通过受保护下载接口返回，不暴露上传目录。
 
-PostgreSQL Compose 环境将 `vf_admin/upload_path` 挂载到 `ruoyi-upload-data` 持久卷，保证容器重建不会只留下数据库记录而丢失已生成文件。API 通过 `PIPELINE_TASK_SCHEDULER_ENABLED=false` 放弃采集、InsightHub 交接、科研、导出和资料解析任务，由 `pipesight-task-worker` 专职执行；对象存储、保留期和清理策略仍属于后续运维增强项。
+PostgreSQL Compose 环境将 `vf_admin/upload_path` 挂载到 `ruoyi-upload-data` 持久卷，保证容器重建不会只留下数据库记录而丢失已生成文件。API 通过 `PIPELINE_TASK_SCHEDULER_ENABLED=false` 放弃采集、科研、导出和资料解析任务，由 `pipesight-task-worker` 专职执行；对象存储、保留期和清理策略仍属于后续运维增强项。
 
 科研生成任务同样先写入 `generation_tasks`，由独立 Task Worker 按租约领取；任务心跳会续租，通用异常最多自动重试 3 次，Worker 重启后会重新扫描 queued 或租约过期任务。取消会先记录 `cancel_requested_at`，运行中的执行器在阶段边界安全停止，避免取消请求与报告发布发生竞态；取消、完成和租约失效由数据库状态与执行器持有者共同裁决，避免旧执行器在取消或重试后再次发布报告。
 自动重试耗尽的瞬态异常会进入 `dead_letter` 状态，用户可在任务页人工重新生成；业务校验类不可重试错误仍保持 `failed`，避免无意义地重复调用模型。
