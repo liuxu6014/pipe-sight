@@ -165,11 +165,10 @@ class PipelineCollectionService:
         translated = await CollectionTranslationService.translate(classification_session_factory(db), snapshot, records)
         kind = 'paper' if snapshot['type'] == 'paper' else 'news'
         classifications = await cls.classify_records(db, translated, kind)
-        if kind != 'paper':
-            entities = await cls.extract_entities(db, translated, snapshot.get('model_id'))
-            for record, entity_list in zip(translated, entities, strict=True):
-                if entity_list:
-                    record['entities'] = entity_list
+        enrichments = await cls.enrich_records(db, translated, snapshot.get('model_id'), kind=kind)
+        for record, enrichment in zip(translated, enrichments, strict=True):
+            if enrichment is not None:
+                record.update(enrichment)
         return translated, classifications
 
     @staticmethod
@@ -207,26 +206,33 @@ class PipelineCollectionService:
         return results
 
     @staticmethod
-    async def extract_entities(db, records, model_id) -> list:
-        """Best-effort entity enrichment aligned to records; never fails the batch."""
+    async def enrich_records(db, records, model_id, *, kind='news') -> list:
+        """Core entities for all collected content; never replaces paper abstracts."""
         from app.intelligence.services.entities import EntityExtractionService  # noqa: PLC0415
 
-        if not model_id:
-            return [None] * len(records)
         sessions = classification_session_factory(db)
         results = []
         for record in records:
             if not isinstance(record, dict) or not isinstance(record.get('title'), str) or not record['title'].strip():
                 results.append(None)
                 continue
-            content = record.get('content_zh') or record.get('content') or ''
+            content = (
+                record.get('abstract_zh') or record.get('abstract') or ''
+                if kind == 'paper'
+                else record.get('content_zh') or record.get('content') or ''
+            )
             try:
                 async with sessions() as entity_db:
-                    entities = await EntityExtractionService.extract(
-                        entity_db, title=record['title'], content=content, model_id=model_id
+                    enrichment = await EntityExtractionService.enrich(
+                        entity_db,
+                        title=record['title'],
+                        content=content,
+                        model_id=model_id,
+                        kind=kind,
+                        summary=record.get('summary'),
                     )
                     await entity_db.commit()
-                    results.append(entities)
+                    results.append(enrichment)
             except Exception:
                 results.append(None)
         return results

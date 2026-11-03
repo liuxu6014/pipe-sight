@@ -59,6 +59,61 @@ async def test_article_processing_uses_new_fields_without_review_or_handoff(env)
 
 
 @pytest.mark.asyncio
+async def test_news_summary_persists_and_recollection_without_enrichment_preserves_it(env) -> None:
+    e = env
+    registered = await source(e)
+    configured = await e.repo.source(e.db, registered['id'])
+    record = {
+        'title': '管道检测试验',
+        'url': 'https://example.test/summary',
+        'content': '研究机构介绍管道检测方法与试验。' * 20,
+        'summary': '研究机构介绍管道检测方法与试验。' * 11 + '应用效果仍需验证。',
+    }
+    assert 180 <= len(record['summary']) <= 220
+    await e.persistence.CollectionPersistenceService.save_record(e.db, configured, record, NOW)
+    await e.db.commit()
+    article = e.db.sync.scalars(select(e.content.PipelineArticle)).one()
+    assert article.summary == record['summary'] and article.content == record['content']
+    summary = record.pop('summary')
+    record['content'] += '补充原文内容。'
+    await e.persistence.CollectionPersistenceService.save_record(e.db, configured, record, NOW)
+    await e.db.commit()
+    assert article.summary == summary
+    record['summary'] = '摘' * 240
+    await e.persistence.CollectionPersistenceService.save_record(e.db, configured, record, NOW)
+    await e.db.commit()
+    assert article.summary == summary
+
+
+@pytest.mark.parametrize('kind', ['website', 'paper'])
+@pytest.mark.asyncio
+async def test_core_entities_persist_and_unavailable_or_excessive_results_do_not_wipe_them(env, kind) -> None:
+    e = env
+    registered = await source(e, type=kind)
+    configured = await e.repo.source(e.db, registered['id'])
+    body_field = 'abstract' if kind == 'paper' else 'content'
+    record = {
+        'title': '超声导波管道检测',
+        'url': 'https://example.test/core',
+        body_field: '超声导波；' + '、'.join(f'技术{i}' for i in range(8)),
+        'entities': [{'type': '技术', 'name': '超声导波'}],
+    }
+    await e.persistence.CollectionPersistenceService.save_record(e.db, configured, record, NOW)
+    await e.db.commit()
+    model = e.content.PipelinePaper if kind == 'paper' else e.content.PipelineArticle
+    saved = e.db.sync.scalars(select(model)).one()
+    expected = record.pop('entities')
+    assert saved.entities == expected
+    await e.persistence.CollectionPersistenceService.save_record(e.db, configured, record, NOW)
+    await e.db.commit()
+    assert saved.entities == expected
+    record['entities'] = [{'type': '技术', 'name': f'技术{i}'} for i in range(8)]
+    await e.persistence.CollectionPersistenceService.save_record(e.db, configured, record, NOW)
+    await e.db.commit()
+    assert saved.entities == expected
+
+
+@pytest.mark.asyncio
 async def test_retry_persists_idempotently_and_does_not_overwrite_parent_failure(env) -> None:
     e = env
     s = await source(e)

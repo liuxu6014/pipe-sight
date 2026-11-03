@@ -1,24 +1,24 @@
 <template>
   <header class="ps-header">
     <div class="ps-header-inner">
-      <button class="ps-brand" type="button" aria-label="返回首页" @click="router.push('/portal')">
+      <el-button :auto-insert-space="false" class="ps-brand ps-ui-control" native-type="button" aria-label="返回首页" @click="router.push('/portal')">
         <img :src="logoUrl" alt="国家管网标识" />
         <span>
           <strong>科技情报与科研辅助平台</strong>
         </span>
-      </button>
+      </el-button>
 
       <nav class="ps-main-nav" aria-label="用户端主导航">
-        <button
+        <el-button :auto-insert-space="false" class="ps-ui-control"
           v-for="item in portalNavigation"
           :key="item.path"
-          type="button"
+          native-type="button"
           :class="{ 'is-active': item.match(route.path) }"
           :aria-current="item.match(route.path) ? 'page' : undefined"
           @click="router.push(item.path)"
         >
           {{ item.label }}
-        </button>
+        </el-button>
       </nav>
 
       <div class="ps-header-tools">
@@ -27,11 +27,11 @@
           <input v-model.trim="keyword" aria-label="搜索平台内容" placeholder="搜索资讯、论文、资料" />
         </form>
 
-        <button
+        <el-button :auto-insert-space="false"
           v-if="store.dataError || store.dataLoading"
-          class="ps-sync-status"
+          class="ps-sync-status ps-ui-control"
           :class="{ 'is-loading': store.dataLoading }"
-          type="button"
+          native-type="button"
           aria-live="polite"
           :title="store.dataLoading ? '正在同步实时数据' : store.dataError"
           :aria-label="store.dataLoading ? '正在同步实时数据' : `${store.dataError}，点击重试`"
@@ -40,25 +40,25 @@
           <i class="ps-sync-status-dot" aria-hidden="true"></i>
           <Refresh :class="{ 'is-loading': store.dataLoading }" />
           <span>{{ store.dataLoading ? '正在同步' : '数据同步异常' }}</span>
-        </button>
+        </el-button>
 
-        <button
-          class="ps-basket-button"
-          type="button"
+        <el-button :icon="Collection" :auto-insert-space="false"
+          class="ps-basket-button ps-ui-control"
+          native-type="button"
           :aria-label="`资料库，${store.libraryCount} 条资料`"
           @click="router.push('/portal/basket')"
         >
-          <Collection />
+
           <span>资料库</span>
           <b>{{ store.libraryCount }}</b>
-        </button>
+        </el-button>
 
         <div class="ps-user-account-actions">
           <el-dropdown trigger="click" @command="handleCommand">
-            <button class="ps-user-button" type="button" :aria-label="`${currentUserName}，账户菜单`">
+            <el-button :auto-insert-space="false" class="ps-user-button ps-ui-control" native-type="button" :aria-label="`${currentUserName}，账户菜单`">
               <PortalUserAvatar />
               <span class="ps-user-name">{{ currentUserName }}</span>
-            </button>
+            </el-button>
             <template #dropdown>
               <el-dropdown-menu class="ps-user-menu">
                 <el-dropdown-item command="profile"><User />个人资料</el-dropdown-item>
@@ -69,16 +69,14 @@
           </el-dropdown>
         </div>
 
-        <button
-          class="ps-mobile-menu"
-          type="button"
+        <el-button :icon="Menu" circle :auto-insert-space="false"
+          class="ps-mobile-menu ps-ui-control"
+          native-type="button"
           :aria-label="mobileOpen ? '收起导航' : '打开导航'"
           :aria-expanded="mobileOpen"
           aria-controls="portal-mobile-nav"
           @click="mobileOpen = !mobileOpen"
-        >
-          <Menu />
-        </button>
+         />
       </div>
     </div>
 
@@ -86,18 +84,18 @@
       <form class="ps-mobile-search ps-search-inline" role="search" @submit.prevent="submitSearch">
         <Search />
         <input v-model.trim="keyword" aria-label="搜索平台内容（移动端）" placeholder="搜索资讯、论文、资料" />
-        <button type="submit">搜索</button>
+        <el-button :auto-insert-space="false" class="ps-ui-control" native-type="submit">搜索</el-button>
       </form>
-      <button
+      <el-button :auto-insert-space="false" class="ps-ui-control"
         v-for="item in portalNavigation"
         :key="item.path"
-        type="button"
+        native-type="button"
         :class="{ 'is-active': item.match(route.path) }"
         :aria-current="item.match(route.path) ? 'page' : undefined"
         @click="goMobile(item.path)"
       >
         {{ item.label }}
-      </button>
+      </el-button>
     </nav>
   </header>
 </template>

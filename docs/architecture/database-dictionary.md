@@ -1,10 +1,10 @@
 # PipeSight PostgreSQL 数据字典
 
-数据库：`pipesight`。导出时间：2026-11-01T15:47:05.877770+08:00。
+数据库：`pipesight`。导出时间：2026-11-03T00:27:18.237859+08:00。
 
 本文件由 `backend/scripts/export_database_dictionary.py` 从实际 catalog 生成，不包含业务记录或连接凭据。
 
-共 31 个表/视图、355 个字段。
+共 32 个表/视图、373 个字段。
 缺失对象注释 0 个，缺失字段注释 0 个。
 
 ## 命名与兼容规则
@@ -33,12 +33,13 @@
 | `public.list_column` | 视图 | 公共库列目录视图；按系统目录汇总字段、类型、注释及约束标记 | 8 |
 | `public.list_table` | 视图 | 公共库表目录视图；显示表名与目录注释，时间列为当前查询事务时间 | 4 |
 | `public.model_calls` | 物理表 | 实际供应商模型调用的用量和排障记录；不保存提示词、原始正文、凭证或响应原文 | 10 |
-| `public.news_articles` | 物理表 | 网站与公众号新闻原文及中文译文；每篇最多关联一个类别，无人工审核流程 | 12 |
-| `public.papers` | 物理表 | 论文文献信息及中英文摘要；保留真实发表日期精度，不保存论文全文 | 15 |
+| `public.news_articles` | 物理表 | 网站与公众号新闻原文及中文译文；每篇最多关联一个类别，无人工审核流程 | 14 |
+| `public.papers` | 物理表 | 论文文献信息及中英文摘要；保留真实发表日期精度，不保存论文全文 | 16 |
 | `public.report_assets` | 物理表 | 成果的生成图片及导出文件；每项资源独立保存存储键、执行状态和失败原因 | 14 |
 | `public.report_versions` | 物理表 | 成果编辑及恢复历史；同一成果与版本号唯一，历史正文不由并发版本字段替代 | 13 |
 | `public.reports` | 物理表 | 用户可编辑的生成文章、科研报告和周期简报正文；执行状态由生成任务维护 | 9 |
 | `public.sys_config` | 物理表 | 系统通用参数；参数键保持唯一，不承载文章正文或业务资料副本 | 10 |
+| `public.sys_dept` | 物理表 | 若依部门组织树；父级为0表示顶级部门，删除为逻辑删除 | 14 |
 | `public.sys_dict_data` | 物理表 | 系统字典选项及界面展示配置；通过type_code关联字典类型编码 | 14 |
 | `public.sys_dict_type` | 物理表 | 系统字典类型及唯一编码；字典项通过类型编码引用，不作为文章类别 | 9 |
 | `public.sys_job` | 物理表 | 系统调度任务配置；负责扫描器及执行器唤醒，不重复保存来源或简报计划 | 16 |
@@ -48,7 +49,7 @@
 | `public.sys_oper_log` | 物理表 | 管理操作日志及脱敏请求响应摘要；操作人名称保留事件发生时文本 | 16 |
 | `public.sys_role` | 物理表 | 系统角色及权限范围；保留多角色授权关系和既有角色编码 | 13 |
 | `public.sys_role_menu` | 物理表 | 角色与菜单权限的多对多关系；角色ID与菜单ID组成复合主键 | 2 |
-| `public.sys_user` | 物理表 | 系统用户账号及个人资料；保留原账号状态和删除编码，不存明文密码 | 19 |
+| `public.sys_user` | 物理表 | 系统用户账号及个人资料；保留原账号状态和删除编码，不存明文密码 | 20 |
 | `public.sys_user_role` | 物理表 | 用户与角色的多对多授权关系；用户ID与角色ID组成复合主键 | 2 |
 | `public.templates` | 物理表 | 文章、科研报告与简报生成模板；正文及图片模型由管理员配置，可暂未配置 | 12 |
 
@@ -298,6 +299,8 @@ APScheduler持久化任务表；框架管理运行时间和序列化任务，不
 | `is_pushed` | boolean | 是 | 否 | false | 推送成功标志；true仅表示收到真实渠道成功回执，默认false | — |
 | `created_at` | timestamp(0) without time zone | 是 | 否 | date_trunc('second'::text, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai'::text)) | 新闻平台入库时间，不代替原文发表时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss | — |
 | `updated_at` | timestamp(0) without time zone | 是 | 否 | date_trunc('second'::text, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai'::text)) | 新闻正文或关联资料最近更新时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss | — |
+| `entities` | jsonb | 否 | 否 | — | 核心事件实体JSON数组；每项含type(地点/时间/政策/人物/机构/技术)与name；通常3至5项、最多6项，类型不凑齐；机构和技术各最多2项，其余类型各最多1项；为空表示未处理或无核心实体 | — |
+| `summary` | text | 否 | 否 | — | 约200字中文摘要，基于原文生成；正常正文控制180至220字符，短原文不凑字数；未处理时为空，不以正文截断冒充摘要 | — |
 
 ## public.papers
 
@@ -320,6 +323,7 @@ APScheduler持久化任务表；框架管理运行时间和序列化任务，不
 | `is_pushed` | boolean | 是 | 否 | false | 论文推送成功标志；真实渠道成功后为true，默认false，不表示审核结果 | — |
 | `created_at` | timestamp(0) without time zone | 是 | 否 | date_trunc('second'::text, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai'::text)) | 论文平台入库时间，不能代替真实发表日期；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss | — |
 | `updated_at` | timestamp(0) without time zone | 是 | 否 | date_trunc('second'::text, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai'::text)) | 论文文献信息或摘要最近更新时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss | — |
+| `entities` | jsonb | 否 | 否 | — | 核心研究实体JSON数组；每项含type与name，仅依据标题和已有摘要，通常3至5项、最多6项；机构和技术各最多2项、其余类型各最多1项，不推测作者机构、不声称读取全文 | — |
 
 ## public.report_assets
 
@@ -394,6 +398,27 @@ APScheduler持久化任务表；框架管理运行时间和序列化任务，不
 | `updated_by` | character varying(64) | 否 | 否 | ''::character varying | 参数最近修改者的历史账号文本；不是用户ID外键 | — |
 | `updated_at` | timestamp(0) without time zone | 否 | 否 | — | 参数最近修改时间；timestamp(0)无时区，精度到秒 | — |
 | `remark` | character varying(500) | 否 | 否 | NULL::character varying | 参数用途或取值说明；不保存明文密钥 | — |
+
+## public.sys_dept
+
+若依部门组织树；父级为0表示顶级部门，删除为逻辑删除
+
+| 字段 | PostgreSQL 类型 | 必填 | 主键 | 默认值 | 说明 | 关联外键 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `dept_id` | bigint | 是 | 是 | nextval('sys_dept_dept_id_seq'::regclass) | 部门数字主键，由数据库自动生成 | — |
+| `parent_id` | bigint | 是 | 否 | '0'::bigint | 上级部门ID，0表示顶级部门；由服务校验有效父级及循环层级 | — |
+| `ancestors` | character varying(500) | 是 | 否 | '0'::character varying | 从根到父级的部门ID路径，以英文逗号分隔，用于子树检索 | — |
+| `dept_name` | character varying(30) | 是 | 否 | — | 部门显示名称，同一父级下未删除的名称唯一 | — |
+| `order_num` | integer | 是 | 否 | 0 | 同级部门显示顺序，数值越小越靠前 | — |
+| `leader` | character varying(20) | 否 | 否 | — | 部门负责人姓名，可空且不关联用户账号 | — |
+| `phone` | character varying(11) | 否 | 否 | — | 部门联系电话，由管理员填写 | — |
+| `email` | character varying(50) | 否 | 否 | — | 部门联系邮箱，由管理员填写 | — |
+| `status` | character varying(1) | 是 | 否 | '0'::character varying | 部门状态：0正常、1停用；停用后不可为用户新增分配 | — |
+| `del_flag` | character varying(1) | 是 | 否 | '0'::character varying | 逻辑删除标记：0存在、2删除；保留删除记录 | — |
+| `create_by` | character varying(64) | 否 | 否 | — | 部门创建者账号文本，不作为用户ID外键 | — |
+| `create_time` | timestamp without time zone | 否 | 否 | — | 部门创建时间，沿用若依原生时间字段 | — |
+| `update_by` | character varying(64) | 否 | 否 | — | 部门最近修改者账号文本，不作为用户ID外键 | — |
+| `update_time` | timestamp without time zone | 否 | 否 | — | 部门最近修改时间，沿用若依原生时间字段 | — |
 
 ## public.sys_dict_data
 
@@ -595,6 +620,7 @@ APScheduler持久化任务表；框架管理运行时间和序列化任务，不
 | `updated_by` | character varying(64) | 否 | 否 | ''::character varying | 账号最近修改者的历史账号文本；不是sys_user.id外键 | — |
 | `updated_at` | timestamp(0) without time zone | 否 | 否 | — | 账号最近修改时间；沿用timestamp(0)无时区历史语义，精度到秒 | — |
 | `remark` | character varying(500) | 否 | 否 | NULL::character varying | 账号管理备注；不保存明文凭证 | — |
+| `dept_id` | bigint | 否 | 否 | — | 用户所属部门ID，关联sys_dept.dept_id；未分配时为空 | FOREIGN KEY (dept_id) REFERENCES sys_dept(dept_id) ON DELETE RESTRICT |
 
 ## public.sys_user_role
 

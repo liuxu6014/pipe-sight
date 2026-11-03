@@ -5,6 +5,8 @@ import { setTimeout as delay, setImmediate } from 'node:timers/promises'
 import { formatBusinessTime } from '../src/utils/portal/businessTime.js'
 import { readScheduleForm, scheduleSummary } from '../src/utils/portal/digestScheduleEditor.js'
 import { normalizeBusinessData } from '../src/utils/portal/businessId.js'
+import { contentCategory, collectionTime, entityGroups } from '../src/utils/portal/contentPresentation.js'
+import { isDigestType } from '../src/views/portal/utils/routing.js'
 import * as vue from 'vue'
 import { createMemoryHistory, createRouter, useRoute, useRouter } from 'vue-router'
 import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
@@ -22,7 +24,7 @@ import { applySavedSearchQuery } from '../src/utils/portal/savedSearches.js'
 
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8')
 const normalizerSource = read('../src/store/modules/portal.js')
-const normalizers = new Function('normalizeBusinessData', 'formatBusinessTime', `${normalizerSource.slice(normalizerSource.indexOf('function normalizeSourceType'), normalizerSource.indexOf('function normalizeDocument')).replaceAll('export function', 'function')}; return { normalizePortalIntelligence, normalizePortalPaper }`)(normalizeBusinessData, formatBusinessTime)
+const normalizers = new Function('normalizeBusinessData', 'formatBusinessTime', 'contentCategory', 'collectionTime', 'entityGroups', `${normalizerSource.slice(normalizerSource.indexOf('function normalizeSourceType'), normalizerSource.indexOf('function normalizeDocument')).replaceAll('export function', 'function')}; return { normalizePortalIntelligence, normalizePortalPaper }`)(normalizeBusinessData, formatBusinessTime, contentCategory, collectionTime, entityGroups)
 const names = ['NewsListView', 'PaperListView', 'KnowledgeView', 'SearchView']
 const sources = Object.fromEntries(names.map(name => [name, read(`../src/views/portal/pages/${name}.vue`)]))
 sources.HomeView = read('../src/views/portal/pages/HomeView.vue')
@@ -72,11 +74,11 @@ async function mountPage(name, { query = {}, api = {}, documents = [], pageProps
     ...vue, useRoute, useRouter, ...normalizers,
     openPortalContent: (router, path) => router.push(path),
     useListQuery, useListRequest, useListWorkspace, validPage, materialBasketReason, cleanSummary, cleanResultMeta, combineLatest, newsDate, resultPath,
-    usePortalStore: () => store, periodOverlaps, useBasketSelection, useBasketParsing, buildLibraryItems, libraryItemPath, libraryItemReason, prepareLibrarySelection,
+    usePortalStore: () => store, periodOverlaps, isDigestType, useBasketSelection, useBasketParsing, buildLibraryItems, libraryItemPath, libraryItemReason, prepareLibrarySelection,
     basketItemLabel, basketItemPath, uploadBasketFile, validateBasketUpload, Tickets: {},
     useUserStore: () => ({ id: 7 }), ownedReports, unfinishedTasks, publicationDate, buildPersonalReports, hasReportOutput, sortResearchReports, createResearchRefresh, reportRowActions,
     getPortalReportPath: item => `/portal/research/reports/${item.id}`, getPortalTaskPath: item => `/portal/research/tasks/${item.id}`,
-    PortalPageHeader: {}, PortalEmptyState: {}, SavedSearchBar: {}, DigestScheduleDialog: {}, readScheduleForm, scheduleSummary, applySavedSearchQuery,
+    PortalPageHeader: {}, PortalEmptyState: {}, SavedSearchBar: {}, ContentEntities: {}, contentCategory, collectionTime, DigestScheduleDialog: {}, readScheduleForm, scheduleSummary, applySavedSearchQuery,
     ElMessage: Object.fromEntries(['success', 'error', 'warning'].map(level => [level, text => messages.push({ level, text })])),
     ElMessageBox: { confirm: async () => {} },
     ...Object.fromEntries(['Collection', 'ChatDotRound', 'Document', 'DocumentAdd', 'Reading', 'Plus', 'Refresh', 'ArrowRight', 'Grid', 'List', 'Search', 'Star', 'StarFilled', 'Filter', 'Close', 'MoreFilled', 'UploadFilled', 'WarningFilled', 'InfoFilled'].map(icon => [icon, {}])),
@@ -340,7 +342,7 @@ test('automatic plan response arriving after account switch cannot republish pri
 test('digest reports and schedules paginate separately and reset on tab changes', async () => {
   const ctx = await mountPage('DigestListView')
   try {
-    ctx.store.digestReports = Array.from({ length: 25 }, (_, i) => ({ id: `d${i}`, title: `简报${i}`, type: '日报' }))
+    ctx.store.digestReports = Array.from({ length: 25 }, (_, i) => ({ id: `d${i}`, title: `简报${i}`, type: '周报' }))
     ctx.page.schedules.value = Array.from({ length: 23 }, (_, i) => ({ id: `s${i}`, name: `计划${i}` }))
     await settle()
     assert.equal(ctx.page.pagedReports.value.length, 10)
@@ -356,6 +358,29 @@ test('digest reports and schedules paginate separately and reset on tab changes'
     assert.equal(ctx.page.currentPage.value, 1)
     ctx.page.pageSize.value = 50; await settle()
     assert.equal(ctx.page.pagedSchedules.value.length, 10)
+  } finally { ctx.close() }
+})
+
+test('digest list exposes only weekly and monthly reports without changing stored daily records', async () => {
+  const ctx = await mountPage('DigestListView')
+  try {
+    const rows = [
+      { id: 'daily', title: '旧日报', type: '日报', status: '旧状态' },
+      { id: 'weekly', title: '周报', type: 'weekly' },
+      { id: 'monthly', title: '月报', type: '月报' },
+      { id: 'daily-code', title: '旧日报编码', reportType: 'daily', type: '日报' },
+      { id: 'weekly-code', title: '新周报', reportType: 'weekly', type: '周报' },
+    ]
+    ctx.store.digestReports = rows
+    const snapshot = JSON.stringify(rows)
+    await settle()
+    assert.deepEqual(ctx.page.pagedReports.value.map(row => row.id), ['weekly', 'monthly', 'weekly-code'])
+    assert.equal(ctx.page.listTotal.value, 3)
+    ctx.page.activeTab.value = '周报'; await settle()
+    assert.deepEqual(ctx.page.pagedReports.value.map(row => row.id), ['weekly', 'weekly-code'])
+    ctx.page.activeTab.value = '月报'; await settle()
+    assert.deepEqual(ctx.page.pagedReports.value.map(row => row.id), ['monthly'])
+    assert.equal(JSON.stringify(ctx.store.digestReports), snapshot)
   } finally { ctx.close() }
 })
 
@@ -684,41 +709,22 @@ test('knowledge paginates filtered real data and returns to a valid page after d
   } finally { ctx.close() }
 })
 
-test('unified library filters mixed sources without duplicates and retains cross-page selection for generation', async () => {
-  const saved = []
-  const ctx = await mountPage('KnowledgeView', { documents: Array.from({ length: 12 }, (_, index) => ({ id: String(100 + index), name: `上传${index}`, status: '已解析', canManage: true })), api: {
-    savePipelineWorkspaceItem: async payload => { saved.push(payload); return { data: {} } }
-  } })
+test('upload library only manages files and ignores legacy type filters', async () => {
+  const ctx = await mountPage('KnowledgeView', { query: { kind: 'paper' }, documents: Array.from({ length: 12 }, (_, index) => ({ id: String(100 + index), name: `上传${index}`, status: '已解析', canManage: true })) })
   try {
-    ctx.store.basket = [{ id: '100', type: 'material', title: '上传0' }, { id: '26', type: 'paper', title: '论文' }, { id: '18', type: 'article', title: '新闻' }]
+    ctx.store.basket = [{ id: '26', type: 'paper', title: '论文' }, { id: '18', type: 'article', title: '新闻' }]
     await settle()
-    assert.equal(ctx.page.libraryItems.value.length, 14)
-    ctx.page.toggleSelection(ctx.page.libraryItems.value.find(item => item.id === '101'), true)
-    ctx.page.currentPage.value = 2
+    assert.equal(ctx.page.libraryItems.value.length, 12)
+    assert.ok(ctx.page.libraryItems.value.every(item => item.kind === 'document'))
+    assert.doesNotMatch(sources.KnowledgeView, /v-model="libraryKind"|label="全部类型"|<el-checkbox|新建报告|createFromSelection|ps-library-selection-tools/)
+    ctx.page.keyword.value = '上传11'
     await settle()
-    ctx.page.toggleSelection(ctx.page.libraryItems.value.find(item => item.id === '111'), true)
-    ctx.page.libraryKind.value = 'paper'
+    assert.deepEqual(ctx.page.filteredDocuments.value.map(item => item.id), ['111'])
+    ctx.page.editDocument(ctx.page.filteredDocuments.value[0])
     await settle()
-    assert.deepEqual(ctx.page.filteredDocuments.value.map(item => item.id), ['26'])
-    assert.equal(ctx.page.selection.selectedItems.value.length, 2)
-    ctx.page.toggleSelection(ctx.page.filteredDocuments.value[0], true)
-    await ctx.page.createFromSelection()
-    await settle()
-    assert.equal(ctx.router.currentRoute.value.path, '/portal/research/create')
-    assert.deepEqual(ctx.router.currentRoute.value.query.selected, ['101', '111', '26'])
-    assert.deepEqual(saved.map(item => item.itemId), ['101', '111'])
-  } finally { ctx.close() }
-})
-
-test('unified library refuses a page selection over the cap without losing existing selections', async () => {
-  const ctx = await mountPage('KnowledgeView', { documents: Array.from({ length: 55 }, (_, index) => ({ id: String(100 + index), name: `上传${index}`, status: '已解析' })) })
-  try {
-    for (const row of ctx.page.libraryItems.value.slice(0, 49)) ctx.page.toggleSelection(row, true)
-    ctx.page.currentPage.value = 6
-    await settle()
-    ctx.page.togglePage(true)
-    assert.equal(ctx.page.selection.selectedItems.value.length, 49)
-    assert.match(ctx.messages.at(-1).text, /超过 50/)
+    assert.equal(ctx.router.currentRoute.value.path, '/portal/knowledge/111')
+    assert.equal(ctx.router.currentRoute.value.query.mode, 'edit')
+    assert.equal(ctx.store.basket.length, 2)
   } finally { ctx.close() }
 })
 
@@ -734,20 +740,8 @@ test('unified library deletion waits for confirmation and cancellation preserves
     await settle()
     for (const item of ctx.page.libraryItems.value) await ctx.page.deleteLibraryItem(item)
     assert.equal(calls, 0)
-    assert.equal(ctx.page.libraryItems.value.length, 2)
-  } finally { ctx.close() }
-})
-
-test('failed preparation retains selections and never opens the report wizard', async () => {
-  const ctx = await mountPage('KnowledgeView', { documents: [{ id: '100', name: '文件', status: '已解析' }], api: {
-    savePipelineWorkspaceItem: async () => { throw new Error('保存失败') }
-  } })
-  try {
-    ctx.page.toggleSelection(ctx.page.libraryItems.value[0], true)
-    await ctx.page.createFromSelection()
-    assert.equal(ctx.page.selection.selectedItems.value.length, 1)
-    assert.equal(ctx.router.currentRoute.value.path, '/portal/knowledge')
-    assert.equal(ctx.messages.at(-1).level, 'error')
+    assert.equal(ctx.page.libraryItems.value.length, 1)
+    assert.equal(ctx.store.basket.length, 1)
   } finally { ctx.close() }
 })
 
@@ -793,20 +787,6 @@ test('duplicate upload feedback explicitly says that the existing material was r
     ctx.page.uploadFiles.value = [{ name: 'same.txt', size: 1, raw: new File(['x'], 'same.txt') }]
     await ctx.page.finishUpload()
     assert.match(ctx.messages.at(-1).text, /复用已有资料，未重复保存/)
-  } finally { ctx.close() }
-})
-
-test('knowledge rejects unsafe, unfinished or AI-disallowed materials before saving', async () => {
-  let saves = 0
-  const ctx = await mountPage('KnowledgeView', { api: { savePipelineWorkspaceItem: async () => { saves += 1 } } })
-  try {
-    for (const doc of [
-      { id: '1', status: '已解析', scanStatus: 'quarantined' },
-      { id: '2', status: '解析中', scanStatus: 'clean' },
-      { id: '3', status: '已解析', allowAiUse: false }
-    ]) await ctx.page.add(doc)
-    assert.equal(saves, 0)
-    assert.equal(ctx.messages.filter(item => item.level === 'warning').length, 3)
   } finally { ctx.close() }
 })
 
@@ -968,6 +948,19 @@ test('search opens correct detail routes and checks internal materials before ba
     await settle()
     assert.equal(saves, 0)
     assert.equal(ctx.router.currentRoute.value.path, '/portal/knowledge/doc1')
+  } finally { ctx.close() }
+})
+
+test('paper classification reaches the server filter without replacing publication filters', async () => {
+  const calls = []
+  const ctx = await mountPage('PaperListView', { query: { classification: '质能网', year: '2024' }, api: { listPipelineIntelligence: async params => { calls.push(params); return { data: { rows: [], total: 0 } } } } })
+  try {
+    assert.equal(calls.at(-1).category, 'paper')
+    assert.equal(calls.at(-1).tag, '质能网')
+    assert.equal(calls.at(-1).yearFrom, 2024)
+    ctx.page.resetFilters(); await settle()
+    assert.equal(calls.at(-1).tag, undefined)
+    assert.equal(ctx.page.classification.value, '')
   } finally { ctx.close() }
 })
 

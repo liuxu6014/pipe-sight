@@ -1,6 +1,7 @@
 """Canonical SQLAlchemy models owned by the system bounded context."""
 
 from app.system.models.config import SysConfig
+from app.system.models.dept import SysDept
 from app.system.models.dictionary import SysDictData, SysDictType
 from app.system.models.menu import SysMenu
 from app.system.models.role import SysRole, SysRoleDept, SysRoleMenu
@@ -8,6 +9,7 @@ from app.system.models.user import SysUser, SysUserPost, SysUserRole
 
 __all__ = [
     'SysConfig',
+    'SysDept',
     'SysDictData',
     'SysDictType',
     'SysMenu',

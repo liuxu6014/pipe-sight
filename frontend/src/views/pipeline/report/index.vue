@@ -1,15 +1,15 @@
 <template>
   <div class="pipeline-page pipeline-report-page ws-list-page">
-    <section class="page-heading">
-      <div><h1>{{ reportKind === 'digest' ? '简报管理' : '报告管理' }}</h1></div>
-      <div class="heading-actions"><el-button plain :icon="DocumentAdd" @click="openCreate(reportKind === 'digest' ? '科技情报日报' : '科研需求报告')">进入用户端编制</el-button><el-button type="primary" :icon="Refresh" :loading="loading" @click="loadReports">刷新列表</el-button></div>
-    </section>
     <el-card shadow="never" class="panel-card report-filter-card">
       <div class="report-management-filters">
         <el-input v-model.trim="keyword" clearable aria-label="查询成果名称或作者" placeholder="查询成果名称或作者" />
         <el-select v-model="statusFilter" clearable aria-label="成果业务状态" placeholder="全部业务状态"><el-option v-for="value in statusOptions" :key="value" :value="value" :label="getReportStatusMeta(value).label" /></el-select>
         <el-button v-if="keyword || statusFilter" @click="keyword = ''; statusFilter = ''">清除筛选</el-button>
         <span class="report-management-scope" aria-live="polite">共 {{ filteredRows.length }} 份</span>
+        <div v-if="reportKind !== 'digest'" class="heading-actions">
+          <el-button plain :icon="DocumentAdd" @click="openCreate('科研需求报告')">进入用户端编制</el-button>
+          <el-button type="primary" :icon="Refresh" :loading="loading" @click="loadReports">刷新列表</el-button>
+        </div>
       </div>
     </el-card>
     <el-alert v-if="reportError" type="warning" show-icon :closable="false" class="report-load-error">
@@ -105,7 +105,6 @@ function openReport(row) {
   router.push(getPortalReportPath({ id: row.id, reportType: row.reportType || row.type }))
 }
 function openCreate(title) {
-  if (title.includes('日报')) return router.push({ path: '/portal/digests/create', query: { type: '日报' } })
   if (title.includes('月报')) return router.push({ path: '/portal/digests/create', query: { type: '月报' } })
   if (title.includes('周报')) return router.push({ path: '/portal/digests/create', query: { type: '周报' } })
   router.push('/portal/research/create')
@@ -115,16 +114,15 @@ onMounted(loadReports)
 </script>
 
 <style scoped>
-.pipeline-report-page .page-heading { padding-bottom: 16px; margin-bottom: 16px; }
-.pipeline-report-page .page-heading h1 { margin: 0; }
 .pipeline-report-page .report-filter-card { margin-bottom: 14px; }
 .pipeline-report-page .report-filter-card :deep(.el-card__body) { padding: 14px 16px; }
 .pipeline-report-page .report-review-table { width: 100%; margin: 0; padding: 0; box-shadow: none; }
 .pipeline-report-page .report-review-table :deep(.el-card__body) { padding: 16px; }
 .pipeline-report-page .report-review-table :deep(.el-table__empty-block) { min-height: 140px; }
 .heading-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.heading-actions .el-button { margin: 0; }
 .report-load-error { margin: 18px 0; }
-.report-retry { padding: 0; border: 0; background: transparent; color: #005487; cursor: pointer; font-size: 13px; }
+.report-retry { padding: 0; border: 0; background: transparent; color: #409eff; cursor: pointer; font-size: 13px; }
 .report-management-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .report-management-filters .el-input { flex: 1 1 260px; }
 .report-management-filters .el-select { flex: 0 1 180px; }

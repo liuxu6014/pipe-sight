@@ -9,10 +9,10 @@ function setup(globals = {}) {
   const source = text.split('<script setup>')[1].split('</script>')[0].replace(/^import .*\n/gm, '')
   const scope = effectScope()
   const context = vm.createContext({ ref, computed, watch, onMounted() {}, onBeforeUnmount() {},
-    onBeforeRouteLeave() {}, onBeforeRouteUpdate() {}, useRoute: () => ({ params: { id: '33' } }),
-    useRouter: () => ({}), usePortalStore: () => ({ researchReports: [] }), setTimeout() {}, clearTimeout() {}, ...globals,
+    onBeforeRouteLeave() {}, onBeforeRouteUpdate() {}, useRoute: () => ({ params: { id: '33' }, path: '/portal/research/reports/33', query: {} }),
+    useRouter: () => ({}), usePortalStore: () => ({ researchReports: [], digestReports: [] }), setTimeout() {}, clearTimeout() {}, ...globals,
   })
-  scope.run(() => vm.runInContext(`${source}\nglobalThis.editor = { sections, currentSectionId, updateSectionContent, updateSectionTitle, setSectionElement, setSectionBody, applyFormat, scrollToSection, syncVisibleSection, documentScrollRef }`, context))
+  scope.run(() => vm.runInContext(`${source}\nglobalThis.editor = { sections, currentSectionId, updateSectionContent, updateSectionTitle, setSectionElement, setSectionBody, applyFormat, scrollToSection, syncVisibleSection, documentScrollRef, outlinePanelRef, keepActiveOutlineVisible }`, context))
   return { text, editor: context.editor, close: () => scope.stop() }
 }
 
@@ -51,6 +51,31 @@ test('outline navigation scrolls the existing document; scrolling updates the ac
     editor.currentSectionId.value = 1
     editor.syncVisibleSection()
     assert.equal(editor.currentSectionId.value, 2)
+  } finally { view.close() }
+})
+
+test('active directory item stays below its sticky heading without moving the article', () => {
+  const view = setup()
+  try {
+    const { editor } = view
+    let row = { top: 360, bottom: 400 }
+    editor.documentScrollRef.value = { scrollTop: 850 }
+    editor.outlinePanelRef.value = {
+      scrollTop: 0,
+      getBoundingClientRect: () => ({ top: 100, bottom: 300 }),
+      querySelector: selector => selector === '[aria-current="location"]'
+        ? { getBoundingClientRect: () => row }
+        : { getBoundingClientRect: () => ({ height: 48 }) }
+    }
+    editor.keepActiveOutlineVisible()
+    assert.equal(editor.outlinePanelRef.value.scrollTop, 108)
+    row = { top: 120, bottom: 160 }
+    editor.keepActiveOutlineVisible()
+    assert.equal(editor.outlinePanelRef.value.scrollTop, 72)
+    row = { top: 180, bottom: 220 }
+    editor.keepActiveOutlineVisible()
+    assert.equal(editor.outlinePanelRef.value.scrollTop, 72)
+    assert.equal(editor.documentScrollRef.value.scrollTop, 850)
   } finally { view.close() }
 })
 

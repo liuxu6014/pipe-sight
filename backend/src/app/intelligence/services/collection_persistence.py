@@ -62,7 +62,17 @@ class CollectionPersistenceService:
 
         if not isinstance(record, dict):
             raise ValueError('候选条目必须为对象')
-        for key in ('author', 'content', 'content_zh', 'title_zh', 'authors', 'journal', 'abstract', 'abstract_zh'):
+        for key in (
+            'author',
+            'content',
+            'content_zh',
+            'summary',
+            'title_zh',
+            'authors',
+            'journal',
+            'abstract',
+            'abstract_zh',
+        ):
             if record.get(key) is not None and not isinstance(record[key], str):
                 raise ValueError('候选文本字段类型无效')
         title = record.get('title')
@@ -98,11 +108,26 @@ class CollectionPersistenceService:
             values = {key: record.get(key) for key in ('author', 'content', 'content_zh')}
             # Only overwrite when a fresh extraction produced a result; re-ingesting
             # without a configured model must not wipe previously stored entities.
-            if 'entities' in record:
-                values['entities'] = record.get('entities')
+            if record.get('summary'):
+                from app.intelligence.services.entities import validated_summary  # noqa: PLC0415
+
+                summary = validated_summary(record['summary'], record.get('content_zh') or record.get('content'))
+                if summary is not None:
+                    values['summary'] = summary
             values.update(title=title.strip(), url=url, published_at=published)
         else:
             raise ValueError('来源内容类型无效')
+        if isinstance(record.get('entities'), list):
+            from app.intelligence.services.entities import validated_entities  # noqa: PLC0415
+
+            entity_content = (
+                record.get('abstract_zh') or record.get('abstract') or ''
+                if source.type == 'paper'
+                else record.get('content_zh') or record.get('content') or ''
+            )
+            entities = validated_entities(record['entities'], title=title, content=entity_content)
+            if entities is not None:
+                values['entities'] = entities
         # Serializes normalized-identity writes across different source workers.
         if db.get_bind().dialect.name == 'postgresql':
             for key in sorted(locks):

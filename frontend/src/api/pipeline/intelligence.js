@@ -329,6 +329,10 @@ export function getPipelineResearchReport(reportId) {
   })
 }
 
+export function deletePipelineResearchReport(reportId) {
+  return request({ url: `/pipeline/research/reports/${requireBusinessId(reportId)}`, method: 'delete' })
+}
+
 export function updatePipelineResearchReport(reportId, data) {
   return request({
     url: `/pipeline/research/reports/${requireBusinessId(reportId)}`,

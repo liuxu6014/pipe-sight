@@ -51,8 +51,8 @@ def test_v7_adds_only_nullable_entities_to_news_articles_and_preserves_every_pri
     assert old['foreign_keys'] == new['foreign_keys']
     assert old['optional_table_definitions'] == new['optional_table_definitions']
     contract = load_contract()
-    assert len(contract['tables']) == 27
-    assert sum(len(t['columns']) for t in contract['tables']) == 321
+    assert len(contract['tables']) == 28
+    assert sum(len(t['columns']) for t in contract['tables']) == 338
     assert {t['name'] for t in contract['tables']} >= {'sys_user', 'papers', 'collection_runs'}
     for table in contract['tables']:
         if table['name'] not in FOUNDATION_TABLE_RENAMES.values():
@@ -129,14 +129,44 @@ def test_v3_stays_frozen_when_runtime_default_advances() -> None:
     assert digest == 'ea009e6a104eb8b54e42e12cb45ae369bb3add9db6a198dcb1343629df635b78'
 
 
-def test_v4_stays_frozen_when_beijing_audit_runtime_v5_becomes_default() -> None:
+def test_v8_adds_only_nullable_news_summary_without_changing_relationships() -> None:
+    old, new = load_contract('v7'), load_contract('v8')
+    before = {table['name']: table for table in old['tables']}
+    after = {table['name']: table for table in new['tables']}
+    assert before.keys() == after.keys()
+    for name, table in before.items():
+        if name == 'news_articles':
+            assert table['columns'] == [c for c in after[name]['columns'] if c['name'] != 'summary']
+            added = [c for c in after[name]['columns'] if c['name'] == 'summary']
+            assert len(added) == 1 and added[0]['nullable'] and added[0]['type'] == 'text'
+        else:
+            assert table == after[name]
+    assert old['foreign_keys'] == new['foreign_keys']
+
+
+def test_v9_adds_only_nullable_paper_entities_and_preserves_existing_relations() -> None:
+    old, new = load_contract('v8'), load_contract('v9')
+    before = {table['name']: table for table in old['tables']}
+    after = {table['name']: table for table in new['tables']}
+    assert before.keys() == after.keys()
+    for name, table in before.items():
+        if name == 'papers':
+            assert table['columns'] == [c for c in after[name]['columns'] if c['name'] != 'entities']
+            added = [c for c in after[name]['columns'] if c['name'] == 'entities']
+            assert len(added) == 1 and added[0]['nullable'] and added[0]['type'] == 'jsonb'
+        else:
+            assert table == after[name]
+    assert old['foreign_keys'] == new['foreign_keys']
+
+
+def test_v4_stays_frozen_when_runtime_contract_advances() -> None:
     value = load_contract('v4')
     digest = hashlib.sha256(
         json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()
     ).hexdigest()
     assert digest == '88491613e027bcdc0058837512053d68eae7a757d9ebcadad16e46e92316b8bc'
-    assert load_contract() == load_contract('v7')
-    assert load_contract()['version'] == '20261102-compact-v7'
+    assert load_contract() == load_contract('v10')
+    assert load_contract()['version'] == '20261103-compact-v10'
 
 
 def test_v4_preserves_v3_physical_core_without_freezing_unstable_orm_ddl() -> None:
@@ -370,3 +400,23 @@ def test_multiple_text_models_require_explicit_template_mapping() -> None:
             templates=[{'template_id': 'existing-template'}],
             models=[{'id': n, 'capabilities': ['text_generate'], 'is_enabled': True} for n in (1, 2)],
         )
+
+
+def test_v10_restores_only_native_departments_and_nullable_user_affiliation():
+    before, after = load_contract('v9'), load_contract('v10')
+    old = {t['name']: t for t in before['tables']}
+    new = {t['name']: t for t in after['tables']}
+    assert new.keys() - old.keys() == {'sys_dept'}
+    for name, table in old.items():
+        if name != 'sys_user':
+            assert table == new[name]
+        else:
+            assert table['columns'] == [c for c in new[name]['columns'] if c['name'] != 'dept_id']
+            assert next(c for c in new[name]['columns'] if c['name'] == 'dept_id')['nullable']
+    assert after['foreign_keys'][:-1] == before['foreign_keys']
+    assert after['foreign_keys'][-1] == {
+        'table': 'sys_user',
+        'columns': ['dept_id'],
+        'target': 'sys_dept',
+        'target_columns': ['dept_id'],
+    }

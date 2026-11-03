@@ -92,10 +92,10 @@ test('does not expose editor defaults before the real report is loaded', () => {
 
 test('does not present fabricated analysis or bypass published report templates', () => {
   assert.doesNotMatch(newsDetail, /可提升缺陷复核与维修排序效率|统一时空基准与多源特征融合/)
-  assert.match(newsDetail, /articleAnalysis/)
+  assert.match(newsDetail, /ContentInsights :item="article"/)
   assert.doesNotMatch(newsDetail, /projectInsight|article-insight|结构化项目启示/)
   assert.doesNotMatch(paperDetail, /解决多源检测条件下缺陷识别结果不一致|建立统一评价框架|可用于技术路线选型/)
-  assert.match(paperDetail, /aiInterpretation/)
+  assert.match(paperDetail, /ContentInsights :item="paper" kind="paper"/)
   assert.match(read('../src/views/portal/pages/ResearchCreateView.vue'), /listPipelineTemplates\(\{ category: 'research', publishedOnly: true \}\)/)
   assert.doesNotMatch(researchWorkbench, /listPipelineTemplates|报告模板/)
   assert.doesNotMatch(researchWorkbench, /import \{ reportTemplates \} from '\.\.\/data'/)

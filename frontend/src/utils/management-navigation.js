@@ -2,8 +2,8 @@
 const MODULES = [
   { key: 'home', title: '管理首页', icon: 'dashboard', direct: true },
   { key: 'users', title: '用户管理', icon: 'user' },
-  { key: 'collection', title: '采集管理', icon: 'link' },
-  { key: 'data', title: '数据管理', icon: 'documentation' },
+  { key: 'collection', title: '采集管理', icon: 'link', direct: true },
+  { key: 'data', title: '情报查询', icon: 'documentation', direct: true },
   { key: 'knowledge', title: '资料库管理', icon: 'documentation', direct: true },
   { key: 'reports', title: '报告管理', icon: 'documentation', direct: true },
   { key: 'digests', title: '简报管理', icon: 'documentation', direct: true },
@@ -19,8 +19,8 @@ const ENTRIES = {
   '/pipeline/dashboard': ['home', '管理首页'],
   '/system/user': ['users', '账号管理'],
   '/system/role': ['users', '角色与授权'],
+  '/system/dept': ['users', '部门管理'],
   '/pipeline/source': ['collection', '数据源管理'],
-  '/pipeline/task': ['collection', '采集任务'],
   '/pipeline/intelligence': ['data', '情报查询'],
   '/pipeline/knowledge': ['knowledge', '资料库管理'],
   '/pipeline/report': ['reports', '科研报告'],
@@ -39,6 +39,8 @@ const TEMPLATE_MENU_PATHS = new Set(['/tool/swagger', '/monitor/druid'])
 // Reject stale backend snapshots; the retired components and routes no longer exist.
 const RETIRED_PIPELINE_PATHS = new Set(['/pipeline/filter', '/pipeline/governance', '/ai/chat'])
 const SETTINGS_ENTRY_ORDER = ['/system/config', '/system/dict', '/system/menu']
+// 旧任务页保留在注册树中，主导航统一进入来源列表。
+const COLLECTION_TASK_PATH = '/pipeline/task'
 
 function isTemplateLink(path = '') {
   if (!/^https?:\/\//i.test(path)) return false
@@ -103,6 +105,7 @@ export function buildManagementNavigation(routes = [], {
       // 隐藏父目录的子项也不能意外出现在导航中。
       if (route.hidden) continue
       const path = resolveNavigationPath(basePath, route.path)
+      if (path === COLLECTION_TASK_PATH) continue
       if (RETIRED_PIPELINE_PATHS.has(path) || TEMPLATE_MENU_PATHS.has(path) || isTemplateLink(path) || isTemplateLink(route.meta?.link)) continue
       if (route.children?.length) {
         visit(route.children, path)
@@ -142,9 +145,18 @@ export function buildManagementNavigation(routes = [], {
     model.route.meta.navigationAliases = ['/ai/model']
   }
 
+  const collectionEntries = entries.filter(entry => entry.module === 'collection')
+  const collection = collectionEntries.find(entry => queryKey(entry.route.query) === '{}') || collectionEntries[0]
+  if (collection) {
+    collection.route.meta.navigationAliases = [...new Set([
+      ...(collection.route.meta.navigationAliases || []), COLLECTION_TASK_PATH
+    ])]
+  }
+
   return MODULES.flatMap(module => {
     const children = entries
-      .filter(entry => entry.module === module.key && !(model && legacyModel && entry === legacyModel))
+      .filter(entry => entry.module === module.key && !(model && legacyModel && entry === legacyModel) &&
+        (module.key !== 'collection' || entry === collection))
       .map(entry => entry.route)
     if (module.key === 'settings') {
       const priority = path => {

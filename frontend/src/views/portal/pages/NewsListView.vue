@@ -1,18 +1,27 @@
 <template>
-  <div class="ps-page ps-list-page">
+  <div class="ps-page ps-list-page ps-news-page">
     <div class="ps-toolbar">
       <div class="ps-search-inline"><Search /><input v-model.trim="keyword" aria-label="搜索新闻资讯" placeholder="搜索标题、摘要或正文" @keydown.enter="reload" /><el-button class="ps-ui-action" v-if="keyword" aria-label="清空资讯关键词" @click="keyword = ''">清空</el-button></div>
       <el-select v-model="sourceType" aria-label="资讯来源" style="width: 150px"><el-option label="全部来源" value="全部" /><el-option label="新闻网站" value="新闻网站" /><el-option label="微信公众号" value="微信公众号" /></el-select>
-      <el-select v-model="activeTags" multiple :multiple-limit="20" clearable filterable allow-create default-first-option collapse-tags collapse-tags-tooltip placeholder="全部标签" aria-label="资讯标签" style="width: 200px"><el-option v-for="tag in tags" :key="tag" :label="tag" :value="tag" /></el-select>
+      <el-select :model-value="activeTags[0] || ''" clearable filterable placeholder="全部类别" aria-label="资讯类别" style="width: 200px" @update:model-value="setCategory"><el-option v-for="tag in tags" :key="tag" :label="tag" :value="tag" /></el-select>
       <el-button @click="resetFilters">重置筛选</el-button>
-      <div class="ps-view-switch"><button type="button" aria-label="列表视图" :aria-pressed="viewMode === 'list'" :class="{ 'is-active': viewMode === 'list' }" @click="viewMode = 'list'"><List /></button><button type="button" aria-label="卡片视图" :aria-pressed="viewMode === 'card'" :class="{ 'is-active': viewMode === 'card' }" @click="viewMode = 'card'"><Grid /></button></div>
+      <SavedSearchBar kind="news" :query="query" :show-current-filters="false" @apply="applySavedSearch" />
+      <div class="ps-view-switch ps-segmented-row"><el-segmented v-model="viewMode" :options="[{ label: '列表', value: 'list' }, { label: '卡片', value: 'card' }]" aria-label="资讯展示方式"  /></div>
     </div>
-    <SavedSearchBar kind="news" :query="query" @apply="applySavedSearch" />
     <div class="ps-news-content ps-list-stack">
       <section v-loading="loading" :aria-busy="loading" class="ps-list-stack">
         <div :class="['ps-news-list', 'ps-list-scroll', { 'is-card': viewMode === 'card' }]" tabindex="0" aria-label="新闻资讯列表">
         <article v-for="item in newsItems" :key="item.id" class="ps-news-card">
-          <div class="ps-news-card-top"><span class="ps-source-badge">{{ item.sourceType }}</span><time>{{ newsDate(item.time) }}</time></div>
+          <div class="ps-news-row-heading">
+            <div class="ps-news-card-top">
+              <el-tag type="primary" size="small">{{ item.sourceType }}</el-tag>
+              <span v-if="item.source" class="ps-news-source" :title="item.source">{{ item.source }}</span>
+              <time>{{ newsDate(item.time) }}</time>
+              <el-tag class="ps-content-category" :type="item.categoryName ? 'primary' : 'info'" size="small" effect="plain">分类：{{ item.categoryName || '未分类' }}</el-tag>
+              <div v-if="item.extraTags.length" class="ps-news-categories"><el-button v-for="tag in item.extraTags" :key="tag" class="ps-category-chip" size="small" plain :type="activeTags.includes(tag) ? 'primary' : 'default'" :aria-pressed="activeTags.includes(tag)" @click="toggleTag(tag)">{{ tag }}</el-button></div>
+            </div>
+            <div class="ps-news-row-actions"><el-button type="primary" plain :loading="busy(item)" :disabled="busy(item)" @click="addToBasket(item)">{{ inBasket(item) ? '取消加入资料库' : '加入资料库' }}</el-button></div>
+          </div>
           <div class="ps-news-card-main">
           <router-link v-if="item.cover_image || viewMode === 'card'" class="ps-news-cover" :aria-label="`阅读资讯：${item.title}`" :to="`/portal/news/${item.id}`">
             <img v-if="item.cover_image" :src="item.cover_image" alt="文章配图" loading="lazy" />
@@ -31,11 +40,9 @@
           </router-link>
           <div class="ps-news-card-copy">
           <router-link class="ps-news-title" :to="`/portal/news/${item.id}`">{{ item.title }}</router-link>
-          <p>{{ cleanSummary(item.summary) }}</p>
-          <div class="ps-tag-row"><button v-for="tag in item.tags" :key="tag" type="button" class="ps-tag" :aria-pressed="activeTags.includes(tag)" @click="toggleTag(tag)">{{ tag }}</button></div>
-          <div v-if="item.entities && item.entities.length" class="ps-tag-row ps-entity-row"><span v-for="entity in item.entities" :key="`${entity.type}-${entity.name}`" class="ps-entity-chip"><em>{{ entity.type }}</em>{{ entity.name }}</span></div>
+          <p v-if="cleanSummary(item.summary)" class="ps-news-summary">{{ cleanSummary(item.summary) }}</p>
+          <ContentEntities :entities="item.entities" compact />
           </div></div>
-          <div class="ps-news-card-footer"><span v-if="item.source">{{ item.source }}</span><div><el-button type="primary" plain :loading="busy(item)" :disabled="busy(item)" @click="addToBasket(item)">{{ inBasket(item) ? '取消加入资料库' : '加入资料库' }}</el-button></div></div>
         </article>
         <PortalEmptyState v-if="loadError && !loading" title="资讯加载失败" :description="loadError" action-label="重新加载" @action="reload" />
         <PortalEmptyState v-else-if="!newsItems.length && !loading" title="没有匹配的资讯" description="请调整标签、来源或搜索关键词。" action-label="重置筛选" @action="resetFilters" />
@@ -58,6 +65,7 @@
 
 <script setup>
 import SavedSearchBar from '../components/SavedSearchBar.vue'
+import ContentEntities from '../components/ContentEntities.vue'
 import { applySavedSearchQuery } from '@/utils/portal/savedSearches'
 import { computed, toRefs, watch } from 'vue'
 import { ElMessage } from 'element-plus'
@@ -92,16 +100,22 @@ const { data, loading, loadError, reload } = useListRequest(() => ({
   pageNum: currentPage.value,
   pageSize: pageSize.value
 }), listPipelineIntelligence)
-const newsItems = computed(() => (data.value?.rows || []).map(item => ({
-  ...normalizePortalIntelligence(item),
-  category: ['article', 'news', 'wechat'].includes(item.category) ? (item.tags?.[0] || '分类未提供') : (item.category || '分类未提供')
-})))
+const newsItems = computed(() => (data.value?.rows || []).map(item => {
+  const normalized = normalizePortalIntelligence(item)
+  return {
+    ...normalized,
+    category: ['article', 'news', 'wechat'].includes(item.category) ? (item.tags?.[0] || '分类未提供') : (item.category || '分类未提供'),
+    extraTags: normalized.tags.filter(tag => tag !== normalized.categoryName)
+  }
+}))
 const total = computed(() => Number(data.value?.total || 0))
 watch(data, value => { if (value) currentPage.value = validPage(total.value, pageSize.value, currentPage.value) })
 const facets = useListRequest(() => ({}), getPipelineContentFilters)
-const tags = computed(() => [...new Set([...(facets.data.value?.newsTags || []), ...activeTags.value])])
+const tags = computed(() => [...new Set([...(facets.data.value?.articleCategories || facets.data.value?.newsTags || []), ...activeTags.value])])
+function setCategory(value) { activeTags.value = value ? [value] : [] }
 function toggleTag(tag) {
-  activeTags.value = activeTags.value.includes(tag) ? activeTags.value.filter(value => value !== tag) : [...activeTags.value, tag].slice(0, 20)
+  if (activeTags.value.includes(tag)) activeTags.value = activeTags.value.filter(value => value !== tag)
+  else setCategory(tag)
 }
 async function addToBasket(item) {
   try {
@@ -122,8 +136,7 @@ function resetFilters() {
 .ps-toolbar { min-height: 0; padding: 6px 12px; row-gap: 6px; margin-bottom: 10px; }
 .ps-toolbar > .ps-search-inline { flex: 1 1 100%; }
 .ps-toolbar > .el-select { flex: 1 1 150px; }
-.ps-search-inline > button { flex-shrink: 0; padding: 4px 8px; border: 0; border-radius: 4px; background: transparent; color: var(--ps-muted); white-space: nowrap; cursor: pointer; }
-.ps-search-inline > button:hover { color: var(--ps-blue); background: var(--ps-blue-soft); }
+.ps-search-inline > button { flex-shrink: 0; white-space: nowrap; }
 @media (min-width: 1051px) {
   .ps-toolbar { flex-wrap: nowrap; }
   .ps-toolbar > .ps-search-inline { flex: 1 1 280px; min-width: 180px; }
@@ -131,12 +144,28 @@ function resetFilters() {
   .ps-toolbar > .el-button, .ps-toolbar > .ps-view-switch { flex-shrink: 0; }
 }
 .ps-news-title, .ps-news-cover { text-decoration: none; }
-.ps-news-card-main { display: flex; gap: 20px; align-items: flex-start; }
+.ps-news-page .ps-news-list { gap: 10px; align-content: start; }
+.ps-news-page .ps-news-card { min-width: 0; padding: 14px 18px 16px; border-radius: 10px; box-shadow: none; }
+.ps-news-row-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 10px 16px; margin-bottom: 4px; }
+.ps-news-page .ps-news-card-top { display: flex; flex-wrap: wrap; align-items: center; align-content: center; gap: 6px 12px; min-width: 0; min-height: 36px; margin: 0; font-size: 13px; line-height: 1.5; color: var(--ps-muted); }
+.ps-news-card-top time { white-space: nowrap; font-size: inherit; }
+.ps-content-category { max-width: 100%; height: auto; min-height: var(--el-tag-height); white-space: normal; overflow-wrap: anywhere; }
+.ps-content-category :deep(.el-tag__content) { white-space: normal; }
+.ps-news-source { max-width: min(260px, 100%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ps-ink-2); }
+.ps-news-categories { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.ps-news-categories :deep(.el-button) { margin: 0; white-space: normal; overflow-wrap: anywhere; }
+.ps-news-row-actions :deep(.el-button) { margin: 0; }
+.ps-news-card-main { display: flex; gap: 16px; align-items: flex-start; }
 .ps-news-card-copy { flex: 1; min-width: 0; }
-.ps-news-cover { flex: 0 0 180px; width: 180px; margin-top: 12px; padding: 0; border: 0; border-radius: 8px; overflow: hidden; background: transparent; }
+.ps-news-page .ps-news-title { display: block; margin: 0; color: var(--ps-ink); font-size: 17px; font-weight: 600; line-height: 1.6; overflow-wrap: anywhere; }
+.ps-news-page .ps-news-title:hover { color: var(--ps-blue); }
+.ps-news-title:focus-visible, .ps-news-cover:focus-visible { outline: 2px solid var(--ps-blue); outline-offset: 3px; border-radius: 4px; }
+.ps-news-page .ps-news-summary { margin: 7px 0 0; color: var(--ps-muted); font-size: 14px; line-height: 1.8; overflow-wrap: anywhere; }
+.ps-news-cover { flex: 0 0 180px; width: 180px; margin-top: 2px; padding: 0; border: 0; border-radius: 8px; overflow: hidden; background: transparent; }
 .ps-news-cover img { display: block; width: 100%; height: 122px; object-fit: cover; }
 .ps-news-list.is-card .ps-news-card-main { flex-direction: column; gap: 0; }
 .ps-news-list.is-card .ps-news-cover { flex: 0 0 auto; width: 100%; }
+.ps-news-list.is-card .ps-news-title { margin-top: 10px; }
 .ps-news-list.is-card .ps-news-cover img { height: 200px; }
 .ps-news-theme-cover { position: relative; height: 200px; width: 100%; overflow: hidden; background: #e6f0f5; }
 .ps-news-theme-cover > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -145,6 +174,10 @@ function resetFilters() {
 .ps-news-theme-copy strong { max-width: 55%; margin-top: 10px; font-size: 25px; line-height: 1.4; overflow-wrap: anywhere; }
 .ps-news-theme-copy span { margin-top: 22px; padding: 3px 7px; border: 1px solid #bfd5e1; border-radius: 4px; background: #eff6fa; font-size: 11px; color: #395c70; }
 @media (max-width: 600px) {
+  .ps-news-page .ps-news-card { padding: 12px; }
+  .ps-news-row-heading { gap: 8px; margin-bottom: 6px; }
+  .ps-news-page .ps-news-card-top { gap: 4px 8px; min-height: 44px; }
+  .ps-news-page .ps-news-title { font-size: 16px; }
   .ps-news-card-main { flex-direction: column; gap: 0; }
   .ps-news-cover { flex: 0 0 auto; width: 100%; }
   .ps-news-cover img { height: 180px; }

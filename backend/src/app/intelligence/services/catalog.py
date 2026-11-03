@@ -28,7 +28,7 @@ class IntelligenceCatalogService:
             'source_type': source_type,
             'publish_time': date_formatter(item.published_at),
             'tags': [category.name] if category else [],
-            'summary': text[:240],
+            'summary': getattr(item, 'summary', None) or '',
             'source_url': item.url,
             'sourceUrl': item.url,
             'author': item.author or '',
@@ -63,6 +63,7 @@ class IntelligenceCatalogService:
             'doi': item.doi or '',
             'authors': [name.strip() for name in (item.authors or '').split(';') if name.strip()],
             'journal': item.journal or '',
+            'entities': item.entities if isinstance(getattr(item, 'entities', None), list) else [],
             'is_pushed': item.is_pushed,
         }
         if detail:

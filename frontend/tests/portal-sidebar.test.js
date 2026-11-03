@@ -35,7 +35,7 @@ test('sidebar is desktop-only and keeps accessible names when collapsed', () => 
   assert.match(header, /class="ps-mobile-nav"/)
   assert.match(header, /@media \(min-width: 1051px\)/)
   assert.doesNotMatch(header, /ps-desktop-nav-toggle|navigationLayout/)
-  assert.match(sidebar, /class="ps-sidebar-toggle"/)
+  assert.match(sidebar, /<el-button[^>]*class="ps-sidebar-toggle ps-ui-control"/)
   assert.match(sidebar, /href="\/portal\/basket"/)
   assert.match(sidebar, /store.libraryCount/)
   assert.match(sidebar, /isBasketPath\(route.path\)/)

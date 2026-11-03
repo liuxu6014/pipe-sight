@@ -69,10 +69,10 @@ def _expected(names: set[str]) -> dict:
 
 def test_comment_data_matches_frozen_317_fields_plus_23_optional_fields() -> None:
     baseline = {t['name']: {c['name'] for c in t['columns']} for t in load_contract()['tables']}
-    assert len(baseline) == 27 and sum(map(len, baseline.values())) == 321
+    assert len(baseline) == 28 and sum(map(len, baseline.values())) == 338
     assert set(baseline) | set(OPTIONAL_TABLE_NAMES) == PUBLIC_TABLES
     assert sum(len(COLUMN_COMMENTS[n]) for n in OPTIONAL_TABLE_NAMES) == 23
-    assert sum(map(len, COLUMN_COMMENTS.values())) == 344
+    assert sum(map(len, COLUMN_COMMENTS.values())) == 361
     for name, fields in baseline.items():
         assert set(COLUMN_COMMENTS[name]) == fields
     source = Path(__file__).parents[1] / 'src/app/schema_comments.py'
@@ -81,9 +81,9 @@ def test_comment_data_matches_frozen_317_fields_plus_23_optional_fields() -> Non
 
 
 def test_all_29_tables_and_340_columns_have_specific_chinese_comments() -> None:
-    assert len(PUBLIC_TABLES) == 29
-    assert set(Base.metadata.tables) == MODEL_TABLES and len(MODEL_TABLES) == 27
-    assert sum(len(t.c) for t in Base.metadata.tables.values()) == 340
+    assert len(PUBLIC_TABLES) == 30
+    assert set(Base.metadata.tables) == MODEL_TABLES and len(MODEL_TABLES) == 28
+    assert sum(len(t.c) for t in Base.metadata.tables.values()) == 357
     placeholders = {'字段说明', '表说明', '待补充', 'TODO', 'TBD', '主键', '创建时间', '更新时间'}
     for name, table_comment in TABLE_COMMENTS.items():
         for label, comment in [(name, table_comment), *COLUMN_COMMENTS[name].items()]:
@@ -129,8 +129,8 @@ def test_generated_sql_exactly_matches_data_and_registered_orm_comments() -> Non
         expected['VIEW', name, None] = view['comment']
         expected.update({('COLUMN', name, c): text for c, text in view['columns'].items()})
     assert actual == expected
-    assert len([key for key in actual if key[0] == 'TABLE']) == 29
-    assert len([key for key in actual if key[0] == 'COLUMN' and key[1] in PUBLIC_TABLES]) == 344
+    assert len([key for key in actual if key[0] == 'TABLE']) == 30
+    assert len([key for key in actual if key[0] == 'COLUMN' and key[1] in PUBLIC_TABLES]) == 361
     for table in Base.metadata.tables.values():
         assert actual['TABLE', table.name, None] == table.comment
         for col in table.c:
@@ -226,11 +226,14 @@ def test_v3_comment_snapshot_is_frozen_independently_of_v4_semantic_policy() -> 
     ).hexdigest()
     assert digest == '6f9beed5e8e895b6729214ac23546f1a26c3609136e5856d2f07dad82700b8fd'
     assert schema_comments_v3.COLUMN_COMMENTS is not COLUMN_COMMENTS
-    assert schema_comments_v3.TABLE_COMMENTS == TABLE_COMMENTS
+    assert {k: v for k, v in TABLE_COMMENTS.items() if k != 'sys_dept'} == schema_comments_v3.TABLE_COMMENTS
     assert schema_comments_v3.VIEW_COMMENTS == VIEW_COMMENTS
     expected = {name: set(cols) for name, cols in schema_comments_v3.COLUMN_COMMENTS.items()}
     expected['digest_schedules'] |= {'last_run_at', 'last_status', 'last_error'}
-    expected['news_articles'] |= {'entities'}
+    expected['news_articles'] |= {'entities', 'summary'}
+    expected['papers'] |= {'entities'}
+    expected['sys_user'] |= {'dept_id'}
+    expected['sys_dept'] = set(COLUMN_COMMENTS['sys_dept'])
     assert expected == {name: set(cols) for name, cols in COLUMN_COMMENTS.items()}
 
 
@@ -279,8 +282,11 @@ def test_v5_only_business_audit_comments_change_from_frozen_v4() -> None:
             else:
                 assert current == column['comment'], key
     assert changed == fields and len(changed) == 27
-    for name in COLUMN_COMMENTS.keys() - frozen_business.keys():
-        assert COLUMN_COMMENTS[name] == schema_comments_v3.COLUMN_COMMENTS[name]
+    for name in COLUMN_COMMENTS.keys() - frozen_business.keys() - {'sys_dept'}:
+        current = COLUMN_COMMENTS[name]
+        if name == 'sys_user':
+            current = {k: v for k, v in current.items() if k != 'dept_id'}
+        assert current == schema_comments_v3.COLUMN_COMMENTS[name]
 
 
 def test_runtime_comments_document_numeric_pk_fk_and_unchanged_string_payloads() -> None:
@@ -371,9 +377,9 @@ def test_comment_only_pg18_updates_preserve_every_business_row() -> None:
                 }
 
             before = rows()
-            assert apply_schema_comments(bind, allow_live=True) == {'tables': 29, 'columns': 344, 'views': 2}
+            assert apply_schema_comments(bind, allow_live=True) == {'tables': 30, 'columns': 361, 'views': 2}
             assert rows() == before
-            assert apply_schema_comments(bind, allow_live=True) == {'tables': 29, 'columns': 344, 'views': 2}
+            assert apply_schema_comments(bind, allow_live=True) == {'tables': 30, 'columns': 361, 'views': 2}
             assert rows() == before
     finally:
         engine.dispose()

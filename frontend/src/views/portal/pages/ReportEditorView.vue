@@ -8,18 +8,18 @@
     </div>
     <template v-else-if="loaded">
     <header class="ps-editor-topbar">
-      <div class="ps-editor-title"><el-button class="ps-ui-action" :aria-label="isDigest ? '返回情报简报' : '返回科研工作台'" @click="router.push(isDigest ? '/portal/digests' : '/portal/research')"><ArrowLeft /></el-button><span><strong>{{ report.title }}</strong><small>{{ reportTypeLabel }}</small></span></div>
+      <div class="ps-editor-title"><el-button :icon="ArrowLeft" circle class="ps-ui-action" :aria-label="isDigest ? '返回情报简报' : '返回科研工作台'" @click="router.push(isDigest ? '/portal/digests' : '/portal/research')" /><span><strong>{{ report.title }}</strong><small>{{ reportTypeLabel }}</small></span></div>
       <div class="ps-save-state"><span :class="{ 'is-saving': saving }"></span>{{ saveLabel }}<b>{{ wordCount.toLocaleString() }} 字</b></div>
       <div class="ps-editor-actions">
-        <el-button :aria-pressed="outlineVisible" @click="outlineVisible = !outlineVisible">目录</el-button>
+        <el-button :type="outlineVisible ? 'primary' : 'default'" :plain="outlineVisible" :aria-pressed="outlineVisible" @click="outlineVisible = !outlineVisible">目录</el-button>
         <el-button :aria-pressed="inspectorVisible" @click="inspectorVisible = !inspectorVisible">引用与记录</el-button>
         <el-button v-if="!isReadOnly" :type="isEditing ? 'default' : 'primary'" @click="toggleEditing">{{ isEditing ? '完成编辑' : '编辑报告' }}</el-button>
-        <el-button v-if="isEditing" :disabled="isReadOnly" :loading="versionSaving" @click="saveVersion"><CollectionTag />保存修改</el-button>
-        <el-button v-if="isEditing" :disabled="report.readOnly" @click="router.push(`/portal/research/reports/${report.id}/diagram`)"><Picture />查看配图</el-button>
-        <el-button @click="openCurrentPreview"><View />预览</el-button>
-        <el-button v-if="report.requiresReview" :disabled="isReadOnly" type="success" @click="finalizeReport"><CircleCheck />确认复核并定稿</el-button>
+        <el-button :icon="CollectionTag" v-if="isEditing" :disabled="isReadOnly" :loading="versionSaving" @click="saveVersion">保存修改</el-button>
+        <el-button :icon="Picture" v-if="isEditing" :disabled="report.readOnly" @click="router.push(`/portal/research/reports/${report.id}/diagram`)">查看配图</el-button>
+        <el-button :icon="View" @click="openCurrentPreview">预览</el-button>
+        <el-button :icon="CircleCheck" v-if="report.requiresReview" :disabled="isReadOnly" type="success" @click="finalizeReport">确认复核并定稿</el-button>
         <el-dropdown trigger="click" @command="exportReport">
-          <el-button type="primary" :disabled="report.readOnly"><Download />{{ report.requiresReview ? '导出草稿' : '导出报告' }}<ArrowDown /></el-button>
+          <el-button :icon="Download" type="primary" :disabled="report.readOnly">{{ report.requiresReview ? '导出草稿' : '导出报告' }}<ArrowDown /></el-button>
           <template #dropdown><el-dropdown-menu>
             <el-dropdown-item command="markdown">Markdown 文档</el-dropdown-item>
             <el-dropdown-item command="docx">Word 文档</el-dropdown-item>
@@ -32,10 +32,10 @@
     <el-alert v-else-if="isReadOnly" title="当前报告已正式发布，处于只读状态" description="预览、引用查看和导出仍可使用；如需修改，请先由管理员撤销发布。" type="info" :closable="false" show-icon />
     <el-alert v-if="report.requiresReview" title="当前报告为待复核草稿" :description="report.generationWarning || '该报告未完成全量模型生成，请配置可用模型或人工复核后再作为正式成果使用。'" type="warning" :closable="false" show-icon />
     <div class="ps-editor-layout" :style="{ '--report-columns': `${outlineVisible ? '220px ' : ''}minmax(0, 1fr)${inspectorVisible ? ' 300px' : ''}` }" :class="{ 'is-reading': !isEditing }">
-      <aside v-if="outlineVisible" class="ps-outline-panel">
-        <div class="ps-editor-panel-head"><span>报告目录</span><el-button class="ps-ui-action" v-if="isEditing" aria-label="新增章节" :disabled="isReadOnly" @click="addSection"><Plus /></el-button></div>
-        <button v-for="(section, index) in sections" :key="section.id" type="button" :class="['ps-outline-item', { 'is-active': currentSectionId === section.id }]" :aria-current="currentSectionId === section.id ? 'location' : undefined" @click="scrollToSection(section.id)"><Rank /><span>{{ index + 1 }}</span><span><strong>{{ section.title }}</strong><small>{{ section.words }} 字 · {{ sectionCitationCount(section) }} 条引用</small></span><i :class="`is-${section.status}`"></i></button>
-        <el-button v-if="isEditing" class="ps-ui-action ps-add-section" :disabled="isReadOnly" @click="addSection"><Plus />新增章节</el-button>
+      <aside v-if="outlineVisible" ref="outlinePanelRef" class="ps-outline-panel">
+        <div class="ps-editor-panel-head"><span>报告目录</span><el-button :icon="Plus" circle class="ps-ui-action" v-if="isEditing" aria-label="新增章节" :disabled="isReadOnly" @click="addSection" /></div>
+        <el-button :auto-insert-space="false" class="ps-ui-control" v-for="(section, index) in sections" :key="section.id" native-type="button" :class="['ps-outline-item', { 'is-active': currentSectionId === section.id }]" :aria-current="currentSectionId === section.id ? 'location' : undefined" @click="scrollToSection(section.id)"><span class="ps-outline-number">{{ index + 1 }}</span><span class="ps-outline-copy"><strong>{{ section.title }}</strong><small>{{ section.words }} 字 · {{ sectionCitationCount(section) }} 条引用</small></span><i class="ps-outline-status" :class="`is-${section.status}`"></i></el-button>
+        <el-button :icon="Plus" v-if="isEditing" class="ps-ui-action ps-add-section" :disabled="isReadOnly" @click="addSection">新增章节</el-button>
       </aside>
 
       <main ref="documentScrollRef" class="ps-document-editor" @scroll.passive="syncVisibleSection">
@@ -44,16 +44,16 @@
           <h1 v-stable-caret :contenteditable="isEditing && !isReadOnly" aria-label="编辑报告标题" @input="updateTitle" @compositionend="updateTitle">{{ report.title }}</h1>
           <div class="ps-doc-meta"><span>编制日期：{{ reportDateLabel }}</span></div>
           <section v-for="(section, index) in sections" :key="section.id" :ref="el => setSectionElement(section.id, el)" class="ps-editable-content ps-report-section" :aria-label="section.title" @focusin="activateSection(section.id)">
-            <div class="ps-section-heading"><h2 v-stable-caret :contenteditable="isEditing && !isReadOnly" aria-label="编辑章节标题" @input="updateSectionTitle($event, section)" @compositionend="updateSectionTitle($event, section)">{{ section.title }}</h2><div v-if="isEditing" class="ps-section-actions"><el-button v-if="isBodyParagraph('', section.title)" plain size="small" :disabled="isReadOnly || rewriteBusy" @click.stop="openRewrite(section)">改写本章</el-button><el-button class="ps-ui-action" title="章节上移" aria-label="章节上移" :disabled="isReadOnly || index <= 0" @click.stop="moveSection(-1, section.id)"><ArrowUp /></el-button><el-button class="ps-ui-action" title="章节下移" aria-label="章节下移" :disabled="isReadOnly || index >= sections.length - 1" @click.stop="moveSection(1, section.id)"><ArrowDown /></el-button><el-button class="ps-ui-action" title="删除章节" aria-label="删除章节" :disabled="isReadOnly || sections.length <= 1" @click.stop="removeSection(section.id)"><Delete /></el-button></div></div>
+            <div class="ps-section-heading"><h2 v-stable-caret :contenteditable="isEditing && !isReadOnly" aria-label="编辑章节标题" @input="updateSectionTitle($event, section)" @compositionend="updateSectionTitle($event, section)">{{ section.title }}</h2><div v-if="isEditing" class="ps-section-actions"><el-button v-if="isBodyParagraph('', section.title)" plain size="small" :disabled="isReadOnly || rewriteBusy" @click.stop="openRewrite(section)">改写本章</el-button><el-button :icon="ArrowUp" circle class="ps-ui-action" title="章节上移" aria-label="章节上移" :disabled="isReadOnly || index <= 0" @click.stop="moveSection(-1, section.id)" /><el-button :icon="ArrowDown" circle class="ps-ui-action" title="章节下移" aria-label="章节下移" :disabled="isReadOnly || index >= sections.length - 1" @click.stop="moveSection(1, section.id)" /><el-button :icon="Delete" circle class="ps-ui-action" title="删除章节" aria-label="删除章节" :disabled="isReadOnly || sections.length <= 1" @click.stop="removeSection(section.id)" /></div></div>
             <div v-stable-caret :ref="el => setSectionBody(section.id, el)" class="ps-report-section-body" :contenteditable="isEditing && !isReadOnly" :aria-label="`${section.title}正文`" @mouseup="captureRewriteSelection(section)" @keyup="captureRewriteSelection(section)" @input="updateSectionContent($event, section)" @compositionend="updateSectionContent($event, section)">
-              <p v-for="(paragraph, paragraphIndex) in paragraphsFor(section)" :key="paragraphIndex" :class="{ 'ps-report-body-paragraph': isBodyParagraph(paragraph, section.title) }"><template v-for="(part, partIndex) in reportCitationParts(paragraph, section.title, citations.length)" :key="partIndex"><sup v-if="part.citation" class="ps-report-citation" role="button" tabindex="0" :contenteditable="false" :aria-label="`查看引用 ${part.text}`" @click.stop="showCitation(part.text)" @keydown.enter.prevent="showCitation(part.text)" @keydown.space.prevent="showCitation(part.text)">{{ part.text }}</sup><template v-else>{{ part.text }}</template></template></p>
+              <p v-for="(paragraph, paragraphIndex) in paragraphsFor(section)" :key="paragraphIndex" :class="{ 'ps-report-body-paragraph': isBodyParagraph(paragraph, section.title) }"><template v-for="(part, partIndex) in reportCitationParts(paragraph, section.title, citations.length)" :key="partIndex"><sup v-if="part.citation" class="ps-report-citation" :contenteditable="false"><el-button class="ps-citation-trigger" :auto-insert-space="false" :aria-label="`查看引用 ${part.text}`" @click.stop="showCitation(part.text)">{{ part.text }}</el-button></sup><template v-else>{{ part.text }}</template></template></p>
             </div>
           </section>
         </article>
       </main>
 
       <aside v-if="inspectorVisible" class="ps-editor-inspector">
-        <div class="ps-inspector-tabs ps-report-inspector-tabs"><button v-for="tab in rightTabs" :key="tab" type="button" :class="{ 'is-active': activeRightTab === tab }" @click="activeRightTab = tab">{{ tab }}</button></div>
+        <div class="ps-inspector-tabs ps-report-inspector-tabs ps-segmented-row"><el-segmented v-model="activeRightTab" :options="rightTabs" aria-label="报告辅助信息"  block /></div>
         <div v-if="activeRightTab === '引用来源'" class="ps-inspector-content"><div class="ps-inspector-summary"><strong>{{ citations.length }} 条引用</strong><span>查看来源并核对正文</span></div><div v-for="source in citations" :id="`report-reference-${source.id}`" :key="source.id" class="ps-citation-card" :class="{ 'is-highlighted': highlightedCitation === String(source.id) }"><span>[{{ source.id }}] {{ citationTypeLabel(source.type) }}</span><strong>{{ source.title }}</strong><small v-if="source.location">{{ source.location }}</small><p v-if="source.quote">{{ source.quote }}</p><div class="ps-reference-actions"><el-button plain size="small" @click="locateCitation(source)">定位正文</el-button><el-button plain size="small" type="primary" :aria-label="`打开引用：${source.title}`" @click="openCitation(source)">查看来源</el-button></div></div><p v-if="!citations.length" class="ps-inspector-empty">本报告暂无引用来源</p></div>
         <ReportExportHistory v-else class="ps-inspector-content" subject="报告" :report-id="String(report.id)" :title="report.title" :read-only="Boolean(report.readOnly)" :refresh-key="exportRefreshKey" />
       </aside>
@@ -82,9 +82,10 @@ import { getCitationPath } from '@/utils/portal/citationRouting'
 import { isDigestType } from '../utils/routing'
 import { buildReportMarkdown, cleanReportCitationNotes, reportCitationParts } from '@/utils/portal/reportDocument'
 import { vStableCaret } from '@/utils/portal/stableCaret'
+import { citationSentenceRange } from '@/utils/portal/citationHighlight'
 import { makeRewriteDraft, applyRewriteDraft, rewriteRequest } from '@/utils/portal/reportRewrite'
 import { proposePipelineReportRewrite } from '@/api/pipeline/intelligence'
-import { ArrowDown, ArrowLeft, ArrowUp, CircleCheck, CollectionTag, Delete, Download, Grid, Link, MoreFilled, Picture, Plus, Rank, View, WarningFilled } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowLeft, ArrowUp, CircleCheck, CollectionTag, Delete, Download, Grid, Link, MoreFilled, Picture, Plus, View, WarningFilled } from '@element-plus/icons-vue'
 import usePortalStore from '@/store/modules/portal'
 import ReportExportHistory from '../components/ReportExportHistory.vue'
 import { createPipelineResearchReportExport, downloadPipelineResearchReportExport, exportPipelineResearchReport, finalizePipelineResearchReport, getPipelineResearchReport, listPipelineResearchReportExports, updatePipelineResearchReport } from '@/api/pipeline/intelligence'
@@ -102,6 +103,7 @@ const versionSaving = ref(false)
 const saveState = ref('saved')
 const isEditing = ref(false)
 const outlineVisible = ref(true)
+const outlinePanelRef = ref(null)
 const inspectorVisible = ref(false)
 const highlightedCitation = ref('')
 const rewriteVisible = ref(false)
@@ -146,11 +148,32 @@ function showCitation(marker) {
   inspectorVisible.value = true
   nextTick(() => document.getElementById(`report-reference-${identity}`)?.scrollIntoView({ block: 'nearest' }))
 }
-function locateCitation(source) {
-  const section = sections.value.find(item => isBodyParagraph('', item.title) && String(item.content || '').includes(`[${source.id}]`))
-  if (!section) return ElMessage.info('当前正文没有使用这条引用')
-  scrollToSection(section.id)
-  ElMessage.info(`已定位到“${section.title}”，请核对 [${source.id}] 对应的句子`)
+function clearLocatedCitation() {
+  window.CSS?.highlights?.delete('report-located-citation')
+  documentScrollRef.value?.querySelectorAll('.is-located-citation').forEach(node => node.classList.remove('is-located-citation'))
+}
+async function locateCitation(source) {
+  await nextTick()
+  clearLocatedCitation()
+  for (const section of sections.value) {
+    if (!isBodyParagraph('', section.title)) continue
+    const marker = [...(sectionBodies.get(section.id)?.querySelectorAll('.ps-report-citation') || [])]
+      .find(node => node.textContent.trim() === `[${source.id}]`)
+    const paragraph = marker?.closest('p')
+    if (!paragraph) continue
+    const range = citationSentenceRange(paragraph, marker)
+    if (range && window.CSS?.highlights && window.Highlight) {
+      window.CSS.highlights.set('report-located-citation', new window.Highlight(range))
+    } else paragraph.classList.add('is-located-citation')
+    activateSection(section.id)
+    highlightedCitation.value = String(source.id)
+    // Only move the reading pane, leaving the source card and keyboard focus in place.
+    const scroller = documentScrollRef.value
+    const rect = range?.getBoundingClientRect() || paragraph.getBoundingClientRect()
+    scroller.scrollTop += rect.top - scroller.getBoundingClientRect().top - 100
+    return
+  }
+  ElMessage.info('当前正文没有使用这条引用')
 }
 function captureRewriteSelection(section) {
   rewriteSelection.value = null
@@ -230,6 +253,20 @@ function syncVisibleSection() {
   if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2) active = sections.value.at(-1)?.id
   if (active != null && active !== currentSectionId.value) activateSection(active)
 }
+function keepActiveOutlineVisible() {
+  const panel = outlinePanelRef.value
+  const item = panel?.querySelector('[aria-current="location"]')
+  if (!item) return
+  const bounds = panel.getBoundingClientRect()
+  const head = panel.querySelector('.ps-editor-panel-head')
+  const top = bounds.top + (head?.getBoundingClientRect().height || 0) + 8
+  const bottom = bounds.bottom - 8
+  const row = item.getBoundingClientRect()
+  // Scroll only the directory; never move the document or steal keyboard focus.
+  if (row.top < top) panel.scrollTop += row.top - top
+  else if (row.bottom > bottom) panel.scrollTop += row.bottom - bottom
+}
+watch([currentSectionId, outlinePanelRef], keepActiveOutlineVisible, { flush: 'post' })
 const reportTypeLabel = computed(() => {
   const type = report.value.reportType || report.value.type
   if (isDigestType(type)) return ({ daily: '日报', weekly: '周报', monthly: '月报' })[type] || '情报简报'
@@ -478,6 +515,7 @@ async function protectUnsavedChanges() {
 onBeforeRouteLeave(protectUnsavedChanges)
 onBeforeRouteUpdate(protectUnsavedChanges)
 onBeforeUnmount(() => {
+  clearLocatedCitation()
   editorDisposed = true
   rewriteSequence += 1
   reportLoadSequence += 1
@@ -491,11 +529,16 @@ onBeforeUnmount(() => {
 .ps-editor-page .ps-editor-layout { grid-template-columns: var(--report-columns); }
 .ps-editor-page .ps-document-canvas { width: min(900px, calc(100% - 40px)); min-height: 100%; margin: 20px auto 36px; padding: 40px clamp(24px, 4vw, 64px); box-shadow: 0 2px 14px rgb(18 38 68 / 5%); }
 .ps-editor-page .ps-editable-content { font-size: 16px; line-height: 1.9; }
-.is-reading .ps-outline-item { min-height: 48px; grid-template-columns: 0 22px minmax(0, 1fr) 0; gap: 6px; }
-.is-reading .ps-outline-item > svg, .is-reading .ps-outline-item > i, .is-reading .ps-outline-item small { display: none; }
-.is-reading .ps-outline-item > span:nth-child(2) { grid-column: 2; }
+.is-reading .ps-outline-item { min-height: 40px; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; }
+.is-reading .ps-outline-status, .is-reading .ps-outline-item small { display: none; }
+.ps-editor-page .ps-outline-panel { padding-bottom: 8px; }
+.ps-editor-page .ps-outline-panel > .ps-editor-panel-head { position: sticky; top: 0; z-index: 2; background: #fff; }
+.ps-editor-page .ps-outline-panel .ps-outline-item { position: relative; width: calc(100% - 16px); margin: 4px 8px; transition: background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
+.ps-editor-page .ps-outline-panel .ps-outline-item.is-active { background: var(--el-color-primary-light-9); color: var(--el-color-primary); box-shadow: 0 3px 10px rgb(64 158 255 / 16%); transform: translateY(-1px); }
+.ps-editor-page .ps-outline-item.is-active::before { content: ''; position: absolute; inset: 9px auto 9px 0; width: 3px; border-radius: 3px; background: var(--el-color-primary); }
+@media (prefers-reduced-motion: reduce) { .ps-editor-page .ps-outline-panel .ps-outline-item { transition: none; } .ps-editor-page .ps-outline-panel .ps-outline-item.is-active { transform: none; } }
 .ps-editor-page .ps-document-editor { scrollbar-gutter: stable; }
-.ps-format-toolbar :deep(.el-button), .ps-section-actions :deep(.el-button) { width: auto; height: auto; min-height: 30px; padding-inline: 8px; }
+.ps-format-toolbar :deep(.el-button), .ps-section-actions :deep(.el-button) { width: auto; }
 .ps-format-toolbar small { color: var(--ps-muted); margin-left: 8px; }
 .ps-reference-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .ps-citation-card.is-highlighted { border-color: var(--ps-blue); background: var(--ps-blue-soft); }
@@ -519,6 +562,8 @@ onBeforeUnmount(() => {
   min-height: 2em;
   outline: none;
 }
+:global(::highlight(report-located-citation)) { background-color: #fff0a6; color: #303133; }
+.ps-report-section-body :deep(.is-located-citation) { background: #fff0a6; border-radius: 4px; }
 .ps-report-inspector-tabs {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -530,6 +575,10 @@ onBeforeUnmount(() => {
   vertical-align: super;
   font-size: .75em;
   line-height: 0;
+  padding: 2px 4px;
+  border-radius: 3px;
+  background: var(--ps-blue-soft, #eaf3fa);
+  box-decoration-break: clone;
 }
 @container report-workspace (max-width: 1100px) {
   .ps-editor-page .ps-editor-layout { position: relative; grid-template-columns: minmax(0, 1fr); }

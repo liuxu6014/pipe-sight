@@ -4,16 +4,14 @@
       <el-input class="ps-search-input" v-model.trim="query.q" clearable aria-label="搜索我的报告" placeholder="搜索报告名称或类型" />
       <el-button v-if="query.q || query.status !== 'all'" @click="query.q = ''; query.status = 'all'">清除筛选</el-button>
     </div>
-    <div class="ps-personal-status" role="group" aria-label="报告生成状态">
-      <button v-for="tab in statusTabs" :key="tab.value" type="button" :aria-pressed="query.status === tab.value" @click="query.status = tab.value">{{ tab.label }}<span>{{ tab.count }}</span></button>
-    </div>
+    <div class="ps-personal-status ps-segmented-row"><el-segmented v-model="query.status" :options="statusTabs.map(tab => ({ label: `${tab.label} ${tab.count}`, value: tab.value }))" aria-label="报告生成状态" /></div>
     <div v-if="loadError" class="ps-inline-state is-warning" role="alert"><span>部分报告记录未加载，以下仅显示已加载记录。</span><el-button plain :loading="store.dataLoading" @click="store.hydrate(true)">重新加载</el-button></div>
     <el-skeleton v-if="store.dataLoading && !store.dataLoaded" :rows="5" animated />
     <template v-else>
       <div class="ps-list-scroll" tabindex="0" aria-label="个人报告记录">
       <section class="ps-personal-report-list" aria-label="我的报告列表">
         <article v-for="row in visibleRows" :key="row.key" class="ps-panel ps-personal-report-row">
-          <div class="ps-personal-report-heading"><button type="button" @click="router.push(row.path)">{{ row.title }}</button><span class="ps-status-pill" :class="`is-${row.status}`">{{ row.statusLabel }}</span></div>
+          <div class="ps-personal-report-heading"><el-link underline="never" :href="$router.resolve(row.path || '/portal').href" class="ps-ui-title" @click.prevent="router.push(row.path)">{{ row.title }}</el-link><el-tag :type="({ generated: 'success', failed: 'danger', active: 'primary' })[row.status] || 'info'">{{ row.statusLabel }}</el-tag></div>
           <div class="ps-personal-report-meta"><span>{{ row.typeLabel }}</span><span v-if="row.businessStatus">{{ row.businessStatus }}</span><span v-if="row.words">{{ Number(row.words).toLocaleString() }} 字</span><time>{{ row.updatedAt || '更新时间未提供' }}</time></div>
           <el-progress v-if="row.status === 'active'" :percentage="row.progress" :stroke-width="6" />
           <footer><small>{{ rowHint(row) }}</small><div><el-button v-if="row.taskPath" plain @click="router.push(row.taskPath)">生成记录</el-button><el-button type="primary" plain @click="router.push(row.path)">{{ rowAction(row) }}</el-button></div></footer>
@@ -54,13 +52,13 @@ onMounted(() => store.hydrate())
 
 <style scoped>
 .ps-personal-status { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
-.ps-personal-status button { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px 14px; border: 1px solid var(--ps-line); border-radius: 7px; background: #fff; color: var(--ps-muted); font: inherit; cursor: pointer; }
-.ps-personal-status button[aria-pressed="true"] { background: var(--ps-blue-soft); color: var(--ps-blue); border-color: #b8d3e3; }
-.ps-personal-status button span { font-size: 12px; font-variant-numeric: tabular-nums; }
+.ps-personal-status button:not(.el-button) { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px 14px; border: 1px solid var(--ps-line); border-radius: 7px; background: #fff; color: var(--ps-muted); font: inherit; cursor: pointer; }
+.ps-personal-status button:not(.el-button)[aria-pressed="true"] { background: var(--ps-blue-soft); color: var(--ps-blue); border-color: #b8d3e3; }
+.ps-personal-status button:not(.el-button) span { font-size: 12px; font-variant-numeric: tabular-nums; }
 .ps-personal-report-list { display: grid; gap: 12px; }
 .ps-personal-report-row { padding: 20px 24px; min-width: 0; }
 .ps-personal-report-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.ps-personal-report-heading > button { padding: 0; border: 0; background: transparent; color: var(--ps-ink); font: inherit; font-size: 17px; font-weight: 600; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
+.ps-personal-report-heading > .ps-ui-title { padding: 0; border: 0; background: transparent; color: var(--ps-ink); font: inherit; font-size: 17px; font-weight: 600; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
 .ps-personal-report-heading > span { flex-shrink: 0; }
 .ps-status-pill.is-failed { color: #a43333; background: #fff0f0; }
 .ps-status-pill.is-active { color: var(--ps-blue); background: var(--ps-blue-soft); }
@@ -70,7 +68,7 @@ onMounted(() => store.hydrate())
 .ps-personal-report-row footer > div { display: flex; flex-wrap: wrap; gap: 8px; flex-shrink: 0; }
 .ps-personal-report-row footer :deep(.el-button) { margin-left: 0; }
 @media (max-width: 600px) {
-  .ps-personal-status button { min-height: 44px; padding-inline: 12px; }
+  .ps-personal-status button:not(.el-button) { min-height: 44px; padding-inline: 12px; }
   .ps-personal-report-row { padding: 16px; }
   .ps-personal-report-row footer { align-items: flex-start; flex-direction: column; }
   .ps-personal-report-row footer > div { flex-shrink: 1; }

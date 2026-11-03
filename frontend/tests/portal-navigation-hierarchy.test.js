@@ -28,7 +28,7 @@ test('account actions remain in avatar menu and basket has one global destinatio
   assert.doesNotMatch(header, /个人资料设置/)
   assert.match(header, /command="profile"/)
   assert.match(header, /command === 'profile'[\s\S]*?router\.push\('\/portal\/profile'\)/)
-  assert.match(header, /<el-dropdown trigger="click"[^>]*>\s*<button class="ps-user-button"[^>]*账户菜单[^>]*>\s*<PortalUserAvatar/)
+  assert.match(header, /<el-dropdown trigger="click"[^>]*>\s*<el-button[^>]*class="ps-user-button ps-ui-control"[^>]*账户菜单[^>]*>\s*<PortalUserAvatar/)
   assert.doesNotMatch(header, /ps-account-trigger|ArrowDown|@click="router.push\('\/portal\/profile'\)"/)
   assert.equal((header.match(/router\.push\('\/portal\/basket'\)/g) || []).length, 1)
   for (const page of ['SearchView', 'ResearchWorkbenchView']) {

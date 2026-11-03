@@ -23,6 +23,7 @@ CONTROLLER_MODULES: tuple[str, ...] = (
     'app.infrastructure.api.file_controller',
     'app.system.api.config_controller',
     'app.system.api.dictionary_controller',
+    'app.system.api.dept_controller',
     'app.infrastructure.api.job_controller',
     'app.infrastructure.api.log_controller',
     'app.system.api.login_controller',

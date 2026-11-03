@@ -3,7 +3,7 @@ import { requireBusinessId } from './businessId.js'
 const clone = value => JSON.parse(JSON.stringify(value || {}))
 const terms = values => [...new Set(values.map(value => value.trim()).filter(Boolean))]
 export function newScheduleForm() {
-  return { name: '', frequency: 'daily', templateId: '', time: '08:00', weekday: 0, monthDay: 1,
+  return { name: '', frequency: 'weekly', templateId: '', time: '08:00', weekday: 0, monthDay: 1,
     enabled: false, keywords: [], categories: [], sources: ['新闻网站', '微信公众号'],
     holidayPolicy: 'run', holidayDates: [], itemCount: 8, summaryLength: 'normal', hotAnalysis: true,
     duplicateMerge: true, requirements: '', generation: {}, selection: {}, originalTemplateId: '' }
@@ -29,7 +29,7 @@ export function scheduleSummary(form) {
 }
 export function schedulePayload(form, template) {
   if (!form.name.trim() || form.name.trim().length > 255) throw new Error('请填写 1 至 255 字的计划名称')
-  if (!['daily', 'weekly', 'monthly'].includes(form.frequency)) throw new Error('请选择自动生成频率')
+  if (!['weekly', 'monthly'].includes(form.frequency)) throw new Error('仅支持周报或月报自动计划，历史日报计划只读')
   if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(form.time)) throw new Error('请填写有效的执行时间')
   if (!Number.isInteger(form.weekday) || form.weekday < 0 || form.weekday > 6 || !Number.isInteger(form.monthDay) || form.monthDay < 1 || form.monthDay > 31) throw new Error('请选择有效的生成日期')
   if (!template || String(template.id) !== form.templateId) throw new Error('请选择可用的简报模板')

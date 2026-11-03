@@ -5,8 +5,35 @@
         :horizontal="appStore.device === 'mobile'"
         class="default-theme"
       >
+        <!--部门数据-->
+        <pane size="16">
+          <el-col>
+            <div class="head-container">
+              <el-input
+                v-model="deptName"
+                placeholder="请输入部门名称"
+                clearable
+                prefix-icon="Search"
+                style="margin-bottom: 20px"
+              />
+            </div>
+            <div class="head-container">
+              <el-tree
+                ref="deptTreeRef"
+                :data="deptOptions"
+                :props="defaultProps"
+                :expand-on-click-node="false"
+                :filter-node-method="filterNode"
+                node-key="id"
+                highlight-current
+                default-expand-all
+                @node-click="handleNodeClick"
+              />
+            </div>
+          </el-col>
+        </pane>
         <!--用户数据-->
-        <pane size="100">
+        <pane size="84">
           <el-col>
             <el-form
               :model="queryParams"
@@ -156,6 +183,14 @@
                 :show-overflow-tooltip="true"
               />
               <el-table-column
+                label="所属部门"
+                align="center"
+                key="deptName"
+                prop="dept.deptName"
+                v-if="columns.deptName.visible"
+                :show-overflow-tooltip="true"
+              />
+              <el-table-column
                 label="手机号码"
                 align="center"
                 key="phonenumber"
@@ -273,6 +308,20 @@
                 v-model="form.nickName"
                 placeholder="请输入用户昵称"
                 maxlength="30"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="所属部门" prop="deptId">
+              <el-tree-select
+                v-model="form.deptId"
+                :data="deptOptions"
+                :props="defaultProps"
+                node-key="id"
+                placeholder="请选择所属部门"
+                check-strictly
+                clearable
+                :value-on-clear="null"
               />
             </el-form-item>
           </el-col>
@@ -452,6 +501,7 @@ import {
   getUser,
   updateUser,
   addUser,
+  deptTreeSelect,
 } from "@/api/system/user";
 import { Splitpanes, Pane } from "splitpanes";
 import "splitpanes/dist/splitpanes.css";
@@ -476,6 +526,9 @@ const title = ref("");
 const dateRange = ref([]);
 const initPassword = ref(undefined);
 const roleOptions = ref([]);
+const deptName = ref("");
+const deptOptions = ref([]);
+const defaultProps = { children: "children", label: "label" };
 /*** 用户导入参数 */
 const upload = reactive({
   // 是否显示弹出层（用户导入）
@@ -498,6 +551,7 @@ const columns = ref({
   userId: { label: "用户编号", visible: true },
   userName: { label: "用户名称", visible: true },
   nickName: { label: "用户昵称", visible: true },
+  deptName: { label: "所属部门", visible: true },
   phonenumber: { label: "手机号码", visible: true },
   status: { label: "状态", visible: true },
   createTime: { label: "创建时间", visible: true },
@@ -511,6 +565,7 @@ const data = reactive({
     userName: undefined,
     phonenumber: undefined,
     status: undefined,
+    deptId: undefined,
   },
   rules: {
     userName: [
@@ -558,6 +613,24 @@ const data = reactive({
 
 const { queryParams, form, rules } = toRefs(data);
 
+/** 查询部门下拉树结构 */
+function getDeptTree() {
+  return deptTreeSelect().then((response) => {
+    deptOptions.value = response.data;
+  });
+}
+/** 根据名称筛选部门树 */
+function filterNode(value, data) {
+  return !value || data.label.includes(value);
+}
+watch(deptName, (value) => {
+  proxy.$refs["deptTreeRef"]?.filter(value);
+});
+/** 部门节点单击事件 */
+function handleNodeClick(data) {
+  queryParams.value.deptId = data.id;
+  handleQuery();
+}
 /** 查询用户列表 */
 function getList() {
   loading.value = true;
@@ -578,6 +651,9 @@ function handleQuery() {
 function resetQuery() {
   dateRange.value = [];
   proxy.resetForm("queryRef");
+  deptName.value = "";
+  queryParams.value.deptId = undefined;
+  proxy.$refs["deptTreeRef"]?.setCurrentKey(null);
   handleQuery();
 }
 /** 删除按钮操作 */
@@ -745,6 +821,7 @@ function submitFileForm() {
 function reset() {
   form.value = {
     userId: undefined,
+    deptId: undefined,
     userName: undefined,
     nickName: undefined,
     password: undefined,
@@ -807,6 +884,7 @@ function submitForm() {
 }
 
 onMounted(() => {
+  getDeptTree();
   getList();
   proxy.getConfigKey("sys.user.initPassword").then((response) => {
     initPassword.value = response.msg;

@@ -7,9 +7,9 @@
 
       <nav class="calm-login-nav" aria-label="平台登录导航">
         <div class="calm-nav-left">
-          <button class="calm-brand" type="button" @click="selectDestination('/portal')">
+          <el-button :auto-insert-space="false" class="calm-brand ps-ui-control" native-type="button" @click="selectDestination('/portal')">
             <img class="calm-brand-logo" :src="PIPECHINA_LOGO_URL" :data-source="PIPECHINA_LOGO_SOURCE_URL" alt="国家管网标识" />
-          </button>
+          </el-button>
 
         </div>
 
@@ -22,17 +22,17 @@
         <p>面向管网科技情报发现、证据沉淀与研究成果生成。</p>
 
         <div class="calm-start-actions">
-          <button class="calm-start-primary" type="button" @click="startTrial">
+          <el-button :auto-insert-space="false" class="calm-start-primary ps-ui-control" native-type="button" @click="startTrial">
             进入平台
-          </button>
+          </el-button>
         </div>
 
         <div class="calm-value-grid" aria-label="平台能力">
-          <button v-for="item in portalDestinations" :key="`value-${item.path}`" type="button" @click="selectDestination(item.path)">
+          <el-button :auto-insert-space="false" class="ps-ui-control" v-for="item in portalDestinations" :key="`value-${item.path}`" native-type="button" @click="selectDestination(item.path)">
             <span>{{ item.order }}</span>
             <strong>{{ item.title }}</strong>
             <small>{{ item.description }}</small>
-          </button>
+          </el-button>
         </div>
       </section>
     </main>
@@ -51,12 +51,12 @@
 
         <section ref="loginCardRef" class="calm-login-dialog" tabindex="-1" :aria-busy="loading">
           <div class="calm-login-card calm-login-sheet">
-            <button class="calm-modal-close" type="button" aria-label="关闭登录窗口" @click="closeLogin">
+            <el-button :auto-insert-space="false" class="calm-modal-close ps-ui-control" native-type="button" aria-label="关闭登录窗口" @click="closeLogin">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
                 <path d="M6 6l12 12" />
                 <path d="M18 6L6 18" />
               </svg>
-            </button>
+            </el-button>
 
             <div class="calm-compact-auth">
               <div class="calm-auth-brand-row">
@@ -132,10 +132,10 @@
                         </svg>
                       </template>
                     </el-input>
-                    <button type="button" class="calm-code-img" aria-label="刷新验证码" @click="getCode">
+                    <el-button :auto-insert-space="false" native-type="button" class="calm-code-img ps-ui-control" aria-label="刷新验证码" @click="getCode">
                       <img v-if="codeUrl" :src="codeUrl" alt="验证码图片" @error="handleCodeImageError" />
                       <span v-else class="calm-code-error">验证码加载失败<br />点击刷新</span>
-                    </button>
+                    </el-button>
                   </div>
                 </el-form-item>
 
@@ -144,13 +144,13 @@
                   <router-link v-if="register" to="/register" class="register-link">注册账号</router-link>
                 </div>
 
-                <button class="calm-submit" type="button" :disabled="loading" @click.prevent="handleLogin">
+                <el-button :auto-insert-space="false" class="calm-submit ps-ui-control" native-type="button" :disabled="loading" @click.prevent="handleLogin">
                   <span>{{ loading ? '验证中...' : (loginAuthenticated ? '重试进入' : '登 录') }}</span>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
                     <path d="M5 12h14" />
                     <path d="m13 6 6 6-6 6" />
                   </svg>
-                </button>
+                </el-button>
               </el-form>
             </div>
           </div>
@@ -638,19 +638,19 @@ onBeforeUnmount(() => {
   transform: translateY(-3px);
 }
 
-.calm-value-grid button > span {
+.calm-value-grid button :deep(> span) > span {
   color: #2d9bea;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.12em;
 }
 
-.calm-value-grid button > strong {
+.calm-value-grid button :deep(> span) > strong {
   margin-top: 12px;
   font-size: 16px;
 }
 
-.calm-value-grid button > small {
+.calm-value-grid button :deep(> span) > small {
   margin-top: 7px;
   color: #718294;
   font-size: 12px;
@@ -952,12 +952,12 @@ onBeforeUnmount(() => {
     padding: 12px;
   }
 
-  .calm-value-grid button > strong {
+  .calm-value-grid button :deep(> span) > strong {
     margin-top: 8px;
     font-size: 14px;
   }
 
-  .calm-value-grid button > small {
+  .calm-value-grid button :deep(> span) > small {
     font-size: 11px;
     line-height: 1.45;
   }

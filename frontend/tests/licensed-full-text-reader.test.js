@@ -65,13 +65,13 @@ test('paper hero suppresses repeated titles and placeholder institutions without
   } finally { h.stop() }
 })
 
-test('stored full text opens by default while summary remains manually selectable', async () => {
+test('legacy full text is ignored while abstract and interpretation stay available', async () => {
  const h = harness()
  try {
   const load = h.loadPaper()
   h.requests[0].resolve(response({ status: 'publisher_preview', html: '<p>Legacy full text</p>', source_url: 'https://mdpi-res.com/d_attachment/legacy.pdf' }))
   await load
-  assert.deepEqual(Array.from(h.tabs.value), ['摘要'])
+  assert.deepEqual(Array.from(h.tabs.value), ['摘要', 'AI解读'])
   assert.equal(h.activeTab.value, '摘要')
   assert.equal(h.opened.length, 0)
  } finally { h.stop() }
@@ -83,7 +83,7 @@ test('verified extracted publisher text adds a full-text tab while untrusted pre
   const load = h.loadPaper()
   h.requests[0].resolve(response({ status: 'publisher_preview', html: '<p>Legacy full text</p>', source_url: 'https://mdpi-res.com/d_attachment/legacy.pdf' }))
   await load
-  assert.deepEqual(Array.from(h.tabs.value), ['摘要'])
+  assert.deepEqual(Array.from(h.tabs.value), ['摘要', 'AI解读'])
   assert.equal(h.activeTab.value, '摘要')
   assert.equal(h.opened.length, 0)
  } finally { h.stop() }
@@ -112,7 +112,7 @@ test('unavailable full text keeps summary distinct and does not invent a DOI lin
     const load = h.loadPaper()
     h.requests[0].resolve(response({ status: 'unavailable' }))
     await load
-    assert.deepEqual(Array.from(h.tabs.value), ['摘要'])
+    assert.deepEqual(Array.from(h.tabs.value), ['摘要', 'AI解读'])
     assert.equal(h.activeTab.value, '摘要')
     assert.equal(h.doiUrl.value, '')
   } finally { h.stop() }
@@ -124,7 +124,7 @@ test('licensed source enables reading even when the outer record has no canonica
   const load = h.loadPaper()
   h.requests[0].resolve(response({ status: 'publisher_preview', html: '<p>Legacy full text</p>', source_url: 'https://mdpi-res.com/d_attachment/legacy.pdf' }))
   await load
-  assert.deepEqual(Array.from(h.tabs.value), ['摘要'])
+  assert.deepEqual(Array.from(h.tabs.value), ['摘要', 'AI解读'])
   assert.equal(h.activeTab.value, '摘要')
   assert.equal(h.opened.length, 0)
  } finally { h.stop() }

@@ -20,9 +20,9 @@
       </div>
       <section v-else-if="mode === 'reports'" class="ps-report-table ps-my-report-table ps-panel ps-list-scroll" tabindex="0" aria-label="我的成果列表">
         <div class="ps-table-head"><span>成果名称</span><span>业务状态</span><span>字数</span><span>更新时间</span><span></span></div>
-        <button v-for="report in pagedItems" :key="report.id" type="button" @click="router.push(getPortalReportPath(report))">
+        <el-button :auto-insert-space="false" class="ps-ui-control" v-for="report in pagedItems" :key="report.id" native-type="button" @click="router.push(getPortalReportPath(report))">
           <span><strong>{{ report.title }}</strong><small>{{ report.type }}</small></span><span><b class="ps-status-pill">{{ report.status }}</b></span><span>{{ report.words ? report.words.toLocaleString() : '待统计' }}</span><span>{{ report.updatedAt }}</span><ArrowRight />
-        </button>
+        </el-button>
       </section>
       <section v-else-if="mode === 'basket' && !sectionError" class="ps-panel ps-basket-panel">
         <div class="ps-basket-toolbar">
@@ -56,7 +56,7 @@
     </template>
     <el-dialog v-if="mode === 'basket'" v-model="uploadVisible" title="上传资料" width="min(480px, calc(100vw - 32px))" append-to-body :close-on-click-modal="!uploading" :close-on-press-escape="!uploading" :show-close="!uploading" @open="uploadError = ''">
       <input ref="fileInput" class="ps-visually-hidden" type="file" accept=".pdf,.docx,.md,.txt" aria-label="选择上传资料" :disabled="uploading" @change="uploadMaterial" />
-      <button type="button" class="ps-upload-drop ps-basket-upload" :disabled="uploading" @click="fileInput?.click()"><UploadFilled /><span>{{ uploading ? '正在上传…' : '选择文件上传' }}</span><small>支持可搜索 PDF、DOCX、MD、TXT，最大 16MB</small></button>
+      <el-button :icon="UploadFilled" :auto-insert-space="false" native-type="button" class="ps-upload-drop ps-basket-upload ps-ui-control" :disabled="uploading" @click="fileInput?.click()"><span>{{ uploading ? '正在上传…' : '选择文件上传' }}</span><small>支持可搜索 PDF、DOCX、MD、TXT，最大 16MB</small></el-button>
       <p class="ps-basket-upload-hint">上传后保存到资料库，解析完成即可用于生成。</p>
       <p v-if="uploadError" role="alert">{{ uploadError }}</p>
       <template #footer><el-button :disabled="uploading" @click="uploadVisible = false">取消</el-button></template>
@@ -183,13 +183,12 @@ function taskHint(task) {
 .ps-basket-panel { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding: 20px 24px; }
 .ps-basket-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 12px; flex-shrink: 0; }
 .ps-basket-toolbar > .el-input { flex: 1 1 240px; min-width: 0; }
-.ps-basket-toolbar :deep(.el-button) { flex-shrink: 0; margin-left: 0; min-height: 44px; }
+.ps-basket-toolbar :deep(.el-button) { flex-shrink: 0; margin-left: 0; }
 .ps-basket-toolbar :deep(.el-input__wrapper) { min-height: 44px; }
 .ps-basket-scroll { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .ps-basket-scroll:focus-visible { outline: 2px solid var(--ps-blue); outline-offset: -2px; border-radius: 4px; }
 .ps-basket-empty { flex: 1; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; min-height: 120px; }
 .ps-basket-empty p { margin: 0; color: var(--ps-muted); font-size: 15px; }
-.ps-basket-empty :deep(.el-button) { min-height: 44px; }
 .ps-basket-selection-tools { flex-shrink: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; padding-bottom: 12px; color: var(--ps-muted); font-size: 13px; }
 .ps-basket-list > div > .el-checkbox { flex: 0 0 auto; margin: 0; }
 .ps-basket-list > div { grid-template-columns: 24px 34px minmax(0, 1fr) auto; }
@@ -199,7 +198,6 @@ function taskHint(task) {
 .ps-basket-list > div > .ps-file-icon { display: grid; }
 .ps-basket-item-copy { display: flex; flex-direction: column; min-width: 0; }
 .ps-basket-item-copy small { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
-.ps-basket-item-copy small :deep(.el-button) { min-height: 28px; padding: 4px 8px; }
 .ps-basket-status-error { flex-shrink: 0; color: var(--ps-muted); font-size: 13px; }
 .ps-basket-item-copy a { color: var(--ps-ink); font-weight: 600; line-height: 1.6; overflow-wrap: anywhere; }
 .ps-basket-item-copy a:hover { color: var(--ps-blue); text-decoration: underline; }

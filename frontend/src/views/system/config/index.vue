@@ -1,5 +1,5 @@
 <template>
-   <div class="app-container">
+   <div class="app-container ws-native-list">
       <el-form :model="queryParams" ref="queryRef" :inline="true" v-show="showSearch" label-width="68px">
          <el-form-item label="参数名称" prop="configName">
             <el-input
@@ -103,16 +103,16 @@
 
       <el-table v-loading="loading" :data="configList" @selection-change="handleSelectionChange">
          <el-table-column type="selection" width="55" align="center" />
-         <el-table-column label="参数主键" align="center" prop="configId" />
-         <el-table-column label="参数名称" align="center" prop="configName" :show-overflow-tooltip="true" />
-         <el-table-column label="参数键名" align="center" prop="configKey" :show-overflow-tooltip="true" />
-         <el-table-column label="参数键值" align="center" prop="configValue" :show-overflow-tooltip="true" />
-         <el-table-column label="系统内置" align="center" prop="configType">
+         <el-table-column label="参数主键" align="center" prop="configId" width="100" />
+         <el-table-column label="参数名称" align="center" prop="configName" min-width="220" :show-overflow-tooltip="true" />
+         <el-table-column label="参数键名" align="center" prop="configKey" min-width="240" :show-overflow-tooltip="true" />
+         <el-table-column label="参数键值" align="center" prop="configValue" min-width="160" :show-overflow-tooltip="true" />
+         <el-table-column label="系统内置" align="center" prop="configType" width="100">
             <template #default="scope">
                <dict-tag :options="sys_yes_no" :value="scope.row.configType" />
             </template>
          </el-table-column>
-         <el-table-column label="备注" align="center" prop="remark" :show-overflow-tooltip="true" />
+         <el-table-column label="备注" align="center" prop="remark" min-width="220" :show-overflow-tooltip="true" />
          <el-table-column label="创建时间" align="center" prop="createTime" width="180">
             <template #default="scope">
                <span>{{ parseTime(scope.row.createTime) }}</span>

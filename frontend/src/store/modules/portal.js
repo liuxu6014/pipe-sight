@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { displayId, normalizeBusinessData, requireBusinessId } from '@/utils/portal/businessId'
 import { formatBusinessTime } from '@/utils/portal/businessTime'
 import { buildLibraryItems } from '@/utils/portal/libraryItems'
+import { contentCategory, collectionTime, entityGroups } from '@/utils/portal/contentPresentation'
 import { ElMessage } from 'element-plus'
 import {
   digestReports as fallbackDigests,
@@ -87,8 +88,10 @@ export function normalizePortalIntelligence(item) {
     importance: Number(item.relevance || 0) >= 90 ? '重点' : '一般',
     category: item.category === 'wechat' || item.category === 'news' ? (item.categoryName || item.tags?.[0] || '未分类') : item.category,
     tags: item.tags || [],
-    entities: item.entities || [],
-    body: item.body || ((item.contentZh || item.content_zh || item.content) ? [item.contentZh || item.content_zh || item.content] : item.summary ? [item.summary] : [])
+    categoryName: contentCategory(item),
+    collectedAt: collectionTime(item),
+    entities: entityGroups(item.entities).flatMap(group => group.values.map(name => ({ type: group.label, name }))),
+    body: item.body || ((item.contentZh || item.content_zh || item.content) ? [item.contentZh || item.content_zh || item.content] : [])
   }
 }
 
@@ -109,7 +112,9 @@ export function normalizePortalPaper(item) {
     doi: item.doi || '',
     citations: item.citations ?? item.citation_count ?? null,
     abstract: item.abstractZh || item.abstract_zh || item.abstract || item.summary || '',
-    keywords: item.tags || []
+    abstractOriginal: item.abstract || '',
+    abstractZh: item.abstractZh || item.abstract_zh || '',
+    keywords: Array.isArray(item.keywords) ? item.keywords : []
   }
 }
 
@@ -135,7 +140,9 @@ function normalizeDocument(item) {
     status,
     updatedAt: item.updated_at || item.updatedAt || '最近更新',
     summary: item.summary || item.scenario || '知识库资料',
-    tags: item.tags || item.keywords || []
+    tags: item.tags || item.keywords || [],
+    categoryName: contentCategory(item),
+    classificationStatus: item.classificationStatus || item.classification_status || ''
   }
 }
 
@@ -202,7 +209,7 @@ const usePortalStore = defineStore('portal-workspace', {
     newsItems: state => resolveRows(fallbackNews, state.liveIntelligence.filter(item => item.category !== 'paper').map(normalizePortalIntelligence)),
     paperItems: state => resolveRows(fallbackPapers, state.liveIntelligence.filter(item => item.category === 'paper').map(normalizePortalPaper)),
     knowledgeDocuments: state => resolveRows(fallbackDocuments, state.liveDocuments.map(normalizeDocument)),
-    libraryCount: state => buildLibraryItems(state.basket, resolveRows(fallbackDocuments, state.liveDocuments.map(normalizeDocument))).length,
+    libraryCount: state => buildLibraryItems([], resolveRows(fallbackDocuments, state.liveDocuments.map(normalizeDocument))).length,
     researchReports: state => resolveRows(fallbackReports, state.liveReports.filter(item => !['daily', 'weekly', 'monthly'].includes(item.type)).map(normalizeReport)),
     digestReports: state => resolveRows(fallbackDigests, state.liveReports.filter(item => ['daily', 'weekly', 'monthly'].includes(item.type)).map(normalizeDigestReport)),
     hotTopics: state => {

@@ -4,11 +4,12 @@ from typing import Any
 
 import pandas as pd
 from redis import asyncio as aioredis
-from sqlalchemy import ColumnElement
+from sqlalchemy import ColumnElement, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.services.excel_export import ExcelExportService
 from app.infrastructure.services.serialization import CamelCaseUtil
+from app.system.models.dept import SysDept
 from app.system.models.user import SysUserRole
 from app.system.repositories.users import UserDao
 from app.system.schemas.user import (
@@ -61,6 +62,17 @@ class UserService:
         :return: 用户列表信息对象
         """
         query_result = await UserDao.get_user_list(query_db, query_object, data_scope_sql, is_page)
+        rows = query_result.rows if is_page else query_result
+        dept_ids = {row.get('deptId') for row in rows if row.get('deptId')}
+        if dept_ids:
+            depts = (
+                (await query_db.execute(select(SysDept).where(SysDept.dept_id.in_(dept_ids), SysDept.del_flag == '0')))
+                .scalars()
+                .all()
+            )
+            dept_map = {dept.dept_id: CamelCaseUtil.transform_result(dept) for dept in depts}
+            for row in rows:
+                row['dept'] = dept_map.get(row.get('deptId'))
         if is_page:
             user_list_result = PageModel[UserRowModel](
                 **{
@@ -72,6 +84,27 @@ class UserService:
             user_list_result = query_result or []
 
         return user_list_result
+
+    @classmethod
+    async def validate_department(cls, query_db: AsyncSession, dept_id: int | None) -> None:
+        if dept_id is None:
+            return
+        dept = (
+            await query_db.execute(select(SysDept).where(SysDept.dept_id == dept_id).with_for_update())
+        ).scalar_one_or_none()
+        if dept is None or dept.del_flag != '0':
+            raise ServiceException(message='所选部门不存在，请重新选择')
+        if dept.status != '0':
+            raise ServiceException(message='所选部门已停用，请选择正常部门')
+
+    @classmethod
+    async def department_info(cls, query_db: AsyncSession, user) -> dict | None:
+        if user is None or user.dept_id is None:
+            return None
+        dept = (
+            await query_db.execute(select(SysDept).where(SysDept.dept_id == user.dept_id, SysDept.del_flag == '0'))
+        ).scalar_one_or_none()
+        return CamelCaseUtil.transform_result(dept) if dept else None
 
     @classmethod
     async def check_user_allowed_services(cls, check_user: UserModel) -> CrudResponseModel:
@@ -156,6 +189,7 @@ class UserService:
         :param page_object: 新增用户对象
         :return: 新增用户校验结果
         """
+        await cls.validate_department(query_db, page_object.dept_id)
         add_user = UserModel(**page_object.model_dump(by_alias=True))
         if not await cls.check_user_name_unique_services(query_db, page_object):
             raise ServiceException(message=f'新增用户{page_object.user_name}失败，登录账号已存在')
@@ -199,6 +233,8 @@ class UserService:
         :param page_object: 编辑用户对象
         :return: 编辑用户校验结果
         """
+        if 'dept_id' in page_object.model_fields_set:
+            await cls.validate_department(query_db, page_object.dept_id)
         edit_user = page_object.model_dump(exclude_unset=True, exclude={'admin'})
         cls._deal_edit_user(page_object, edit_user)
         user_info = await cls.user_detail_services(query_db, edit_user.get('user_id'))
@@ -273,6 +309,7 @@ class UserService:
             return UserDetailModel(
                 data=UserInfoModel(
                     **CamelCaseUtil.transform_result(query_user.get('user_basic_info')),
+                    dept=await cls.department_info(query_db, query_user.get('user_basic_info')),
                     roleIds=role_ids,
                     role=CamelCaseUtil.transform_result(query_user.get('user_role_info')),
                 ),
@@ -298,6 +335,7 @@ class UserService:
         return UserProfileModel(
             data=UserInfoModel(
                 **CamelCaseUtil.transform_result(query_user.get('user_basic_info')),
+                dept=await cls.department_info(query_db, query_user.get('user_basic_info')),
                 roleIds=role_ids,
                 role=CamelCaseUtil.transform_result(query_user.get('user_role_info')),
             ),

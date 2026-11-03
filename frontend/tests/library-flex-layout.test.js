@@ -18,7 +18,8 @@ test('unified library fills the viewport and removes the content width cap', () 
 })
 
 test('list alone grows and scrolls, with usable controls on short and narrow screens', () => {
-  assert.match(page, /\.ps-material-list \{ flex: 1 1 0; min-width: 0; min-height: 0; overflow: auto/)
+  assert.match(page, /\.ps-material-list \{ flex: 1 1 0; min-width: 0; min-height: 0; overflow: hidden/)
+  assert.match(page, /<el-table[^>]+:max-height="listHeight"/)
   assert.match(page, /\.ps-knowledge-page > \.ps-pagination \{[^}]*flex-shrink: 0/)
   assert.match(styles, /@media \(max-height: 540px\)/)
   assert.match(styles, /\.ps-basket-page > \.ps-material-list \{ min-height: 160px/)

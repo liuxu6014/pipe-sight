@@ -4,7 +4,7 @@
       <template #actions><el-button @click="clearFilters">清除筛选</el-button></template>
     </PortalPageHeader>
 
-    <div class="ps-search-mode" role="group" aria-label="检索方式"><button type="button" :aria-pressed="searchMode === 'keyword'" :class="{ 'is-active': searchMode === 'keyword' }" @click="searchMode = 'keyword'">关键词搜索</button><button type="button" :aria-pressed="searchMode === 'semantic'" :class="{ 'is-active': searchMode === 'semantic' }" @click="searchMode = 'semantic'">语义搜索<span>待接入</span></button></div>
+    <div class="ps-search-mode ps-segmented-row"><el-segmented v-model="searchMode" :options="[{ label: '关键词搜索', value: 'keyword' }, { label: '语义搜索（待接入）', value: 'semantic' }]" aria-label="检索方式"  /></div>
     <form class="ps-search-hero" @submit.prevent="applyKeyword">
       <Search />
       <input v-model.trim="draftKeyword" maxlength="200" aria-label="全站搜索关键词" :placeholder="searchMode === 'semantic' ? '用自然语言描述你想研究的问题' : '输入题名、作者、摘要或资料名称'" />
@@ -31,17 +31,15 @@
       </aside>
 
       <section v-loading="loading" :aria-busy="loading" class="ps-results-panel ps-list-stack">
-        <div class="ps-tabs-line" aria-label="按内容类型筛选">
-          <button v-for="tab in tabs" :key="tab.value" type="button" :aria-pressed="activeType === tab.value" :class="{ 'is-active': activeType === tab.value }" @click="activeType = tab.value">{{ tab.label }} <span v-if="!loading && !loadError">{{ countByType(tab.value) }}</span></button>
-        </div>
+        <div class="ps-tabs-line ps-segmented-row"><el-segmented v-model="activeType" :options="tabs.map(tab => ({ label: tab.label, value: tab.value }))" aria-label="搜索内容类型" /></div>
         <div class="ps-list-scroll" tabindex="0" aria-label="搜索结果列表">
         <div v-if="filteredResults.length" class="ps-result-list">
           <article v-for="result in filteredResults" :key="`${result.type}-${result.id}`" class="ps-result-card">
             <div class="ps-result-type">{{ result.typeLabel }}</div>
             <div class="ps-result-body">
-              <button type="button" class="ps-result-title" @click="openResult(result)">
+              <el-link underline="never" :href="$router.resolve(result.path || '/portal').href" class="ps-result-title ps-ui-title" @click.prevent="openResult(result)">
                 <template v-for="(part, index) in result.titleParts" :key="`title-${index}`"><mark v-if="part.match" class="ps-search-highlight">{{ part.text }}</mark><span v-else>{{ part.text }}</span></template>
-              </button>
+              </el-link>
               <p><template v-for="(part, index) in result.summaryParts" :key="`summary-${index}`"><mark v-if="part.match" class="ps-search-highlight">{{ part.text }}</mark><span v-else>{{ part.text }}</span></template></p>
               <div class="ps-meta-row"><span>{{ result.meta }}</span><span v-for="tag in result.tags" :key="tag" class="ps-tag">{{ tag }}</span></div>
             </div>

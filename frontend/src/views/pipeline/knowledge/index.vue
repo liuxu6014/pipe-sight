@@ -1,17 +1,5 @@
 <template>
   <div class="pipeline-page pipeline-knowledge-page ws-list-page">
-    <section class="page-heading">
-      <div>
-
-        <h1>资料库管理</h1>
-
-      </div>
-      <div class="heading-actions">
-        <el-button :icon="Refresh" :loading="loading" @click="loadDocuments">刷新</el-button>
-        <el-button type="primary" :icon="UploadFilled" @click="openUpload">上传资料</el-button>
-      </div>
-    </section>
-
     <el-alert
       v-if="loadError"
       :title="loadError"
@@ -27,24 +15,27 @@
 
     <div class="knowledge-workspace knowledge-status-only">
       <el-card shadow="never" class="panel-card knowledge-status-card">
-        <template #header>资料状态</template>
+        <template #header>
+          <div class="knowledge-status-head">
+            <strong>资料状态</strong>
+            <div class="knowledge-status-actions">
+              <el-button type="primary" :icon="UploadFilled" @click="openUpload">上传资料</el-button>
+            </div>
+          </div>
+        </template>
         <dl>
           <div><dt>资料总数</dt><dd>{{ documents.length }}</dd></div>
           <div><dt>已解析</dt><dd>{{ statusCount('ready') }}</dd></div>
           <div><dt>处理中</dt><dd>{{ processingCount }}</dd></div>
           <div><dt>解析失败</dt><dd class="is-danger">{{ statusCount('failed') }}</dd></div>
         </dl>
-        <p>以每份文件的安全检查与解析结果为准。可搜索 PDF、DOCX、MD、TXT 按现有解析流程处理；扫描材料及旧版 DOC 不视为已支持。</p>
       </el-card>
     </div>
 
     <el-card v-loading="loading" shadow="never" class="panel-card knowledge-table-card ws-list-panel">
       <template #header>
         <div class="card-header knowledge-table-head">
-          <div>
-            <strong>业务资料管理</strong>
-            <small>列表仅展示当前账号有权访问的资料</small>
-          </div>
+          <strong>业务资料管理</strong>
           <div class="knowledge-filters">
             <el-input v-model="keyword" :prefix-icon="Search" clearable placeholder="搜索名称、摘要或标签" />
             <el-select v-model="statusFilter" aria-label="解析状态筛选">
@@ -164,7 +155,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Download, Refresh, Search, UploadFilled } from '@element-plus/icons-vue'
+import { Delete, Download, Search, UploadFilled } from '@element-plus/icons-vue'
 import {
   deletePipelineKnowledgeDocument,
   downloadPipelineKnowledgeDocument,
@@ -339,17 +330,37 @@ onMounted(loadDocuments)
 .ws-list-page .knowledge-status-card dl { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .ws-list-page .knowledge-status-card dl div { padding: 8px 12px; }
 .ws-list-page .knowledge-status-card dd { font-size: 20px; }
-.ws-list-page .knowledge-status-card p { margin: 8px 0 0; font-size: 12px; }
 @media (max-width: 760px) {
   .ws-list-page .knowledge-status-card dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-.heading-actions,
+.knowledge-status-head,
 .card-header,
 .knowledge-pagination {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.knowledge-status-head {
+  width: 100%;
+  min-width: 0;
+}
+
+.knowledge-status-head > strong {
+  flex-shrink: 0;
+}
+
+.knowledge-status-actions {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.knowledge-status-actions .el-button {
+  margin: 0;
 }
 
 .knowledge-alert {
@@ -365,18 +376,6 @@ onMounted(loadDocuments)
 
 .knowledge-workspace.knowledge-status-only {
   grid-template-columns: minmax(0, 1fr);
-}
-
-.card-header > div,
-.knowledge-table-head > div:first-child {
-  min-width: 0;
-  display: grid;
-  gap: 4px;
-}
-
-.card-header small {
-  color: #718096;
-  font-size: 13px;
 }
 
 .doc-name {
@@ -414,13 +413,6 @@ onMounted(loadDocuments)
 
 .knowledge-status-card dd.is-danger {
   color: #c24141;
-}
-
-.knowledge-status-card p {
-  margin: 16px 0;
-  color: #667085;
-  font-size: 13px;
-  line-height: 1.7;
 }
 
 .knowledge-filters {
@@ -480,7 +472,7 @@ onMounted(loadDocuments)
 }
 
 .upload-icon {
-  color: #005487;
+  color: #409eff;
   font-size: 42px;
 }
 
@@ -499,16 +491,10 @@ onMounted(loadDocuments)
 }
 
 @media (max-width: 760px) {
-  .heading-actions,
   .knowledge-table-head,
   .knowledge-pagination {
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .heading-actions .el-button {
-    width: 100%;
-    margin: 0;
   }
 
   .knowledge-filters,

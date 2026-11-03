@@ -152,12 +152,20 @@ def env(monkeypatch):
     content.PipelineArticle = content_model(
         'PipelineArticle',
         'news_articles',
-        {'author': Text, 'published_at': DateTime(timezone=True), 'content': Text, 'content_zh': Text},
+        {
+            'author': Text,
+            'published_at': DateTime(timezone=True),
+            'content': Text,
+            'content_zh': Text,
+            'summary': Text,
+            'entities': JSON,
+        },
     )
     content.PipelinePaper = content_model(
         'PipelinePaper',
         'papers',
-        dict.fromkeys(('title_zh', 'doi', 'authors', 'journal', 'published_date', 'abstract', 'abstract_zh'), Text),
+        dict.fromkeys(('title_zh', 'doi', 'authors', 'journal', 'published_date', 'abstract', 'abstract_zh'), Text)
+        | {'entities': JSON},
     )
     monkeypatch.setitem(sys.modules, content.__name__, content)
     repository = importlib.import_module('app.intelligence.repositories.collection_repository')

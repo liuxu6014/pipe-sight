@@ -290,7 +290,6 @@ onUnmounted(() => { active = false; requestEpoch++; stopRouteWatch(); stopRefres
   .ps-task-footer { padding: 10px; }
   .ps-task-footer > span { display: none; }
   .ps-task-footer > div { width: 100%; justify-content: flex-end; }
-  .ps-task-footer :deep(.el-button) { min-height: 40px; }
 }
 @media (prefers-reduced-motion: reduce) { .ps-stage-list > div.is-active > span svg { animation: none; } }
 </style>

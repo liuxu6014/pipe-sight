@@ -327,6 +327,18 @@ async def get_pipeline_research_report(
     return ResponseUtil.success(data=data)
 
 
+@controller.delete('/research/reports/{report_id}', summary='删除本人报告及其生成和导出记录')
+async def delete_pipeline_research_report(
+    report_id: BusinessId,
+    query_db: Annotated[AsyncSession, DBSessionDependency()],
+    current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
+) -> Response:
+    data = await ResearchReportService.delete_report(
+        query_db, user_id=current_user.user.user_id, report_id=report_id
+    )
+    return ResponseUtil.success(data=data, msg='报告已删除')
+
+
 @controller.post('/research/reports/{report_id}/rewrite', summary='生成本人报告局部改写建议，不覆盖正文')
 async def propose_report_rewrite(
     report_id: BusinessId,

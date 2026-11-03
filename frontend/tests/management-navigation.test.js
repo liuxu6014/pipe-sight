@@ -29,24 +29,25 @@ test('available modules follow the eleven-module requirements order regardless o
   assert.deepEqual(menus.find(menu => menu.meta.title === '用户管理').children.map(menu => menu.path), ['/system/user', '/system/role'])
 })
 
-test('single filter, report and digest entries are direct links with independent active states', () => {
+test('single intelligence, report and digest entries are direct links with independent active states', () => {
   const sharedReportComponent = () => {}
   const inputs = [directory('/pipeline', [
     page('filter', '过滤结果与评估'),
+    page('intelligence', '情报查询'),
     page('report', '科研报告', { component: sharedReportComponent }),
     page('digest', '简报管理', { component: sharedReportComponent })
   ])]
   const original = JSON.stringify(inputs)
   const menus = buildManagementNavigation(inputs)
-  assert.deepEqual(menus.map(menu => menu.meta.title), ['报告管理', '简报管理'])
-  assert.deepEqual(menus.map(menu => menu.path), ['/pipeline/report', '/pipeline/digest'])
+  assert.deepEqual(menus.map(menu => menu.meta.title), ['情报查询', '报告管理', '简报管理'])
+  assert.deepEqual(menus.map(menu => menu.path), ['/pipeline/intelligence', '/pipeline/report', '/pipeline/digest'])
   assert.ok(menus.every(menu => !menu.children && !menu.meta.navigationGroup))
   for (const menu of menus) {
     assert.equal(resolveActiveNavigation({ path: menu.path }, menus), menu.path)
     assert.equal(findNavigationGroup({ path: menu.path }, menus)?.path, menu.path)
     assert.equal(resolveActiveNavigation({ path: `${menu.path}/detail`, meta: { activeMenu: menu.path } }, menus), menu.path)
   }
-  assert.equal(menus[0].component, menus[1].component)
+  assert.equal(menus[1].component, menus[2].component)
   assert.equal(JSON.stringify(inputs), original)
 })
 
@@ -69,8 +70,8 @@ test('backend default empty and whitespace query strings keep every available mo
   const snapshot = JSON.stringify(data)
   const menus = buildManagementNavigation(data.toReversed())
   assert.deepEqual(menus.map(menu => menu.meta.title), [
-    '管理首页', '用户管理', '采集管理', '数据管理', '资料库管理',
-    '报告管理', '简报管理', '模板管理', '系统配置', '运行日志'
+    '管理首页', '用户管理', '采集管理', '情报查询', '资料库管理',
+    '报告管理', '简报管理', '模板管理', '模型与类别提示词', '运行日志'
   ])
   assert.deepEqual(leafMenus(menus).map(menu => menu.path), paths)
   assert.ok(leafMenus(menus).every(menu => menu.query === undefined))
@@ -130,7 +131,7 @@ test('unmapped authorized pages and external links remain reachable without inve
   assert.deepEqual(leafMenus(buildManagementNavigation(inputs)).map(menu => menu.path), ['/tool/custom', 'https://example.com/docs'])
 })
 
-test('system configuration starts with model and prompts, then parameters and dictionaries', () => {
+test('model configuration is direct and system configuration starts with parameters and dictionaries', () => {
   const inputs = [
     directory('/system', [page('menu'), page('dict'), page('config')]),
     directory('/tool', [page('custom')]),
@@ -138,8 +139,9 @@ test('system configuration starts with model and prompts, then parameters and di
   ]
   const original = JSON.stringify(inputs)
   const menus = buildManagementNavigation(inputs)
+  assert.equal(menus.find(menu => menu.path === '/pipeline/model')?.meta.title, '模型与类别提示词')
   assert.deepEqual(menus.find(menu => menu.meta.title === '系统配置').children.map(menu => menu.path), [
-    '/pipeline/model', '/system/config', '/system/dict', '/system/menu', '/tool/custom'
+    '/system/config', '/system/dict', '/system/menu', '/tool/custom'
   ])
   assert.equal(JSON.stringify(inputs), original)
   const withoutModel = buildManagementNavigation([directory('/system', [page('menu'), page('config')])])
@@ -168,9 +170,9 @@ test('only the specified upstream template destinations are omitted, including r
 
 test('destination deduplication ignores query key order while preserving distinct filtered entries', () => {
   const menus = buildManagementNavigation([directory('/pipeline', [
-    page('source', '来源甲', { query: '{"status":"failed","filters":{"kind":"news"}}' }),
-    page('source', '来源甲重复', { query: '{"filters":{"kind":"news"},"status":"failed"}' }),
-    page('source', '来源乙', { query: '{"status":"failed","filters":{"kind":"paper"}}' })
+    page('intelligence', '情报甲', { query: '{"status":"failed","filters":{"kind":"news"}}' }),
+    page('intelligence', '情报甲重复', { query: '{"filters":{"kind":"news"},"status":"failed"}' }),
+    page('intelligence', '情报乙', { query: '{"status":"failed","filters":{"kind":"paper"}}' })
   ])])
   assert.equal(leafMenus(menus).length, 2)
 })
@@ -196,8 +198,8 @@ test('the actual SidebarItem renders group children as real links and preserves 
   })
   const context = vm.createContext({ Vue, ref: Vue.ref, AppLink, resolveNavigationPath })
   vm.runInContext(script, context)
-  const menus = buildManagementNavigation([directory('/pipeline', [
-    page('source', '数据源'), page('task', '任务', { query: '{"status":"failed"}' })
+  const menus = buildManagementNavigation([directory('/system', [
+    page('user', '账号'), page('role', '角色', { query: '{"status":"failed"}' })
   ])])
   const app = Vue.createSSRApp({ render: () => Vue.h(context.SidebarItem, { item: menus[0], basePath: menus[0].path }) })
   app.component('svg-icon', { render: () => null })
@@ -210,10 +212,10 @@ test('the actual SidebarItem renders group children as real links and preserves 
     render() { return Vue.h('ul', { 'data-index': this.index }, [this.$slots.title?.(), this.$slots.default?.()]) }
   })
   const html = await renderToString(app)
-  assert.match(html, /采集管理/)
-  assert.match(html, /data-index="\/pipeline\/source"/)
-  assert.match(html, /data-index="\/pipeline\/task"/)
-  assert.match(html, /&quot;path&quot;:&quot;\/pipeline\/task&quot;,&quot;query&quot;:\{&quot;status&quot;:&quot;failed&quot;\}/)
+  assert.match(html, /用户管理/)
+  assert.match(html, /data-index="\/system\/user"/)
+  assert.match(html, /data-index="\/system\/role"/)
+  assert.match(html, /&quot;path&quot;:&quot;\/system\/role&quot;,&quot;query&quot;:\{&quot;status&quot;:&quot;failed&quot;\}/)
   assert.doesNotMatch(html, /data-to="[^"\n]*_management/)
 })
 

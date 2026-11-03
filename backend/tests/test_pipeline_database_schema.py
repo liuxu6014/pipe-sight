@@ -42,6 +42,7 @@ DOMAIN_TABLES = {
     'collection_runs',
 }
 FOUNDATION_TABLES = {
+    'sys_dept',
     'sys_user',
     'sys_role',
     'sys_menu',
@@ -58,7 +59,7 @@ FOUNDATION_TABLES = {
 OPTIONAL_TABLES = {'model_calls', 'report_versions'}
 FRAMEWORK_TABLES = {'apscheduler_jobs', 'alembic_version'}
 APPLICATION_TABLES = DOMAIN_TABLES | FOUNDATION_TABLES | OPTIONAL_TABLES
-FULL_TABLE_COUNT = 29
+FULL_TABLE_COUNT = 30
 BASELINE_RUOYI_TABLES = {
     'sys_user',
     'sys_role',
@@ -141,7 +142,6 @@ DEFERRED_TABLES = {
 }
 OBSOLETE_GENERIC_TABLES = {'contents', 'chunks', 'audit_logs', 'sources', 'crawl_tasks', 'articles'}
 REMOVED_PLATFORM_TABLES = {
-    'sys_dept',
     'sys_post',
     'sys_role_dept',
     'sys_user_post',
@@ -289,15 +289,15 @@ def test_full_system_orm_registers_foundation_and_domain_tables() -> None:
     assert len(APPLICATION_TABLES | FRAMEWORK_TABLES) == FULL_TABLE_COUNT
     assert not FRAMEWORK_TABLES & set(Base.metadata.tables)
     for table_name, table in Base.metadata.tables.items():
-        expected = {'sys_user_role': ('user_id', 'role_id'), 'sys_role_menu': ('role_id', 'menu_id')}.get(
+        expected = {'sys_dept': ('dept_id',), 'sys_user_role': ('user_id', 'role_id'), 'sys_role_menu': ('role_id', 'menu_id')}.get(
             table_name, ('id',)
         )
         assert tuple(table.primary_key.columns.keys()) == expected
 
 
-def test_removed_organization_concepts_are_not_exposed_by_active_api_models() -> None:
-    assert 'dept_id' not in UserModel.model_fields
-    assert 'dept' not in UserInfoModel.model_fields
+def test_departments_restored_without_unused_posts_and_role_scopes() -> None:
+    assert 'dept_id' in UserModel.model_fields
+    assert 'dept' in UserInfoModel.model_fields
     assert 'post_ids' not in UserInfoModel.model_fields
     assert 'post_ids' not in UserDetailModel.model_fields
     assert 'posts' not in UserDetailModel.model_fields

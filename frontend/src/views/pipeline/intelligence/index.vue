@@ -1,11 +1,5 @@
 <template>
   <div class="pipeline-page intelligence-page ws-list-page">
-    <section class="page-heading">
-      <div>
-        <h1>情报查询</h1>
-      </div>
-    </section>
-
     <el-card shadow="never" class="filter-card">
       <el-form :model="queryParams" inline class="intelligence-filters" @submit.prevent="handleQuery">
         <el-form-item class="keyword-filter">
@@ -33,17 +27,18 @@
       <div v-loading="loading" :aria-busy="loading" class="intelligence-list-region ws-list-scroll" tabindex="0" aria-label="情报列表滚动区">
         <ul v-if="rows.length" class="intelligence-list" aria-label="情报列表">
           <li v-for="row in rows" :key="row.id" class="intelligence-item">
-            <h2 class="item-title"><button type="button" class="title-button" @click="openDetail(row)">{{ row.title }}</button></h2>
-            <p v-if="row.summary" class="row-summary">{{ row.summary }}</p>
-            <div v-if="row.tags?.length" class="item-tags"><el-tag v-for="tag in row.tags" :key="tag" effect="plain">{{ tag }}</el-tag></div>
-            <div class="item-footer">
+            <div class="item-header">
               <div class="item-meta">
-                <el-tag :type="categoryType(row.category)" effect="light">{{ categoryText(row.category) }}</el-tag>
+                <el-tag :type="categoryType(row.category)" effect="light" size="small">{{ categoryText(row.category) }}</el-tag>
                 <span v-if="row.source" class="item-source">{{ row.source }}</span>
-                <time v-if="row.publish_time">{{ formatBusinessTime(row.publish_time) }}</time>
+                <time v-if="row.publish_time" class="item-date" title="发布时间"><el-icon aria-hidden="true"><Calendar /></el-icon>{{ formatBusinessTime(row.publish_time) }}</time>
               </div>
-              <el-button plain type="primary" :icon="View" @click="openDetail(row)">查看详情</el-button>
+              <el-button class="detail-action" plain type="primary" :icon="View" @click="openDetail(row)">查看详情</el-button>
             </div>
+            <h2 class="item-title"><el-link underline="never" :href="$router.resolve({ path: '/pipeline/intelligence/detail', query: { id: row.id } }).href" class="title-button" @click.prevent="openDetail(row)">{{ row.title }}</el-link></h2>
+            <p v-if="row.summary" class="row-summary">{{ row.summary }}</p>
+            <div v-if="row.tags?.length" class="item-tags"><el-tag v-for="tag in row.tags" :key="tag" effect="plain" size="small">{{ tag }}</el-tag></div>
+            <ContentEntities :entities="row.entities || []" compact />
           </li>
         </ul>
         <el-empty v-else-if="!loading" description="暂无匹配的情报" :image-size="80" />
@@ -54,6 +49,7 @@
         v-model:page="queryParams.pageNum"
         v-model:limit="queryParams.pageSize"
         :total="total"
+        :auto-scroll="false"
         @pagination="getList"
       />
     </el-card>
@@ -64,9 +60,10 @@
 import { formatBusinessTime } from '@/utils/portal/businessTime'
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Refresh, Search, View } from '@element-plus/icons-vue'
+import { Calendar, Refresh, Search, View } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import { listPipelineIntelligence } from '@/api/pipeline/intelligence'
+import ContentEntities from '@/views/portal/components/ContentEntities.vue'
 defineOptions({ name: 'PipelineIntelligence' })
 const router = useRouter()
 const loading = ref(false), loadError = ref(''), rows = ref([]), total = ref(0)
@@ -85,103 +82,62 @@ function openDetail(row) { router.push({ path: '/pipeline/intelligence/detail', 
 onMounted(getList)
 </script>
 <style scoped>
-.intelligence-page .page-heading { padding-bottom: 16px; margin-bottom: 16px; }
-.intelligence-page .page-heading h1 { margin: 0; }
-.filter-card :deep(.el-card__body) { padding: 14px 16px; }
-.intelligence-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 16px; }
+/* Scope the override to these cards; RuoYi sets card padding with !important. */
+.filter-card :deep(.el-card__body) { padding: 12px 16px !important; }
+.intelligence-filters { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 12px 16px; }
 .intelligence-filters :deep(.el-form-item) { margin: 0; }
 .intelligence-filters .keyword-filter { flex: 1 1 300px; min-width: 0; }
 .intelligence-filters .keyword-filter :deep(.el-input) { width: 100%; }
-.intelligence-filters .type-filter { flex: 0 0 250px; }
+.intelligence-filters .type-filter { flex: 0 0 240px; }
 .intelligence-filters :deep(.el-form-item__content) { min-width: 0; }
 .intelligence-filters .type-filter :deep(.el-select) { width: 100%; }
 .intelligence-filters .filter-actions { flex: 0 0 auto; }
-@media (max-width: 640px) {
-  .intelligence-filters .keyword-filter,
-  .intelligence-filters .type-filter { flex-basis: 100%; }
-}
-.intelligence-list-card { margin-top: 14px; }
-.intelligence-list-card :deep(.el-card__body) { padding: 0 20px 16px; }
-.intelligence-list-region { min-height: 140px; }
+.intelligence-list-card :deep(.el-card__body) { padding: 0 !important; }
+.intelligence-list-region { min-height: 0; }
 .intelligence-list { margin: 0; padding: 0; list-style: none; }
-.intelligence-item { padding: 18px 0; border-bottom: 1px solid #e5ebf2; }
+.intelligence-item { padding: 16px 20px; border-bottom: 1px solid var(--el-border-color-lighter); }
+.intelligence-item:last-child { border-bottom: 0; }
+.intelligence-item:hover { background: var(--el-fill-color-extra-light); }
+.item-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.item-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; min-width: 0; color: var(--el-text-color-secondary); font-size: 13px; line-height: 1.6; }
+.item-meta > .el-tag { flex-shrink: 0; }
+.item-source { overflow-wrap: anywhere; color: var(--el-text-color-regular); }
+.item-date { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.detail-action { flex-shrink: 0; margin: 0; }
 .item-title { margin: 0; font-size: 16px; font-weight: 600; }
-.title-button { display: block; width: 100%; border: 0; background: transparent; color: #005487; font: inherit; padding: 0; text-align: left; white-space: normal; overflow-wrap: anywhere; line-height: 1.6; cursor: pointer; }
-.title-button:hover { text-decoration: underline; }
-.title-button:focus-visible { outline: 2px solid #7da6c0; outline-offset: 3px; border-radius: 3px; }
-.item-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
-.item-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; min-width: 0; color: #526277; font-size: 13px; }
-.item-source { overflow-wrap: anywhere; }
-.item-meta time { white-space: nowrap; }
-.item-footer > .el-button { flex-shrink: 0; min-height: 44px; }
-.item-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.item-tags :deep(.el-tag) { max-width: 100%; height: auto; white-space: normal; overflow-wrap: anywhere; }
-.list-loading { padding: 32px 0; color: #526277; text-align: center; }
-@media (max-width: 640px) {
-  .intelligence-list-card :deep(.el-card__body) { padding: 0 14px 14px; }
-  .item-footer { align-items: flex-start; }
-}
-
-.intelligence-load-error { margin-top: 18px; }
-.intelligence-retry { padding: 0; border: 0; background: transparent; color: #2764e7; cursor: pointer; font-size: 13px; }
-
+.title-button { display: block; width: 100%; color: var(--el-text-color-primary); font: inherit; padding: 0; text-align: left; white-space: normal; overflow-wrap: anywhere; line-height: 1.6; }
+.title-button :deep(.el-link__inner) { display: inline; }
+.title-button:hover { color: var(--el-color-primary); }
+.title-button:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: 3px; border-radius: 3px; }
 .row-summary {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   overflow: hidden;
   white-space: normal;
-  margin: 8px 0 0;
-  color: #667085;
-  font-size: 13px;
-  line-height: 1.7;
-}
-
-.review-title {
-  margin: 0 0 16px;
-  color: #173d56;
-  font-weight: 600;
-  line-height: 1.6;
-}
-
-.review-meta {
-  margin-bottom: 16px;
-}
-
-.review-content {
-  margin-bottom: 16px;
-  padding: 0 4px;
-  background: #f8fafc;
-}
-
-.review-section-title {
-  margin: 12px 0 6px;
-  color: #344054;
-  font-weight: 600;
-}
-
-.review-body {
-  margin: 0;
-  color: #475467;
-  line-height: 1.7;
-  white-space: pre-wrap;
-}
-
-.review-json {
-  margin: 0;
-  color: #475467;
-  font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
+  margin: 8px 0 0;
+  color: var(--el-text-color-regular);
+  font-size: 14px;
+  line-height: 1.8;
 }
-
-.review-error {
-  margin: 0;
-  color: #b42318;
-  line-height: 1.6;
-}
-
-.reprocess-form {
-  margin-top: 16px;
+.item-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.item-tags :deep(.el-tag) { max-width: 100%; height: auto; white-space: normal; overflow-wrap: anywhere; }
+.intelligence-list-card :deep(.pagination-container) { padding: 12px 20px; border-top: 1px solid var(--el-border-color-lighter); }
+.list-loading { padding: 32px 16px; color: var(--el-text-color-secondary); text-align: center; }
+.intelligence-load-error { margin-top: 12px; }
+.intelligence-retry { margin-top: 8px; }
+@media (max-width: 760px) {
+  .intelligence-filters { gap: 10px; }
+  .intelligence-filters .keyword-filter { flex-basis: 100%; }
+  .intelligence-filters .type-filter { flex: 1 1 180px; }
+  .intelligence-item { padding: 14px; }
+  .item-header { align-items: flex-start; gap: 8px; }
+  .item-meta { gap: 6px 10px; }
+  .item-source { flex-basis: 100%; order: 1; }
+  .item-meta .item-date { white-space: normal; }
+  .intelligence-list-card :deep(.pagination-container) { padding: 10px 14px; }
+  .intelligence-list-card :deep(.el-pagination) { flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+  .intelligence-list-card :deep(.el-pagination__jump) { display: none; }
 }
 </style>

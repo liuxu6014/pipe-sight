@@ -37,7 +37,7 @@ test('editing retains generation preferences, filters and name without alias col
 
 test('bad time, missing source and wrong cadence are rejected before save', () => {
   const form = { ...newScheduleForm(), name: '计划', templateId: '31' }
-  const template = { id: '31', digestCadence: 'daily' }
+  const template = { id: '31', digestCadence: 'weekly' }
   for (const delta of [{ time: '24:01' }, { sources: [] }, { name: ' ' }, { keywords: Array(21).fill('词') }]) {
     assert.throws(() => schedulePayload({ ...form, ...delta }, template))
   }

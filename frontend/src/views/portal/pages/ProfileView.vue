@@ -115,7 +115,7 @@ onBeforeUnmount(() => { active = false; generation += 1; resetPassword() })
 .ps-profile-field-hint { margin-top: 4px; color: var(--ps-muted); font-size: 12px; }
 .ps-profile-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--ps-line-soft); }
 .ps-profile-actions > div { display: flex; gap: 10px; margin-left: auto; }
-.ps-profile-actions :deep(.el-button) { margin-left: 0; min-height: 44px; min-width: 96px; }
+.ps-profile-actions :deep(.el-button) { margin-left: 0; min-width: 96px; }
 .ps-profile-save-state { color: #956020; font-size: 12px; }
 .ps-profile-error { color: #a43333; font-size: 13px; line-height: 1.6; }
 .ps-profile-security-form { max-width: 520px; }

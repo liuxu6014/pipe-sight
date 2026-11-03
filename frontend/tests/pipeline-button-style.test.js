@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 
 const styles = readFileSync(new URL('../src/assets/styles/pipeline.scss', import.meta.url), 'utf8')
 
-test('keeps primary text links out of the filled primary button rule', () => {
-  assert.match(styles, /\.pipeline-page \.el-button--primary:not\(\.is-link\):not\(\.is-text\) \{/)
-  assert.match(styles, /\.pipeline-page \.el-button\.is-link\.el-button--primary,[\s\S]*?\{[\s\S]*?background: transparent;/)
+test('management buttons retain the component primary, plain and disabled appearances', () => {
+  assert.doesNotMatch(styles, /\.pipeline-page \.el-button--primary[^{}]*\{/)
+  assert.doesNotMatch(styles, /\.pipeline-page \.el-button\s*\{[^}]*(?:border-radius|background|box-shadow):/s)
 })

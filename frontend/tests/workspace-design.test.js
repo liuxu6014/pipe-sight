@@ -24,11 +24,11 @@ test('portal searches share one subtle outer focus without suppressing form or b
   assert.ok(css.includes(`.ps-portal[data-page] :is(${containers}, .ps-search-input) input:focus-visible`))
   assert.match(css, /input:focus-visible\s*\{\s*outline: none;\s*box-shadow: none;/)
   assert.ok(css.includes(`.ps-portal[data-page] :is(${containers}):focus-within`))
-  assert.match(workspace, /box-shadow: 0 0 0 2px #00548712;/)
+  assert.match(workspace, /box-shadow: 0 0 0 2px #409eff12;/)
   assert.match(css, /\.ps-search-input \.el-input__wrapper.is-focus/)
   assert.match(css, /:is\(button, a, summary\):focus-visible/)
   assert.match(css, /:is\(input, textarea\):not\(:where\(\.el-input__inner, \.el-textarea__inner, \.el-select__input, \.el-input-tag__input\)\):focus-visible/)
-  assert.match(workspace, /\.el-input-tag\.is-focused\s*\{\s*box-shadow: 0 0 0 1px color-mix\(in srgb, var\(--ps-blue\), #fff 38%\) inset, 0 0 0 2px #00548712;/)
+  assert.match(workspace, /\.el-input-tag\.is-focused\s*\{\s*box-shadow: 0 0 0 1px color-mix\(in srgb, var\(--ps-blue\), #fff 38%\) inset, 0 0 0 2px #409eff12;/)
   for (const page of ['ResearchWorkbenchView', 'MyReportsView', 'MyWorkspaceView']) {
     const source = read(`../src/views/portal/pages/${page}.vue`)
     assert.doesNotMatch(source, /<el-input(?! class="ps-search-input")[^>]*aria-label="搜索/)
@@ -59,7 +59,7 @@ test('content adaptation is shared by both shells and never attached to login', 
 test('login keeps its existing visual layout outside the workspace redesign', () => {
   const login = read('../src/views/login.vue')
   assert.doesNotMatch(login, /class="calm-nav-link"|class="calm-start-secondary"/)
-  assert.match(login, /class="calm-start-primary"/)
+  assert.match(login, /<el-button[^>]*class="calm-start-primary ps-ui-control"/)
   assert.match(login, /height: clamp\(300px, 52vh, 660px\)/)
   assert.match(login, /\.calm-value-grid \{[^}]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/)
   assert.doesNotMatch(login, /class="calm-intro"|class="calm-brand-copy"|class="calm-access-note"/)
@@ -80,8 +80,10 @@ function luminance(hex) {
   return linear[0] * .2126 + linear[1] * .7152 + linear[2] * .0722
 }
 
-test('primary, muted and status text tokens meet AA contrast on their surfaces', () => {
-  for (const name of ['ink', 'ink-2', 'muted', 'blue', 'teal', 'orange', 'green', 'danger']) {
+test('body text tokens retain contrast while UI accents use the requested Element Plus blue', () => {
+  assert.match(portal, /--ps-blue: #409eff;/)
+  assert.doesNotMatch(portal, /--el-color-primary[^:]*:/)
+  for (const name of ['ink', 'ink-2', 'muted', 'teal', 'orange', 'green', 'danger']) {
     const color = portal.match(new RegExp(`--ps-${name}: (#[a-f0-9]{6})`))[1]
     for (const surface of ['ffffff', 'f4f6f9']) {
       const ratio = (luminance(surface) + .05) / (luminance(color) + .05)
@@ -124,7 +126,7 @@ test('navigation exposes current location and mobile expanded state without a se
 test('home-only button states keep focus inset in scroll panels and separate input from submit focus', () => {
   const css = compileString(workspace).css
   assert.match(css, /\.ps-portal \.ps-home-page button:not\(:disabled\):focus-visible[^}]*outline: 2px solid var\(--ps-blue\);[^}]*outline-offset: -2px;/)
-  assert.match(css, /\.ps-portal \.ps-home-page :is\([^}]*\):active\s*\{\s*background-color: #d8eaf4;/)
+  assert.match(css, /\.ps-portal \.ps-home-page :is\([^}]*\):active\s*\{\s*background-color: #d9ecff;/)
   assert.match(css, /\.ps-portal \.ps-home-hero--discovery \.ps-home-welcome \.ps-hero-search:has\(button:focus-visible\)\s*\{\s*box-shadow: none;/)
 })
 
@@ -145,7 +147,7 @@ test('home separates personal work and authorized reading from management metric
 test('desktop workspaces prioritize reports and keep guidance in an on-demand popover', () => {
   const reports = read('../src/views/portal/pages/ResearchWorkbenchView.vue')
   assert.doesNotMatch(reports, /class="ps-research-lead"|模板推荐|class="ps-template-grid"/)
-  assert.match(reports, /v-for="report in pagedReports"/)
+  assert.match(reports, /<el-table :data="pagedReports"/)
   assert.doesNotMatch(reports, /unfinishedTasks|ps-report-side|生成任务|研究选材/)
   const help = read('../src/views/portal/components/PortalWorkflowGuide.vue')
   assert.match(help, /class="ps-workflow-popover"/)
@@ -164,7 +166,7 @@ test('editor export formats share one action and resource selection remains labe
     assert.match(source, /:loading="versionSaving"/)
   }
   assert.match(read('../src/views/portal/pages/ResearchCreateView.vue'), /章目标字数/)
-  assert.match(read('../src/views/portal/pages/NewsListView.vue'), /aria-label="卡片视图"/)
+  assert.match(read('../src/views/portal/pages/NewsListView.vue'), /<el-segmented v-model="viewMode"[^>]*value: 'card'/)
 })
 
 test('synthetic visual QA stays localhost-only and separate from production authentication', () => {

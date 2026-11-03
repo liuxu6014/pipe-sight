@@ -1,9 +1,7 @@
 <template>
   <div class="ps-page ps-create-page ps-digest-create-page">
     <header class="ps-create-context">
-      <el-button class="ps-ui-action ps-create-back" aria-label="返回情报简报" title="返回情报简报" @click="router.push('/portal/digests')">
-        <Back />
-      </el-button>
+      <el-button :icon="Back" circle class="ps-ui-action ps-create-back" aria-label="返回情报简报" title="返回情报简报" @click="router.push('/portal/digests')" />
       <div class="ps-create-heading"><h1>新建简报</h1></div>
       <el-button class="ps-create-plan-button" @click="planDialog = true">新建自动计划</el-button>
     </header>
@@ -11,14 +9,12 @@
         <div class="ps-form-grid ps-digest-filter-grid">
           <label>报告类型
             <el-radio-group v-model="form.type">
-              <el-radio-button value="日报">日报</el-radio-button>
               <el-radio-button value="周报">周报</el-radio-button>
               <el-radio-button value="月报">月报</el-radio-button>
             </el-radio-group>
           </label>
           <label>{{ periodFieldLabel }}
-            <el-date-picker v-if="form.type === '日报'" v-model="form.date" type="date" placeholder="选择报告日期" />
-            <el-date-picker v-else-if="form.type === '周报'" v-model="form.period" type="daterange" start-placeholder="开始日期" end-placeholder="结束日期" />
+            <el-date-picker v-if="form.type === '周报'" v-model="form.period" type="daterange" start-placeholder="开始日期" end-placeholder="结束日期" />
             <el-date-picker v-else v-model="form.month" type="month" placeholder="选择报告月份" />
           </label>
           <label>来源范围<el-select v-model="form.sources" multiple collapse-tags collapse-tags-tooltip :max-collapse-tags="2"><el-option label="新闻网站" value="新闻网站" /><el-option label="微信公众号" value="微信公众号" /></el-select></label>
@@ -157,7 +153,6 @@ const submitting = ref(false)
 const requestId = ref('')
 let requestFingerprint = ''
 const reportTypeConfigs = {
-  日报: { reportType: 'daily', periodLabel: '报告日期', leadTitle: '今日要闻', hotTitle: '热点研判', itemCount: 8 },
   周报: { reportType: 'weekly', periodLabel: '报告周期', leadTitle: '本周要闻', hotTitle: '周度趋势研判', itemCount: 10 },
   月报: { reportType: 'monthly', periodLabel: '报告月份', leadTitle: '月度要闻', hotTitle: '月度趋势研判', itemCount: 15 }
 }
@@ -176,8 +171,8 @@ async function loadCategories() {
     categoryError.value = error?.msg || error?.message || '类别加载失败'
   }
 }
-const initialType = ({ 日报: '日报', 周报: '周报', 月报: '月报' })[String(route.query.type || '')] || '日报'
-const form = reactive({ type: initialType, date: new Date(), period: [], month: new Date(), directions: [], sources: ['新闻网站', '微信公众号'], keywords: [], template: String(route.query.template || ''), itemCount: 8, summaryLength: 'normal', hotAnalysis: true, duplicateMerge: true })
+const initialType = ({ weekly: '周报', monthly: '月报', 周报: '周报', 月报: '月报' })[String(route.query.type || '')] || '周报'
+const form = reactive({ type: initialType, period: [], month: new Date(), directions: [], sources: ['新闻网站', '微信公众号'], keywords: [], template: String(route.query.template || ''), itemCount: reportTypeConfigs[initialType].itemCount, summaryLength: 'normal', hotAnalysis: true, duplicateMerge: true })
 const keywordDraft = ref('')
 function updateKeywords(values) {
   form.keywords = [...new Set((values || []).map(value => value.trim()).filter(Boolean))]
@@ -219,6 +214,7 @@ const columnSuggestions = computed(() => writingSections.value.length
   ? writingSections.value.map(section => section.title)
   : [currentTypeConfig.value.leadTitle])
 watch(() => form.type, type => {
+  if (!reportTypeConfigs[type]) return
   selectTemplateForType()
   form.itemCount = reportTypeConfigs[type].itemCount
 })
@@ -310,7 +306,8 @@ async function loadSourceTask() {
     const task = res.data || {}
     const config = task.config || {}
     const reportType = task.type || config.reportType || config.report_type
-    const typeMap = { daily: '日报', weekly: '周报', monthly: '月报' }
+    if (['daily', '日报'].includes(reportType)) throw new Error('历史日报仅供查阅，请返回简报列表新建周报或月报')
+    const typeMap = { weekly: '周报', monthly: '月报' }
     if (typeMap[reportType]) form.type = typeMap[reportType]
     await Promise.resolve()
     const options = config.options || {}
@@ -325,13 +322,12 @@ async function loadSourceTask() {
     form.hotAnalysis = options.hotAnalysis !== false
     form.duplicateMerge = options.duplicateMerge !== false
     if (Array.isArray(config.period)) {
-      if (form.type === '日报') form.date = parseCalendarDate(config.period[0])
-      else if (form.type === '周报') form.period = config.period.map(parseCalendarDate)
+      if (form.type === '周报') form.period = config.period.map(parseCalendarDate)
       else form.month = parseCalendarDate(config.period[0])
     }
     ElMessage.success('已载入原简报配置，请重新核对周期候选并明确选择资料')
   } catch (error) {
-    if (!stopped && generation === sourceTaskGeneration) sourceTaskError.value = error?.msg || '原简报配置加载失败，请重试后再确认候选范围'
+    if (!stopped && generation === sourceTaskGeneration) sourceTaskError.value = error?.msg || error?.message || '原简报配置加载失败，请重试后再确认候选范围'
   } finally {
     if (!stopped && generation === sourceTaskGeneration) {
       sourceTaskLoading.value = false
@@ -344,11 +340,6 @@ function formatDate(value) {
   return calendarDate(value)
 }
 function buildReportPeriod() {
-  if (form.type === '日报') {
-    const value = formatDate(form.date)
-    const date = new Date(form.date)
-    return { period: value ? [value] : [], label: value ? `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日` : '' }
-  }
   if (form.type === '周报') {
     const period = (form.period || []).map(formatDate).filter(Boolean)
     return { period, label: period.length === 2 ? `${period[0]} 至 ${period[1]}` : '' }
@@ -396,13 +387,14 @@ async function createDigest() {
   }
 }
 function buildDigestPayload() {
+  if (!['周报', '月报'].includes(form.type)) throw new Error('仅支持新建周报或月报')
   if (form.template && !decimalId(form.template)) throw new Error(ID_UPGRADE_NOTICE)
   if (selectedCandidateIds.value.length > DIGEST_SELECTION_LIMIT) throw new Error(`每份简报最多选择 ${DIGEST_SELECTION_LIMIT} 篇资料，请减少勾选`)
   if (refreshing.value || previewError.value || sourceTaskLoading.value || sourceTaskError.value) throw new Error('候选核验尚未完成或加载失败')
   if (!selectedCandidateIds.value.length || selectedCandidates.value.some(item => !item.ready)) throw new Error('存在未核验的已选资料')
   const reportType = currentTypeConfig.value.reportType
   const { period, label } = buildReportPeriod()
-  if (!period.length || (reportType !== 'daily' && period.length !== 2) || period[0] > period.at(-1)) throw new Error(`请选择完整且有效的${periodFieldLabel.value}`)
+  if (!period.length || period.length !== 2 || period[0] > period.at(-1)) throw new Error(`请选择完整且有效的${periodFieldLabel.value}`)
   const selectedTemplate = templateOptions.value.find(item => item.value === form.template)
   if (!templateMatchesType(selectedTemplate, form.type)) throw new Error('请选择适用于当前简报周期的启用模板')
   const modelError = templateGenerationError(selectedTemplate)
@@ -462,13 +454,15 @@ onMounted(async () => {
 .ps-digest-filter-grid > .ps-digest-direction-field, .ps-digest-filter-grid > .ps-digest-keyword-field { grid-column: span 3; }
 .ps-digest-create-page .ps-digest-output-grid { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr); }
 .ps-digest-create-page .ps-form-grid :deep(.el-date-editor), .ps-digest-create-page .ps-form-grid :deep(.el-input-number) { width: 100%; }
-.ps-keyword-editor { display: flex; align-items: center; flex-wrap: nowrap; gap: 8px; min-width: 0; padding: 8px; border: 1px solid var(--ps-line); border-radius: 6px; background: #fff; transition: border-color .18s ease, box-shadow .18s ease; }
-.ps-keyword-editor:focus-within { border-color: color-mix(in srgb, var(--ps-blue), #fff 38%); box-shadow: 0 0 0 2px #00548712; }
-.ps-keyword-tags { display: flex; flex: 0 1 auto; flex-wrap: nowrap; gap: 6px; min-width: 0; max-width: 58%; overflow-x: auto; scrollbar-width: thin; }
+.ps-keyword-editor { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; padding: 6px 8px; border: 1px solid var(--ps-line); border-radius: 6px; background: #fff; transition: border-color .18s ease, box-shadow .18s ease; }
+.ps-keyword-editor:focus-within { border-color: color-mix(in srgb, var(--ps-blue), #fff 38%); box-shadow: 0 0 0 2px #409eff12; }
+.ps-keyword-tags { display: flex; flex: 0 1 auto; flex-wrap: wrap; gap: 6px; min-width: 0; max-width: 100%; }
+.ps-keyword-tags :deep(.el-tag) { max-width: 100%; }
+.ps-keyword-tags :deep(.el-tag__content) { overflow: hidden; text-overflow: ellipsis; }
 .ps-keyword-entry { display: flex; align-items: center; flex: 1 1 auto; min-width: 0; gap: 8px; }
 .ps-keyword-entry input { min-width: 0; flex: 1; height: 30px; padding: 0 8px; border: 0; outline: 0; background: transparent; color: var(--ps-ink); font: inherit; }
 .ps-keyword-entry input::placeholder { color: var(--ps-muted); }
-.ps-keyword-entry .el-button { flex-shrink: 0; min-height: 30px; padding: 4px 10px; }
+.ps-keyword-entry .el-button { flex-shrink: 0; }
 .ps-digest-candidate-scroll > .ps-inspector-empty { margin: 0; padding: 36px 16px; text-align: center; }
 .ps-digest-settings-toggle { display: flex; align-items: center; flex-shrink: 0; gap: 8px; min-height: 44px; padding: 0; border: 0; background: transparent; color: var(--ps-ink); font: inherit; cursor: pointer; }
 .ps-digest-settings-toggle > span { font-size: 22px; line-height: 1; }

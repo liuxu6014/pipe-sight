@@ -9,34 +9,37 @@
           <div class="ps-detail-title-row"><el-button class="ps-detail-back-button" plain :icon="Back" aria-label="返回" title="返回" @click="returnFromNewsDetail(router)" /><h1><a v-if="articleUrl" :href="articleUrl" target="_blank" rel="noopener noreferrer" title="打开原文（新窗口）">{{ article.title }}</a><template v-else>{{ article.title }}</template></h1></div>
           <div class="ps-detail-info-row">
           <div class="ps-article-meta">
-            <span class="ps-article-source">{{ article.source }}</span><time>{{ newsDate(article.time) }}</time>
+            <span class="ps-article-source">{{ article.source }}</span><time>发布于 {{ newsDate(article.time) }}</time><span v-if="article.author">作者 {{ article.author }}</span>
             <div class="ps-article-flags"><span>{{ article.sourceType }}</span></div>
           </div>
-          <div class="ps-article-actions"><el-button :loading="busy(article)" :disabled="busy(article)" @click="addToBasket"><Collection />{{ inBasket(article) ? '取消加入资料库' : '加入资料库' }}</el-button></div>
+          <div class="ps-article-actions"><el-button :icon="Collection" :loading="busy(article)" :disabled="busy(article)" @click="addToBasket">{{ inBasket(article) ? '取消加入资料库' : '加入资料库' }}</el-button></div>
           </div>
           <div v-if="article.tags.length" class="ps-article-head-bottom">
           <div class="ps-tag-row"><span v-for="tag in article.tags" :key="tag" class="ps-tag">{{ tag }}</span></div>
           </div>
-          <div v-if="article.entities && article.entities.length" class="ps-article-head-bottom">
-          <div class="ps-tag-row ps-entity-row"><span v-for="entity in article.entities" :key="`${entity.type}-${entity.name}`" class="ps-entity-chip"><em>{{ entity.type }}</em>{{ entity.name }}</span></div>
-          </div>
+          <el-tag v-if="categoryName && !article.tags.includes(categoryName)" effect="plain">{{ categoryName }}</el-tag>
         </header>
-        <section v-if="showSummary" id="article-summary" class="ps-ai-summary" role="button" tabindex="0" aria-label="复制文章摘要，双击或按回车、空格键" title="双击复制摘要" @dblclick="copySummary" @keydown.enter.prevent="copySummary" @keydown.space.prevent="copySummary"><p>{{ summaryText }}</p></section>
-        <div v-if="articleAnalysis.length" class="ps-impact-grid"><section v-for="item in articleAnalysis" :id="item.id" :key="item.id"><span>{{ item.label }}</span><strong>{{ item.value }}</strong></section></div>
+        <el-tabs v-model="activeTab" class="ps-content-tabs" aria-label="资讯内容切换">
+          <el-tab-pane label="摘要" name="summary"><section id="article-summary" class="ps-news-summary"><div class="summary-heading"><h2>内容摘要</h2><el-button v-if="summaryText" plain @click="copySummary">复制摘要</el-button></div><p>{{ summaryText || '当前记录暂未提供摘要。' }}</p></section></el-tab-pane>
+          <el-tab-pane label="全文" name="fulltext"><div class="ps-translation-toolbar"><el-radio-group v-if="content.hasTranslation" v-model="language" aria-label="文章语言"><el-radio-button value="original">原文</el-radio-button><el-radio-button value="zh">已保存中文</el-radio-button></el-radio-group><el-tooltip v-else content="按需翻译与结果入库接口待接入；不会自动翻译或覆盖原文。"><span><el-button disabled plain>翻译为中文 · 待接入</el-button></span></el-tooltip></div>
         <div class="ps-article-body">
-          <template v-if="article.body_blocks?.length">
+          <template v-if="language === 'original' && article.body_blocks?.length">
             <template v-for="(block, index) in article.body_blocks" :key="index">
               <p v-if="block.type === 'paragraph'">{{ block.text }}</p>
               <img v-else-if="block.type === 'image'" :src="block.src" :alt="block.alt || '文章配图'" loading="lazy" style="display: block; max-width: 100%; height: auto; margin: 20px auto;" />
             </template>
           </template>
-          <template v-else><p v-for="paragraph in article.body" :key="paragraph">{{ paragraph }}</p></template>
+          <template v-else><p v-for="(paragraph, index) in visibleBody" :key="index">{{ paragraph }}</p><el-empty v-if="!visibleBody.length" description="当前资料未提供全文，可查看摘要或打开标题原文。" :image-size="64" /></template>
         </div>
+          </el-tab-pane>
+          <el-tab-pane label="官网洞察" name="insight"><ContentInsights :item="article" /></el-tab-pane>
+        </el-tabs>
+        <ContentEntities :entities="article.entities" />
       </article>
       <aside class="ps-reading-aside">
-        <section v-if="articleAnalysis.length" class="ps-panel ps-article-toc"><h3>文章目录</h3><a v-if="showSummary" href="#article-summary">内容摘要</a><a v-for="item in articleAnalysis" :key="item.id" :href="'#' + item.id">{{ item.label }}</a></section>
-        <section v-if="relatedNews.length" class="ps-panel"><h3>其他资讯</h3><button v-for="item in relatedNews" :key="item.id" type="button" class="ps-related-item" @click="openPortalContent(router, `/portal/news/${item.id}`)"><strong>{{ item.title }}</strong><small>{{ item.source }}<template v-if="item.time"> · {{ newsDate(item.time) }}</template></small></button></section>
-        <section v-if="paperItems.length" class="ps-panel"><h3>其他论文</h3><button v-for="paper in paperItems.slice(0, 2)" :key="paper.id" type="button" class="ps-related-item" @click="openPortalContent(router, `/portal/papers/${paper.id}`)"><strong>{{ paper.titleZh }}</strong><small>{{ paper.journal }} · {{ paper.year }}</small></button></section>
+        <section class="ps-panel ps-article-toc"><h3>阅读导航</h3><el-button plain @click="activeTab = 'summary'">内容摘要</el-button><el-button plain @click="activeTab = 'fulltext'">文章全文</el-button><el-button plain @click="activeTab = 'insight'">官网洞察</el-button></section>
+        <section v-if="relatedNews.length" class="ps-panel"><h3>其他资讯</h3><el-link underline="never" :href="$router.resolve(`/portal/news/${item.id}` || '/portal').href" v-for="item in relatedNews" :key="item.id" class="ps-related-item ps-ui-title" @click.prevent="openPortalContent(router, `/portal/news/${item.id}`)"><strong>{{ item.title }}</strong><small>{{ item.source }}<template v-if="item.time"> · {{ newsDate(item.time) }}</template></small></el-link></section>
+        <section v-if="paperItems.length" class="ps-panel"><h3>其他论文</h3><el-link underline="never" :href="$router.resolve(`/portal/papers/${paper.id}` || '/portal').href" v-for="paper in paperItems.slice(0, 2)" :key="paper.id" class="ps-related-item ps-ui-title" @click.prevent="openPortalContent(router, `/portal/papers/${paper.id}`)"><strong>{{ paper.titleZh }}</strong><small>{{ paper.journal }} · {{ paper.year }}</small></el-link></section>
       </aside>
     </div>
   </div>
@@ -52,6 +55,9 @@ import { getPipelineIntelligenceDetail, savePipelineWorkspaceItem, deletePipelin
 import { useListWorkspace } from '@/utils/portal/listQuery'
 import { normalizePortalIntelligence } from '@/store/modules/portal'
 import PortalEmptyState from '../components/PortalEmptyState.vue'
+import ContentEntities from '../components/ContentEntities.vue'
+import ContentInsights from '../components/ContentInsights.vue'
+import { contentCategory, readingContent } from '@/utils/portal/contentPresentation'
 import { newsDate } from '@/utils/portal/discovery'
 import { openPortalContent, returnFromNewsDetail } from '@/utils/portal/openContent'
 
@@ -62,13 +68,13 @@ const { inBasket, busy, toggleBasket } = useListWorkspace(portalStore, { save: s
 const liveArticle = ref(null)
 const detailError = ref('')
 const detailLoading = ref(true)
+const activeTab = ref('summary')
+const language = ref('original')
 const article = computed(() => detailError.value ? null : liveArticle.value)
+const categoryName = computed(() => contentCategory(article.value || {}))
+const content = computed(() => readingContent(article.value || {}))
+const visibleBody = computed(() => language.value === 'zh' ? content.value.translated : content.value.original)
 const summaryText = computed(() => (article.value?.summary || '').replace(/^导读摘要（据公开资料整理）\s*[:：]\s*/, ''))
-const showSummary = computed(() => {
-  const normalize = value => String(value || '').replace(/\s+/g, '')
-  const body = article.value?.body_blocks?.filter(block => block.type === 'paragraph').map(block => block.text).join('') || article.value?.body?.join('') || ''
-  return Boolean(summaryText.value && !normalize(body).startsWith(normalize(summaryText.value)))
-})
 const articleUrl = computed(() => {
   const value = article.value?.sourceUrl || article.value?.source_url || article.value?.originalUrl || article.value?.original_url || article.value?.url || article.value?.link
   if (!value) return ''
@@ -81,31 +87,25 @@ const articleUrl = computed(() => {
 })
 const relatedNews = computed(() => portalStore.newsItems.filter(item => item.id !== article.value?.id).slice(0, 3))
 const paperItems = computed(() => portalStore.paperItems)
-function asText(value) {
-  if (Array.isArray(value)) return value.map(item => asText(item)).filter(Boolean).join('；')
-  if (value && typeof value === 'object') return asText(value.summary || value.content || value.description || value.text || '')
-  return value == null ? '' : String(value).trim()
-}
-const articleAnalysis = computed(() => {
-  const current = article.value || {}
-  return [
-    { id: 'article-impact', label: '业务影响', value: asText(current.businessImpact || current.business_impact || current.impact) },
-    { id: 'article-tech', label: '技术要点', value: asText(current.technicalPoints || current.technical_points || current.technicalSummary || current.technical_summary) }
-  ].filter(item => item.value)
-})
+let detailRequest = 0
 async function loadArticle() {
+  const request = ++detailRequest
+  activeTab.value = 'summary'
+  language.value = 'original'
   detailLoading.value = true
   liveArticle.value = null
   detailError.value = ''
   try {
     const res = await getPipelineIntelligenceDetail(route.params.itemId)
+    if (request !== detailRequest) return
     const payload = res.data?.data || res.data
     if (payload?.id && payload.category !== 'paper') liveArticle.value = normalizePortalIntelligence(payload)
     else detailError.value = '该资讯记录不存在或当前账号没有访问权限。'
   } catch (error) {
+    if (request !== detailRequest) return
     detailError.value = error?.msg || '资讯详情加载失败，请确认后端服务和访问权限。'
   } finally {
-    detailLoading.value = false
+    if (request === detailRequest) detailLoading.value = false
   }
 }
 async function addToBasket() {
@@ -150,6 +150,7 @@ watch(() => route.params.itemId, loadArticle)
 </script>
 
 <style scoped>
+.ps-content-tabs { margin-top: 16px; }.ps-news-summary { padding: 16px 18px; background: var(--ps-blue-soft); border-radius: 8px; }.summary-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }.summary-heading h2 { margin: 0; font-size: 16px; }.ps-news-summary p { line-height: 1.9; white-space: pre-wrap; margin: 12px 0 0; }.ps-translation-toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
 .ps-article { padding-top: 22px; }
 .ps-article-head h1 { margin: 0; font-size: 24px; font-weight: 600; line-height: 1.45; letter-spacing: 0; overflow-wrap: anywhere; }
 @media (max-width: 600px) {

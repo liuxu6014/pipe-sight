@@ -4,12 +4,12 @@ from copy import deepcopy
 from types import SimpleNamespace
 from typing import Any, NoReturn
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.business_ids import parse_business_id, wire_id
 from app.business_time import format_business_time
 from app.intelligence.models.configuration import PipelineTemplateVersion
-from app.research.models.research_models import utcnow
+from app.research.models.research_models import PipelineReportAsset, PipelineResearchJob, utcnow
 from app.research.repositories.research_repository import ResearchDao
 from app.research.services.execution import ResearchExecutionService
 from app.research.services.exporters import build_file, safe_file_stem
@@ -73,6 +73,32 @@ class ResearchReportService:
         row = await cls._owned(db, user_id, report_id, include_all=include_all)
         await cls._load_display_history(db, row)
         return {**report_serializer(row), 'readOnly': str(row.user_id) != str(user_id)}
+
+    @classmethod
+    async def delete_report(cls, db, *, user_id, report_id) -> dict:
+        report = await cls._owned(db, user_id, report_id, lock=True)
+        # Lock children too: a retry/export worker must not start during deletion.
+        jobs = list(
+            await db.scalars(
+                select(PipelineResearchJob).where(PipelineResearchJob.report_id == report.id).with_for_update()
+            )
+        )
+        if any(job.status in {'queued', 'running'} for job in jobs):
+            raise ServiceException(message='报告仍有生成任务进行中，请先取消任务后再删除')
+        assets = list(
+            await db.scalars(
+                select(PipelineReportAsset).where(PipelineReportAsset.report_id == report.id).with_for_update()
+            )
+        )
+        if any(asset.status in {'queued', 'running'} for asset in assets):
+            raise ServiceException(message='报告仍有导出或配图任务进行中，请等待任务结束后再删除')
+        identity = wire_id(report.id)
+        # Assets reference jobs with RESTRICT; remove them before the report's
+        # existing FK cascades remove its jobs, saved entries and edit history.
+        await db.execute(delete(PipelineReportAsset).where(PipelineReportAsset.report_id == report.id))
+        await db.delete(report)
+        await db.commit()
+        return {'id': identity}
 
     @staticmethod
     def _check_version(report, expected_version, expected_revision=None) -> None:

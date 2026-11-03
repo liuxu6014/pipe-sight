@@ -9,16 +9,16 @@
     <template v-else-if="loaded">
     <header class="ps-editor-topbar">
       <div class="ps-editor-title">
-        <el-button class="ps-ui-action" aria-label="返回情报简报" @click="router.push('/portal/digests')"><ArrowLeft /></el-button>
+        <el-button :icon="ArrowLeft" circle class="ps-ui-action" aria-label="返回情报简报" @click="router.push('/portal/digests')" />
         <span><strong>{{ digest.title }}</strong><small>{{ digestPeriod }} · {{ reportTypeLabel }}</small></span>
       </div>
       <div class="ps-save-state"><span :class="{ 'is-saving': saving }"></span>{{ saveLabel }}</div>
       <div class="ps-editor-actions">
         <el-button :disabled="digest.readOnly" @click="router.push(`/portal/research/reports/${digest.id}/diagram`)">查看配图</el-button>
-        <el-button :disabled="isReadOnly" :loading="versionSaving" @click="saveVersion"><CollectionTag />保存修改</el-button>
-        <el-button v-if="digest.requiresReview" :disabled="isReadOnly" type="success" @click="finalizeDigest"><CircleCheck />确认复核并定稿</el-button>
+        <el-button :icon="CollectionTag" :disabled="isReadOnly" :loading="versionSaving" @click="saveVersion">保存修改</el-button>
+        <el-button :icon="CircleCheck" v-if="digest.requiresReview" :disabled="isReadOnly" type="success" @click="finalizeDigest">确认复核并定稿</el-button>
         <el-dropdown trigger="click" @command="exportDigest">
-          <el-button type="primary" :disabled="digest.readOnly || exporting" :loading="exporting"><Download />{{ digest.requiresReview ? '导出草稿' : '导出简报' }}</el-button>
+          <el-button :icon="Download" type="primary" :disabled="digest.readOnly || exporting" :loading="exporting">{{ digest.requiresReview ? '导出草稿' : '导出简报' }}</el-button>
           <template #dropdown><el-dropdown-menu>
             <el-dropdown-item command="markdown">Markdown 文档</el-dropdown-item>
             <el-dropdown-item command="docx">Word 文档</el-dropdown-item>
@@ -28,42 +28,50 @@
       </div>
     </header>
     <el-alert v-if="digest.readOnly" title="正在只读查看其他用户的简报" description="可查看正文和来源；编辑、定稿及文件导出由简报所有者操作。" type="info" :closable="false" show-icon />
+    <el-alert v-else-if="isLegacyDaily" title="历史日报仅供查阅" description="保留原文和来源，不再编辑、保存或定稿。" type="info" :closable="false" show-icon />
     <el-alert v-else-if="isReadOnly" title="当前简报已正式发布，处于只读状态" description="来源查看和导出仍可使用；如需修改，请先由管理员撤销发布。" type="info" :closable="false" show-icon />
     <el-alert v-if="digest.requiresReview" title="当前简报为待复核草稿" :description="digest.generationWarning || '该简报未完成全量模型生成，请配置可用模型或人工复核后再作为正式成果使用。'" type="warning" :closable="false" show-icon />
 
     <div class="ps-editor-layout ps-digest-editor-layout">
       <aside class="ps-outline-panel">
-        <div class="ps-editor-panel-head"><span>栏目目录</span><el-button class="ps-ui-action" aria-label="新增栏目" :disabled="isReadOnly" @click="addSection"><Plus /></el-button></div>
-        <button v-for="(section, index) in sections" :key="section.id" type="button" :class="['ps-outline-item', { 'is-active': currentSectionId === section.id }]" @click="currentSectionId = section.id">
-          <Rank /><span>{{ index + 1 }}</span><span><strong>{{ section.title }}</strong><small>{{ section.words || 0 }} 字 · {{ sectionSources(section).length }} 条来源</small></span><i :class="`is-${section.status || 'draft'}`"></i>
-        </button>
-        <el-button class="ps-ui-action ps-add-section" :disabled="isReadOnly" @click="addSection"><Plus />新增栏目</el-button>
+        <div class="ps-editor-panel-head"><span>栏目目录</span><el-button :icon="Plus" circle class="ps-ui-action" aria-label="新增栏目" :disabled="isReadOnly" @click="addSection" /></div>
+        <el-button :auto-insert-space="false" class="ps-ui-control" v-for="(section, index) in bodySections" :key="section.id" native-type="button" :class="['ps-outline-item', { 'is-active': currentSectionId === section.id }]" @click="currentSectionId = section.id">
+          <span class="ps-outline-number">{{ index + 1 }}</span><span class="ps-outline-copy"><strong>{{ section.title }}</strong><small>{{ section.words || 0 }} 字 · {{ sectionSources(section).length }} 条来源</small></span><i class="ps-outline-status" :class="`is-${section.status || 'draft'}`"></i>
+        </el-button>
+        <el-button :icon="Plus" class="ps-ui-action ps-add-section" :disabled="isReadOnly" @click="addSection">新增栏目</el-button>
       </aside>
 
       <main class="ps-digest-canvas">
         <article class="ps-digest-paper">
-          <header><span>管网科技情报简报</span><h1>{{ digest.title }}</h1><p>{{ digest.readOnly ? '当前仅供查阅，修改和文件导出由简报所有者操作。' : isReadOnly ? '正式发布后内容锁定，来源查看与导出仍可使用。' : '所有栏目均可编辑，引用可回到来源条目，保存后跨会话保留。' }}</p><div><span>{{ digestPeriod }}</span><span>{{ digest.owner || '编制人待补充' }}</span></div></header>
+          <header><span>管网科技情报简报</span><h1>{{ digest.title }}</h1><p>{{ digest.readOnly ? '当前仅供查阅，修改和文件导出由简报所有者操作。' : isLegacyDaily ? '历史日报仅供查阅，来源查看与导出仍可使用。' : isReadOnly ? '正式发布后内容锁定，来源查看与导出仍可使用。' : '所有栏目均可编辑，引用可回到来源条目，保存后跨会话保留。' }}</p><div><span>{{ digestPeriod }}</span><span>{{ digest.owner || '编制人待补充' }}</span></div></header>
           <section v-if="currentSection">
             <div class="ps-digest-section-title">
               <span>{{ sectionNumber }}</span>
               <div><h2>{{ currentSection.title }}</h2><p>本栏目关联 {{ currentSectionSources.length }} 条来源</p></div>
-              <el-button class="ps-ui-action" :disabled="isReadOnly" @click="rebuildSection"><MagicStick />按证据重组研判</el-button>
+              <el-button :icon="MagicStick" class="ps-ui-action" :disabled="isReadOnly" @click="rebuildSection">按证据重组研判</el-button>
             </div>
             <div :key="currentSection.id" class="ps-digest-intro" aria-label="栏目正文" role="textbox" aria-multiline="true" :class="{ 'is-empty': !currentSection.content }" data-placeholder="当前栏目暂无正文，请在此补充。" :contenteditable="!isReadOnly" @input="updateSectionContent"><template v-for="(part, partIndex) in reportCitationParts(currentSection.content, currentSection.title, Math.max(0, ...citations.map(item => Number(item.id) || 0)))" :key="partIndex"><sup v-if="part.citation" class="ps-citation-marker"><router-link v-if="citationPath(part.text)" :to="citationPath(part.text)" :contenteditable="false" :aria-label="`查看引用 ${part.text} 的资料详情`">{{ part.text }}</router-link><template v-else>{{ part.text }}</template></sup><span v-else>{{ part.text }}</span></template></div>
-            <article v-for="(source, index) in currentSectionSources" :key="source.id" class="ps-digest-news">
-              <span class="ps-digest-index">{{ String(index + 1).padStart(2, '0') }}</span>
-              <div><h3><router-link v-if="getCitationPath(source)" :to="getCitationPath(source)">{{ source.title }}</router-link><template v-else>{{ source.title }}</template></h3><p v-if="source.quote">{{ source.quote }}</p><small>{{ citationSourceLabel(source) }}<template v-if="source.location"> · {{ source.location }}</template></small></div>
-              <div class="ps-digest-item-actions"><el-button class="ps-ui-action" title="从当前栏目移除" :disabled="isReadOnly" @click="removeSource(source.id)"><Delete /></el-button><Rank /></div>
-            </article>
+
+          </section>
+          <section class="ps-digest-reference-section" aria-label="文末参考资料">
+            <h2>参考资料</h2>
+            <p v-if="authoredReferences" class="ps-digest-intro">{{ authoredReferences }}</p>
+            <ol v-else-if="citations.length" class="ps-digest-sources">
+              <li v-for="source in citations" :key="source.id">
+                <span>[{{ source.id }}]</span>
+                <div><router-link v-if="getCitationPath(source)" :to="getCitationPath(source)">{{ source.title }}</router-link><strong v-else>{{ source.title }}</strong><small>{{ citationSourceLabel(source) }}<template v-if="source.location"> · {{ source.location }}</template></small></div>
+              </li>
+            </ol>
+            <p v-else class="ps-inspector-empty">当前简报尚未关联来源</p>
           </section>
         </article>
       </main>
 
       <aside class="ps-editor-inspector" :class="{ 'is-picking-candidates': activeTab === '候选资讯' }">
-        <div class="ps-inspector-tabs"><button v-for="tab in tabs" :key="tab" type="button" :class="{ 'is-active': activeTab === tab }" @click="activeTab = tab">{{ tab }}</button></div>
+        <div class="ps-inspector-tabs ps-segmented-row"><el-segmented v-model="activeTab" :options="tabs" aria-label="简报辅助信息"  block /></div>
         <div v-show="activeTab === '候选资讯'" class="ps-inspector-content ps-digest-candidate-content"><DigestCandidatePicker :selected-ids="currentArticleIds" :read-only="isReadOnly" :enabled="activeTab === '候选资讯' && loaded" @select="addCandidate" /></div>
         <div v-if="activeTab === '来源清单'" class="ps-inspector-content">
-          <ol class="ps-digest-sources"><li v-for="(item, index) in citations" :key="item.id"><span>{{ index + 1 }}</span><div><router-link v-if="getCitationPath(item)" :to="getCitationPath(item)">{{ item.title }}</router-link><strong v-else>{{ item.title }}</strong><small>{{ citationSourceLabel(item) }}<template v-if="item.location"> · {{ item.location }}</template></small></div></li></ol>
+          <ol class="ps-digest-sources"><li v-for="(item, index) in citations" :key="item.id"><span>[{{ item.id }}]</span><div><router-link v-if="getCitationPath(item)" :to="getCitationPath(item)">{{ item.title }}</router-link><strong v-else>{{ item.title }}</strong><small>{{ citationSourceLabel(item) }}<template v-if="item.location"> · {{ item.location }}</template></small><el-button v-if="currentSectionSources.some(source => String(source.id) === String(item.id))" plain :disabled="isReadOnly" @click="removeSource(item.id)">从当前栏目移除</el-button></div></li></ol>
           <p v-if="!citations.length" class="ps-inspector-empty">当前报告尚未关联来源</p>
         </div>
         <div v-if="activeTab === '导出记录'" class="ps-inspector-content"><ReportExportHistory :report-id="String(digest.id)" :title="digest.title" :read-only="Boolean(digest.readOnly)" :refresh-key="exportRefreshKey" /></div>
@@ -83,7 +91,7 @@ import { getCitationPath } from '@/utils/portal/citationRouting'
 import ReportExportHistory from '../components/ReportExportHistory.vue'
 import DigestCandidatePicker from '../components/DigestCandidatePicker.vue'
 import { decimalId } from '@/utils/portal/businessId'
-import { ArrowLeft, CircleCheck, CollectionTag, Delete, Download, MagicStick, Plus, Rank, WarningFilled } from '@element-plus/icons-vue'
+import { ArrowLeft, CircleCheck, CollectionTag, Download, MagicStick, Plus, WarningFilled } from '@element-plus/icons-vue'
 import usePortalStore from '@/store/modules/portal'
 import { createPipelineResearchReportExport, downloadPipelineResearchReportExport, exportPipelineResearchReport, finalizePipelineResearchReport, getPipelineResearchReport, listPipelineResearchReportExports, updatePipelineResearchReport } from '@/api/pipeline/intelligence'
 
@@ -112,11 +120,17 @@ let editRevision = 0
 let savePromise = Promise.resolve()
 let active = true
 let loadGeneration = 0
-const saveLabel = computed(() => ({ saved: '已保存', dirty: '有未保存修改', saving: '正在保存…', error: '保存失败，请重试' })[saveState.value] || '保存状态未知')
-const isReadOnly = computed(() => Boolean(digest.value.readOnly) || digest.value.status === 'published')
+const saveLabel = computed(() => isLegacyDaily.value ? '历史日报 · 只读' : ({ saved: '已保存', dirty: '有未保存修改', saving: '正在保存…', error: '保存失败，请重试' })[saveState.value] || '保存状态未知')
+const isLegacyDaily = computed(() => ['daily', '日报'].includes(digest.value.reportType || digest.value.type))
+const isReadOnly = computed(() => isLegacyDaily.value || Boolean(digest.value.readOnly) || digest.value.status === 'published')
+function isReferenceSection(section) {
+  return /^(参考资料|参考文献|来源清单|资料来源|references)$/i.test(String(section.title || '').replace(/^(?:\d+\.)+\s*/, '').trim())
+}
+const bodySections = computed(() => sections.value.filter(section => !isReferenceSection(section)))
+const authoredReferences = computed(() => sections.value.filter(isReferenceSection).map(section => section.content || '').filter(Boolean).join('\n\n'))
 
-const currentSection = computed(() => sections.value.find(item => item.id === currentSectionId.value) || sections.value[0])
-const currentSectionIndex = computed(() => Math.max(sections.value.findIndex(item => item.id === currentSectionId.value), 0))
+const currentSection = computed(() => bodySections.value.find(item => item.id === currentSectionId.value) || bodySections.value[0])
+const currentSectionIndex = computed(() => Math.max(bodySections.value.findIndex(item => item.id === currentSectionId.value), 0))
 const sectionNumber = computed(() => String(currentSectionIndex.value + 1).padStart(2, '0'))
 const digestPeriod = computed(() => digest.value.period || (digest.value.metadata?.period || []).join(' 至 ') || String(digest.value.updatedAt || '').slice(0, 10) || '当前周期')
 const reportTypeLabel = computed(() => ({ daily: '科技情报日报', weekly: '科技情报周报', monthly: '科技情报月报', 日报: '科技情报日报', 周报: '科技情报周报', 月报: '科技情报月报' })[digest.value.reportType || digest.value.type] || '科技情报简报')
@@ -332,7 +346,7 @@ async function loadDigest() {
     sections.value = Array.isArray(res.data.sections) ? res.data.sections : []
     citations.value = res.data.citations || []
     issues.value = res.data.qualityIssues || []
-    currentSectionId.value = sections.value[0]?.id
+    currentSectionId.value = bodySections.value[0]?.id
     loaded.value = true
   } catch (error) {
     if (!active || generation !== loadGeneration) return
@@ -371,7 +385,12 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .ps-digest-intro { white-space: pre-wrap; }
-.ps-citation-marker { position: static; vertical-align: super; font-size: .75em; line-height: 0; }
+.ps-citation-marker { position: static; vertical-align: super; font-size: .75em; line-height: 0; padding: 2px 4px; margin-inline: 1px; border-radius: 3px; background: var(--ps-blue-soft, #e8f1f8); color: var(--ps-blue); white-space: nowrap; }
+.ps-citation-marker a:focus-visible { outline: 2px solid var(--ps-blue); outline-offset: 2px; }
+.ps-digest-reference-section { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--ps-line); }
+.ps-digest-reference-section h2 { margin: 0 0 8px; font-size: 17px; }
+.ps-digest-sources .el-button { margin: 8px 0 0; }
+.ps-digest-intro { overflow-wrap: anywhere; }
 .ps-citation-marker a, .ps-digest-news h3 a, .ps-digest-sources a { color: var(--ps-blue); text-decoration: none; }
 .ps-citation-marker a:hover, .ps-digest-news h3 a:hover, .ps-digest-sources a:hover { text-decoration: underline; }
 .ps-digest-sources { list-style: none; padding: 0; margin: 0; }

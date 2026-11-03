@@ -125,7 +125,8 @@ test('A05 detail failures show retry state and the next success clears it', asyn
   assert.equal(page.detail.value.category_name, '检测')
   const markup = source('intelligence/detail').split('<script setup>')[0]
   assert.match(markup, /detail.category_name/)
-  assert.doesNotMatch(markup, /detail\.(timeline|entities|related_topics|relevance|categoryName)/)
+  assert.match(markup, /ContentEntities :entities="detail.entities/)
+  assert.doesNotMatch(markup, /detail\.(timeline|related_topics|relevance|categoryName)/)
 })
 
 test('A04 dashboard shows source names and counts without a fabricated percentage', () => {

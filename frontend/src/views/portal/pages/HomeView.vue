@@ -4,7 +4,7 @@
       <form class="ps-home-search" role="search" @submit.prevent="submitSearch">
         <Search aria-hidden="true" />
         <input v-model.trim="keyword" maxlength="200" aria-label="搜索研究资料" placeholder="搜索资讯、论文、研究资料或我的报告" />
-        <el-button v-if="keyword" class="ps-ui-action ps-home-search-clear" aria-label="清空搜索" @click="clearSearch"><Close /></el-button>
+        <el-button :icon="Close" circle v-if="keyword" class="ps-ui-action ps-home-search-clear" aria-label="清空搜索" @click="clearSearch" />
         <el-button native-type="submit" type="primary" :disabled="!keyword">搜索</el-button>
       </form>
     </section>
@@ -18,7 +18,7 @@
       <ul v-else-if="searchResults.length" class="ps-home-result-list">
         <li v-for="item in searchResults" :key="`${item.type}-${item.id}`">
           <span class="ps-home-content-type">{{ item.type_label || typeLabels[item.type] || '资料' }}</span>
-          <div><button type="button" class="ps-home-item-title" :disabled="!resultPath(item)" @click="openPortalContent(router, resultPath(item))">{{ item.title }}</button><p>{{ cleanSummary(item.summary) || '摘要未提供' }}</p><small>{{ cleanResultMeta(item.meta) }}</small></div>
+          <div><el-link underline="never" :href="$router.resolve(resultPath(item) || '/portal').href" class="ps-home-item-title ps-ui-title" :disabled="!resultPath(item)" @click.prevent="openPortalContent(router, resultPath(item))">{{ item.title }}</el-link><p>{{ cleanSummary(item.summary) || '摘要未提供' }}</p><small>{{ cleanResultMeta(item.meta) }}</small></div>
         </li>
       </ul>
       <PortalEmptyState v-else compact title="没有匹配结果" description="请缩短关键词或尝试其他技术名称。" />
@@ -32,23 +32,23 @@
     <p v-if="overview.loadError.value" class="ps-home-load-warning" role="alert">统计加载失败，不以零代替。<el-button plain @click="overview.reload">重试</el-button></p>
 
     <section class="ps-home-modules" aria-label="四大功能">
-      <button v-for="entry in modules" :key="entry.path" type="button" class="ps-home-module" @click="router.push(entry.path)">
+      <el-button :auto-insert-space="false" v-for="entry in modules" :key="entry.path" native-type="button" class="ps-home-module ps-ui-control" @click="router.push(entry.path)">
         <span class="ps-home-module-icon"><component :is="entry.icon" /></span>
         <strong>{{ entry.title }}</strong><p>{{ entry.description }}</p><span class="ps-home-module-link">{{ entry.action }}<ArrowRight /></span>
-      </button>
+      </el-button>
     </section>
 
     <section class="ps-panel ps-home-latest" aria-label="最新资讯与论文">
-      <div class="ps-section-head"><h2>最新资讯与论文</h2><div class="ps-home-feed-tabs" role="group" aria-label="最新内容类型"><button v-for="tab in feedTabs" :key="tab.key" type="button" :aria-pressed="feedType === tab.key" @click="feedType = tab.key">{{ tab.label }}</button></div></div>
+      <div class="ps-section-head"><h2>最新资讯与论文</h2><div class="ps-home-feed-tabs ps-segmented-row"><el-segmented v-model="feedType" :options="feedTabs.map(tab => ({ label: tab.label, value: tab.key }))" aria-label="最新内容类型" /></div></div>
       <p v-if="articles.loadError.value || papers.loadError.value" class="ps-home-load-warning" role="alert">{{ articles.loadError.value ? '资讯加载失败。' : '' }}{{ papers.loadError.value ? '论文加载失败。' : '' }}<el-button plain @click="reloadLatest">重试</el-button></p>
       <div class="ps-home-panel-content" tabindex="0" aria-label="最新资讯与论文滚动区">
       <el-skeleton v-if="articles.loading.value || papers.loading.value" :rows="6" animated />
       <ul v-else-if="latestItems.length" class="ps-home-latest-list">
         <li v-for="item in latestItems" :key="`${item.kind}-${item.id}`">
-          <button type="button" class="ps-home-latest-item" @click="openPortalContent(router, item.path)">
+          <el-button :auto-insert-space="false" native-type="button" class="ps-home-latest-item ps-ui-control" @click="openPortalContent(router, item.path)">
             <img v-if="item.cover_image" :src="item.cover_image" alt="文章配图" loading="lazy" />
             <span class="ps-home-latest-copy"><span class="ps-home-item-meta"><b>{{ item.kindLabel }}</b><time>{{ item.date }}</time></span><strong>{{ item.title }}</strong><span class="ps-home-item-summary">{{ item.summary || '摘要未提供，可进入详情阅读。' }}</span><small>{{ item.source || '来源未提供' }}</small></span><ArrowRight class="ps-home-latest-arrow" />
-          </button>
+          </el-button>
         </li>
       </ul>
       <PortalEmptyState v-else compact title="暂无可访问内容" description="仅展示已发布且当前账号允许阅读的内容。" />
@@ -114,13 +114,13 @@ function reloadLatest() { articles.reload(); papers.reload() }
 <style scoped lang="scss">
 .ps-home-page.ps-home-dashboard { display: block; height: auto; min-height: calc(100dvh - 70px); }
 .ps-home-dashboard > section + section { margin-top: 16px; }
-.ps-home-search-panel { display: block; padding: 20px 24px 16px; border: 1px solid #dce8ef; border-radius: 12px; background: #edf5fa; }
+.ps-home-search-panel { display: block; padding: 20px 24px 16px; border: 1px solid #dce8ef; border-radius: 12px; background: #ecf5ff; }
 .ps-home-search { display: flex; align-items: center; gap: 12px; max-width: 1000px; margin: auto; padding: 5px 5px 5px 18px; border: 1px solid #b8cfdf; border-radius: 9px; background: #fff; }
 .ps-home-search > svg { width: 21px; height: 21px; flex-shrink: 0; color: var(--ps-muted); }
 .ps-home-search input { flex: 1; width: 0; min-width: 0; height: 42px; border: 0; background: transparent; font: inherit; font-size: 15px; color: var(--ps-ink); }
 .ps-home-search input:focus-visible { outline: none; }
 .ps-home-search:has(button:focus-visible) { box-shadow: none; }
-.ps-home-search .el-button { height: 44px; min-width: 92px; margin: 0; }
+.ps-home-search .el-button { min-width: 92px; margin: 0; }
 .ps-home-search-clear { width: 32px; height: 32px; display: grid; place-items: center; padding: 6px; border: 0; border-radius: 5px; background: transparent; color: var(--ps-muted); }
 .ps-home-search-clear:hover { background: var(--ps-blue-soft); }
 .ps-home-statistics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); background: #fff; border: 1px solid var(--ps-line); border-radius: 12px; padding: 18px 0; }
@@ -137,15 +137,15 @@ function reloadLatest() { articles.reload(); papers.reload() }
 .ps-home-module:hover { border-color: #89afc8; background: #f8fbfd; }
 .ps-home-module-icon { display: grid; place-items: center; width: 42px; height: 42px; margin-bottom: 14px; border-radius: 10px; background: var(--ps-blue-soft); color: var(--ps-blue); }
 .ps-home-module-icon svg { width: 23px; height: 23px; }
-.ps-home-module > strong { font-size: 19px; font-weight: 600; }
+.ps-home-module strong { font-size: 19px; font-weight: 600; }
 .ps-home-module p { margin: 10px 0 18px; color: var(--ps-muted); font-size: 13px; line-height: 1.7; }
 .ps-home-module-link { display: flex; align-items: center; gap: 6px; margin-top: auto; color: var(--ps-blue); font-size: 13px; }
 .ps-home-module-link svg { width: 14px; }
 .ps-home-latest, .ps-home-search-results { padding: 22px; }
 .ps-home-dashboard h2 { margin: 0; font-size: 19px; font-weight: 600; }
 .ps-home-feed-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
-.ps-home-feed-tabs button { padding: 7px 14px; min-height: 36px; border: 0; border-radius: 6px; background: transparent; font: inherit; font-size: 13px; color: var(--ps-muted); }
-.ps-home-feed-tabs button[aria-pressed="true"] { color: var(--ps-blue); background: var(--ps-blue-soft); }
+.ps-home-feed-tabs button:not(.el-button) { padding: 7px 14px; min-height: 36px; border: 0; border-radius: 6px; background: transparent; font: inherit; font-size: 13px; color: var(--ps-muted); }
+.ps-home-feed-tabs button:not(.el-button)[aria-pressed="true"] { color: var(--ps-blue); background: var(--ps-blue-soft); }
 .ps-home-latest-list, .ps-home-result-list { list-style: none; margin: 0; padding: 0; }
 .ps-home-latest-list li + li, .ps-home-result-list li + li { border-top: 1px solid var(--ps-line-soft); }
 .ps-home-latest-item { display: flex; align-items: center; gap: 18px; width: 100%; padding: 20px 0; border: 0; border-radius: 6px; background: transparent; text-align: left; font: inherit; }
@@ -172,7 +172,7 @@ function reloadLatest() { articles.reload(); papers.reload() }
   .ps-home-search-panel { padding: 18px 12px 14px; }
   .ps-home-search { gap: 8px; padding-left: 10px; }
   .ps-home-search input { font-size: 14px; }
-  .ps-home-search .el-button { min-width: 62px; padding-inline: 12px; }
+  .ps-home-search .el-button { min-width: 62px; }
   .ps-home-statistics { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 16px; padding-block: 16px; }
   .ps-home-statistics > div { gap: 6px; }
   .ps-home-metric-value { font-size: 36px; }
@@ -181,7 +181,7 @@ function reloadLatest() { articles.reload(); papers.reload() }
   .ps-home-statistics > div:last-child .ps-home-metric-number { min-height: 0; }
   .ps-home-modules { gap: 12px; }
   .ps-home-module { padding: 16px; }
-  .ps-home-module > strong { font-size: 17px; }
+  .ps-home-module strong { font-size: 17px; }
   .ps-home-latest, .ps-home-search-results { padding: 16px; }
   .ps-home-latest-item { flex-wrap: wrap; gap: 12px; }
   .ps-home-latest-item img { flex: 0 0 100%; width: 100%; height: 150px; }

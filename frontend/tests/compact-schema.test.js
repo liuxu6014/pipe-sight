@@ -7,6 +7,7 @@ import * as vue from 'vue'
 import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 import * as contract from '../src/utils/pipeline/compactContract.js'
 import * as sourceAdapters from '../src/utils/pipeline/sourceAdapters.js'
+import * as sourceManagement from '../src/utils/pipeline/sourceManagement.js'
 
 const read = path => readFileSync(new URL('../src/' + path, import.meta.url), 'utf8')
 function page(path, dependencies, exports) {
@@ -156,22 +157,27 @@ test('category UI rejects invalid enabling before making an API request and allo
   } finally { h.close() }
 })
 
-test('source configuration preserves disabled state and failed toggles never invert the current switch', async () => {
+test('source configuration changes frequency only, preserves disabled state and never inverts a failed toggle', async () => {
   const writes = []
   let fail = false
   const h = page('views/pipeline/source/index.vue', {
+    ...sourceManagement,
     listPipelineSources: async () => ({ data: { rows: [] } }),
     updatePipelineSource: async (id, payload) => { if (fail) throw new Error('保存失败'); writes.push({ id, payload }) },
     disablePipelineSource: async () => { throw new Error('停用失败') }
-  }, 'resetForm, sourceForm, sourcePayload, saveSource, toggleSource')
+  }, 'openFrequencyDialog, frequency, saveSource, toggleSource')
   try {
-    h.resetForm({ id: 's', name: '来源', type: 'website', adapter: 'pipechina_group_news', config: { timeout: 30 }, isEnabled: false })
-    h.sourceForm.name = '更新来源'
-    const data = h.sourcePayload()
+    const original = { id: 's', name: '来源', type: 'wechat', adapter: 'wechat_rss', config: { timeout: 30, feed_url: 'https://example.com/rss' }, modelId: 12, isEnabled: false }
+    h.openFrequencyDialog(original)
+    Object.assign(h.frequency, { unit: 'hour', amount: 6 })
+    const data = sourceManagement.existingSourcePayload(original, { cron: sourceManagement.sourceIntervalCron(h.frequency) })
     assert.equal(data.isEnabled, false); assert.equal(data.config.timeout, 30)
-    assert.equal(data.timezone, 'Asia/Shanghai'); assert.equal(data.type, 'website')
+    assert.equal(data.timezone, 'Asia/Shanghai'); assert.equal(data.type, 'wechat')
     assert.equal('sourceCode' in data, false); assert.equal('handoffMode' in data, false)
     await h.saveSource(); assert.equal(writes[0].payload.isEnabled, false)
+    assert.equal(writes[0].payload.cron, '0 */6 * * *')
+    assert.equal(writes[0].payload.name, original.name)
+    assert.equal(writes[0].payload.modelId, 12)
     const source = { id: 's', name: '来源', type: 'website', adapter: 'pipechina_group_news', isEnabled: true }
     await h.toggleSource(source); assert.equal(source.isEnabled, true)
     assert.ok(h.messages.some(item => item.text === '停用失败'))

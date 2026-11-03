@@ -5,7 +5,7 @@
       <el-button plain type="primary" @click="router.push('/portal/me/reports')">查看全部</el-button>
     </div>
     <div class="ps-task-list">
-      <button v-for="task in store.tasks" :key="task.id" type="button" class="ps-task-row" @click="openTask(task)">
+      <el-button :auto-insert-space="false" v-for="task in store.tasks" :key="task.id" native-type="button" class="ps-task-row ps-ui-control" @click="openTask(task)">
         <span class="ps-task-status" :class="`is-${task.status}`"></span>
         <span class="ps-task-copy">
           <strong>{{ task.title }}</strong>
@@ -13,7 +13,7 @@
           <el-progress :percentage="task.progress" :stroke-width="5" :show-text="false" />
         </span>
         <ArrowRight />
-      </button>
+      </el-button>
       <p v-if="!store.tasks.length" class="ps-inspector-empty">当前没有生成任务</p>
     </div>
   </el-drawer>

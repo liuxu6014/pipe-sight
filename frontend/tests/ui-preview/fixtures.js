@@ -19,7 +19,13 @@ const dashboard = {
 
 export async function fixtureRequest(name, args = []) {
   let data = { rows: [], total: 0 }
-  if (name === 'getPipelineDashboard') data = dashboard
+  if (name === 'listModelAll' || name === 'listModel') data = [
+    { modelId: '900101', modelCode: 'preview-text', modelName: '数据处理模型（合成）', provider: 'compatible', baseUrl: 'https://example.com/preview-only', capabilities: ['text_generate'], maxTokens: 8000, temperature: 0.2, status: '0', hasCredential: false },
+    { modelId: '900102', modelCode: 'preview-image', modelName: '图片生成模型（合成）', provider: 'compatible', baseUrl: 'https://example.com/preview-only', capabilities: ['image_generate', 'image_input'], status: '0', hasCredential: false }
+  ]
+  else if (name === 'listPipelineCategories') data = { rows: [{ id: '900111', name: '碳氢醇氨储运', prompt: '关注能源介质储运，仅用输入证据。', modelId: '900101', appliesTo: 'all', isEnabled: true }, { id: '900112', name: '质能网', prompt: '关注能源跨区传输、能量转换、介质转化与协同网络。', modelId: '900101', appliesTo: 'all', isEnabled: true }] }
+  else if (name === 'getPipelineContentFilters') data = { articleCategories: ['碳氢醇氨储运', '质能网'], categories: ['碳氢醇氨储运', '质能网'], paperCategories: ['碳氢醇氨储运', '质能网'], newsTags: ['检测技术'], journals: ['合成测试期刊'], years: [2026, 2025] }
+  else if (name === 'getPipelineDashboard') data = dashboard
   else if (name === 'getPipelinePortalOverview') data = {
     paperCount: paperItems.length,
     newsCount: newsItems.length,
@@ -56,12 +62,21 @@ export async function fixtureRequest(name, args = []) {
     }
     const sourceLabel = { news: '新闻网站', wechat: '微信公众号' }[params.source_type]
     const rows = params.category === 'paper'
-      ? paperItems.map(item => ({ ...item, title: item.titleZh, summary: item.abstract, open_access_status: 'open' }))
+      ? paperItems.map(item => ({ ...item, category: 'paper', category_name: '碳氢醇氨储运', collected_at: '2026-11-02 10:00:00', title: item.titleZh, summary: item.abstract, open_access_status: 'open' }))
       : newsItems.filter(item => !sourceLabel || item.sourceType === sourceLabel)
     const start = ((params.pageNum || 1) - 1) * (params.pageSize || rows.length)
     data = { rows: rows.slice(start, start + (params.pageSize || rows.length)), total: rows.length }
   }
-  else if (name === 'getPipelineIntelligenceDetail') data = args[0] === '900018' ? { ...newsItems[0], id: '900018', title: '管网检测动态（合成新闻）', source: '界面验收合成来源', content: '合成新闻正文，仅供界面验收，不构成真实资讯。' } : newsItems.find(item => item.id === args[0]) || { ...paperItems[0], title: paperItems[0].titleZh }
+  else if (name === 'getPipelineIntelligenceDetail') data = args[0] === '900018' ? {
+    id: '900018', category: 'news', category_name: '碳氢醇氨储运', title: '管网检测动态（合成新闻）', source: '界面验收合成来源', source_type: 'news', tags: ['碳氢醇氨储运'], publish_time: '2026-11-02 09:00:00',
+    summary: '这是一条专供界面检查的合成摘要，用来核对摘要与全文切换，不构成真实新闻。',
+    content_original: 'Original fixture text. This is synthetic UI test content.', content_zh: '这是已保存的合成中文正文，仅供界面验收，不构成真实资讯。',
+    entities: ['地点', '时间', '政策', '人物', '机构', '技术'].map(type => ({ type, name: `${type}实体（合成）` })),
+    ai_insight: { organization: '合成研究机构', policy: '政策样例（合成）', work: '展示已保存的合成解读。', technology: '检测方法（合成）', policy_focus: '政策重点（合成）', scenario: '储运场景（合成）' }
+  } : args[0] === '900026' ? {
+    ...paperItems[0], id: '900026', category: 'paper', category_name: '质能网', title: '能源储运研究（合成论文）', title_zh: '能源储运研究（合成论文）', journal: '合成测试期刊', authors: ['合成作者'], published_date: '2026-10', collected_at: '2026-11-02 10:00:00', abstract: 'Original abstract for UI testing only.', abstract_zh: '这是一段合成论文摘要，仅用于页面排版检查。',
+    ai_insight: { institution: '合成研究机构', research: '合成研究工作。', effect: '样例不提供量化效果。', scenario: '能源储运场景（合成）' }
+  } : newsItems.find(item => item.id === args[0]) || { ...paperItems[0], category: 'paper', title: paperItems[0].titleZh }
   else if (name === 'listPipelineKnowledgeDocuments') data = { rows: knowledgeDocuments, total: knowledgeDocuments.length }
   else if (name === 'getPipelineResearchReport') data = ['900050', '900051'].includes(args[0]) ? {
     ...report, id: args[0], reportType: 'weekly', type: '周报', readOnly: args[0] === '900050', requiresReview: false,

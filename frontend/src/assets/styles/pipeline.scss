@@ -1,8 +1,8 @@
 // 管网科技情报门户全局样式。
 :root {
-  --pipeline-blue: #005487;
-  --pipeline-blue-deep: #003f68;
-  --pipeline-blue-soft: #eaf4fa;
+  --pipeline-blue: #409eff;
+  --pipeline-blue-deep: #337ecc;
+  --pipeline-blue-soft: #ecf5ff;
   --pipeline-ink: #172b3d;
   --pipeline-muted: #526277;
   --pipeline-rule: #d9e2e9;
@@ -11,17 +11,12 @@
 }
 
 .pipeline-page {
-  --el-color-primary: var(--pipeline-blue);
-  --el-color-primary-light-3: #4c90b7;
-  --el-color-primary-light-5: #80b4cf;
-  --el-color-primary-light-8: #d8eaf4;
-  --el-color-primary-light-9: #edf6fb;
   position: relative;
   min-height: calc(100vh - 84px);
-  max-width: 1600px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
   min-width: 0;
-  padding: 24px 28px 40px;
+  padding: 12px 16px;
   background: var(--pipeline-canvas);
   color: var(--pipeline-ink);
   font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -112,33 +107,6 @@
   gap: 16px;
 }
 
-.pipeline-page .el-button {
-  min-height: 40px;
-  border-radius: 6px;
-  font-weight: 600;
-  transition: border-color 180ms ease, color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
-}
-
-.pipeline-page .el-button--primary:not(.is-link):not(.is-text):not(.is-plain) {
-  border-color: var(--pipeline-blue);
-  background: var(--pipeline-blue);
-  box-shadow: 0 5px 12px rgba(0, 84, 135, 0.16);
-}
-
-.pipeline-page .el-button--primary:not(.is-link):not(.is-text):not(.is-plain):hover,
-.pipeline-page .el-button--primary:not(.is-link):not(.is-text):not(.is-plain):focus-visible {
-  border-color: var(--pipeline-blue-deep);
-  background: var(--pipeline-blue-deep);
-}
-
-.pipeline-page .el-button.is-link.el-button--primary,
-.pipeline-page .el-button.is-text.el-button--primary {
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
-  color: var(--pipeline-blue);
-}
-
 .pipeline-page .el-button:focus-visible,
 .pipeline-page .el-input__wrapper:focus-within,
 .pipeline-page .el-select__wrapper.is-focused {
@@ -166,11 +134,6 @@
 .pipeline-page .el-table td.el-table__cell {
   padding-top: 13px;
   padding-bottom: 13px;
-}
-
-.pipeline-page .el-tag {
-  border-radius: 2px;
-  font-weight: 600;
 }
 
 .pipeline-page .el-input__wrapper,

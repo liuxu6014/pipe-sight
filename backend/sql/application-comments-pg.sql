@@ -1,7 +1,7 @@
--- compact-v7中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；若依表字段不变。
+-- compact-v10中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；恢复若依部门表及用户dept_id。
 -- 27个业务created_at/updated_at为北京时间timestamp(0)无时区；其他运行时间字段保持原类型。
 -- 普通不透明令牌保留；系统幂等键内嵌ID、显式JSON引用及语义指纹按实体映射核验。
--- 27张基线表321字段，2张保留功能表23字段；共29张物理表344字段。
+-- 28张基线表338字段，2张保留功能表23字段；共30张物理表361字段。
 -- 仅COMMENT及存在性保护块；调用方管理事务，不修改字段、约束或业务数据。
 
 COMMENT ON TABLE public."news_articles" IS '网站与公众号新闻原文及中文译文；每篇最多关联一个类别，无人工审核流程';
@@ -13,7 +13,8 @@ COMMENT ON COLUMN public."news_articles"."author" IS '原作者名单文本；�
 COMMENT ON COLUMN public."news_articles"."published_at" IS '原文发布时间，保留到秒；由旧published_time迁入，非平台审核或入库时间；带时区';
 COMMENT ON COLUMN public."news_articles"."content" IS '抓取的原文正文；未取得正文时允许为空，不以导读摘要冒充全文';
 COMMENT ON COLUMN public."news_articles"."content_zh" IS '中文正文或译文；为空时展示回退content，不重复复制中文原文';
-COMMENT ON COLUMN public."news_articles"."entities" IS '实体抽取结果JSON数组；每项含type(地点/时间/政策/人物/机构/技术)与name；排除国家管网等平台自身机构，为空表示未抽取或无实体';
+COMMENT ON COLUMN public."news_articles"."summary" IS '约200字中文摘要，基于原文生成；正常正文控制180至220字符，短原文不凑字数；未处理时为空，不以正文截断冒充摘要';
+COMMENT ON COLUMN public."news_articles"."entities" IS '核心事件实体JSON数组；每项含type(地点/时间/政策/人物/机构/技术)与name；通常3至5项、最多6项，类型不凑齐；机构和技术各最多2项，其余类型各最多1项；为空表示未处理或无核心实体';
 COMMENT ON COLUMN public."news_articles"."category_id" IS '唯一类别ID，关联categories.id；未分类或未命中为空，不以空值推断审核失败；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串';
 COMMENT ON COLUMN public."news_articles"."is_pushed" IS '推送成功标志；true仅表示收到真实渠道成功回执，默认false';
 COMMENT ON COLUMN public."news_articles"."created_at" IS '新闻平台入库时间，不代替原文发表时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss';
@@ -31,6 +32,7 @@ COMMENT ON COLUMN public."papers"."journal" IS '论文期刊或会议名称；�
 COMMENT ON COLUMN public."papers"."published_date" IS '真实发表日期及精度：YYYY、YYYY-MM或YYYY-MM-DD；未知月日不补造，非入库或审核日期';
 COMMENT ON COLUMN public."papers"."abstract" IS '原文摘要或已明确标识的历史导读摘要；不存论文全文';
 COMMENT ON COLUMN public."papers"."abstract_zh" IS '中文摘要；与原文摘要分别保存，不作为论文全文存储';
+COMMENT ON COLUMN public."papers"."entities" IS '核心研究实体JSON数组；每项含type与name，仅依据标题和已有摘要，通常3至5项、最多6项；机构和技术各最多2项、其余类型各最多1项，不推测作者机构、不声称读取全文';
 COMMENT ON COLUMN public."papers"."category_id" IS '唯一类别ID，关联categories.id；未分类或未命中为空，类别删除受限；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串';
 COMMENT ON COLUMN public."papers"."is_pushed" IS '论文推送成功标志；真实渠道成功后为true，默认false，不表示审核结果';
 COMMENT ON COLUMN public."papers"."created_at" IS '论文平台入库时间，不能代替真实发表日期；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss';
@@ -224,6 +226,7 @@ COMMENT ON COLUMN public."sys_user"."created_at" IS '账号创建时间；沿用
 COMMENT ON COLUMN public."sys_user"."updated_by" IS '账号最近修改者的历史账号文本；不是sys_user.id外键';
 COMMENT ON COLUMN public."sys_user"."updated_at" IS '账号最近修改时间；沿用timestamp(0)无时区历史语义，精度到秒';
 COMMENT ON COLUMN public."sys_user"."remark" IS '账号管理备注；不保存明文凭证';
+COMMENT ON COLUMN public."sys_user"."dept_id" IS '用户所属部门ID，关联sys_dept.dept_id；未分配时为空';
 
 COMMENT ON TABLE public."sys_role" IS '系统角色及权限范围；保留多角色授权关系和既有角色编码';
 COMMENT ON COLUMN public."sys_role"."id" IS '角色自增ID；保留原role_id值和授权关系';
@@ -429,6 +432,22 @@ BEGIN
     END IF;
 END;
 $pipesight_report_versions_comments$;
+
+COMMENT ON TABLE public."sys_dept" IS '若依部门组织树；父级为0表示顶级部门，删除为逻辑删除';
+COMMENT ON COLUMN public."sys_dept"."dept_id" IS '部门数字主键，由数据库自动生成';
+COMMENT ON COLUMN public."sys_dept"."parent_id" IS '上级部门ID，0表示顶级部门；由服务校验有效父级及循环层级';
+COMMENT ON COLUMN public."sys_dept"."ancestors" IS '从根到父级的部门ID路径，以英文逗号分隔，用于子树检索';
+COMMENT ON COLUMN public."sys_dept"."dept_name" IS '部门显示名称，同一父级下未删除的名称唯一';
+COMMENT ON COLUMN public."sys_dept"."order_num" IS '同级部门显示顺序，数值越小越靠前';
+COMMENT ON COLUMN public."sys_dept"."leader" IS '部门负责人姓名，可空且不关联用户账号';
+COMMENT ON COLUMN public."sys_dept"."phone" IS '部门联系电话，由管理员填写';
+COMMENT ON COLUMN public."sys_dept"."email" IS '部门联系邮箱，由管理员填写';
+COMMENT ON COLUMN public."sys_dept"."status" IS '部门状态：0正常、1停用；停用后不可为用户新增分配';
+COMMENT ON COLUMN public."sys_dept"."del_flag" IS '逻辑删除标记：0存在、2删除；保留删除记录';
+COMMENT ON COLUMN public."sys_dept"."create_by" IS '部门创建者账号文本，不作为用户ID外键';
+COMMENT ON COLUMN public."sys_dept"."create_time" IS '部门创建时间，沿用若依原生时间字段';
+COMMENT ON COLUMN public."sys_dept"."update_by" IS '部门最近修改者账号文本，不作为用户ID外键';
+COMMENT ON COLUMN public."sys_dept"."update_time" IS '部门最近修改时间，沿用若依原生时间字段';
 
 DO $pipesight_list_table_comments$
 BEGIN

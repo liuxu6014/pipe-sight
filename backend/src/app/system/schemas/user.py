@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.alias_generators import to_camel
 from pydantic_validation_decorator import Network, NotBlank, Size, Xss
 
+from app.system.schemas.dept import DeptModel
 from app.system.schemas.role import RoleModel
 from exceptions.exception import ModelValidatorException
 
@@ -24,6 +25,7 @@ class UserModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, from_attributes=True)
 
     user_id: int | None = Field(default=None, description='用户ID')
+    dept_id: int | None = Field(default=None, gt=0, description='所属部门ID')
     user_name: str | None = Field(default=None, description='用户账号')
     nick_name: str | None = Field(default=None, description='用户昵称')
     user_type: str | None = Field(default=None, description='用户类型（00系统用户）')
@@ -89,6 +91,8 @@ class UserModel(BaseModel):
 class UserRowModel(UserModel):
     """用户列表行数据模型。"""
 
+    dept: DeptModel | None = None
+
 
 class UserRoleModel(BaseModel):
     """用户和角色关联表对应pydantic模型。"""
@@ -100,6 +104,7 @@ class UserRoleModel(BaseModel):
 
 
 class UserInfoModel(UserModel):
+    dept: DeptModel | None = None
     role_ids: str | None | None = Field(default=None, description='角色ID信息')
     role: list[RoleModel | None] | None = Field(default=[], description='角色信息')
 

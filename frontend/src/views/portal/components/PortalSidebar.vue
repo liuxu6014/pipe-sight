@@ -6,7 +6,7 @@
       </a>
       <a class="ps-sidebar-basket" href="/portal/basket" :class="{ 'is-active': isBasketPath(route.path) }" :aria-current="isBasketPath(route.path) ? 'page' : undefined" :aria-label="`资料库，${store.libraryCount} 条资料`" :title="collapsed ? `资料库（${store.libraryCount}）` : undefined" @click="navigate($event, '/portal/basket')"><Collection aria-hidden="true" /><span v-if="!collapsed">资料库</span><b v-if="store.libraryCount" class="ps-sidebar-basket-count" aria-hidden="true">{{ store.libraryCount > 99 ? '99+' : store.libraryCount }}</b></a>
     </nav>
-    <button class="ps-sidebar-toggle" type="button" :aria-label="collapsed ? '展开左侧导航' : '收起左侧导航'" :aria-expanded="!collapsed" aria-controls="portal-desktop-nav" @click="layout.toggle()"><Expand v-if="collapsed" /><Fold v-else /><span v-if="!collapsed">收起导航</span></button>
+    <el-button :auto-insert-space="false" class="ps-sidebar-toggle ps-ui-control" native-type="button" :aria-label="collapsed ? '展开左侧导航' : '收起左侧导航'" :aria-expanded="!collapsed" aria-controls="portal-desktop-nav" @click="layout.toggle()"><Expand v-if="collapsed" /><Fold v-else /><span v-if="!collapsed">收起导航</span></el-button>
   </aside>
 </template>
 

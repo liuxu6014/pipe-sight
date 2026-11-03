@@ -1,4 +1,4 @@
-"""compact-v7中文注释数据；数值引用语义映射与不透明字符串分别说明。
+"""compact-v9中文注释数据；数值引用语义映射与不透明字符串分别说明。
 
 27张基线表321字段，2张保留功能表23字段；共29表344字段。
 12张业务表共享BIGINT序列，若依基础表及其字段保持不变。
@@ -49,7 +49,8 @@ COLUMN_COMMENTS = {
         'published_at': '原文发布时间，保留到秒；由旧published_time迁入，非平台审核或入库时间；带时区',
         'content': '抓取的原文正文；未取得正文时允许为空，不以导读摘要冒充全文',
         'content_zh': '中文正文或译文；为空时展示回退content，不重复复制中文原文',
-        'entities': '实体抽取结果JSON数组；每项含type(地点/时间/政策/人物/机构/技术)与name；排除国家管网等平台自身机构，为空表示未抽取或无实体',
+        'summary': '约200字中文摘要，基于原文生成；正常正文控制180至220字符，短原文不凑字数；未处理时为空，不以正文截断冒充摘要',
+        'entities': '核心事件实体JSON数组；每项含type(地点/时间/政策/人物/机构/技术)与name；通常3至5项、最多6项，类型不凑齐；机构和技术各最多2项，其余类型各最多1项；为空表示未处理或无核心实体',
         'category_id': '唯一类别ID，关联categories.id；未分类或未命中为空，不以空值推断审核失败；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串',
         'is_pushed': '推送成功标志；true仅表示收到真实渠道成功回执，默认false',
         'created_at': '新闻平台入库时间，不代替原文发表时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss',
@@ -67,6 +68,7 @@ COLUMN_COMMENTS = {
         'published_date': '真实发表日期及精度：YYYY、YYYY-MM或YYYY-MM-DD；未知月日不补造，非入库或审核日期',
         'abstract': '原文摘要或已明确标识的历史导读摘要；不存论文全文',
         'abstract_zh': '中文摘要；与原文摘要分别保存，不作为论文全文存储',
+        'entities': '核心研究实体JSON数组；每项含type与name，仅依据标题和已有摘要，通常3至5项、最多6项；机构和技术各最多2项、其余类型各最多1项，不推测作者机构、不声称读取全文',
         'category_id': '唯一类别ID，关联categories.id；未分类或未命中为空，类别删除受限；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串',
         'is_pushed': '论文推送成功标志；真实渠道成功后为true，默认false，不表示审核结果',
         'created_at': '论文平台入库时间，不能代替真实发表日期；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss',
@@ -466,3 +468,24 @@ VIEW_COMMENTS = {
         },
     },
 }
+
+
+# Native RuoYi organization management restored independently of business tables.
+TABLE_COMMENTS['sys_dept'] = '若依部门组织树；父级为0表示顶级部门，删除为逻辑删除'
+COLUMN_COMMENTS['sys_dept'] = {
+    'dept_id': '部门数字主键，由数据库自动生成',
+    'parent_id': '上级部门ID，0表示顶级部门；由服务校验有效父级及循环层级',
+    'ancestors': '从根到父级的部门ID路径，以英文逗号分隔，用于子树检索',
+    'dept_name': '部门显示名称，同一父级下未删除的名称唯一',
+    'order_num': '同级部门显示顺序，数值越小越靠前',
+    'leader': '部门负责人姓名，可空且不关联用户账号',
+    'phone': '部门联系电话，由管理员填写',
+    'email': '部门联系邮箱，由管理员填写',
+    'status': '部门状态：0正常、1停用；停用后不可为用户新增分配',
+    'del_flag': '逻辑删除标记：0存在、2删除；保留删除记录',
+    'create_by': '部门创建者账号文本，不作为用户ID外键',
+    'create_time': '部门创建时间，沿用若依原生时间字段',
+    'update_by': '部门最近修改者账号文本，不作为用户ID外键',
+    'update_time': '部门最近修改时间，沿用若依原生时间字段',
+}
+COLUMN_COMMENTS['sys_user']['dept_id'] = '用户所属部门ID，关联sys_dept.dept_id；未分配时为空'

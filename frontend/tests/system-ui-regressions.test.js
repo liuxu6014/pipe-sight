@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import { ref, reactive, computed, toRefs } from 'vue'
+import { ref, reactive, computed, toRefs, watch } from 'vue'
 import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 import { getDefaultLoginPath } from '../src/utils/portal/auth.js'
 
@@ -18,7 +18,7 @@ function setup(path, overrides = {}) {
   let closes = 0
   const proxy = { $modal: { loading() {}, closeLoading() { closes++ }, msgError: message => errors.push(message), msgSuccess() {}, confirm: () => Promise.resolve() }, useDict: () => ({}), $refs: {}, ...overrides.proxy }
   const env = {
-    ref, reactive, computed, toRefs, getCurrentInstance: () => ({ proxy }),
+    ref, reactive, computed, toRefs, watch, getCurrentInstance: () => ({ proxy }),
     onBeforeUnmount: fn => hooks.push(fn), onUnmounted: fn => hooks.push(fn),
     onDeactivated: fn => deactivated.push(fn), onActivated: fn => activated.push(fn),
     onMounted: fn => mounted.push(fn), nextTick: () => Promise.resolve(),

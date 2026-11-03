@@ -24,6 +24,7 @@
           <h1 v-else>{{ document.name }}</h1>
           <div class="ps-document-meta">
             <span>{{ document.format }}</span>
+            <el-tag effect="plain" :type="contentCategory(document) ? 'primary' : 'info'">{{ contentCategory(document) || '待分类' }}</el-tag>
             <span class="ps-parse-state" :class="statusClass(document.status)">{{ document.status }}</span>
             <span v-if="document.updatedAt">更新于 {{ document.updatedAt }}</span>
           </div>
@@ -37,7 +38,7 @@
           <el-button v-if="canManage" :disabled="loading || !liveDocument" :icon="Edit" @click="openEditor">编辑资料</el-button>
           <el-button v-if="document.allowDownload !== false" :icon="Download" @click="downloadDocument">下载文件</el-button>
           <el-dropdown v-if="canManage" trigger="click">
-            <el-button aria-label="更多资料操作"><MoreFilled /></el-button>
+            <el-button :icon="MoreFilled" circle aria-label="更多资料操作" />
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item v-if="canManage" :disabled="reparsing" @click="reparse">{{ reparsing ? '正在提交…' : '重新解析' }}</el-dropdown-item>
@@ -48,6 +49,8 @@
           </template>
         </div>
       </section>
+
+      <el-alert v-if="!contentCategory(document)" title="系统提示词分类待接入" description="当前资料尚无已保存的分类结果。接入统一处理后展示真实类别，正文编辑与下载不受影响。" type="info" show-icon :closable="false" class="ps-classification-notice" />
 
       <section v-if="editVisible" class="ps-material-inline-editor" aria-label="编辑资料正文" :aria-busy="editSaving">
         <p class="ps-material-edit-note">直接修改正文，保存后用于检索和新报告生成；原始文件保留不变。</p>
@@ -114,6 +117,7 @@ import { ArrowLeft, Document, Download, Edit, Loading, MoreFilled, WarningFilled
 import { useMaterialEditor } from '@/utils/portal/materialEditor'
 import { returnFromKnowledgeDetail } from '@/utils/portal/openContent'
 import PortalEmptyState from '../components/PortalEmptyState.vue'
+import { contentCategory } from '@/utils/portal/contentPresentation'
 import usePortalStore from '@/store/modules/portal'
 import {
   deletePipelineKnowledgeDocument,
@@ -312,7 +316,7 @@ watch([() => route.query.mode, () => liveDocument.value?.id], () => {
 .ps-material-inline-editor :deep(textarea) { font-size: 15px; line-height: 1.8; padding: 16px; }
 .ps-document-heading-copy h1 { margin: 0; font-size: 20px; line-height: 1.5; overflow-wrap: anywhere; }
 .ps-document-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 6px; font-size: 13px; }
-.ps-document-detail-head > .el-button { margin: 0; min-width: 44px; min-height: 44px; }
+.ps-document-detail-head > .el-button { margin: 0; min-width: 44px; }
 .ps-page-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .ps-page-actions :deep(.el-button) { margin-left: 0; }
 .ps-document-detail-layout { height: max(360px, calc(100dvh - 220px)); min-height: 0; overflow: hidden; grid-template-columns: minmax(0, 1fr); background: #fff; }
@@ -323,7 +327,6 @@ watch([() => route.query.mode, () => liveDocument.value?.id], () => {
 .ps-reader-context { min-width: 0; }
 .ps-reader-context > span { font-size: 13px; color: var(--ps-muted); }
 .ps-reader-context :deep(.el-select) { width: 200px; }
-.ps-reader-actions :deep(.el-button) { min-height: 36px; }
 .ps-document-preview > article { box-sizing: border-box; width: 100%; max-width: 1040px; min-height: 0; margin: 0 auto; padding: 24px 32px 32px; box-shadow: none; font-family: inherit; overflow-wrap: anywhere; }
 .ps-document-preview article h2 { margin: 0 0 16px; font-size: calc(21px * var(--ps-preview-zoom, 1)); }
 .ps-document-preview article p { margin: 0 0 10px; font-size: calc(16px * var(--ps-preview-zoom, 1)); line-height: 1.75; white-space: pre-wrap; }

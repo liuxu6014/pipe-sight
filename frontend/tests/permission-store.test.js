@@ -77,6 +77,7 @@ function managementFixture() {
 
 function projectDynamicRoutes() {
   const source = readFileSync(new URL('../src/router/index.js', import.meta.url), 'utf8')
+    .replaceAll('import.meta.env.BASE_URL', JSON.stringify('/'))
     .replace(/^import .*\n/gm, '')
     .replace(/^export const /gm, 'const ')
     .replace('export default router;', 'globalThis.result = dynamicRoutes')
@@ -307,7 +308,7 @@ test('management navigation uses backend menus while registration keeps hidden a
     dynamicRoutes: [{ path: '/privileged', permissions: ['system:user:edit'] }]
   })
   const registered = await store.generateRoutes({ roles: ['admin'] })
-  assert.deepEqual(Array.from(store.sidebarRouters, menu => menu.meta.title), ['管理首页', '采集管理'])
+  assert.deepEqual(Array.from(store.sidebarRouters, menu => menu.meta.title), ['管理首页'])
   assert.equal(registered[0].children.length, 4)
   assert.equal(registered[0].children[2].hidden, true)
   assert.equal(store.defaultRoutes[1].children.length, 4)
@@ -326,7 +327,7 @@ test('ordinary users keep their existing menu filter and wildcard managers use t
   assert.deepEqual(Array.from(store.sidebarRouters, menu => menu.path), ['/pipeline'])
   assert.equal(store.routes.length, 2)
   await store.generateRoutes({ permissions: ['*:*:*'] })
-  assert.deepEqual(Array.from(store.sidebarRouters, menu => menu.meta.title), ['用户管理', '采集管理'])
+  assert.deepEqual(Array.from(store.sidebarRouters, menu => menu.meta.title), ['用户管理'])
   assert.equal(store.routes.length, 2)
 })
 

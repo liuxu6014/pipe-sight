@@ -1,32 +1,67 @@
 <template>
   <div class="app-container pipeline-page pipeline-template-page ws-list-page">
-    <div class="pipeline-page-head"><div><h1>模板管理</h1></div><div class="pipeline-head-actions"><el-button v-if="canSaveTemplate" type="primary" :icon="Plus" @click="createTemplate">新建模板</el-button></div></div>
+    <section class="template-toolbar" aria-label="模板筛选与操作">
+      <el-input v-model="keyword" :prefix-icon="Search" clearable aria-label="搜索模板" placeholder="搜索模板名称或说明" />
+      <el-select v-model="status" aria-label="模板状态">
+        <el-option label="全部状态" value="all" />
+        <el-option label="已启用" value="enabled" />
+        <el-option label="已停用" value="disabled" />
+      </el-select>
+      <el-button :icon="Refresh" :loading="loading" @click="loadTemplates">刷新</el-button>
+      <el-button v-if="canSaveTemplate" type="primary" :icon="Plus" @click="createTemplate">新建模板</el-button>
+    </section>
+    <nav class="template-categories" aria-label="模板类别">
+      <el-segmented v-model="activeCategory" :options="categories" :props="{ label: 'name', value: 'value' }">
+        <template #default="{ item }"><span>{{ item.name }}</span><span class="template-category-count">{{ countCategory(item.value) }}</span></template>
+      </el-segmented>
+    </nav>
     <el-alert v-if="templateError" type="warning" show-icon :closable="false" class="template-load-error">
       <template #title>{{ templateError }}</template>
-      <template #default><el-button class="ps-ui-action template-retry" @click="loadTemplates">重新加载</el-button></template>
+      <template #default><el-button plain @click="loadTemplates">重新加载</el-button></template>
     </el-alert>
-    <div v-else class="template-layout ws-split-layout">
-      <aside class="template-categories"><button v-for="category in categories" :key="category.name" type="button" :class="{ 'is-active': activeCategory === category.value }" @click="activeCategory = category.value"><component :is="category.icon" /><span>{{ category.name }}</span><b>{{ countCategory(category.value) }}</b></button></aside>
-      <main v-loading="loading"><div class="template-toolbar"><el-input v-model="keyword" :prefix-icon="Search" clearable placeholder="搜索模板名称或用途" /><el-select v-model="status"><el-option label="全部状态" value="all" /><el-option label="已启用" value="enabled" /><el-option label="已停用" value="disabled" /></el-select></div><div class="template-grid ws-card-grid"><article v-for="item in filteredTemplates" :key="item.id"><div class="template-preview" :style="{ '--template-color': item.color }"><span>{{ item.purpose }}</span><div><i></i><i></i><i></i><i></i></div><b>{{ purposeLabel(item.purpose) }}</b></div><div class="template-body"><div><el-tag :type="statusTag(item.status)" size="small" effect="plain">{{ statusLabel(item.status) }}</el-tag><small>{{ item.modelId ? '已选择模型' : '模型未配置' }}</small></div><h3>{{ item.name }}</h3><p>{{ item.description }}</p><dl><div><dt>最近更新</dt><dd>{{ item.updatedAt }}</dd></div><div><dt>使用次数</dt><dd>{{ item.usage ?? '—' }}</dd></div></dl><footer><el-button v-if="canSaveTemplate" plain type="primary" @click="editTemplate(item)">编辑</el-button><el-button plain @click="previewTemplate(item)">预览</el-button><el-button v-if="canSaveTemplate" plain @click="toggleTemplate(item)">{{ item.isEnabled ? '停用' : '启用' }}</el-button></footer></div></article></div></main>
-    </div>
-    <el-drawer v-model="editorVisible" :title="editingTemplate?.id ? '编辑模板' : '新建模板'" size="640px"><el-form label-position="top" :model="form"><div class="template-form-grid"><el-form-item label="模板名称"><el-input v-model="form.name" /></el-form-item><el-form-item label="模板类型"><el-select v-model="form.purpose"><el-option label="科研报告" value="research" /><el-option label="日报周月报" value="digest" /><el-option label="文章" value="article" /></el-select></el-form-item><el-form-item label="模板说明" class="is-full"><el-input v-model="form.description" type="textarea" :rows="3" /></el-form-item></div>
- <el-form-item label="正文生成提示词" required><el-input v-model="form.prompt" type="textarea" :rows="6" /></el-form-item>
+    <section v-else v-loading="loading" class="template-results ws-list-scroll" aria-label="模板列表">
+      <div class="template-grid">
+        <article v-for="item in filteredTemplates" :key="item.id" class="template-card">
+          <header class="template-card-head">
+            <span class="template-document-icon"><el-icon><Document /></el-icon></span>
+            <h3>{{ item.name }}</h3>
+            <el-tag :type="statusTag(item.status)" effect="light">{{ statusLabel(item.status) }}</el-tag>
+          </header>
+          <p class="template-description">{{ item.description || '暂无模板说明' }}</p>
+          <dl class="template-metadata">
+            <div><dt>报告类型</dt><dd>{{ reportTypeLabel(item) }}</dd></div>
+            <div><dt>文本模型</dt><dd>{{ modelLabel(item.modelId) }}</dd></div>
+            <div><dt>章节结构</dt><dd>{{ item.sections?.length ? `${item.sections.length} 个章节` : '未配置' }}</dd></div>
+            <div><dt>最近更新</dt><dd>{{ item.updatedAt || '—' }}</dd></div>
+          </dl>
+          <footer class="template-card-actions">
+            <el-button v-if="canSaveTemplate" type="primary" plain :icon="Edit" @click="editTemplate(item)">编辑</el-button>
+            <el-button :icon="View" @click="previewTemplate(item)">预览</el-button>
+            <el-button v-if="canSaveTemplate" :disabled="saving" @click="toggleTemplate(item)">{{ item.isEnabled ? '停用' : '启用' }}</el-button>
+          </footer>
+        </article>
+      </div>
+      <el-empty v-if="!loading && !filteredTemplates.length" description="当前筛选下暂无模板" :image-size="72" />
+    </section>
+    <div class="template-result-count" aria-live="polite">共 {{ filteredTemplates.length }} 个模板<span v-if="unassignedCount"> · {{ unassignedCount }} 个未绑定报告类型</span></div>
+    <el-drawer v-model="editorVisible" :title="editingTemplate?.id ? '编辑模板' : '新建模板'" size="640px"><el-form label-position="top" :model="form"><div class="template-form-grid"><el-form-item label="模板名称" required><el-input v-model="form.name" /></el-form-item><el-form-item label="报告类型（仅本次预览）"><el-select v-model="form.reportType" clearable placeholder="具体类型保存待后端接入"><el-option v-for="category in categories.filter(item => item.value !== 'all')" :key="category.value" :label="category.name" :value="category.value" /></el-select></el-form-item><el-form-item label="模板说明" class="is-full"><el-input v-model="form.description" type="textarea" :rows="3" /></el-form-item></div>
+ <el-alert class="template-contract-note" type="warning" :closable="false" title="报告类型选择不写入当前接口；仅保存名称、正文提示词、章节及模型等已有字段。允许多个模板并存，不按报告类型覆盖已有模板。" /><el-form-item label="正文生成提示词" required><el-input v-model="form.prompt" type="textarea" :rows="6" /></el-form-item>
  <el-alert v-if="modelError" :title="modelError" type="warning" :closable="false"><template #default><el-button plain @click="loadModels">重新加载模型</el-button></template></el-alert>
  <el-form-item label="文本生成模型"><el-select v-model="form.modelId" clearable placeholder="可稍后由管理员配置"><el-option v-for="model in textModels" :key="model.modelId" :label="model.modelName || model.modelCode" :value="model.modelId" /></el-select></el-form-item>
  <el-form-item label="启用配图"><el-switch v-model="form.imageConfig.enabled" /></el-form-item>
  <el-form-item label="图片生成模型"><el-select v-model="form.imageModelId" clearable placeholder="仅显示具备图片生成能力的模型"><el-option v-for="model in imageModels" :key="model.modelId" :label="model.modelName || model.modelCode" :value="model.modelId" /></el-select></el-form-item>
  <el-form-item v-if="form.imageConfig.enabled" label="配图数量"><el-input-number v-model="form.imageConfig.count" :min="1" :max="10" /></el-form-item>
- <el-form-item v-if="form.imageConfig.enabled" label="图片生成提示词"><el-input v-model="form.imageConfig.prompt" type="textarea" :rows="3" placeholder="留空时由后台使用报告标题" /></el-form-item>
+ <el-form-item v-if="form.imageConfig.enabled" label="图片生成提示词"><el-input v-model="form.imageConfig.prompt" type="textarea" :rows="3" placeholder="填写配图内容和风格要求；本页不执行图片生成" /></el-form-item>
  <el-form-item label="启用模板"><el-switch v-model="form.isEnabled" /></el-form-item>
- <h3>章节结构</h3><div v-for="(section, index) in form.sections" :key="section.id" class="template-section-row"><Rank /><span>{{ index + 1 }}</span><el-input v-model="section.title" /><el-input-number v-model="section.words" :min="100" :max="8000" :step="100" /><el-switch v-model="section.required" active-text="必填" /><el-button class="ps-ui-action" @click="form.sections.splice(index, 1)" aria-label="删除章节"><Delete /></el-button></div><el-button v-if="canSaveTemplate" class="template-add-section" @click="form.sections.push({ id: Date.now(), title: '新增章节', words: 1000, required: false })"><Plus />新增章节</el-button></el-form><template #footer><el-button @click="editorVisible = false">取消</el-button><el-button v-if="canSaveTemplate" type="primary" :loading="saving" @click="saveTemplate">保存模板</el-button></template></el-drawer>
-    <el-dialog v-model="previewVisible" :title="previewingTemplate?.name || '模板预览'" width="720px"><div v-if="previewingTemplate" class="template-preview-dialog"><div class="preview-meta"><el-tag :type="statusTag(previewingTemplate.status)" effect="plain">{{ statusLabel(previewingTemplate.status) }}</el-tag><span>{{ purposeLabel(previewingTemplate.purpose) }}</span></div><p class="preview-description">{{ previewingTemplate.description || '暂无模板说明' }}</p><div v-if="previewingTemplate.sections?.length" class="preview-sections"><div v-for="(section, index) in previewingTemplate.sections" :key="section.id || index" class="preview-section"><span>{{ index + 1 }}</span><div><strong>{{ section.title || '未命名章节' }}</strong><small>{{ section.required ? '必填' : '选填' }} · {{ section.words || '—' }} 字</small></div></div></div><el-empty v-else description="当前模板尚未配置章节结构" :image-size="72" /></div></el-dialog>
+ <h3>章节结构</h3><div v-for="(section, index) in form.sections" :key="section.id" class="template-section-row"><Rank /><span>{{ index + 1 }}</span><el-input v-model="section.title" :aria-label="'第' + (index + 1) + '章标题'" /><el-input-number :aria-label="'第' + (index + 1) + '章字数'" v-model="section.words" :min="100" :max="8000" :step="100" /><el-switch v-model="section.required" active-text="必填" /><el-button :icon="Delete" circle class="ps-ui-action" @click="form.sections.splice(index, 1)" aria-label="删除章节" /></div><el-button :icon="Plus" v-if="canSaveTemplate" class="template-add-section" @click="form.sections.push({ id: Date.now(), title: '新增章节', words: 1000, required: false })">新增章节</el-button></el-form><template #footer><el-button @click="editorVisible = false">取消</el-button><el-button @click="previewTemplate({ ...form, status: form.isEnabled ? 'enabled' : 'disabled' })">预览草稿</el-button><el-button v-if="canSaveTemplate" type="primary" :loading="saving" @click="saveTemplate">保存模板内容</el-button></template></el-drawer>
+    <el-dialog v-model="previewVisible" :title="previewingTemplate?.name || '模板预览'" width="min(720px, calc(100vw - 32px))"><div v-if="previewingTemplate" class="template-preview-dialog"><div class="preview-meta"><el-tag :type="statusTag(previewingTemplate.status)" effect="plain">{{ statusLabel(previewingTemplate.status) }}</el-tag><span>{{ reportTypeLabel(previewingTemplate) }}</span></div><el-alert title="仅模板配置与提示词预览，不生成报告、不调用模型。草稿类型选择尚未保存。" type="info" :closable="false" class="template-contract-note" /><el-form label-position="top"><el-form-item label="正文生成提示词（只读）"><el-input :model-value="previewingTemplate.prompt" type="textarea" :rows="8" readonly /></el-form-item></el-form><p class="preview-description">{{ previewingTemplate.description || '暂无模板说明' }}</p><div v-if="previewingTemplate.sections?.length" class="preview-sections"><div v-for="(section, index) in previewingTemplate.sections" :key="section.id || index" class="preview-section"><span>{{ index + 1 }}</span><div><strong>{{ section.title || '未命名章节' }}</strong><small>{{ section.required ? '必填' : '选填' }} · {{ section.words || '—' }} 字</small></div></div></div><el-empty v-else description="当前模板尚未配置章节结构" :image-size="72" /></div></el-dialog>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Calendar, Collection, Delete, Document, Files, Plus, Rank, Search } from '@element-plus/icons-vue'
+import { Delete, Document, Files, Plus, Rank, Search, Refresh, Edit, View } from '@element-plus/icons-vue'
 import { createPipelineTemplate, listPipelineTemplates, retirePipelineTemplate, updatePipelineTemplate } from '@/api/pipeline/intelligence'
 import { listModelAll } from '@/api/ai/model'
 import { modelsFor } from '@/utils/pipeline/compactContract'
@@ -35,32 +70,46 @@ const activeCategory = ref('all'), keyword = ref(''), status = ref('all')
 const editorVisible = ref(false), previewVisible = ref(false), previewingTemplate = ref(null), editingTemplate = ref(null)
 const saving = ref(false), loading = ref(false), templateError = ref('')
 const canSaveTemplate = computed(() => checkPermi(['pipeline:template:save']))
-const categories = [{ name: '全部模板', value: 'all', icon: Files }, { name: '科研报告', value: 'research', icon: Document }, { name: '日报周月报', value: 'digest', icon: Calendar }, { name: '文章', value: 'article', icon: Collection }]
+// These are the portal report keys, not new values for the API's purpose enum.
+const categories = [{ name: '全部模板', value: 'all', icon: Files }, { name: '科研需求报告', value: 'research-demand', icon: Document }, { name: '技术路线报告', value: 'technology-route', icon: Document }, { name: '科技项目需求填报表', value: 'project-demand', icon: Document }]
+function reportTypeOf(item) { return ['research-demand', 'technology-route', 'project-demand'].find(key => key === item?.reportType || key === item?.purpose) || '' }
+function reportTypeLabel(item) { return ({ 'research-demand': '科研需求报告', 'technology-route': '技术路线报告', 'project-demand': '科技项目需求填报表' })[reportTypeOf(item)] || '报告类型待绑定' }
 const templates = ref([]), models = ref([]), modelError = ref('')
+const unassignedCount = computed(() => templates.value.filter(item => !reportTypeOf(item)).length)
 const textModels = computed(() => modelsFor(models.value, 'text_generate'))
 const imageModels = computed(() => modelsFor(models.value, 'image_generate'))
-const form = reactive({ name: '', purpose: 'research', prompt: '', description: '', modelId: null, imageModelId: null, sections: [], imageConfig: { enabled: false }, isEnabled: true })
-const filteredTemplates = computed(() => templates.value.filter(item => (activeCategory.value === 'all' || item.purpose === activeCategory.value) && (status.value === 'all' || item.status === status.value) && (!keyword.value || `${item.name}${item.description}`.includes(keyword.value))))
-function countCategory(value) { return value === 'all' ? templates.value.length : templates.value.filter(item => item.purpose === value).length }
+const form = reactive({ name: '', purpose: 'research', reportType: '', prompt: '', description: '', modelId: null, imageModelId: null, sections: [], imageConfig: { enabled: false }, isEnabled: true })
+const filteredTemplates = computed(() => templates.value.filter(item => (activeCategory.value === 'all' || reportTypeOf(item) === activeCategory.value) && (status.value === 'all' || item.status === status.value) && (!keyword.value.trim() || `${item.name} ${item.description || ''}`.includes(keyword.value.trim()))))
+function countCategory(value) { return value === 'all' ? templates.value.length : templates.value.filter(item => reportTypeOf(item) === value).length }
+function modelLabel(id) {
+ if (!id) return '未配置'
+ const model = models.value.find(item => String(item.modelId) === String(id))
+ return model?.modelName || model?.modelCode || '已配置模型'
+}
 function statusTag(value) { return value === 'enabled' ? 'success' : 'info' }
 function statusLabel(value) { return value === 'enabled' ? '已启用' : '已停用' }
-function purposeLabel(value) { return ({ article: '文章', research: '科研报告', digest: '简报' })[value] || value }
 function resetForm(item = null) {
- Object.assign(form, { name: item?.name || '', purpose: item?.purpose || 'research', prompt: item?.prompt || '', description: item?.description || '', modelId: item?.modelId ?? null, imageModelId: item?.imageModelId ?? null, sections: (item?.sections || []).map(section => ({ ...section })), imageConfig: item ? JSON.parse(JSON.stringify(item.imageConfig || {})) : {}, isEnabled: item?.isEnabled ?? true })
+ Object.assign(form, { name: item?.name || '', purpose: item?.purpose || 'research', reportType: reportTypeOf(item) || (activeCategory.value === 'all' ? '' : activeCategory.value), prompt: item?.prompt || '', description: item?.description || '', modelId: item?.modelId ?? null, imageModelId: item?.imageModelId ?? null, sections: (item?.sections || []).map(section => ({ ...section })), imageConfig: item ? JSON.parse(JSON.stringify(item.imageConfig || {})) : {}, isEnabled: item?.isEnabled ?? true })
  form.imageConfig.enabled ??= false
  form.imageConfig.count ??= 1
  form.imageConfig.prompt ??= ''
 }
 function createTemplate() { if (!canSaveTemplate.value) return; editingTemplate.value = null; resetForm(); editorVisible.value = true }
 function editTemplate(item) { if (!canSaveTemplate.value) return; editingTemplate.value = item; resetForm(item); editorVisible.value = true }
-function previewTemplate(item) { previewingTemplate.value = item; previewVisible.value = true }
+function previewTemplate(item) { previewingTemplate.value = JSON.parse(JSON.stringify(item)); previewVisible.value = true }
 async function loadTemplates() {
  loading.value = true; templateError.value = ''
- try { const res = await listPipelineTemplates(); templates.value = (res.data?.rows || []).map(item => ({ ...item, status: item.isEnabled ? 'enabled' : 'disabled' })) }
+ try {
+  const res = await listPipelineTemplates()
+  const rows = res.data?.rows || []
+  const reportRows = rows.filter(item => item.purpose === 'research' || reportTypeOf(item))
+  templates.value = reportRows.map(item => ({ ...item, status: item.isEnabled ? 'enabled' : 'disabled' }))
+ }
  catch (error) { templateError.value = error?.msg || error?.message || '模板加载失败，请重试' }
  finally { loading.value = false }
 }
 async function loadModels() {
+ if (!checkPermi(['ai:model:query'])) return
  modelError.value = ''
  try { const res = await listModelAll(); models.value = res.data?.rows || res.data || [] }
  catch (error) { models.value = []; modelError.value = error?.msg || error?.message || '模型列表加载失败；可稍后配置模型' }
@@ -75,7 +124,7 @@ async function saveTemplate() {
  try {
   if (editingTemplate.value) await updatePipelineTemplate(editingTemplate.value.id, templatePayload())
   else await createPipelineTemplate(templatePayload())
-  editorVisible.value = false; ElMessage.success('模板已保存'); await loadTemplates()
+  editorVisible.value = false; ElMessage.success(form.reportType && form.reportType !== reportTypeOf(editingTemplate.value) ? '模板内容已保存；本次预览的报告类型未保存（待后端接入）' : '模板内容已保存'); await loadTemplates()
  } catch (error) { ElMessage.error(error?.msg || error?.message || '模板保存失败') }
  finally { saving.value = false }
 }
@@ -93,9 +142,35 @@ async function toggleTemplate(item) {
 onMounted(() => { loadTemplates(); loadModels() })
 </script>
 <style scoped>
-.template-layout { display: grid; grid-template-columns: 210px minmax(0,1fr); gap: 18px; }.template-categories { padding: 10px; border: 1px solid #e2e8f0; border-radius: 10px; align-self: start; background: #fff; }.template-categories button { width: 100%; min-height: 44px; padding: 0 11px; border: 0; border-radius: 7px; display: grid; grid-template-columns: 18px 1fr auto; gap: 9px; align-items: center; background: transparent; color: #475569; cursor: pointer; text-align: left; }.template-categories button.is-active { background: #edf3ff; color: #2764e7; }.template-categories svg { width: 16px; }.template-categories b { font-size: 13px; }
-.template-load-error { margin-bottom: 18px; }.template-retry { padding: 0; border: 0; background: transparent; color: #2764e7; cursor: pointer; font-size: 13px; }
-.template-toolbar { margin-bottom: 14px; display: grid; grid-template-columns: minmax(260px,1fr) 140px; gap: 10px; }.template-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 15px; }.template-grid article { border: 1px solid #e2e8f0; border-radius: 11px; overflow: hidden; background: #fff; }.template-preview { height: 145px; padding: 18px; position: relative; background: linear-gradient(145deg, color-mix(in srgb,var(--template-color),#fff 88%),#f8fafc); }.template-preview > span { color: var(--template-color); font-size: 13px; font-weight: 800; }.template-preview > div { width: 110px; margin: 18px auto 0; padding: 16px; border-top: 4px solid var(--template-color); background: #fff; box-shadow: 0 5px 15px rgba(15,23,42,.1); }.template-preview i { height: 3px; margin-bottom: 7px; display: block; background: #dbe3ed; }.template-preview i:nth-child(2){width:78%}.template-preview i:nth-child(3){width:90%}.template-preview i:nth-child(4){width:60%}.template-preview > b { position: absolute; right: 14px; bottom: 12px; color: #64748b; font-size: 13px; }.template-body { padding: 17px; }.template-body > div { display: flex; justify-content: space-between; }.template-body small { color: #64748b; }.template-body h3 { margin: 13px 0 7px; font-size: 15px; }.template-body p { height: 38px; margin: 0; overflow: hidden; color: #64748b; font-size: 13px; line-height: 1.7; }.template-body dl { margin: 14px 0; }.template-body dl div { padding: 4px 0; display: flex; justify-content: space-between; color: #64748b; font-size: 13px; }.template-body dd { margin: 0; color: #334155; }.template-body footer { padding-top: 10px; border-top: 1px solid #edf1f6; display: flex; align-items: center; }
+.template-contract-note { margin-bottom: 14px; }
+.template-form-grid :deep(.el-select) { width: 100%; }
+.template-toolbar {
+ display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+ background: var(--el-bg-color); border: 1px solid var(--el-border-color-light); border-radius: 8px;
+}
+.template-toolbar .el-input { flex: 1; min-width: 180px; }
+.template-toolbar .el-select { width: 140px; flex-shrink: 0; }
+.template-toolbar .el-button { margin: 0; }
+.template-categories { overflow-x: auto; padding: 0 0 2px; }
+.template-categories :deep(.el-segmented__item-label) { display: flex; align-items: center; gap: 8px; }
+.template-category-count { font-size: 12px; opacity: .8; font-variant-numeric: tabular-nums; }
+.template-results { min-width: 0; }
+.template-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.template-card {
+ min-width: 0; display: flex; flex-direction: column; padding: 20px;
+ border: 1px solid var(--el-border-color-light); border-radius: 8px; background: var(--el-bg-color);
+}
+.template-card-head { display: flex; align-items: center; gap: 10px; }
+.template-document-icon { display: flex; padding: 9px; border-radius: 6px; background: var(--el-color-primary-light-9); color: var(--el-color-primary); font-size: 20px; }
+.template-card h3 { flex: 1; min-width: 0; margin: 0; color: var(--el-text-color-primary); font-size: 16px; line-height: 1.5; overflow-wrap: anywhere; }
+.template-description { margin: 14px 0; color: var(--el-text-color-regular); font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+.template-metadata { display: grid; gap: 10px; margin: auto 0 16px; font-size: 13px; }
+.template-metadata > div { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; }
+.template-metadata dt { color: var(--el-text-color-secondary); }
+.template-metadata dd { margin: 0; color: var(--el-text-color-regular); overflow-wrap: anywhere; }
+.template-card-actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 14px; border-top: 1px solid var(--el-border-color-lighter); }
+.template-card-actions .el-button { margin: 0; }
+.template-result-count { color: var(--el-text-color-secondary); font-size: 13px; padding: 10px 16px; background: var(--el-bg-color); border: 1px solid var(--el-border-color-light); border-radius: 8px; }
 .template-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }.template-form-grid .is-full { grid-column: 1/-1; }.template-section-row { min-height: 52px; display: grid; grid-template-columns: 18px 24px minmax(0, 1fr) 120px 76px 28px; gap: 8px; align-items: center; }.template-section-row > svg { width: 14px; color: #94a3b8; }.template-section-row > button { border: 0; background: transparent; color: #94a3b8; cursor: pointer; }.template-section-row > button svg { width: 15px; }.template-add-section { width: 100%; margin-top: 10px; }
 .template-section-row > .el-input-number { width: 100%; }
 :deep(.el-drawer) { max-width: 100vw; }
@@ -105,6 +180,13 @@ onMounted(() => { loadTemplates(); loadModels() })
  .template-section-row > .el-switch { grid-column: 3; grid-row: 3; }
  .template-section-row > button { grid-column: 4; grid-row: 1; }
 }
-.preview-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; color: #64748b; font-size: 13px; }.preview-description { margin: 18px 0; color: #475569; line-height: 1.7; }.preview-sections { border-top: 1px solid #e2e8f0; }.preview-section { min-height: 58px; padding: 10px 0; border-bottom: 1px solid #edf1f6; display: flex; align-items: center; gap: 12px; }.preview-section > span { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: #edf3ff; color: #2764e7; font-size: 13px; font-weight: 700; }.preview-section div { display: flex; flex-direction: column; gap: 4px; }.preview-section small { color: #64748b; font-size: 13px; }
-@media (max-width: 1100px){.template-grid{grid-template-columns:repeat(2,1fr)}}@media (max-width:760px){.template-layout{grid-template-columns:1fr}.template-categories{display:grid;grid-template-columns:repeat(2,1fr)}.template-grid{grid-template-columns:1fr}.template-toolbar,.template-form-grid{grid-template-columns:1fr}}
+.preview-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; color: #64748b; font-size: 13px; }.preview-description { margin: 18px 0; color: #475569; line-height: 1.7; }.preview-sections { border-top: 1px solid #e2e8f0; }.preview-section { min-height: 58px; padding: 10px 0; border-bottom: 1px solid #edf1f6; display: flex; align-items: center; gap: 12px; }.preview-section > span { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: #edf3ff; color: #409eff; font-size: 13px; font-weight: 700; }.preview-section div { display: flex; flex-direction: column; gap: 4px; }.preview-section small { color: #64748b; font-size: 13px; }
+@media (max-width: 1200px) { .template-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) {
+ .template-grid, .template-form-grid { grid-template-columns: minmax(0, 1fr); }
+ .template-toolbar { flex-wrap: wrap; padding: 12px; }
+ .template-toolbar .el-input { flex: 1 1 100%; min-width: 0; }
+ .template-toolbar .el-select { flex: 1; min-width: 100px; }
+ .template-card { padding: 16px; }
+}
 </style>

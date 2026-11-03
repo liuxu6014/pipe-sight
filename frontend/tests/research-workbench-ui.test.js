@@ -4,6 +4,20 @@ import { readFileSync } from 'node:fs'
 import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 import { sortResearchReports } from '../src/views/portal/utils/reportList.js'
 
+test('research reports use a full-width Element Plus table with actions and an independent pager', () => {
+  const source = readFileSync(new URL('../src/views/portal/pages/ResearchWorkbenchView.vue', import.meta.url), 'utf8')
+  const { descriptor } = parse(source)
+  const script = compileScript(descriptor, { id: 'research-table' })
+  const compiled = compileTemplate({ source: descriptor.template.content, filename: 'ResearchWorkbenchView.vue', id: 'research-table', compilerOptions: { bindingMetadata: script.bindings } })
+  assert.deepEqual(compiled.errors, [])
+  assert.match(source, /<el-table :data="pagedReports" row-key="key" height="100%" style="width: 100%"/)
+  for (const label of ['报告名称', '状态', '更新时间', '操作']) assert.match(source, new RegExp(`<el-table-column[^>]*label="${label}"`))
+  assert.match(source, /show-overflow-tooltip/)
+  assert.match(source, /reportRowActions\(report\)/)
+  assert.match(source, /<\/el-table>[\s\S]*?<el-pagination/)
+  assert.doesNotMatch(source, /<article v-for="report|ps-report-list-row/)
+})
+
 test('portal spacing is compact without changing management, reading typography or paper canvas sizing', () => {
   const styles = readFileSync(new URL('../src/assets/styles/workspace.scss', import.meta.url), 'utf8')
   assert.match(styles, /\.ps-portal \.ps-workspace-surface > \.ps-page \{[^}]*padding-block: var\(--ws-page-space\) 12px;/)
@@ -141,7 +155,7 @@ test('research creation keeps a compact icon return and groups cancel with next 
   assert.match(descriptor.template.content, /@click="selectCurrentMaterialPage">\{\{ currentMaterialPageSelected \? '取消当前页选择' : '全选当前页'/)
   assert.match(descriptor.template.content, /:page-sizes="\[10, 20, 50\]"/)
   assert.match(source, /searchPipelineResearchMaterials\(\{[\s\S]*?pageNum: materialPage.value/)
-  assert.match(descriptor.template.content, /v-if="activeStep === 1 && !verifying && selectionProblems.length"/)
+  assert.match(descriptor.template.content, /v-if="activeStep === 2 && !verifying && selectionProblems.length"/)
   assert.match(descriptor.template.content, /aria-label="返回科研工作台" title="返回科研工作台"/)
   assert.match(descriptor.template.content, /class="ps-step-footer-actions"[\s\S]*?>取消<\/el-button>[\s\S]*?>下一步<\/el-button>/)
   assert.match(descriptor.styles[0].content, /\.ps-step-footer-actions\s*\{[^}]*margin-left:\s*auto/)

@@ -1,0 +1,104 @@
+// Normal actions use Element Plus's own size, borders, colors and state styles.
+// Only document cards and navigation need layout across its slot wrapper.
+:is(.ps-portal, .pipeline-page, .pipeline-user-login, .el-overlay) .el-button.ps-ui-control {
+  margin-left: 0;
+}
+
+:is(.ps-portal, .pipeline-page, .pipeline-user-login, .el-overlay) .el-button.ps-ui-control:where(.ps-brand, .calm-brand, .ps-user-button, .ps-sync-status, .ps-basket-button, .ps-sidebar-toggle, .ps-home-module, .ps-home-latest-item, .ps-outline-item, .ps-candidate-news, .ps-upload-drop, .ps-task-row, .ps-saved-search-apply),
+:is(.ps-template-choice, .management-entry-grid, .ps-my-report-table) > .el-button.ps-ui-control {
+  height: auto;
+  min-width: 0;
+  white-space: normal;
+  line-height: 1.5;
+  font-family: inherit;
+}
+
+:is(.ps-portal, .pipeline-page, .pipeline-user-login, .el-overlay) .el-button.ps-ui-control > span {
+  display: contents;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+}
+
+// Brand navigation keeps its logo appearance, including hover and active states.
+:is(.ps-portal, .pipeline-user-login) .el-button.ps-ui-control:is(.ps-brand, .calm-brand) {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+:is(.ps-portal, .pipeline-page, .pipeline-user-login, .el-overlay) :is(.ps-ui-control, .ps-ui-title, .ps-citation-trigger):focus-visible {
+  outline: 2px solid var(--el-color-primary, #409eff);
+  outline-offset: 2px;
+}
+
+.el-link.ps-ui-title {
+  min-width: 0;
+  max-width: 100%;
+  justify-content: flex-start;
+  align-items: stretch;
+  white-space: normal;
+  text-align: left;
+  line-height: inherit;
+  font-family: inherit;
+  overflow-wrap: anywhere;
+}
+.el-link.ps-ui-title > .el-link__inner { display: contents; }
+.el-link.ps-ui-title.is-disabled { pointer-events: none; }
+
+.ps-segmented-row {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.ps-segmented-row > .el-segmented { flex-shrink: 0; }
+.ps-inspector-tabs.ps-segmented-row { display: flex; }
+.ps-inspector-tabs.ps-segmented-row > .el-segmented { flex: 1; }
+
+.ps-portal .ps-template-choice .el-button.ps-ui-control { display: block; }
+.ps-portal :is(.ps-tabs-line, .ps-inspector-tabs, .ps-view-switch, .ps-search-mode) { gap: 8px; }
+.ps-portal .ps-template-choice .el-button.ps-ui-control p { white-space: normal; }
+.ps-portal .ps-outline-item.ps-ui-control { margin-block: 2px; border-radius: 6px; }
+.ps-portal .ps-outline-item.ps-ui-control strong { white-space: normal; overflow-wrap: anywhere; }
+.ps-portal .ps-candidate-news.ps-ui-control { padding-inline: 10px; }
+.el-overlay .ps-upload-drop.el-button.ps-ui-control { border-style: dashed; }
+.ps-portal .ps-home-latest-item.el-button.ps-ui-control { padding-inline: 12px; }
+.ps-portal .ps-home-latest-list li + li { border-top: 0; margin-top: 8px; }
+.pipeline-page .template-categories .el-button.ps-ui-control + .el-button { margin-top: 8px; }
+.ps-saved-search-panel .el-button.ps-ui-control { height: auto; min-width: 0; white-space: normal; text-align: left; }
+.ps-saved-search-panel .ps-saved-search-apply > span { display: block; min-width: 0; }
+.ps-portal .ps-report-citation .el-button.ps-citation-trigger {
+  display: inline-flex;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  padding: 1px 3px;
+  margin: 0;
+  border: 1px solid #cddfea;
+  border-radius: 3px;
+  background: var(--ps-blue-soft);
+  color: var(--ps-blue);
+  font: inherit;
+  line-height: 1;
+  vertical-align: baseline;
+  text-indent: 0;
+}
+
+// Informational notices in the portal follow the light primary palette.
+body:has(.ps-portal) .el-message--info {
+  --el-message-bg-color: var(--el-color-primary-light-9);
+  --el-message-border-color: var(--el-color-primary-light-7);
+  --el-message-text-color: var(--el-color-primary-dark-2);
+  --el-message-close-icon-color: var(--el-color-primary);
+  --el-message-close-hover-color: var(--el-color-primary-dark-2);
+}
+body:has(.ps-portal) .el-message--info .el-message__icon { color: var(--el-color-primary); }
+
+@media (max-width: 760px) {
+  .ps-portal .ps-home-module.ps-ui-control { min-height: 160px; }
+  .ps-portal .ps-inspector-tabs { flex-wrap: wrap; }
+}

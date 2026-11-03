@@ -37,7 +37,7 @@ async function mount(name, { query = {}, api = {}, basket = [], timers = {} } = 
     searchPipelineIntelligence: async () => ({ data: { rows: [], total: 0 } }),
     searchPipelineDigestCandidates: params => (api.searchPipelineIntelligence || (async () => ({ data: { rows: [], total: 0 } })))(params),
     searchPipelineResearchMaterials: async () => ({ data: { rows: [], total: 0 } }),
-    listPipelineTemplates: async () => ({ data: { rows: [{ templateKey: '100', modelId: 1, modelConfigured: true, name: '已发布模板', reportType: name === 'DigestCreateView' ? 'daily' : 'research-demand', digestCadence: name === 'DigestCreateView' ? 'daily' : null, version: 'V4', sections: [{ id: 1, title: '实际章节', words: 1000 }] }] } }),
+    listPipelineTemplates: async () => ({ data: { rows: [{ templateKey: '100', modelId: 1, modelConfigured: true, name: '已发布模板', reportType: name === 'DigestCreateView' ? 'weekly' : 'research-demand', digestCadence: name === 'DigestCreateView' ? 'weekly' : null, version: 'V4', sections: [{ id: 1, title: '实际章节', words: 1000 }] }] } }),
     createPipelineResearchJob: forbidden, createPipelineDigestSchedule: forbidden, uploadPipelineKnowledgeDocument: forbidden, reparsePipelineKnowledgeDocument: forbidden,
     ...api, ...timers
   }
@@ -60,9 +60,56 @@ async function mount(name, { query = {}, api = {}, basket = [], timers = {} } = 
   const app = renderer.createApp({ render: () => vue.h(vue.resolveComponent('RouterView')) }).use(router)
   await router.push({ path: '/create', query })
   app.mount(node('root'))
+  // Evidence scenarios use completed task parameters and an explicit weekly period.
+  // Blank first-step validation is exercised separately in research-digest-workflow.test.js.
+  if (name === 'ResearchCreateView') {
+    page.form.name = '选材契约测试报告'
+    page.form.direction = '管道检测'
+  } else {
+    page.form.period = [new Date(2026, 9, 13), new Date(2026, 9, 19)]
+  }
   await settle()
   return { get page() { return page }, store, router, messages, get mutations() { return mutations }, close: () => app.unmount() }
 }
+
+test('mounted research wizard validates parameters before template and evidence steps, then submits the edited outline contract', async () => {
+  const templates = ['research-demand', 'technology-route', 'project-demand'].flatMap((reportType, index) =>
+    [0, 1].map(offset => ({ id: String(200 + index * 2 + offset), purpose: 'research', reportType,
+      modelId: 1, modelConfigured: true, version: 'V5', name: `${reportType}-${offset}`,
+      sections: [{ id: 1, title: '模板章节', words: 1000, description: '模板描述' }] })))
+  const ctx = await mount('ResearchCreateView', { basket: [article('111')], api: {
+    listPipelineTemplates: async () => ({ data: { rows: templates } })
+  } })
+  try {
+    ctx.page.form.name = ''; ctx.page.form.direction = ''
+    ctx.page.nextStep()
+    assert.equal(ctx.page.activeStep.value, 0)
+    assert.equal(ctx.page.nextStepBlocked.value, true)
+    ctx.page.form.name = '管道检测任务'; ctx.page.form.direction = '检测技术'
+    ctx.page.form.reportType = 'technology-route'
+    await settle()
+    ctx.page.nextStep()
+    assert.equal(ctx.page.activeStep.value, 1)
+    assert.equal(ctx.page.availableReportTemplates.value.length, 2)
+    ctx.page.form.template = '203'
+    await settle()
+    ctx.page.nextStep()
+    assert.equal(ctx.page.activeStep.value, 2)
+    await ctx.page.verifySelected()
+    ctx.page.nextStep()
+    assert.equal(ctx.page.activeStep.value, 3)
+    ctx.page.outline.value[0].words = 1800
+    ctx.page.outline.value[0].description = '用户补充的分析边界'
+    const payload = ctx.page.buildResearchPayload()
+    assert.equal(payload.reportType, 'technology-route')
+    assert.equal(payload.templateId, '203')
+    assert.equal(payload.templateVersion, 'V5')
+    assert.equal(payload.outline[0].words, 1800)
+    assert.equal(payload.outline[0].description, '用户补充的分析边界')
+    assert.deepEqual(payload.selectedItemIds, ['111'])
+    assert.equal(ctx.mutations, 0)
+  } finally { ctx.close() }
+})
 
 test('digest starts unfiltered and uses administrator category labels', async () => {
   const calls = []
@@ -91,7 +138,7 @@ test('digest starts unfiltered and uses administrator category labels', async ()
 
 test('digest writing outline follows the selected template instead of invented category columns', async () => {
   const ctx = await mount('DigestCreateView', { api: {
-    listPipelineTemplates: async () => ({ data: { rows: [{ id: '100', name: '日报', digestCadence: 'daily', modelId: 1, modelConfigured: true,
+    listPipelineTemplates: async () => ({ data: { rows: [{ id: '100', name: '周报', digestCadence: 'weekly', modelId: 1, modelConfigured: true,
       sections: [{ title: '行业进展', words: 500, required: true }, { title: '业务影响', words: 400, required: true },
         { title: '热点研判', words: 300, required: false }, { title: '来源清单', words: 100, required: true }] }] } })
   } })
@@ -120,17 +167,17 @@ test('NULL model templates stay selectable and research submission makes no gene
   } finally { ctx.close() }
 })
 
-test('one canonical digest template is selectable for daily weekly monthly and missing models prevent enqueue and schedule', async () => {
+test('one canonical digest template is selectable for weekly monthly and missing models prevent enqueue and schedule', async () => {
   const ctx = await mount('DigestCreateView', { api: {
     listPipelineTemplates: async () => ({ data: { rows: [{ id: '503', name: '简报模板', purpose: 'digest', reportType: 'digest', digestCadence: 'all', modelId: null, modelConfigured: false }] } })
   } })
   try {
-    for (const type of ['日报', '周报', '月报']) {
+    for (const type of ['周报', '月报']) {
       ctx.page.form.type = type; await settle()
       assert.equal(ctx.page.availableTemplates.value[0].value, '503')
       assert.equal(ctx.page.form.template, '503')
     }
-    ctx.page.form.type = '日报'; await settle()
+    ctx.page.form.type = '周报'; await settle()
     ctx.page.form.schedule = true
     ctx.page.selectedCandidateIds.value = ['504']
     await ctx.page.createDigest()
@@ -147,7 +194,7 @@ test('research upload dialog closes after success and adds the returned material
     return pending.promise
   } } })
   try {
-    ctx.page.activeStep.value = 1
+    ctx.page.activeStep.value = 2
     ctx.page.uploadDialogVisible.value = true
     const file = new Blob(['test material'], { type: 'text/plain' })
     Object.defineProperty(file, 'name', { value: 'material.txt' })
@@ -188,7 +235,7 @@ test('research material list exposes parse state before selection and blocks fai
     ctx.page.selectedIds.value = ['505']
     await ctx.page.verifySelected()
     assert.equal(ctx.page.availableMaterials.value[0].reason, '解析失败')
-    ctx.page.activeStep.value = 1
+    ctx.page.activeStep.value = 2
     assert.equal(ctx.page.nextStepBlocked.value, true)
   } finally { ctx.close() }
 })
@@ -342,7 +389,7 @@ test('catalog rows without review status can be selected and are verified agains
     assert.equal(row.state, 'unchecked')
     assert.equal(row.ready, false)
     assert.equal(row.reason, '选择后核验')
-    ctx.page.activeStep.value = 1
+    ctx.page.activeStep.value = 2
     ctx.page.toggleMaterial(row.id, true)
     assert.equal(calls, 1)
     assert.equal(ctx.page.nextStepBlocked.value, true)
@@ -590,9 +637,9 @@ test('research keeps missing and denied IDs visible and blocks payloads instead 
     assert.equal(ctx.page.selectedMaterials.value[1].title, '选材 108')
     assert.match(ctx.page.selectionProblems.value[0].reason, /无权访问/)
     assert.throws(() => ctx.page.buildResearchPayload(), /不可用/)
-    ctx.page.activeStep.value = 1
+    ctx.page.activeStep.value = 2
     ctx.page.nextStep()
-    assert.equal(ctx.page.activeStep.value, 1)
+    assert.equal(ctx.page.activeStep.value, 2)
     ctx.page.toggleMaterial('108', false)
     await settle()
     assert.deepEqual(ctx.page.buildResearchPayload().selectedItemIds, ['115'])
@@ -709,7 +756,7 @@ test('digest independent plan dialog does not couple plan configuration to manua
   const ctx = await mount('DigestCreateView')
   try {
     for (const [frequency, type] of [
-      ['daily', '日报'], ['weekly', '周报'], ['monthly', '月报']
+      ['weekly', '周报'], ['monthly', '月报']
     ]) {
       ctx.page.form.type = type
       await vue.nextTick()
@@ -800,7 +847,7 @@ test('digest preserves cross-page explicit selections and builds only those IDs 
     searchPipelineIntelligence: async params => { calls.push(params); return { data: { rows: [{ id: `${700 + params.pageNum}` }], total: 45 } } }
   } })
   try {
-    ctx.page.form.date = new Date(2026, 9, 13)
+    ctx.page.form.period = [new Date(2026, 9, 13), new Date(2026, 9, 19)]
     await settle()
     assert.equal(ctx.page.previewPageSize.value, 10)
     assert.equal(calls.at(-1).pageSize, 10)
@@ -843,7 +890,7 @@ test('digest scope changes invalidate old pages and selections; a late old respo
   let calls = 0
   const ctx = await mount('DigestCreateView', { api: { searchPipelineIntelligence: () => ++calls === 1 ? old.promise : Promise.resolve({ data: { rows: [{ id: '125' }], total: 1 } }) } })
   try {
-    ctx.page.form.date = new Date(2026, 9, 13)
+    ctx.page.form.period = [new Date(2026, 9, 13), new Date(2026, 9, 19)]
     ctx.page.form.keywords = ['新关键词']
     await settle()
     old.resolve({ data: { rows: [{ id: '120' }], total: 1 } })
@@ -862,7 +909,7 @@ test('digest request or detail failure is visible, not a zero candidate conclusi
   let fail = true
   const ctx = await mount('DigestCreateView', { api: { searchPipelineIntelligence: async () => { if (fail) throw { msg: '查询失败' }; return { data: { rows: [{ id: '111' }], total: 1 } } } } })
   try {
-    ctx.page.form.date = new Date(2026, 9, 13)
+    ctx.page.form.period = [new Date(2026, 9, 13), new Date(2026, 9, 19)]
     await settle()
     assert.equal(ctx.page.previewError.value, '查询失败')
     assert.equal(ctx.page.refreshing.value, false)
@@ -892,7 +939,7 @@ test('digest invalid/reversed periods do not query, and cleared controls never b
   const ctx = await mount('DigestCreateView', { api: { searchPipelineIntelligence: async params => { calls.push(params); return { data: { rows: [], total: 0 } } } } })
   try {
     const before = calls.length
-    ctx.page.form.date = null
+    ctx.page.form.period = []
     await settle()
     assert.equal(calls.length, before)
     assert.deepEqual(ctx.page.buildReportPeriod().period, [])
@@ -952,7 +999,7 @@ test('both generation forms select the real large decimal template ID without ha
   for (const name of names) {
     const id = '9007199254740993'
     const ctx = await mount(name, { api: {
-      listPipelineTemplates: async () => ({ data: { rows: [{ id, name: '真实模板编号', purpose: name === 'DigestCreateView' ? 'digest' : 'research', digestCadence: name === 'DigestCreateView' ? 'daily' : null, modelId: null, modelConfigured: false, sections: [] }] } })
+      listPipelineTemplates: async () => ({ data: { rows: [{ id, name: '真实模板编号', purpose: name === 'DigestCreateView' ? 'digest' : 'research', digestCadence: name === 'DigestCreateView' ? 'weekly' : null, modelId: null, modelConfigured: false, sections: [] }] } })
     } })
     try {
       assert.equal(ctx.page.form.template, id)

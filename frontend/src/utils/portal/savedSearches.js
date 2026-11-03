@@ -2,9 +2,9 @@ import { decimalId } from './businessId.js'
 
 const DEFAULTS = {
   news: { q: '', source: '全部', tag: [] },
-  paper: { q: '', year: 'all', years: [], journals: [] },
+  paper: { q: '', year: 'all', years: [], journals: [], classification: '' },
   search: { q: '', mode: 'keyword', type: 'all', date: 'all', source: 'all', directions: [] },
-  knowledge: { q: '', status: 'all' },
+  knowledge: { q: '', status: 'all', classification: '' },
 }
 const ENUMS = {
   news: { source: ['全部', '新闻网站', '微信公众号'] },
@@ -38,7 +38,7 @@ export function normalizeSearchFilters(kind, input = {}) {
 
 export function searchFilterChips(kind, input) {
   const filters = normalizeSearchFilters(kind, input)
-  const labels = { q: '关键词', tag: '标签', year: '年份', years: '年份范围', journals: '期刊', type: '内容', date: '时间', source: '来源', directions: '类别', status: '状态' }
+  const labels = { q: '关键词', tag: '类别', classification: '类别', year: '年份', years: '年份范围', journals: '期刊', type: '内容', date: '时间', source: '来源', directions: '类别', status: '状态' }
   const values = { type: { news: '新闻资讯', paper: '论文', document: '内部资料', report: '我的报告' }, date: { week: '近一周', year: '近一年' }, source: { public: '公开来源', internal: '内部资料' } }
   return Object.entries(filters).flatMap(([field, value]) => {
     if (JSON.stringify(value) === JSON.stringify(DEFAULTS[kind][field]) || field === 'mode') return []

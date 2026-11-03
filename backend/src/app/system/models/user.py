@@ -37,6 +37,9 @@ class SysUser(Base):
         {'comment': '用户信息表'},
     )
 
+    dept_id = Column(
+        BigInteger, ForeignKey('sys_dept.dept_id', ondelete='RESTRICT'), nullable=True, index=True, comment='所属部门ID'
+    )
     id = Column(BigInteger, primary_key=True, nullable=False, autoincrement=True, comment='用户ID')
     username = Column(String(30), nullable=False, comment='用户账号；软删除后仍保留且不可复用')
     nickname = Column(String(30), nullable=False, comment='用户昵称')

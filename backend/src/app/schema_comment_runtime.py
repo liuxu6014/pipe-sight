@@ -1,4 +1,4 @@
-"""Current compact-v7 comment SQL and catalog verification; no ORM imports."""
+"""Current compact-v10 comment SQL and catalog verification; no ORM imports."""
 
 import sqlalchemy as sa
 
@@ -22,10 +22,10 @@ def _comment_sql(kind: str, table: str, column: str | None, comment: str) -> str
 def render_comment_sql() -> str:
     """Deterministic canonical SQL; optional/framework/catalog objects guarded."""
     lines = [
-        '-- compact-v7中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；若依表字段不变。',
+        '-- compact-v10中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；恢复若依部门表及用户dept_id。',
         '-- 27个业务created_at/updated_at为北京时间timestamp(0)无时区；其他运行时间字段保持原类型。',
         '-- 普通不透明令牌保留；系统幂等键内嵌ID、显式JSON引用及语义指纹按实体映射核验。',
-        '-- 27张基线表321字段，2张保留功能表23字段；共29张物理表344字段。',
+        '-- 28张基线表338字段，2张保留功能表23字段；共30张物理表361字段。',
         '-- 仅COMMENT及存在性保护块；调用方管理事务，不修改字段、约束或业务数据。',
         '',
     ]

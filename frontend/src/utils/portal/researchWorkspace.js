@@ -5,9 +5,23 @@ export function reportRowActions(row) {
     const research = row.path.startsWith('/portal/research/reports/')
     return [{ label: research ? '查看' : '查看简报', path: row.path },
       ...(research && !row.readOnly && row.status !== 'published'
-        ? [{ label: '继续编辑', path: `${row.path}?mode=edit`, primary: true }] : [])]
+        ? [{ label: '编辑', path: `${row.path}?mode=edit`, primary: true }] : [])]
   }
   return [{ label: ({ active: '查看进度', failed: '查看原因 / 重试', cancelled: '查看任务', generated: '查看结果' })[row.status] || '查看任务', path: row.path, primary: row.status === 'failed' }]
+}
+
+export function canDeleteResearchReport(row) {
+  return row?.kind === 'report' && !row.readOnly && row.status !== 'active'
+    && Boolean(row.path?.startsWith('/portal/research/reports/'))
+}
+
+export function removeDeletedReport(store, reportId) {
+  const id = String(reportId)
+  store.liveReports = store.liveReports.filter(row => String(row.id) !== id)
+  store.tasks = store.tasks.filter(row => String(row.reportId ?? row.report_id) !== id)
+  store.basket = store.basket.filter(row => !(row.type === 'report' && String(row.id) === id))
+  store.favoriteItems = store.favoriteItems.filter(row => !(row.type === 'report' && String(row.id) === id))
+  store.favorites = store.favorites.filter(value => String(value) !== id)
 }
 
 export function templatePreview(template) {

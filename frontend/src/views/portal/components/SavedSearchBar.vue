@@ -1,11 +1,11 @@
 <template>
-  <div class="ps-saved-search-bar" aria-label="当前筛选与常用条件">
-    <div class="ps-query-chips" aria-label="当前筛选">
+  <div class="ps-saved-search-bar" :class="{ 'is-compact': !showCurrentFilters }" :aria-label="showCurrentFilters ? '当前筛选与常用条件' : '常用条件'">
+    <div v-if="showCurrentFilters" class="ps-query-chips" aria-label="当前筛选">
       <el-tag v-for="chip in queryState.chips" :key="`${chip.field}:${chip.value}`" closable @close="removeFilter(chip)">{{ chip.label }}</el-tag>
       <span v-if="!queryState.chips.length">{{ queryState.error || '未设置筛选条件' }}</span>
     </div>
-    <el-popover trigger="click" placement="bottom-end" width="min(360px, calc(100vw - 24px))" @show="loadSaved">
-      <template #reference><el-button :disabled="!account">{{ account ? `常用条件${saved.length ? ` · ${saved.length}` : ''}` : '登录后保存条件' }}</el-button></template>
+    <component :is="inline ? 'div' : ElPopover" v-bind="inline ? {} : { trigger: 'click', placement: 'bottom-end', width: 'min(360px, calc(100vw - 24px))' }" @show="loadSaved">
+      <template v-if="!inline" #reference><el-button :disabled="!account">{{ account ? `常用条件${saved.length ? ` · ${saved.length}` : ''}` : '登录后保存条件' }}</el-button></template>
       <div class="ps-saved-search-panel">
         <strong>常用检索条件</strong>
         <p>仅保存在当前浏览器，按账号隔离；本页最多 12 组。相同条件再次保存会更新名称，不保存正文或文件。共享电脑请勿保存敏感关键词。</p>
@@ -13,22 +13,22 @@
         <el-button type="primary" :disabled="!canSave" @click="saveCurrent">保存当前条件</el-button>
         <p v-if="error" class="ps-saved-search-error" role="alert">{{ error }}</p>
         <ul v-if="saved.length">
-          <li v-for="entry in saved" :key="entry.id"><button type="button" class="ps-saved-search-apply" :aria-label="`应用条件：${entry.name}`" @click="applyEntry(entry)"><strong>{{ entry.name }}</strong><small>{{ summary(entry.filters) }}</small></button><el-button plain type="danger" :aria-label="`移除条件：${entry.name}`" @click="removeEntry(entry)">移除</el-button></li>
+          <li v-for="entry in saved" :key="entry.id"><el-button :auto-insert-space="false" native-type="button" class="ps-saved-search-apply ps-ui-control" :aria-label="`应用条件：${entry.name}`" @click="applyEntry(entry)"><strong>{{ entry.name }}</strong><small>{{ summary(entry.filters) }}</small></el-button><el-button plain type="danger" :aria-label="`移除条件：${entry.name}`" @click="removeEntry(entry)">移除</el-button></li>
         </ul>
         <p v-else-if="!error">尚未保存条件。先设置筛选，再输入名称保存。</p>
       </div>
-    </el-popover>
+    </component>
   </div>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, ElPopover } from 'element-plus'
 import useUserStore from '@/store/modules/user'
 import { decimalId } from '@/utils/portal/businessId'
 import { createSavedSearchRepository, normalizeSearchFilters, searchFilterChips, withoutSearchFilter } from '@/utils/portal/savedSearches'
 
-const props = defineProps({ kind: { type: String, required: true }, query: { type: Object, required: true } })
+const props = defineProps({ kind: { type: String, required: true }, query: { type: Object, required: true }, showCurrentFilters: { type: Boolean, default: true }, inline: Boolean })
 const emit = defineEmits(['apply'])
 const userStore = useUserStore()
 const account = computed(() => decimalId(userStore.id))
@@ -81,6 +81,7 @@ onBeforeUnmount(() => { disposed = true; window.removeEventListener('storage', s
 
 <style scoped>
 .ps-saved-search-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin: 10px 0 14px; }
+.ps-saved-search-bar.is-compact { flex: 0 0 auto; margin: 0; }
 .ps-query-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; flex: 1; }
 .ps-query-chips > span:not(.el-tag) { color: var(--ps-muted); font-size: 13px; }
 .ps-query-chips :deep(.el-tag) { max-width: 100%; height: auto; min-height: 28px; white-space: normal; overflow-wrap: anywhere; }

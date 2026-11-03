@@ -84,10 +84,11 @@ class PipelineArticle(Base):
     published_at = Column(DateTime(timezone=True), nullable=True, comment='来源原文发布时间，不是平台入库时间')
     content = Column(Text, nullable=True, comment='原文正文')
     content_zh = Column(Text, nullable=True, comment='中文译文，原文已中文则无需重复保存')
+    summary = Column(Text, nullable=True, comment='约200字中文摘要，基于原文生成；短原文允许更短，未处理时为空')
     entities = Column(
         JSON().with_variant(JSONB(), 'postgresql'),
         nullable=True,
-        comment='实体抽取结果JSON数组；每项含type(地点/时间/政策/人物/机构/技术)与name；排除国家管网等平台自身机构，为空表示未抽取或无实体',
+        comment='核心事件实体JSON数组；每项含type与name，通常3至5项，最多6项；不为凑数补齐类型',
     )
     category_id = Column(
         BigInteger,
@@ -160,6 +161,11 @@ class PipelinePaper(Base):
     published_date = Column(String(10), nullable=True, comment='真实发表日期：YYYY或YYYY-MM或YYYY-MM-DD')
     abstract = Column(Text, nullable=True, comment='原文摘要')
     abstract_zh = Column(Text, nullable=True, comment='中文摘要')
+    entities = Column(
+        JSON().with_variant(JSONB(), 'postgresql'),
+        nullable=True,
+        comment='核心研究实体JSON数组；仅依据标题及摘要，最多6项，不推测作者机构或论文全文',
+    )
     category_id = Column(
         BigInteger, ForeignKey('categories.id', ondelete='RESTRICT'), nullable=True, comment='唯一类别ID'
     )

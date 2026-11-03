@@ -30,7 +30,7 @@
           </el-form-item>
 
           <div v-if="suggestedTitles.length" class="title-suggestions">
-            <button v-for="title in suggestedTitles" :key="title" type="button" @click="form.topic = title">{{ title }}</button>
+            <el-button :auto-insert-space="false" class="ps-ui-control" v-for="title in suggestedTitles" :key="title" native-type="button" @click="form.topic = title">{{ title }}</el-button>
           </div>
 
           <el-row :gutter="12">

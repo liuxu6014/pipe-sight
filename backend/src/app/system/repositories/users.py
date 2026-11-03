@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.services.pagination import PaginationService
 from app.infrastructure.services.persistence_mapping import PersistenceMapping
+from app.system.models.dept import SysDept
 from app.system.models.menu import SysMenu
 from app.system.models.role import SysRole, SysRoleMenu
 from app.system.models.user import SysUser, SysUserRole
@@ -226,6 +227,17 @@ class UserDao:
             select(SysUser)
             .where(
                 SysUser.del_flag == '0',
+                SysUser.dept_id.in_(
+                    select(SysDept.dept_id).where(
+                        SysDept.del_flag == '0',
+                        or_(
+                            SysDept.dept_id == query_object.dept_id,
+                            (',' + SysDept.ancestors + ',').like(f'%,{query_object.dept_id},%'),
+                        ),
+                    )
+                )
+                if query_object.dept_id is not None
+                else True,
                 SysUser.id == query_object.user_id if query_object.user_id is not None else True,
                 SysUser.username.like(f'%{query_object.user_name}%') if query_object.user_name else True,
                 SysUser.nickname.like(f'%{query_object.nick_name}%') if query_object.nick_name else True,

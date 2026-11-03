@@ -12,8 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.infrastructure.services.file_transfer import FileTransferService
 from app.infrastructure.services.file_upload import FileUploadSupport
 from app.infrastructure.services.logging_support import logger
+from app.system.models.dept import SysDept
 from app.system.models.role import SysRole
 from app.system.models.user import SysUser
+from app.system.schemas.dept import DeptModel
 from app.system.schemas.user import (
     AddUserModel,
     AvatarModel,
@@ -32,6 +34,7 @@ from app.system.schemas.user import (
     UserRoleResponseModel,
     UserRowModel,
 )
+from app.system.services.depts import DeptService
 from app.system.services.passwords import PasswordService
 from app.system.services.roles import RoleService
 from app.system.services.users import UserService
@@ -258,6 +261,21 @@ async def query_detail_system_user_profile(
 
 
 @user_controller.get(
+    '/deptTree',
+    summary='获取用户管理部门树',
+    dependencies=[
+        UserInterfaceAuthDependency(['system:user:list', 'system:user:add', 'system:user:edit'], is_strict=False)
+    ],
+)
+async def get_system_user_dept_tree(
+    query_db: Annotated[AsyncSession, DBSessionDependency()],
+    data_scope_sql: Annotated[ColumnElement, DataScopeDependency(SysDept, user_alias=None)],
+) -> Response:
+    tree = await DeptService.get_dept_tree_services(query_db, DeptModel(), data_scope_sql)
+    return ResponseUtil.success(data=tree)
+
+
+@user_controller.get(
     '/{user_id}',
     summary='获取用户详情接口',
     description='用于获取指定用户的详情信息',
@@ -344,7 +362,7 @@ async def change_system_user_profile_info(
     current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
 ) -> Response:
     edit_user = EditUserModel(
-        **user_info.model_dump(exclude_unset=True, by_alias=True, exclude={'role_ids'}),
+        **user_info.model_dump(exclude_unset=True, by_alias=True, exclude={'role_ids', 'dept_id', 'dept'}),
         userId=current_user.user.user_id,
         userName=current_user.user.user_name,
         updateBy=current_user.user.user_name,

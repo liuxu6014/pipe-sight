@@ -3,7 +3,6 @@
     <PortalPageHeader title="资料库">
       <template #actions>
         <el-button type="primary" :icon="UploadFilled" @click="openUpload">上传资料</el-button>
-        <el-button type="primary" :loading="preparingReport" :disabled="!selection.selectedItems.value.length || preparingReport" @click="createFromSelection">新建报告</el-button>
       </template>
     </PortalPageHeader>
 
@@ -14,11 +13,8 @@
     </div>
 
     <div class="ps-toolbar ps-knowledge-toolbar">
-      <el-input v-model.trim="keyword" :prefix-icon="Search" clearable aria-label="搜索资料库" placeholder="搜索资料标题、来源或摘要" />
-      <el-select v-model="libraryKind" aria-label="资料类型">
-        <el-option label="全部类型" value="all" /><el-option label="新闻资讯" value="news" />
-        <el-option label="论文" value="paper" /><el-option label="上传资料" value="document" />
-      </el-select>
+      <el-input v-model.trim="keyword" :prefix-icon="Search" clearable aria-label="搜索资料库" placeholder="搜索文件名称或摘要" />
+      <el-select v-model="classification" clearable filterable placeholder="全部类别" aria-label="资料类别"><el-option v-for="name in libraryCategories" :key="name" :label="name" :value="name" /></el-select>
       <el-select v-model="parseStatus" aria-label="按解析状态筛选">
         <el-option label="全部状态" value="all" />
         <el-option label="已解析" value="已解析" />
@@ -31,49 +27,40 @@
       </el-select>
       <el-button @click="clearFilters">重置筛选</el-button>
     </div>
-    <div class="ps-library-selection-tools">
-      <el-checkbox :model-value="selection.allVisible.value" :indeterminate="selection.indeterminate.value" :disabled="!selectablePage.length || preparingReport" @change="togglePage">全选当前页</el-checkbox>
-      <span role="status">已选 {{ selection.selectedItems.value.length }} / 50 条</span>
-      <el-button v-if="selection.selectedItems.value.length" :disabled="preparingReport" @click="selection.selectedIds.value = []">清空选择</el-button>
-    </div>
-    <section class="ps-material-list" :aria-busy="isInitialLoading" aria-label="资料列表">
-
-      <template v-if="isInitialLoading">
-        <div v-for="index in 4" :key="index" class="ps-knowledge-skeleton"><i></i><span></span><span></span><span></span></div>
-      </template>
-
-      <article v-for="doc in pagedDocuments" v-else :key="`${doc.kind}:${doc.id}`">
-        <el-tooltip :content="libraryItemReason(doc) || '勾选用于生成报告'" placement="top"><el-checkbox :model-value="selection.selectedIds.value.includes(doc.id)" :disabled="Boolean(libraryItemReason(doc)) || preparingReport" :aria-label="`选择资料：${doc.name}`" @change="toggleSelection(doc, $event)" /></el-tooltip>
-        <span class="ps-doc-type" :class="`is-${String(doc.format || '').toLowerCase()}`">{{ doc.format }}</span>
-        <span class="ps-doc-main">
-          <button type="button" @click="openDocument(doc)">{{ doc.name }}</button>
-          <p>{{ doc.summary }}</p>
-          <small>{{ doc.kind === 'document' ? '上传资料' : doc.kind === 'paper' ? '论文' : '新闻资讯' }}<template v-if="doc.source || doc.journal"> · {{ doc.source || doc.journal }}</template><template v-if="doc.updatedAt || doc.publishedDate || doc.time"> · {{ doc.updatedAt || doc.publishedDate || doc.time }}</template></small>
-          <small v-if="doc.scanStatus && doc.scanStatus !== 'clean'" class="ps-doc-security-state">
-            安全状态：{{ scanStatusLabel(doc.scanStatus) }}{{ doc.scanMessage ? ` · ${doc.scanMessage}` : '' }}
-          </small>
-        </span>
-        <span data-label="解析状态">
-          <b class="ps-parse-state" :class="statusClass(doc.status)"><i></i>{{ doc.status }}</b>
-          <el-button v-if="doc.status === '解析失败' && doc.canManage !== false" plain type="primary" :loading="isReparsing(doc.id)" :aria-label="`重试解析：${doc.name}`" @click="reparse(doc)">重试</el-button>
-        </span>
-        <span class="ps-row-actions">
+    <section ref="listRegion" class="ps-material-list" :aria-busy="isInitialLoading" aria-label="资料列表">
+      <el-skeleton v-if="isInitialLoading" :rows="4" animated />
+      <el-table v-else :data="pagedDocuments" row-key="id" :max-height="listHeight" class="ps-library-table" style="width: 100%">
+        <el-table-column label="资料名称" min-width="360" header-align="center">
+          <template #default="{ row: doc }">
+            <div class="ps-library-identity">
+              <span class="ps-doc-type" :class="`is-${String(doc.format || '').toLowerCase()}`">{{ doc.format }}</span>
+              <div class="ps-doc-main">
+                <el-link underline="hover" :href="$router.resolve(libraryItemPath(doc) || '/portal').href" class="ps-ui-title" @click.prevent="openDocument(doc)">{{ doc.name }}</el-link>
+                <p v-if="doc.summary" :title="doc.summary">{{ doc.summary }}</p>
+                <small v-if="doc.scanStatus && doc.scanStatus !== 'clean'" class="ps-doc-security-state">安全状态：{{ scanStatusLabel(doc.scanStatus) }}{{ doc.scanMessage ? ` · ${doc.scanMessage}` : '' }}</small>
+              </div>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="类别" width="130" header-align="center" align="center">
+          <template #default="{ row: doc }"><el-tag class="ps-library-category" effect="plain" :type="contentCategory(doc) ? 'primary' : 'info'">{{ contentCategory(doc) || '待分类' }}</el-tag></template>
+        </el-table-column>
+        <el-table-column label="解析状态" width="130" header-align="center" align="center">
+          <template #default="{ row: doc }"><b class="ps-parse-state" :class="statusClass(doc.status)"><i></i>{{ doc.status }}</b></template>
+        </el-table-column>
+        <el-table-column label="更新时间" width="180" header-align="center" align="center">
+          <template #default="{ row: doc }"><time>{{ doc.updatedAt || doc.publishedDate || doc.time || '—' }}</time></template>
+        </el-table-column>
+        <el-table-column label="操作" width="320" header-align="center" align="right">
+          <template #default="{ row: doc }"><div class="ps-row-actions">
           <el-button plain type="primary" @click="openDocument(doc)">查看</el-button>
-          <el-button v-if="doc.kind === 'document' && doc.canManage === true" @click="editDocument(doc)">编辑</el-button>
-          <el-button v-if="doc.kind !== 'document' || doc.canManage === true" plain type="danger" :loading="deletingId === `${doc.kind}:${doc.id}`" :disabled="Boolean(deletingId) || preparingReport" @click="deleteLibraryItem(doc)">删除</el-button>
-          <el-dropdown v-if="doc.kind === 'document'" trigger="click" :disabled="preparingReport || Boolean(deletingId)">
-            <el-button class="ps-ui-action" :aria-label="`${doc.name}的更多操作`"><MoreFilled /></el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item v-if="doc.canManage !== false && doc.status !== '解析失败'" :disabled="isReparsing(doc.id)" @click="reparse(doc)">
-                  {{ isReparsing(doc.id) ? '正在提交…' : '重新解析' }}
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-        </span>
-      </article>
+          <el-button v-if="doc.canManage === true" @click="editDocument(doc)">编辑</el-button>
+          <el-button v-if="doc.canManage !== false" plain :loading="isReparsing(doc.id)" :disabled="Boolean(deletingId)" :aria-label="`${doc.status === '解析失败' ? '重试解析' : '重新解析'}：${doc.name}`" @click="reparse(doc)">{{ doc.status === '解析失败' ? '重试解析' : '重新解析' }}</el-button>
+          <el-button v-if="doc.canManage === true" plain type="danger" :loading="deletingId === `${doc.kind}:${doc.id}`" :disabled="Boolean(deletingId)" @click="deleteLibraryItem(doc)">删除</el-button>
 
+          </div></template>
+        </el-table-column>
+        <template #empty>
       <PortalEmptyState
         v-if="!isInitialLoading && !filteredDocuments.length && !documentsError"
         :title="hasFilters ? '没有匹配资料' : '还没有研究资料'"
@@ -82,6 +69,8 @@
         @action="hasFilters ? clearFilters() : openUpload()"
       />
       <PortalEmptyState v-else-if="!isInitialLoading && !filteredDocuments.length && documentsError" title="暂时无法确认资料列表" description="资料获取失败，请重新获取后再检查筛选结果。" action-label="重新获取" @action="refreshDocuments" />
+        </template>
+      </el-table>
     </section>
     <div v-if="filteredDocuments.length && !isInitialLoading" class="ps-pagination" aria-label="研究资料列表分页">
       <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :page-sizes="[10, 20, 50]" :total="filteredDocuments.length" :pager-count="5" layout="total, sizes, ->, prev, pager, next, jumper" background />
@@ -110,6 +99,7 @@
         已选择 {{ uploadFiles.length }} 份资料<span v-if="uploading">，正在上传第 {{ completedUploads + 1 }} 份</span>
       </div>
       <p class="ps-upload-private-note">上传后保存到个人资料库，仅自己可见。</p>
+      <el-alert title="分类方式：系统提示词" description="资料解析后将由统一提示词分类；当前自动分类接口待接入，暂显示为待分类，不会把文件类型或关键词当作类别。" type="info" show-icon :closable="false" />
       <template #footer>
         <el-button :disabled="uploading" @click="uploadVisible = false">取消</el-button>
         <el-button type="primary" :loading="uploading" :disabled="!uploadFiles.length" @click="finishUpload">开始上传</el-button>
@@ -124,7 +114,7 @@ import { applySavedSearchQuery } from '@/utils/portal/savedSearches'
 import { computed, onBeforeUnmount, onMounted, ref, toRefs, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Close, MoreFilled, Search, UploadFilled, WarningFilled } from '@element-plus/icons-vue'
+import { Close, Search, UploadFilled, WarningFilled } from '@element-plus/icons-vue'
 import PortalPageHeader from '../components/PortalPageHeader.vue'
 import PortalEmptyState from '../components/PortalEmptyState.vue'
 import usePortalStore from '@/store/modules/portal'
@@ -132,25 +122,32 @@ import {
   deletePipelineKnowledgeDocument,
   listPipelineKnowledgeDocuments,
   reparsePipelineKnowledgeDocument,
-  uploadPipelineKnowledgeDocument,
-  savePipelineWorkspaceItem
+  uploadPipelineKnowledgeDocument
 } from '@/api/pipeline/intelligence'
-import { materialBasketReason, useListQuery, useListWorkspace, validPage } from '@/utils/portal/listQuery'
-import { useBasketSelection } from '@/utils/portal/basketSelection'
-import { buildLibraryItems, libraryItemPath, libraryItemReason, prepareLibrarySelection } from '@/utils/portal/libraryItems'
+import { useListQuery, validPage } from '@/utils/portal/listQuery'
+import { buildLibraryItems, libraryItemPath } from '@/utils/portal/libraryItems'
+import { contentCategory } from '@/utils/portal/contentPresentation'
 
 const MAX_FILE_SIZE = 16 * 1024 * 1024
 const ALLOWED_EXTENSIONS = new Set(['pdf', 'docx', 'md', 'txt'])
 const router = useRouter()
 const route = useRoute()
 const portalStore = usePortalStore()
-const query = useListQuery({ q: '', status: 'all', kind: 'all', page: 1, size: 10 })
+const query = useListQuery({ q: '', status: 'all', classification: '', page: 1, size: 10 })
 function applySavedSearch(filters) { if (!applySavedSearchQuery(query, filters, 'knowledge')) refreshDocuments() }
-const { q: keyword, status: parseStatus, page: currentPage, size: pageSize } = toRefs(query)
-const libraryKind = toRefs(query).kind
-const preparingReport = ref(false)
+const { q: keyword, status: parseStatus, classification, page: currentPage, size: pageSize } = toRefs(query)
+const listRegion = ref(null)
+const listHeight = ref()
+let listResizeObserver
+watch(listRegion, element => {
+  listResizeObserver?.disconnect()
+  if (!element || typeof ResizeObserver === 'undefined') return
+  listResizeObserver = new ResizeObserver(([entry]) => {
+    listHeight.value = Math.max(1, Math.floor(entry.contentRect.height))
+  })
+  listResizeObserver.observe(element)
+}, { flush: 'post' })
 const deletingId = ref('')
-const { inBasket, busy, persist } = useListWorkspace(portalStore, { save: savePipelineWorkspaceItem })
 const uploadVisible = ref(false)
 const uploadFiles = ref([])
 const uploading = ref(false)
@@ -158,7 +155,8 @@ const completedUploads = ref(0)
 const reparsingIds = ref(new Set())
 
 const documents = computed(() => portalStore.knowledgeDocuments || [])
-const libraryItems = computed(() => buildLibraryItems(portalStore.basket, documents.value, portalStore.paperItems, portalStore.newsItems))
+const libraryItems = computed(() => buildLibraryItems([], documents.value))
+const libraryCategories = computed(() => [...new Set(libraryItems.value.map(contentCategory).filter(Boolean))])
 const parsingRefreshError = ref('')
 const hasParsingDocuments = computed(() => documents.value.some(doc => ['queued', 'planned', 'parsing', '解析中', '待解析', '等待解析', '待安全扫描'].includes(doc.parseStatus || doc.status)))
 let parsingTimer
@@ -178,11 +176,11 @@ watch(hasParsingDocuments, pending => {
 watch(() => portalStore.workspaceEpoch, () => {
   parsingGeneration++
   clearTimeout(parsingTimer); parsingTimer = undefined
-  reparsingIds.value = new Set(); parsingRefreshError.value = ''; deletingId.value = ''; preparingReport.value = false
+  reparsingIds.value = new Set(); parsingRefreshError.value = ''; deletingId.value = ''
   uploading.value = false; uploadFiles.value = []; completedUploads.value = 0; uploadVisible.value = false
   scheduleParsingRefresh()
 })
-onBeforeUnmount(() => { parsingStopped = true; parsingGeneration++; clearTimeout(parsingTimer) })
+onBeforeUnmount(() => { listResizeObserver?.disconnect(); parsingStopped = true; parsingGeneration++; clearTimeout(parsingTimer) })
 async function refreshParsingDocuments() {
   if (parsingStopped || parsingRunning) return
   if (uploading.value || reparsingIds.value.size || portalStore.dataLoading) { scheduleParsingRefresh(); return }
@@ -200,43 +198,19 @@ async function refreshParsingDocuments() {
     if (!parsingStopped && generation === parsingGeneration && epoch === portalStore.workspaceEpoch) parsingRefreshError.value = '状态更新暂时失败，正在自动重试'
   } finally { parsingRunning = false; scheduleParsingRefresh() }
 }
-const documentsError = computed(() => portalStore.sectionErrors?.documents || portalStore.sectionErrors?.workspace || (!portalStore.sectionErrors ? portalStore.dataError : ''))
+const documentsError = computed(() => portalStore.sectionErrors?.documents || (!portalStore.sectionErrors ? portalStore.dataError : ''))
 const isInitialLoading = computed(() => portalStore.dataLoading && !portalStore.dataLoaded)
-const hasFilters = computed(() => Boolean(keyword.value || parseStatus.value !== 'all' || libraryKind.value !== 'all'))
+const hasFilters = computed(() => Boolean(keyword.value || parseStatus.value !== 'all' || classification.value))
 const filteredDocuments = computed(() => {
   const query = keyword.value.toLocaleLowerCase('zh-CN')
   return libraryItems.value.filter(item => {
     const searchText = [item.name, item.summary, item.owner, item.source, item.journal, ...(safeTags(item))].filter(Boolean).join(' ').toLocaleLowerCase('zh-CN')
-    return (libraryKind.value === 'all' || item.kind === libraryKind.value)
+    return (!classification.value || contentCategory(item) === classification.value)
       && (parseStatus.value === 'all' || (item.status === '等待解析' ? '待解析' : item.status) === parseStatus.value)
       && (!query || searchText.includes(query))
   })
 })
 const pagedDocuments = computed(() => filteredDocuments.value.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value))
-const selectablePage = computed(() => pagedDocuments.value.filter(item => !libraryItemReason(item)))
-const selection = useBasketSelection(() => libraryItems.value, () => selectablePage.value, () => portalStore.workspaceEpoch)
-function toggleSelection(item, checked) {
-  if (preparingReport.value || libraryItemReason(item)) return
-  if (checked && !selection.selectedIds.value.includes(item.id) && selection.selectedItems.value.length >= 50) return ElMessage.warning('每次最多选择 50 条资料，已选资料不会被截断')
-  selection.toggle(item.id, checked)
-}
-function togglePage(checked) {
-  if (preparingReport.value) return
-  const added = selectablePage.value.filter(item => !selection.selectedIds.value.includes(item.id)).length
-  if (checked && selection.selectedItems.value.length + added > 50) return ElMessage.warning('全选当前页后将超过 50 条，请逐条选择；已选资料不会被截断')
-  selection.toggleVisible(checked)
-}
-async function createFromSelection() {
-  if (preparingReport.value) return
-  const epoch = portalStore.workspaceEpoch
-  preparingReport.value = true
-  try {
-    const ids = await prepareLibrarySelection([...selection.selectedItems.value], persist, () => !parsingStopped && epoch === portalStore.workspaceEpoch)
-    if (!parsingStopped && epoch === portalStore.workspaceEpoch) await router.push({ path: '/portal/research/create', query: { selected: ids } })
-  } catch (error) {
-    if (!parsingStopped && epoch === portalStore.workspaceEpoch) ElMessage.error(error?.msg || error?.message || '资料准备失败，请重试')
-  } finally { if (epoch === portalStore.workspaceEpoch) preparingReport.value = false }
-}
 watch([() => filteredDocuments.value.length, pageSize, () => portalStore.dataLoaded], () => {
   if (!isInitialLoading.value && portalStore.dataLoaded) currentPage.value = validPage(filteredDocuments.value.length, pageSize.value, currentPage.value)
 }, { immediate: true })
@@ -249,28 +223,14 @@ function statusClass(status) { return { 'is-processing': ['解析中', '待解�
 function openDocument(doc) { const path = libraryItemPath(doc); if (path) router.push(path) }
 function editDocument(doc) { router.push({ path: `/portal/knowledge/${doc.id}`, query: { mode: 'edit' } }) }
 function openUpload() { uploadVisible.value = true }
-async function add(doc) {
-  const reason = materialBasketReason(doc)
-  if (reason) return ElMessage.warning(reason)
-  try { if (await persist(doc, 'material') === 'saved') ElMessage.success('已加入资料库') }
-  catch (error) { ElMessage.error(error?.msg || '加入资料库失败，请重试') }
-}
-function clearFilters() { keyword.value = ''; parseStatus.value = 'all'; libraryKind.value = 'all'; currentPage.value = 1 }
+function clearFilters() { keyword.value = ''; parseStatus.value = 'all'; classification.value = ''; currentPage.value = 1 }
 async function deleteLibraryItem(item) {
-  if (deletingId.value || preparingReport.value || parsingStopped) return
+  if (deletingId.value || parsingStopped) return
   const epoch = portalStore.workspaceEpoch
   const key = `${item.kind}:${item.id}`
   deletingId.value = key
   try {
-    if (item.kind === 'document') {
-      await removeDocument(item)
-    } else {
-      await ElMessageBox.confirm(`是否确认从资料库删除“${item.name}”？此操作不删除新闻或论文的原始数据。`, '确认删除', {
-        confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning', customClass: 'ps-library-delete-confirm', closeOnClickModal: false, autofocus: false
-      })
-      if (parsingStopped || epoch !== portalStore.workspaceEpoch) return
-      if (await portalStore.removeFromBasket(item.id)) ElMessage.success('已从资料库删除')
-    }
+    await removeDocument(item)
   } catch (error) {
     if (!['cancel', 'close'].includes(error) && !parsingStopped && epoch === portalStore.workspaceEpoch) ElMessage.error('删除失败，请稍后重试')
   } finally { if (epoch === portalStore.workspaceEpoch) deletingId.value = '' }
@@ -400,25 +360,31 @@ onMounted(() => {
 .ps-knowledge-toolbar { min-height: 0; padding: 10px 12px; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
 .ps-knowledge-toolbar > .el-input { flex: 1 1 280px; min-width: 180px; }
 .ps-knowledge-toolbar > .el-select { flex: 0 0 170px; width: 170px; }
-.ps-material-list { border: 1px solid var(--ps-line); border-radius: 12px; padding: 0 16px; background: #fff; }
-.ps-material-list > article { display: grid; grid-template-columns: 24px 42px minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--ps-line); }
-.ps-material-list > article:last-of-type { border-bottom: 0; }
-.ps-doc-main { min-width: 0; }
-.ps-doc-main > button { border: 0; padding: 0; background: none; font: inherit; font-weight: 600; text-align: left; color: var(--ps-ink); overflow-wrap: anywhere; cursor: pointer; }
-.ps-doc-main > button:hover { color: var(--ps-blue); }
+.ps-material-list { border: 0; border-radius: 0; padding: 0; background: transparent; }
+.ps-library-table { border: 1px solid var(--ps-line); border-radius: 10px; }
+.ps-library-table :deep(.el-table__cell) { padding-block: 14px; }
+.ps-library-table :deep(th.el-table__cell) { padding-block: 10px; color: var(--ps-muted); font-size: 12px; font-weight: 500; }
+.ps-library-table :deep(.cell) { padding-inline: 12px; }
+.ps-library-table :deep(.el-table__inner-wrapper::before) { display: none; }
+.ps-library-table time { color: var(--ps-muted); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ps-library-identity { display: flex; align-items: flex-start; gap: 12px; min-width: 0; }
+.ps-library-category { max-width: 100%; height: auto; white-space: normal; overflow-wrap: anywhere; }
+.ps-library-category :deep(.el-tag__content) { white-space: normal; }
+.ps-doc-main { flex: 1; min-width: 0; }
+.ps-doc-main > .ps-ui-title { border: 0; padding: 0; background: none; font: inherit; font-size: 15px; font-weight: 600; line-height: 1.6; white-space: normal; text-align: left; color: var(--ps-ink); overflow-wrap: anywhere; cursor: pointer; }
+.ps-doc-main > .ps-ui-title:hover { color: var(--ps-blue); }
 .ps-doc-main p { margin: 6px 0; color: var(--ps-muted); font-size: 13px; line-height: 1.65; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .ps-doc-main small, .ps-upload-private-note { font-size: 12px; line-height: 1.6; color: var(--ps-muted); }
 .ps-doc-main small { display: block; }
-.ps-doc-type { width: 42px; height: 46px; display: grid; place-items: center; font-size: 11px; border-radius: 6px; background: #edf4f8; color: var(--ps-blue); }
-.ps-row-actions { display: flex; gap: 8px; align-items: center; }
+.ps-doc-type { flex: 0 0 42px; width: 42px; height: 46px; display: grid; place-items: center; font-size: 11px; border-radius: 6px; background: #edf4f8; color: var(--ps-blue); }
+.ps-row-actions { display: flex; flex-wrap: nowrap; justify-content: flex-end; gap: 8px; align-items: center; }
+.ps-row-actions > .el-button { margin: 0; }
 .ps-row-actions button { cursor: pointer; }
 .ps-knowledge-page.ps-basket-page { gap: 12px; }
 .ps-knowledge-page > .ps-page-header { flex-shrink: 0; margin: 0; }
 .ps-knowledge-toolbar { flex-shrink: 0; margin: 0; }
-.ps-library-selection-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; flex-shrink: 0; color: var(--ps-muted); font-size: 13px; }
-.ps-material-list { flex: 1 1 0; min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.ps-material-list { flex: 1 1 0; min-width: 0; min-height: 0; overflow: hidden; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .ps-knowledge-page > .ps-inline-state { flex-shrink: 0; }
-.ps-material-list > article > .el-checkbox { margin: 0; }
 .ps-knowledge-page > .ps-pagination { margin: 0; padding: 12px 16px; flex-shrink: 0; background: #fff; border: 1px solid var(--ps-line); border-radius: 10px; }
 :global(.el-message-box.ps-library-delete-confirm) { width: 480px; max-width: calc(100vw - 32px); box-sizing: border-box; }
 :global(.ps-library-delete-confirm .el-message-box__message) { overflow-wrap: anywhere; }
@@ -428,8 +394,7 @@ onMounted(() => {
   .ps-knowledge-toolbar { flex-direction: row; }
   .ps-knowledge-toolbar > .el-input { flex-basis: 100%; }
   .ps-knowledge-toolbar > .el-select { flex: 1 1 140px; width: auto; }
-  .ps-material-list > article { grid-template-columns: 24px 36px minmax(0, 1fr); gap: 10px; }
-  .ps-material-list > article > span[data-label], .ps-row-actions { grid-column: 3; flex-wrap: wrap; }
+  .ps-doc-type { width: 36px; height: 40px; }
   .ps-row-actions { gap: 8px; }
   .ps-row-actions :deep(.el-button + .el-button) { margin-left: 0; }
   .ps-knowledge-page > .ps-pagination { padding: 8px; }

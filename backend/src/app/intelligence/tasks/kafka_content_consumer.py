@@ -66,8 +66,7 @@ def _guard_target() -> None:
     """仅允许写生产 183/pipesight，其它目标直接拒绝。"""
     if (DataBaseConfig.db_host, DataBaseConfig.db_database) != (TARGET_HOST, TARGET_DATABASE):
         raise RuntimeError(
-            f'仅允许 {TARGET_HOST}/{TARGET_DATABASE}，拒绝目标: '
-            f'{DataBaseConfig.db_host}/{DataBaseConfig.db_database}'
+            f'仅允许 {TARGET_HOST}/{TARGET_DATABASE}，拒绝目标: {DataBaseConfig.db_host}/{DataBaseConfig.db_database}'
         )
 
 
@@ -238,7 +237,10 @@ async def _process_and_save(db, message: KafkaContentMessage, now) -> str:
     kind = 'paper' if source.type == 'paper' else 'news'
     if source.type == 'paper':
         classify_content = json.dumps(
-            {key: record.get(key) for key in ('doi', 'authors', 'journal', 'published_date', 'abstract', 'abstract_zh')},
+            {
+                key: record.get(key)
+                for key in ('doi', 'authors', 'journal', 'published_date', 'abstract', 'abstract_zh')
+            },
             ensure_ascii=False,
         )
     else:
@@ -249,17 +251,25 @@ async def _process_and_save(db, message: KafkaContentMessage, now) -> str:
         logger.warning('分类失败，按未分类入库：%s', exc)
         category_id = None
 
-    # 处理：实体抽取（来源配置了模型且非论文时），失败或缺结果不阻塞入库。
-    if source.type != 'paper':
-        entity_content = record.get('content_zh') or record.get('content') or ''
-        try:
-            entity_list = await EntityExtractionService.extract(
-                db, title=record['title'], content=entity_content, model_id=source.model_id
-            )
-            if entity_list:
-                record['entities'] = entity_list
-        except Exception as exc:
-            logger.warning('实体抽取跳过：%s', exc)
+    # 新闻概括核心事件，论文仅用标题与摘要；失败不覆盖已有结果。
+    entity_content = (
+        record.get('abstract_zh') or record.get('abstract') or ''
+        if kind == 'paper'
+        else record.get('content_zh') or record.get('content') or ''
+    )
+    try:
+        enrichment = await EntityExtractionService.enrich(
+            db,
+            title=record['title'],
+            content=entity_content,
+            model_id=source.model_id,
+            kind=kind,
+            summary=record.get('summary'),
+        )
+        if enrichment is not None:
+            record.update(enrichment)
+    except Exception as exc:
+        logger.warning('核心实体处理跳过：%s', exc)
 
     try:
         saved = await CollectionPersistenceService.save_record(db, source, record, now, category_id=category_id)

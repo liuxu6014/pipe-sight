@@ -3,10 +3,11 @@
     <div v-loading="loading" class="ps-schedule-form">
       <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
       <p class="ps-schedule-intro">独立保存计划，不立即生成简报。每次执行时重新筛选资料，没有匹配文章则跳过。</p>
-      <el-form label-position="top" :disabled="saving || loading" @submit.prevent="save">
+      <el-alert v-if="legacyDaily" title="历史日报计划仅供查阅，不能编辑或保存" type="info" :closable="false" />
+      <el-form label-position="top" :disabled="saving || loading || legacyDaily" @submit.prevent="save">
         <div class="ps-schedule-fields">
           <el-form-item label="计划名称" class="is-wide"><el-input v-model="form.name" aria-label="计划名称" maxlength="255" placeholder="例如：管道检测每周简报" /></el-form-item>
-          <el-form-item label="生成频率"><el-select v-model="form.frequency" aria-label="生成频率"><el-option label="每天（日报）" value="daily" /><el-option label="每周（周报）" value="weekly" /><el-option label="每月（月报）" value="monthly" /></el-select></el-form-item>
+          <el-form-item label="生成频率"><el-select v-model="form.frequency" aria-label="生成频率"><el-option v-if="legacyDaily" label="历史日报（只读）" value="daily" disabled /><el-option label="每周（周报）" value="weekly" /><el-option label="每月（月报）" value="monthly" /></el-select></el-form-item>
           <el-form-item label="执行时间 · 北京时间"><el-time-picker v-model="form.time" aria-label="执行时间" format="HH:mm" value-format="HH:mm" :clearable="false" /></el-form-item>
           <el-form-item v-if="form.frequency === 'weekly'" label="每周生成日"><el-select v-model="form.weekday" aria-label="每周生成日"><el-option v-for="(day, index) in weekdays" :key="index" :label="day" :value="index" /></el-select></el-form-item>
           <el-form-item v-if="form.frequency === 'monthly'" label="每月生成日"><el-select v-model="form.monthDay" aria-label="每月生成日"><el-option v-for="day in 31" :key="day" :label="`${day}日`" :value="day" /></el-select><small>当月不足所选日期时，月末执行。</small></el-form-item>
@@ -30,7 +31,7 @@
       </el-form>
       <p class="ps-schedule-summary">{{ scheduleSummary(form) }} · {{ periodDescription }}</p>
     </div>
-    <template #footer><el-button :disabled="saving" @click="close(false)">取消</el-button><el-button type="primary" :loading="saving" :disabled="loading || Boolean(loadError)" @click="save">保存计划</el-button></template>
+    <template #footer><el-button :disabled="saving" @click="close(false)">{{ legacyDaily ? '关闭' : '取消' }}</el-button><el-button v-if="!legacyDaily" type="primary" :loading="saving" :disabled="loading || Boolean(loadError)" @click="save">保存计划</el-button></template>
   </el-dialog>
 </template>
 
@@ -47,6 +48,7 @@ const store = usePortalStore()
 const form = ref(newScheduleForm()), templates = ref([]), categories = ref([])
 const loading = ref(false), saving = ref(false), error = ref(''), loadError = ref('')
 const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+const legacyDaily = computed(() => ['daily', '日报'].includes(props.record?.reportType))
 const matchingTemplates = computed(() => templates.value.filter(item => ['all', form.value.frequency].includes(item.digestCadence)))
 const missingCategories = computed(() => form.value.categories.filter(name => !categories.value.includes(name)))
 const periodDescription = computed(() => ({ daily: '汇总前一天文章', weekly: '汇总执行日前 7 天文章', monthly: '汇总上一个自然月文章' })[form.value.frequency])
@@ -72,7 +74,7 @@ watch(() => props.modelValue, async open => {
 })
 watch(() => store.workspaceEpoch, () => { epoch++; emit('update:modelValue', false) })
 async function save() {
-  if (loading.value || saving.value || loadError.value) return
+  if (legacyDaily.value || loading.value || saving.value || loadError.value) return
   error.value = ''
   let payload
   try {
