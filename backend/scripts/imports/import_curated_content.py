@@ -1,6 +1,6 @@
 """Import source-verified public metadata; dry-run by default, never overwrite rows.
 
-Run from backend: PYTHONPATH=src .venv/bin/python scripts/import_curated_content.py
+Run from backend: PYTHONPATH=src .venv/bin/python scripts/imports/import_curated_content.py
 After a verified database backup, add --apply --backup /absolute/path/to/dump.
 Manual publication is an explicit user-authorized exception to the automated
 processing workflow. No collector, model call, embedding or external receipt is
@@ -22,7 +22,7 @@ import psycopg2
 from psycopg2 import sql
 from psycopg2.extras import Json
 
-DEFAULT_MANIFEST = Path(__file__).resolve().parents[1] / 'data/curated/homepage-real-content-20261014.json'
+DEFAULT_MANIFEST = Path(__file__).resolve().parents[2] / 'data/curated/homepage-real-content-20261014.json'
 REASON = '用户授权导入真实公开资料用于首页核对；人工核验来源并发布导读；未进行模型处理或全文采集'
 FULL_TEXT_REASON = (
     '用户授权导入完整管网工程文献；核验原始元数据、CC BY/CC0许可、正文参考文献与配图及全文校验和；未调用大模型'
@@ -63,7 +63,7 @@ def validate_manifest(manifest) -> None:
             ):
                 raise ValueError('Unverified full-text reuse license')
             directory = (
-                Path(__file__).resolve().parents[1] / 'vf_admin/upload_path/licensed_papers' / full_text['asset_key']
+                Path(__file__).resolve().parents[2] / 'vf_admin/upload_path/licensed_papers' / full_text['asset_key']
             )
             for filename, fingerprint in [
                 ('article.html', full_text.get('sha256')),

@@ -12,7 +12,7 @@ from app.intelligence.services.authorized_article import read_authorized_article
 from config.env import UploadConfig
 
 spec = importlib.util.spec_from_file_location(
-    'authorized_import', Path(__file__).parents[1] / 'scripts/complete_authorized_articles.py'
+    'authorized_import', Path(__file__).parents[1] / 'scripts/backfills/complete_authorized_articles.py'
 )
 importer = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(importer)

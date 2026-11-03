@@ -31,7 +31,7 @@
 |---|---|---|---|
 | 新闻网站 | `website` | 站内定时抓取国家管网 `pipechina.com.cn` | `intelligence/integrations/public_source_bridge.py`（`pipechina_group_news` adapter） |
 | 公众号 | `wechat` | 管理员在来源管理添加公众号 RSS 链接，`wechat_rss` 适配器拉取内部 wechat2rss feed | `intelligence/integrations/wechat_rss.py` |
-| 论文 | `paper` | Crossref 抓取，**默认只有摘要**；全文靠授权 JATS / 出版方 PDF 预览 | `public_source_bridge.py`（`crossref_works`）、`intelligence/services/full_text.py`、`scripts/prepare_licensed_papers.py`、`scripts/prepare_publisher_paper_previews.py` |
+| 论文 | `paper` | Crossref 抓取，**默认只有摘要**；全文靠授权 JATS / 出版方 PDF 预览 | `public_source_bridge.py`（`crossref_works`）、`intelligence/services/full_text.py`、`scripts/papers/prepare_licensed_papers.py`、`scripts/papers/prepare_publisher_paper_previews.py` |
 
 论文默认只入库摘要，全文（`full_text.py`）分两类可选项：
 

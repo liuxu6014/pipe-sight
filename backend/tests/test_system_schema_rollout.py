@@ -113,7 +113,7 @@ def memory_db():
 
 @pytest.mark.parametrize('model', MODELS)
 def test_columns_match_approved_appendix(model):
-    document = (Path(__file__).parents[2] / 'output/管网平台精简数据库设计_20261025.md').read_text()
+    document = (Path(__file__).parents[2] / 'docs/architecture/compact-database-design.md').read_text()
     heading = next(
         '### ' + name + '（现有表：'
         for name in (model.__tablename__, APPENDIX_TABLE_NAMES[model.__tablename__])

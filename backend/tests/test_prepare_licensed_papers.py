@@ -7,7 +7,7 @@ import pytest
 from lxml import etree
 
 spec = importlib.util.spec_from_file_location(
-    'prepare_papers', Path(__file__).parents[1] / 'scripts/prepare_licensed_papers.py'
+    'prepare_papers', Path(__file__).parents[1] / 'scripts/papers/prepare_licensed_papers.py'
 )
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)

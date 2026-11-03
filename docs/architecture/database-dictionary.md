@@ -2,7 +2,7 @@
 
 数据库：`pipesight`。导出时间：2026-11-03T00:27:18.237859+08:00。
 
-本文件由 `backend/scripts/export_database_dictionary.py` 从实际 catalog 生成，不包含业务记录或连接凭据。
+本文件由 `backend/scripts/checks/export_database_dictionary.py` 从实际 catalog 生成，不包含业务记录或连接凭据。
 
 共 32 个表/视图、373 个字段。
 缺失对象注释 0 个，缺失字段注释 0 个。

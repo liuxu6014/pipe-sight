@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 spec = importlib.util.spec_from_file_location(
-    'publisher_extract', Path(__file__).parents[1] / 'scripts/prepare_publisher_paper_previews.py'
+    'publisher_extract', Path(__file__).parents[1] / 'scripts/papers/prepare_publisher_paper_previews.py'
 )
 extract = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(extract)

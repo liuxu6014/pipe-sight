@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
-const startScriptPath = new URL('../../start-dev.ps1', import.meta.url)
+const startScriptPath = new URL('../../scripts/dev/start-dev.ps1', import.meta.url)
 
 test('does not reimport legacy business tables into an upgraded database', async () => {
   const script = await readFile(startScriptPath, 'utf8')

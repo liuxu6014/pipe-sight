@@ -23,7 +23,7 @@ $processPath = [string]$env:Path
 [System.Environment]::SetEnvironmentVariable('PATH', $null, [System.EnvironmentVariableTarget]::Process)
 [System.Environment]::SetEnvironmentVariable('Path', $processPath, [System.EnvironmentVariableTarget]::Process)
 
-$RepoRoot = $PSScriptRoot
+$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $BackendRoot = Join-Path $RepoRoot 'backend'
 $FrontendRoot = Join-Path $RepoRoot 'frontend'
 $BackendPython = Join-Path $BackendRoot '.venv\Scripts\python.exe'
@@ -765,7 +765,7 @@ Write-Host "`nPipeSight is ready." -ForegroundColor Green
 Write-Host "Frontend: $frontendBaseUrl/pipesight/portal"
 Write-Host "Backend:  $backendBaseUrl/docs"
 Write-Host "Logs:     $RuntimeRoot"
-Write-Host 'Stop:     powershell -ExecutionPolicy Bypass -File .\stop-dev.ps1'
+Write-Host 'Stop:     powershell -ExecutionPolicy Bypass -File .\scripts\dev\stop-dev.ps1'
 }
 finally {
     if ($null -ne $startLock) {

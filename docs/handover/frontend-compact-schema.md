@@ -69,7 +69,7 @@
 
 个人 AI 聊天页面、消息组件、API 包装、专用图标、Monaco shim/alias 及 9 项专属直接依赖已删除，npm 离线同步裁掉 220 个包；统一模型配置、类别与 Provider 表单、报告/简报/配图生成保留。系统/角色共用组件和依赖未扩大删除。最终 29 表由数据库迁移代理验收，本代理未改库。
 
-Confucius 精确菜单/API 清单与前端删除项见 [个人聊天退役交接](./PERSONAL_CHAT_RETIREMENT_CONFUCIUS.md)：历史菜单 119、component=ai/chat/index、完整路径 /ai/chat、权限 ai:chat:list；不连带删除 ai:model:* 或 system/monitor 菜单。最新前端验证 317/317，通过生产构建（7.18 秒）与差异检查。
+Confucius 精确菜单/API 清单与前端删除项见 [个人聊天退役交接](./personal-chat-retirement.md)：历史菜单 119、component=ai/chat/index、完整路径 /ai/chat、权限 ai:chat:list；不连带删除 ai:model:* 或 system/monitor 菜单。最新前端验证 317/317，通过生产构建（7.18 秒）与差异检查。
 
 ## 业务编号 bigint 适配（2026-10-25）
 

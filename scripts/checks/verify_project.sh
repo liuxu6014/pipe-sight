@@ -2,9 +2,9 @@
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-printf '%s\n' '[1/3] Unified backend and InsightHub Worker tests'
+printf '%s\n' '[1/3] Backend API and task worker tests'
 (cd "$ROOT_DIR/backend" && uv run pytest tests -q)
 
 printf '%s\n' '[2/3] Frontend tests'

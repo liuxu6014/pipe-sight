@@ -2,7 +2,7 @@
 
 项目文档按用途归类，运行代码位于根目录的 `backend/` 和 `frontend/`。
 
-长期重构以 [项目目标结构与分层开发规范](architecture/project-structure-and-layering.md) 为依据：后端包名为 `app`，目标源码布局为 `backend/src/app/`。当前已建立可安装包和 API 入口，业务模块仍按迁移阶段逐步移动。该文档说明目标目录、分层及迁移验收；不代表全部代码已经迁移。
+当前目录以 [实际代码结构](project-structure.md) 和 [代码地图](architecture/code-map.md) 为准；[项目目标结构与分层规范](architecture/project-structure-and-layering.md) 保留长期方案与迁移背景，示例不代表当前运行入口。
 
 面向管理层的完整流程讲解见 [项目全流程说明](项目全流程说明.md)（采集 → 处理 → 入库 → 浏览/选材 → 简报/报告）。
 
@@ -13,6 +13,9 @@
 | `reference/` | 模板、示例文件和撰写指南 |
 | `plans/` | 开发计划、实施方案、菜单种子 SQL 和阶段性设计 |
 | `handover/` | 交接说明、数据库设计和部署适配资料 |
+| `guides/` | 命令行和配置操作指南 |
+| `assets/` | 文档图片 |
+| `reviews/` | 阶段性检查和验收记录 |
 | `reports/` | 项目进度汇报及双周汇报材料 |
 | `project-structure.md` | 当前代码、部署和文档结构说明 |
 
@@ -43,7 +46,16 @@
 - [配置主来源与处理边界](architecture/configuration-ownership.md)：区分已经接入的提示词快照路径与尚待整合的领域分类、评分及历史配置。
 - [命名与注释规范化方案](plans/2026-10-14-database-naming-and-comments.md)：表名映射、兼容边界和迁移验证。
 - 新字段必须在 ORM 或建表 SQL 中声明，并同步补充 `backend/sql/application-comments-pg.sql` 及新的迁移；禁止仅在数据库客户端手工改注释。
-- 新环境完成基础 SQL 初始化后必须执行 `alembic upgrade head`。运行 `backend/scripts/export_database_dictionary.py --env dev --check` 可检查当前配置库；缺少注释或仍存在历史物理表时返回失败。该检查不导出业务记录。
+- 新环境完成基础 SQL 初始化后必须执行 `alembic upgrade head`。运行 `backend/scripts/checks/export_database_dictionary.py --env dev --check` 可检查当前配置库；缺少注释或仍存在历史物理表时返回失败。该检查不导出业务记录。
+
+## 操作与交接指南
+
+- [CLI 使用](guides/cli-usage.md)
+- [传输加密配置](guides/transport-crypto-config.md)
+- [前端精简结构适配](handover/frontend-compact-schema.md)
+- [个人聊天功能移除说明](handover/personal-chat-retirement.md)
+- [精简数据库设计](architecture/compact-database-design.md)
+- [部署目录](../deploy/README.md)与[开发脚本](../scripts/README.md)
 
 ## 代码入口
 

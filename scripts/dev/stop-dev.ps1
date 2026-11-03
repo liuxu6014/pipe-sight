@@ -4,8 +4,8 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$RepoRoot = $PSScriptRoot.ToLowerInvariant()
-$RuntimeRoot = Join-Path $PSScriptRoot '.runtime\pipesight-dev'
+$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path.ToLowerInvariant()
+$RuntimeRoot = Join-Path $RepoRoot '.runtime\pipesight-dev'
 
 function Stop-RecordedProcess {
     param(

@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 spec = importlib.util.spec_from_file_location(
-    'curated_import', Path(__file__).parents[1] / 'scripts/import_curated_content.py'
+    'curated_import', Path(__file__).parents[1] / 'scripts/imports/import_curated_content.py'
 )
 importer = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(importer)

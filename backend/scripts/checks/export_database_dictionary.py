@@ -118,7 +118,7 @@ def markdown_dictionary(report: dict[str, Any]) -> str:
         '',
         f'数据库：`{report["database"]}`。导出时间：{report["exported_at"]}。',
         '',
-        '本文件由 `backend/scripts/export_database_dictionary.py` 从实际 catalog 生成，不包含业务记录或连接凭据。',
+        '本文件由 `backend/scripts/checks/export_database_dictionary.py` 从实际 catalog 生成，不包含业务记录或连接凭据。',
         '',
         f'共 {report["object_count"]} 个表/视图、{report["column_count"]} 个字段。',
         f'缺失对象注释 {len(report["missing_object_comments"])} 个，缺失字段注释 {len(report["missing_column_comments"])} 个。',

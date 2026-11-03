@@ -12,8 +12,8 @@ script is safe to re-run.
 
 Run from backend with the target env set (same as the other one-off imports):
 
-    .venv/Scripts/python.exe scripts/import_wechat_feeds.py            # dry-run
-    .venv/Scripts/python.exe scripts/import_wechat_feeds.py --apply    # write
+    .venv/Scripts/python.exe scripts/imports/import_wechat_feeds.py            # dry-run
+    .venv/Scripts/python.exe scripts/imports/import_wechat_feeds.py --apply    # write
 
 Targets only the production DB (172.16.4.183/pipesight); any other host/database is refused.
 """

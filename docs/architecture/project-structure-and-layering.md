@@ -2,6 +2,8 @@
 
 状态：目标架构与实施说明。当前 `src/app` 已是正式应用包，旧 `module_*` 业务包和全局 `utils` Python 模块已退出运行路径；后续工作集中在业务闭环、部署验收和未覆盖的边界能力。**InsightHub/`news` 处理子系统已于 2026-11-01 随 `news.*` 删除决定整体移除，本文第 6 节及正文中“InsightHub 融合”相关内容仅为历史迁移记录，不再代表现有代码。**
 
+> 当前实际结构见 [代码目录](../project-structure.md)。部署文件集中在 `deploy/docker/`、`deploy/nginx/`，三个 Compose 入口仍位于根目录；开发脚本位于 `scripts/dev/`，检查入口位于 `scripts/checks/`。下文目标树和历史示例不覆盖这些现行入口。
+
 编写日期：2026-10-01。
 
 适用项目：国家管网科技情报与科研辅助平台（PipeSight）。

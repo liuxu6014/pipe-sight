@@ -1,6 +1,6 @@
 """把一次性导入的 wechat_rss_import 来源迁移为可启停的 wechat_rss 采集源。
 
-此前 `scripts/import_wechat_feeds.py` 用 `adapter='wechat_rss_import'`（未注册进采集器）
+此前 `scripts/imports/import_wechat_feeds.py` 用 `adapter='wechat_rss_import'`（未注册进采集器）
 写入了 17 个公众号来源，并把 feed 地址同时放在 `url` 列和 `config.feed_url`。它们因此
 无法在来源管理中启停/定时采集。
 
@@ -17,8 +17,8 @@
 
 Run from backend with the target env set:
 
-    .venv/Scripts/python.exe scripts/migrate_wechat_rss_sources.py            # dry-run
-    .venv/Scripts/python.exe scripts/migrate_wechat_rss_sources.py --apply    # write
+    .venv/Scripts/python.exe scripts/migrations/migrate_wechat_rss_sources.py            # dry-run
+    .venv/Scripts/python.exe scripts/migrations/migrate_wechat_rss_sources.py --apply    # write
 """
 
 from __future__ import annotations

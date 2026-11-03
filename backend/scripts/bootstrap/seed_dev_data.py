@@ -9,8 +9,8 @@ from pathlib import Path
 
 from sqlalchemy import select
 
-# Allow ``python scripts/seed_dev_data.py`` from backend/.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# Allow ``python scripts/bootstrap/seed_dev_data.py`` from backend/.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 # Register the small set of referenced RuoYi tables before SQLAlchemy flushes
 # the pipeline models (the app normally imports these through auto-registration).

@@ -27,6 +27,13 @@
 
 新增后端业务时，默认放入 `backend/src/app/` 对应领域目录；只有在确认兼容调用方后，才调整根目录下的历史支持模块。
 
+## 部署、维护与文档
+
+- `deploy/docker/` 和 `deploy/nginx/` 集中保存镜像与代理配置，Compose 入口保留在仓库根目录。
+- `scripts/dev/` 提供联合启动与停止，`scripts/checks/` 提供工程验证。
+- `backend/scripts/` 按初始化、导入、回填、检查、迁移辅助和论文工具分组，具体文件见[维护脚本清单](../../backend/scripts/README.md)。正式数据库迁移仍在 `backend/alembic/`。
+- `docs/guides/` 保存操作指南，`docs/handover/` 保存交接说明；文档图片位于 `docs/assets/`。
+
 ## 不属于源码主干的目录
 
 `.runtime/`、`logs/`、`output/`、`dist/`、`node_modules/` 和 `vf_admin/` 是运行时、构建产物、依赖或外部管理资源。它们可以用于诊断或交付，但不应成为新的业务代码落点。

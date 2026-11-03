@@ -6,7 +6,7 @@ stamping ``alembic_version`` progressively (business_consistency and beijing_aud
 re-read the live revision during execution). This is a rehearsal against the
 ``pipesight`` scratch database on the server; the helpers are POSIX-only, so it must
 run inside the Linux container. The digest migration and ``validate_schema`` run
-afterwards via ``alembic upgrade head`` + ``_verify_schema.py``.
+afterwards via ``alembic upgrade head`` + ``scripts/checks/verify_schema.py``.
 """
 
 from __future__ import annotations

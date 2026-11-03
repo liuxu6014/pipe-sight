@@ -15,8 +15,8 @@ Dry-run by default: it only lists what would change. ``--apply`` deletes rows.
 
 Run from backend with the target env set:
 
-    .venv/Scripts/python.exe scripts/cleanup_low_quality_articles.py          # dry-run
-    .venv/Scripts/python.exe scripts/cleanup_low_quality_articles.py --apply  # delete
+    .venv/Scripts/python.exe scripts/backfills/cleanup_low_quality_articles.py          # dry-run
+    .venv/Scripts/python.exe scripts/backfills/cleanup_low_quality_articles.py --apply  # delete
 
 Targets only the production DB (172.16.4.183/pipesight); any other host/database is refused.
 """

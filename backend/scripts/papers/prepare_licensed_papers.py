@@ -24,7 +24,7 @@ import httpx
 from lxml import etree
 from PIL import Image
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 OUTPUT = ROOT / '.runtime/licensed-papers-20261014'
 ASSETS = ROOT / 'backend/vf_admin/upload_path/licensed_papers'
 API = 'https://www.ebi.ac.uk/europepmc/webservices/rest'

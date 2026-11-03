@@ -26,7 +26,7 @@ from lxml import html
 from PIL import Image
 from psycopg2.extras import Json, RealDictCursor
 
-BACKEND = Path(__file__).resolve().parents[1]
+BACKEND = Path(__file__).resolve().parents[2]
 ROOT = BACKEND.parent
 STAGE = ROOT / '.runtime/authorized-articles-20261014'
 ASSETS = BACKEND / 'vf_admin/upload_path/authorized_articles'

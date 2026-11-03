@@ -1,7 +1,7 @@
 """初始化真实公开来源并按来源执行一次采集。
 
-运行方式（容器内）：python scripts/bootstrap_real_pipeline.py
-如需显式重新激活已停用来源：python scripts/bootstrap_real_pipeline.py --reactivate
+运行方式（容器内）：python scripts/bootstrap/bootstrap_real_pipeline.py
+如需显式重新激活已停用来源：python scripts/bootstrap/bootstrap_real_pipeline.py --reactivate
 """
 
 import argparse

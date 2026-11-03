@@ -18,71 +18,38 @@
 
 ## 项目结构
 
-```
+```text
 PipeSight/
-├── frontend/                    # Vue 3 前端源码
-│   ├── src/
-│   │   ├── api/                 # API 接口封装
-│   │   │   ├── pipeline/        # 管网情报业务接口
-│   │   │   ├── system/          # 系统管理接口
-│   │   │   ├── monitor/         # 监控管理接口
-│   │   │   └── ai/              # 模型配置接口
-│   │   ├── views/
-│   │   │   ├── pipeline/        # 管网情报页面
-│   │   │   │   ├── dashboard/   # 情报工作台
-│   │   │   │   ├── intelligence/# 情报检索与详情
-│   │   │   │   ├── source/      # 数据源管理
-│   │   │   │   ├── task/        # 采集任务管理
-│   │   │   │   ├── report/      # 报告管理
-│   │   │   │   └── knowledge/   # 知识库
-│   │   │   ├── system/          # 系统管理（用户/角色/菜单/字典）
-│   │   │   ├── monitor/         # 监控管理（在线用户/操作日志/定时任务）
-│   │   │   ├── ai/              # 模型配置
-│   │   │   └── dashboard/       # 首页工作台
-│   │   ├── layout/              # 页面布局组件
-│   │   ├── router/              # 动态路由
-│   │   ├── store/               # Pinia 状态管理
-│   │   ├── components/          # 公共组件
-│   │   └── utils/               # 工具函数
-│   ├── bin/                     # Nginx 配置文件
-│   ├── vite/                    # Vite 插件配置
-│   ├── Dockerfile               # 前端 Docker 构建文件
-├── backend/                     # FastAPI 后端源码
-│   ├── pyproject.toml           # 依赖、打包和命令入口
-│   ├── src/app/                 # 唯一正式 Python 应用包
-│   │   ├── entrypoints/         # API、任务 Worker 入口
-│   │   ├── system/              # 认证、RBAC、系统管理
-│   │   ├── intelligence/        # 情报、采集、处理、AI 编排
-│   │   ├── library/             # 资料库与文件访问
-│   │   ├── research/            # 科研任务、证据与成果
-│   │   ├── health/              # 健康检查
-│   │   └── infrastructure/      # 监控、模型、文件、日志等技术设施
-│   ├── common/                  # HTTP、依赖、注解等跨切面适配
-│   ├── config/                  # 配置、数据库模型发现和调度设置
-│   ├── middlewares/             # 中间件
-│   ├── exceptions/              # 全局异常处理
-│   ├── sub_applications/        # 静态文件等应用挂载适配
-│   ├── sql/                     # 数据库初始化 SQL
-│   ├── tests/                   # 测试用例（含架构测试）
-│   ├── alembic/                 # 数据库迁移
-│   ├── cli/                     # CLI 命令行工具
-│   ├── scripts/                 # 一次性导入、回填和运维脚本
-│   ├── server.py                # 兼容启动入口，应用工厂在 app.bootstrap
-│   ├── Dockerfile.my            # MySQL 版 Docker 构建
-│   └── Dockerfile.pg            # PostgreSQL 版 Docker 构建
-│
-├── docs/
-│   ├── architecture/           # 架构、数据库和环境说明
-│   ├── requirements/           # 需求、原型和客户确认资料
-│   ├── reference/              # 模板与示例
-│   ├── plans/                  # 设计文档与实施计划
-│   ├── handover/               # 交接与数据库资料
-│   ├── reports/                # 进度和双周汇报
-│   └── project-structure.md    # 目录结构说明
-│
-├── docker-compose.my.yml        # Legacy Docker Compose（MySQL，仅迁移参考）
-└── docker-compose.pg.yml        # 默认 Docker Compose（连 172.16.4.183）
+├── backend/                    # Python 后端工程
+│   ├── src/app/                # 正式应用包：system / intelligence / library / research 等
+│   ├── cli/                    # ruoyi 命令与启动入口
+│   ├── common/                 # HTTP 契约、注解、枚举等跨切面支持
+│   ├── config/                 # 环境、数据库、调度配置
+│   ├── alembic/                # 正式数据库迁移记录
+│   ├── sql/                    # 数据库初始化与配套 SQL
+│   ├── data/                   # 受控数据清单和冻结结构契约
+│   ├── scripts/                # 按用途分组的维护脚本
+│   └── tests/                  # 业务及架构测试
+├── frontend/                   # Vue 3 + Element Plus 前端工程
+│   ├── src/                    # api / store / router / views / components / assets
+│   ├── tests/                  # 回归测试与 UI 预览夹具
+│   ├── public/                 # 静态资源
+│   ├── bin/                    # 前端 Windows 辅助命令
+│   └── vite/                   # Vite 插件配置
+├── deploy/                     # Docker 镜像定义及 Nginx 配置
+│   ├── docker/
+│   └── nginx/
+├── scripts/                    # 仓库级命令
+│   ├── dev/                    # Windows 开发服务启动、停止
+│   └── checks/                 # 项目验证入口
+├── docs/                       # 架构、使用指南、需求、交接与评审记录
+├── docker-compose.local.yml    # 本地 Redis
+├── docker-compose.pg.yml       # PostgreSQL 部署入口
+└── docker-compose.my.yml       # 历史 MySQL 迁移验证入口
 ```
+
+详细目录与新增文件约定见 [当前项目结构](docs/project-structure.md)。
+部署文件见 [部署目录说明](deploy/README.md)，维护工具见 [后端脚本说明](backend/scripts/README.md)。
 
 ## 业务功能
 
@@ -132,7 +99,7 @@ PipeSight/
 
 ```powershell
 cd PipeSight
-.\start-dev.cmd
+.\scripts\dev\start-dev.cmd
 ```
 
 脚本会依次完成以下工作：
@@ -152,23 +119,23 @@ cd PipeSight
 停止本次启动的前后端（不会停止 PostgreSQL/Redis）：
 
 ```powershell
-.\stop-dev.cmd
+.\scripts\dev\stop-dev.cmd
 ```
 
 常用启动选项：
 
 ```powershell
 # 强制使用 Docker 中的 Redis
-.\start-dev.cmd -Infrastructure Docker
+.\scripts\dev\start-dev.cmd -Infrastructure Docker
 
 # 使用本机 Redis（数据库统一连 183）
-.\start-dev.cmd -Infrastructure Local
+.\scripts\dev\start-dev.cmd -Infrastructure Local
 
 # 禁止自动安装依赖（依赖缺失或过期时直接报错）
-.\start-dev.cmd -SkipInstall
+.\scripts\dev\start-dev.cmd -SkipInstall
 
 # requirements-pg.txt 或 package-lock.json 变更后强制重装
-.\start-dev.cmd -ForceDependencyInstall
+.\scripts\dev\start-dev.cmd -ForceDependencyInstall
 ```
 
 ### 2. 手动启动基础设施
@@ -207,14 +174,14 @@ uv run --project . --no-sync python -m app.entrypoints.api --env=dev
 
 ```powershell
 cd backend
-uv run --no-sync python scripts/seed_dev_data.py --env=dev
+uv run --no-sync python scripts/bootstrap/seed_dev_data.py --env=dev
 ```
 
 初始化真实公开来源并执行一次采集：
 
 ```bash
 cd backend
-uv run --no-sync python scripts/bootstrap_real_pipeline.py
+uv run --no-sync python scripts/bootstrap/bootstrap_real_pipeline.py
 ```
 
 该脚本默认保留管理员对内置来源的启用/停用状态，并逐个来源执行、逐个报告失败。只有确认需要恢复已停用内置来源时，才显式增加 `--reactivate`。外部来源执行前还必须在管理端完成已发布 `data-filter` Prompt、可用模型和场景路由配置。
@@ -223,7 +190,7 @@ uv run --no-sync python scripts/bootstrap_real_pipeline.py
 
 ```bash
 cd backend
-uv run --no-sync python scripts/bootstrap_deepseek_route.py --env=dockerpg
+uv run --no-sync python scripts/bootstrap/bootstrap_deepseek_route.py --env=dockerpg
 ```
 
 数据库连接由 `--env=dockerpg` 对应的环境文件提供，统一指向 `172.16.4.183` 的 `pipesight` 库。
@@ -250,7 +217,7 @@ PipeSight API 和任务 Worker 统一使用 `backend/` 的 Python 项目环境�
 
 ```bash
 # 一键执行全部本地验证
-./scripts/verify_project.sh
+./scripts/checks/verify_project.sh
 
 # 也可以按组件分别执行：
 
@@ -467,8 +434,8 @@ ruoyi --help
 - [平台设计文档](docs/plans/2026-07-13-pipeline-intelligence-platform-design.md)
 - [平台实施计划](docs/plans/2026-07-13-pipeline-intelligence-platform-implementation.md)
 - [菜单种子 SQL](docs/plans/2026-07-13-pipeline-menu-seed.sql)
-- [CLI 使用指南](backend/docs/cli_usage.md)
-- [传输加密配置](backend/docs/transport_crypto_config.md)
+- [CLI 使用指南](docs/guides/cli-usage.md)
+- [传输加密配置](docs/guides/transport-crypto-config.md)
 
 ## License
 

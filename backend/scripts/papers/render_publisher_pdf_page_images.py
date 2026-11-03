@@ -11,7 +11,7 @@ from pathlib import Path
 from PIL import Image
 from pypdf import PdfReader
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 MANIFEST = ROOT / 'backend/data/curated/paper-fulltext-previews.json'
 PDFS = ROOT / 'output/pdf/paper-fulltext-20261017'
 FILES = {

@@ -6,7 +6,7 @@ API Key 只以 PipeSight 加密格式写入 ``ai_models``，脚本不会打印�
 运行方式（项目根目录）：
 
     cd backend
-    uv run --no-sync python scripts/bootstrap_deepseek_route.py --env=dockerpg
+    uv run --no-sync python scripts/bootstrap/bootstrap_deepseek_route.py --env=dockerpg
 
 支持的环境变量：
 
@@ -38,7 +38,7 @@ DEFAULT_BASE_URL = 'https://api.deepseek.com/v1'
 
 def _load_project_env() -> None:
     """在本地执行脚本时读取项目根目录的 .env，不覆盖显式环境变量。"""
-    load_dotenv(Path(__file__).resolve().parents[2] / '.env', override=False)
+    load_dotenv(Path(__file__).resolve().parents[3] / '.env', override=False)
 
 
 def _first_api_key() -> str:
