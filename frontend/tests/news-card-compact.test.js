@@ -23,9 +23,9 @@ test('article metadata and the bordered saved-item control share a compact headi
   assert.match(news, /\.ps-news-page \.ps-news-list \{[^}]*align-content: start/)
 })
 
-test('compact entity views omit the entire empty section but retain the honest detail empty state', () => {
+test('compact entity views omit empty sections unless leading content is provided and retain detail empty states', () => {
   const markup = parse(entities).descriptor.template.content
-  assert.match(markup, /v-if="!compact \|\| hasEntities"/)
+  assert.match(markup, /v-if="!compact \|\| hasEntities \|\| \$slots.prepend"/)
   assert.doesNotMatch(markup, /实体信息待处理|v-if="compact && !hasEntities"/)
   assert.match(markup, /v-if="!compact && !hasEntities"/)
   assert.match(entities, /\.is-compact \{[^}]*background: transparent/)

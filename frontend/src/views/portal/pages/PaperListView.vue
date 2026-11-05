@@ -31,7 +31,6 @@
           <div class="ps-paper-card-top" aria-label="论文概览">
             <span class="ps-paper-source" aria-label="论文来源">{{ paper.journal }}</span>
             <time>{{ paper.publishedDate || paper.year || '日期未提供' }}</time>
-            <ContentCategory :name="contentCategory(paper)" />
           </div>
           <div class="ps-paper-main">
             <router-link class="ps-paper-title" :to="`/portal/papers/${paper.id}`">{{ paper.titleZh }}</router-link>
@@ -41,7 +40,9 @@
           </div>
           <div class="ps-paper-card-footer">
             <div class="ps-paper-topic-tags">
-              <ContentEntities :entities="paper.entities" compact />
+              <ContentEntities :entities="paper.entities" compact>
+                <template #prepend><ContentCategory :name="contentCategory(paper)" /></template>
+              </ContentEntities>
               <div v-if="paper.keywords.length" class="ps-paper-keywords" aria-label="论文关键词"><el-tag v-for="tag in paper.keywords" :key="tag" size="small" type="info" effect="plain">{{ tag }}</el-tag></div>
             </div>
             <div class="ps-paper-row-actions">

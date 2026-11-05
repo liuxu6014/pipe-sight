@@ -1,7 +1,8 @@
 <template>
-  <section v-if="!compact || hasEntities" class="ps-content-entities" :class="{ 'is-compact': compact }" aria-label="文章实体信息">
+  <section v-if="!compact || hasEntities || $slots.prepend" class="ps-content-entities" :class="{ 'is-compact': compact }" aria-label="文章实体信息">
     <div v-if="!compact" class="entity-heading"><h2>核心实体</h2></div>
     <div class="entity-tags">
+      <slot name="prepend" />
       <template v-for="group in visibleGroups" :key="group.label">
         <el-tag v-for="value in group.values" :key="`${group.label}:${value}`" :type="tagTypes[group.label]" size="small" :class="{ 'is-location': group.label === '地点' }" :title="`${group.label}：${value}`" :aria-label="`${group.label}：${value}`"><el-icon class="entity-icon" aria-hidden="true"><component :is="entityIcons[group.label]" /></el-icon><span class="entity-value">{{ value }}</span></el-tag>
       </template>
