@@ -36,7 +36,7 @@
           <div class="ps-paper-card-top" aria-label="论文概览">
             <span class="ps-paper-source" aria-label="论文来源">{{ paper.journal }}</span>
             <time>{{ paper.publishedDate || paper.year || '日期未提供' }}</time>
-            <el-tag class="ps-paper-category" :type="contentCategory(paper) ? 'primary' : 'info'" size="small" effect="plain">{{ contentCategory(paper) || '未分类' }}</el-tag>
+            <ContentCategory :name="contentCategory(paper)" />
           </div>
           <div class="ps-paper-main">
             <router-link class="ps-paper-title" :to="`/portal/papers/${paper.id}`">{{ paper.titleZh }}</router-link>
@@ -82,6 +82,7 @@
 <script setup>
 import SavedSearchBar from '../components/SavedSearchBar.vue'
 import ContentEntities from '../components/ContentEntities.vue'
+import ContentCategory from '../components/ContentCategory.vue'
 import { applySavedSearchQuery } from '@/utils/portal/savedSearches'
 import { computed, ref, toRefs, watch } from 'vue'
 import { ElMessage } from 'element-plus'
@@ -183,8 +184,6 @@ function doiUrl(paper) {
 .ps-paper-card-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; min-width: 0; margin-bottom: 8px; font-size: 13px; line-height: 1.5; color: var(--ps-muted); }
 .ps-paper-card-top time { white-space: nowrap; }
 .ps-paper-source { color: var(--ps-ink-2); font-weight: 600; overflow-wrap: anywhere; }
-.ps-paper-category { max-width: 100%; height: auto; min-height: var(--el-tag-height); white-space: normal; overflow-wrap: anywhere; }
-.ps-paper-category :deep(.el-tag__content) { white-space: normal; }
 .ps-paper-main .ps-paper-title { display: block; margin: 0; color: var(--ps-ink); font-size: 18px; font-weight: 600; line-height: 1.55; text-align: left; overflow-wrap: anywhere; text-decoration: none; }
 .ps-paper-main .ps-paper-title:hover { color: var(--ps-blue); }
 .ps-paper-title:focus-visible, .ps-paper-doi:focus-visible { outline: 2px solid var(--ps-blue); outline-offset: 3px; border-radius: 4px; }

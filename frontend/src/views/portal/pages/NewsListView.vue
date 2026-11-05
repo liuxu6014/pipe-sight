@@ -14,10 +14,10 @@
         <article v-for="item in newsItems" :key="item.id" class="ps-news-card">
           <div class="ps-news-row-heading">
             <div class="ps-news-card-top">
-              <el-tag type="primary" size="small">{{ item.sourceType }}</el-tag>
+              <el-tag class="ps-news-source-type" type="primary" size="small">{{ item.sourceType }}</el-tag>
               <span v-if="item.source" class="ps-news-source" :title="item.source">{{ item.source }}</span>
               <time>{{ newsDate(item.time) }}</time>
-              <el-tag class="ps-content-category" :type="item.categoryName ? 'primary' : 'info'" size="small" effect="plain">分类：{{ item.categoryName || '未分类' }}</el-tag>
+              <ContentCategory :name="item.categoryName" />
               <div v-if="item.extraTags.length" class="ps-news-categories"><el-button v-for="tag in item.extraTags" :key="tag" class="ps-category-chip" size="small" plain :type="activeTags.includes(tag) ? 'primary' : 'default'" :aria-pressed="activeTags.includes(tag)" @click="toggleTag(tag)">{{ tag }}</el-button></div>
             </div>
             <div class="ps-news-row-actions"><el-button type="primary" plain :loading="busy(item)" :disabled="busy(item)" @click="addToBasket(item)">{{ inBasket(item) ? '取消加入资料库' : '加入资料库' }}</el-button></div>
@@ -66,6 +66,7 @@
 <script setup>
 import SavedSearchBar from '../components/SavedSearchBar.vue'
 import ContentEntities from '../components/ContentEntities.vue'
+import ContentCategory from '../components/ContentCategory.vue'
 import { applySavedSearchQuery } from '@/utils/portal/savedSearches'
 import { computed, toRefs, watch } from 'vue'
 import { ElMessage } from 'element-plus'
@@ -146,11 +147,10 @@ function resetFilters() {
 .ps-news-title, .ps-news-cover { text-decoration: none; }
 .ps-news-page .ps-news-list { gap: 10px; align-content: start; }
 .ps-news-page .ps-news-card { min-width: 0; padding: 14px 18px 16px; border-radius: 10px; box-shadow: none; }
-.ps-news-row-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 10px 16px; margin-bottom: 4px; }
+.ps-news-row-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 10px 16px; margin-bottom: 8px; }
 .ps-news-page .ps-news-card-top { display: flex; flex-wrap: wrap; align-items: center; align-content: center; gap: 6px 12px; min-width: 0; min-height: 36px; margin: 0; font-size: 13px; line-height: 1.5; color: var(--ps-muted); }
-.ps-news-card-top time { white-space: nowrap; font-size: inherit; }
-.ps-content-category { max-width: 100%; height: auto; min-height: var(--el-tag-height); white-space: normal; overflow-wrap: anywhere; }
-.ps-content-category :deep(.el-tag__content) { white-space: normal; }
+.ps-news-card-top time { white-space: nowrap; font-size: inherit; color: #637084; }
+.ps-news-source-type { flex-shrink: 0; height: 28px; padding: 0 10px; border: 0; border-radius: 6px; font-size: 13px; line-height: 20px; --el-tag-text-color: #245ca6; --el-tag-bg-color: #edf4ff; }
 .ps-news-source { max-width: min(260px, 100%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ps-ink-2); }
 .ps-news-categories { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
 .ps-news-categories :deep(.el-button) { margin: 0; white-space: normal; overflow-wrap: anywhere; }
