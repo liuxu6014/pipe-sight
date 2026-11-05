@@ -1,32 +1,27 @@
 <template>
   <div class="ps-page ps-paper-library ps-list-page">
     <div class="ps-toolbar ps-paper-toolbar" role="search" aria-label="论文筛选">
-      <el-input v-model.trim="keyword" class="ps-paper-search" :prefix-icon="Search" clearable aria-label="搜索论文资料" placeholder="搜索题名、作者或摘要" @keydown.enter="reload" />
-      <el-select v-model="year" class="ps-paper-year-filter" filterable allow-create default-first-option aria-label="发表年份，可输入年份" @change="yearRange = []">
-        <el-option label="全部年份" value="all" />
-        <el-option v-for="item in yearOptions" :key="item" :label="String(item)" :value="String(item)" />
-      </el-select>
-      <el-select v-model="classification" class="ps-paper-category-filter" clearable filterable placeholder="全部类别" aria-label="论文类别">
-        <el-option v-for="name in categoryOptions" :key="name" :label="name" :value="name" />
-      </el-select>
-      <div class="ps-paper-filter-actions">
-        <el-popover trigger="click" placement="bottom-end" :width="380" :popper-style="{ maxWidth: 'calc(100vw - 24px)' }" popper-class="ps-paper-filter-popover">
-          <template #reference><el-button :icon="Filter" :type="yearRange.length || journals.length ? 'primary' : 'default'" plain>筛选设置{{ yearRange.length || journals.length ? ' · 已设置' : '' }}</el-button></template>
-          <el-tabs v-model="filterTab" class="ps-paper-filter-tabs" aria-label="论文筛选设置">
-            <el-tab-pane label="高级筛选" name="advanced">
-              <div class="ps-filter-panel ps-paper-advanced">
-                <label>年份范围<el-date-picker v-model="yearRange" type="yearrange" value-format="YYYY" start-placeholder="起始年" end-placeholder="结束年" aria-label="论文发表年份范围" style="width: 100%" @change="changeYearRange" /></label>
-                <label>期刊 / 会议<el-select v-model="journals" multiple filterable allow-create default-first-option aria-label="期刊或会议名称，可输入" placeholder="输入名称或选择期刊"><el-option v-for="item in journalOptions" :key="item" :label="item" :value="item" /></el-select></label>
-                <p>选择后自动筛选，可输入期刊名称。未选年份时包含日期缺失记录。</p>
-                <el-button :disabled="!yearRange.length && !journals.length" @click="yearRange = []; journals = []">清除高级筛选</el-button>
-              </div>
-            </el-tab-pane>
-            <el-tab-pane label="常用条件" name="saved">
-              <SavedSearchBar kind="paper" :query="query" :show-current-filters="false" inline @apply="applySavedSearch" />
-            </el-tab-pane>
-          </el-tabs>
-        </el-popover>
-        <el-button :icon="RefreshLeft" @click="resetFilters">重置</el-button>
+      <div class="ps-paper-search-row">
+        <el-input v-model.trim="keyword" class="ps-paper-search" :prefix-icon="Search" clearable aria-label="搜索论文资料" placeholder="搜索题名、作者或摘要" @keydown.enter="reload" />
+        <el-button :icon="RefreshLeft" @click="resetFilters">重置筛选</el-button>
+      </div>
+      <div class="ps-paper-filter-fields">
+        <div class="ps-paper-filter-field">
+          <span id="paper-year-label">发表年份</span>
+          <el-date-picker :model-value="selectedYearRange.length ? selectedYearRange : null" type="yearrange" value-format="YYYY" start-placeholder="起始年份" end-placeholder="结束年份" range-separator="至" clearable aria-labelledby="paper-year-label" aria-label="论文发表年份范围" @update:model-value="changeYearRange" />
+        </div>
+        <div class="ps-paper-filter-field">
+          <span id="paper-category-label">内容类别</span>
+          <el-select v-model="classification" clearable filterable placeholder="全部类别" aria-labelledby="paper-category-label" aria-label="论文类别">
+            <el-option v-for="name in categoryOptions" :key="name" :label="name" :value="name" />
+          </el-select>
+        </div>
+        <div class="ps-paper-filter-field">
+          <span id="paper-journal-label">期刊 / 会议</span>
+          <el-select v-model="journal" clearable filterable placeholder="全部期刊 / 会议" aria-labelledby="paper-journal-label" aria-label="论文期刊或会议">
+            <el-option v-for="item in journalOptions" :key="item" :label="item" :value="item" />
+          </el-select>
+        </div>
       </div>
     </div>
     <div class="ps-content-with-filter ps-list-stack">
@@ -61,7 +56,7 @@
           </div>
         </article>
         <PortalEmptyState v-if="loadError && !loading" title="论文加载失败" :description="loadError" action-label="重新加载" @action="reload" />
-        <PortalEmptyState v-else-if="!filteredPapers.length && !loading" title="没有匹配的论文" description="尝试放宽年份或期刊筛选。" action-label="重置筛选" @action="resetFilters" />
+        <PortalEmptyState v-else-if="!filteredPapers.length && !loading" title="没有匹配的论文" description="尝试放宽关键词、年份、类别或期刊筛选。" action-label="重置筛选" @action="resetFilters" />
         </div>
         <div v-if="total > 0 && !loading && !loadError" class="ps-pagination" aria-label="论文列表分页">
           <el-pagination
@@ -80,13 +75,11 @@
 </template>
 
 <script setup>
-import SavedSearchBar from '../components/SavedSearchBar.vue'
 import ContentEntities from '../components/ContentEntities.vue'
 import ContentCategory from '../components/ContentCategory.vue'
-import { applySavedSearchQuery } from '@/utils/portal/savedSearches'
-import { computed, ref, toRefs, watch } from 'vue'
+import { computed, toRefs, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Filter, RefreshLeft, Search } from '@element-plus/icons-vue'
+import { RefreshLeft, Search } from '@element-plus/icons-vue'
 import PortalEmptyState from '../components/PortalEmptyState.vue'
 import usePortalStore from '@/store/modules/portal'
 import { getPipelineContentFilters, listPipelineIntelligence, savePipelineWorkspaceItem, deletePipelineWorkspaceItem } from '@/api/pipeline/intelligence'
@@ -96,23 +89,17 @@ import { cleanSummary } from '@/utils/portal/discovery'
 import { contentCategory, collectionTime } from '@/utils/portal/contentPresentation'
 
 const portalStore = usePortalStore()
-const filterTab = ref('advanced')
-const currentYear = new Date().getFullYear()
 const query = useListQuery({ q: '', year: 'all', years: [], journals: [], classification: '', page: 1, size: 10 })
-function applySavedSearch(filters) { if (!applySavedSearchQuery(query, filters, 'paper')) reload() }
 const { q: keyword, year, years: yearRange, journals, classification, page: currentPage, size: pageSize } = toRefs(query)
 const { inBasket, busy, toggleBasket } = useListWorkspace(portalStore, { save: savePipelineWorkspaceItem, remove: deletePipelineWorkspaceItem })
 const facets = useListRequest(() => ({}), getPipelineContentFilters)
 const categoryOptions = computed(() => [...new Set([...(facets.data.value?.paperCategories || facets.data.value?.categories || []), ...(classification.value ? [classification.value] : [])])])
 const journalOptions = computed(() => [...new Set([...(facets.data.value?.journals || []), ...journals.value])])
-const yearOptions = computed(() => [...new Set([currentYear, ...(facets.data.value?.years || []), ...(year.value === 'all' ? [] : [Number(year.value)])])].sort((a, b) => b - a))
-const selectedYearRange = computed(() => {
-  if (year.value !== 'all') {
-    const selected = Number(year.value)
-    return [selected, selected]
-  }
-  return yearRange.value || []
-})
+// Keep older single-year links visible in the same range control.
+const selectedYearRange = computed(() => year.value !== 'all' ? [String(year.value), String(year.value)] : yearRange.value || [])
+const journal = computed({ get: () => journals.value[0] || '', set: value => { journals.value = value ? [value] : [] } })
+// The API accepts one journal keyword; normalize legacy multi-select URLs too.
+watch(journals, values => { if (values.length > 1) journals.value = values.slice(0, 1) }, { immediate: true })
 const { data, loading, loadError, reload } = useListRequest(() => {
   const [yearFrom, yearTo] = selectedYearRange.value.map(Number)
   return {
@@ -121,7 +108,7 @@ const { data, loading, loadError, reload } = useListRequest(() => {
       keyword: keyword.value || undefined,
       yearFrom,
       yearTo,
-      journal: journals.value.length ? journals.value.join(',') : undefined,
+      journal: journal.value || undefined,
       pageNum: currentPage.value,
       pageSize: pageSize.value
   }
@@ -161,22 +148,22 @@ function doiUrl(paper) {
 </script>
 
 <style scoped>
-.ps-paper-library > .ps-paper-toolbar { display: grid; grid-template-columns: minmax(220px, 1fr) 136px 164px max-content; --el-component-size: 40px; align-items: center; gap: 10px; padding: 10px 12px; }
-.ps-paper-toolbar > :is(.ps-paper-search, .ps-paper-year-filter, .ps-paper-category-filter) { width: 100%; min-width: 0; height: var(--el-component-size); }
-.ps-paper-filter-actions { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.ps-paper-filter-actions :deep(.el-button) { height: var(--el-component-size); margin: 0; }
-.ps-paper-filter-tabs { max-height: min(560px, calc(100dvh - 180px)); overflow-y: auto; }
-.ps-paper-filter-tabs :deep(.el-tabs__header) { margin-bottom: 8px; }
-.ps-paper-filter-tabs :deep(.ps-saved-search-bar) { display: block; margin: 0; }
-.ps-paper-filter-tabs :deep(.ps-saved-search-panel > strong) { display: none; }
-@media (max-width: 1150px) {
-  .ps-paper-library > .ps-paper-toolbar { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) max-content; }
-  .ps-paper-toolbar > .ps-paper-search { grid-column: 1 / -1; }
+.ps-paper-library > .ps-paper-toolbar { display: flex; flex-direction: column; align-items: stretch; gap: 12px; padding: 14px 16px; --el-component-size: 40px; }
+.ps-paper-search-row { display: flex; align-items: center; gap: 12px; }
+.ps-paper-search { flex: 1; min-width: 0; }
+.ps-paper-search-row > .el-button { flex-shrink: 0; margin: 0; height: var(--el-component-size); }
+.ps-paper-filter-fields { display: grid; grid-template-columns: minmax(260px, 1.1fr) minmax(160px, .8fr) minmax(200px, 1fr); gap: 14px; }
+.ps-paper-filter-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ps-paper-filter-field > span { color: var(--ps-ink-2); font-size: 13px; line-height: 20px; }
+.ps-paper-filter-field > :deep(.el-select), .ps-paper-filter-field > :deep(.el-date-editor) { width: 100%; min-width: 0; box-sizing: border-box; }
+@media (max-width: 1000px) {
+  .ps-paper-filter-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ps-paper-filter-field:first-child { grid-column: 1 / -1; }
 }
-@media (max-width: 760px) {
-  .ps-paper-library > .ps-paper-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); --el-component-size: 44px; gap: 8px; }
-  .ps-paper-filter-actions { grid-column: 1 / -1; }
-  .ps-paper-filter-actions > :deep(.el-button) { flex: 1; min-width: 0; }
+@media (max-width: 600px) {
+  .ps-paper-library > .ps-paper-toolbar { padding: 12px; --el-component-size: 44px; }
+  .ps-paper-filter-fields { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .ps-paper-search-row { gap: 8px; }
 }
 /* Compact bibliographic header, reading content and a shared action footer. */
 .ps-paper-library .ps-paper-list { gap: 10px; align-content: start; }

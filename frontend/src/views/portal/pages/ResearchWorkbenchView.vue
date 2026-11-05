@@ -1,12 +1,16 @@
 <template>
   <div class="ps-page ps-research-workspace ps-list-page">
     <div class="ps-toolbar ps-research-toolbar">
+      <div class="ps-research-toolbar-row">
         <el-input class="ps-search-input" v-model.trim="keyword" clearable aria-label="搜索报告" placeholder="搜索报告名称或类型" :prefix-icon="Search" />
         <el-select v-model="status" placeholder="全部状态" aria-label="报告生成状态"><el-option label="全部状态" value="" /><el-option v-for="item in reportStatuses" :key="item.value" :label="item.label" :value="item.value" /></el-select>
         <el-select v-model="sort" aria-label="报告排序"><el-option label="最近更新" value="updated-desc" /><el-option label="最早更新" value="updated-asc" /><el-option label="名称排序" value="title" /></el-select>
-        <el-button :loading="refreshing" @click="refreshWorkspace">刷新</el-button>
-        <el-button v-if="keyword || status" @click="keyword = ''; status = ''">重置</el-button>
-      <div class="ps-research-toolbar-actions"><el-button type="primary" :icon="Plus" @click="router.push('/portal/research/create')">新建报告</el-button></div>
+        <div class="ps-research-toolbar-actions">
+          <el-button :loading="refreshing" @click="refreshWorkspace">刷新</el-button>
+          <el-button v-if="keyword || status" @click="keyword = ''; status = ''">重置</el-button>
+          <el-button type="primary" :icon="Plus" @click="router.push('/portal/research/create')">新建报告</el-button>
+        </div>
+      </div>
     </div>
     <div class="ps-report-workspace-content ps-list-stack">
       <section class="ps-panel ps-report-main ps-list-stack">
@@ -147,8 +151,11 @@ onBeforeUnmount(() => { listResizeObserver?.disconnect(); disposed = true; clear
 </script>
 
 <style scoped>
-.ps-research-toolbar-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-.ps-research-toolbar-actions :deep(.el-button) { margin-left: 0; }
+.ps-research-workspace > .ps-research-toolbar { overflow-x: auto; }
+.ps-research-toolbar-row { display: grid; grid-template-columns: minmax(160px, 1fr) 124px 124px max-content; align-items: center; gap: 8px; width: 100%; min-width: 0; --el-component-size: 40px; }
+.ps-research-toolbar-row > .el-input, .ps-research-toolbar-row > .el-select { min-width: 0; width: 100%; }
+.ps-research-toolbar-actions { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; }
+.ps-research-toolbar-actions :deep(.el-button) { flex-shrink: 0; height: 40px; margin-left: 0; }
 .ps-research-workspace .ps-report-main.ps-panel { padding: 0; border: 0; border-radius: 0; background: transparent; gap: 12px; }
 .ps-report-list-region { overflow: hidden; }
 .ps-research-workspace .ps-report-main > .ps-pagination { margin: 0; padding: 12px 16px; border: 1px solid var(--ps-line); border-radius: 10px; background: #fff; }
@@ -167,8 +174,4 @@ onBeforeUnmount(() => { listResizeObserver?.disconnect(); disposed = true; clear
 .ps-report-records-table :deep(.cell) { padding-inline: 16px; }
 .ps-report-records-table time { color: var(--ps-muted); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ps-report-records-table :deep(.el-table__inner-wrapper::before) { display: none; }
-@media (min-width: 1051px) {
-  .ps-research-toolbar > .el-input { flex: 1 1 180px; }
-  .ps-research-toolbar > .el-select { flex: 0 0 130px; width: 130px; }
-}
 </style>

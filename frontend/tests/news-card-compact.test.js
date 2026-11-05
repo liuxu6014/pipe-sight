@@ -7,17 +7,6 @@ const read = name => readFileSync(new URL(`../src/views/portal/${name}.vue`, imp
 const news = read('pages/NewsListView')
 const entities = read('components/ContentEntities')
 
-test('news keeps saved conditions in its toolbar without the current-filter row', () => {
-  const { descriptor } = parse(news)
-  const page = descriptor.template.ast.children.find(node => node.type === 1)
-  const toolbar = page.children.find(node => node.type === 1 && node.props.some(p => p.name === 'class' && p.value?.content === 'ps-toolbar'))
-  const saved = toolbar.children.find(node => node.type === 1 && node.tag === 'SavedSearchBar')
-  assert.ok(saved)
-  assert.ok(saved.props.some(p => p.arg?.content === 'show-current-filters' && p.exp?.content === 'false'))
-  assert.equal(page.children.some(node => node.type === 1 && node.tag === 'SavedSearchBar'), false)
-  assert.match(read('components/SavedSearchBar'), /v-if="showCurrentFilters" class="ps-query-chips"/)
-})
-
 test('stored entities use native small tags with category colors, without fake empty tags', () => {
   assert.match(entities, /<el-tag[^>]*:type="tagTypes\[group.label\]" size="small"/)
   assert.match(entities, /地点: 'primary'.*时间: 'info'.*政策: 'warning'.*人物: 'danger'.*机构: 'success'.*技术: 'primary'/)

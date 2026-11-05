@@ -125,8 +125,7 @@ test('keeps empty and unavailable portal states explicit', () => {
   assert.doesNotMatch(home, /ps-home-timeline/)
   assert.match(search, /该结果暂未提供可访问的详情路径/)
   assert.match(search, /return counts\.value\[type\] \?\? 0/)
-  assert.match(paperList, /const currentYear = new Date\(\)\.getFullYear\(\)/)
-  assert.match(paperList, /v-for="item in yearOptions"/)
+  assert.match(paperList, /type="yearrange"/)
   assert.doesNotMatch(paperList, /<el-option label="2026"/)
 })
 

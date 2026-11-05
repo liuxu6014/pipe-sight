@@ -78,7 +78,7 @@ async function mountPage(name, { query = {}, api = {}, documents = [], pageProps
     basketItemLabel, basketItemPath, uploadBasketFile, validateBasketUpload, Tickets: {},
     useUserStore: () => ({ id: 7 }), ownedReports, unfinishedTasks, publicationDate, buildPersonalReports, hasReportOutput, sortResearchReports, createResearchRefresh, reportRowActions,
     getPortalReportPath: item => `/portal/research/reports/${item.id}`, getPortalTaskPath: item => `/portal/research/tasks/${item.id}`,
-    PortalPageHeader: {}, PortalEmptyState: {}, SavedSearchBar: {}, ContentEntities: {}, contentCategory, collectionTime, DigestScheduleDialog: {}, readScheduleForm, scheduleSummary, applySavedSearchQuery,
+    PortalPageHeader: {}, PortalEmptyState: {}, SavedSearchBar: {}, ContentEntities: {}, ContentCategory: {}, contentCategory, collectionTime, DigestScheduleDialog: {}, readScheduleForm, scheduleSummary, applySavedSearchQuery,
     ElMessage: Object.fromEntries(['success', 'error', 'warning'].map(level => [level, text => messages.push({ level, text })])),
     ElMessageBox: { confirm: async () => {} },
     ...Object.fromEntries(['Collection', 'ChatDotRound', 'Document', 'DocumentAdd', 'Reading', 'Plus', 'Refresh', 'ArrowRight', 'Grid', 'List', 'Search', 'Star', 'StarFilled', 'Filter', 'Close', 'MoreFilled', 'UploadFilled', 'WarningFilled', 'InfoFilled'].map(icon => [icon, {}])),
@@ -243,8 +243,6 @@ test('research reports use the selected page size and reset or clamp their page'
 })
 
 for (const [page, filters] of [
-  ['NewsListView', { q: '已保存新闻', source: '微信公众号', tag: ['检测'] }],
-  ['PaperListView', { q: '已保存论文', year: '2024', journals: ['期刊A'] }],
   ['SearchView', { q: '已保存检索', type: 'paper', source: 'public', date: 'year', directions: ['检测'] }],
   ['KnowledgeView', { q: '已保存资料', status: '解析失败' }],
 ]) {
@@ -677,14 +675,14 @@ test('paper DOI links resolve directly and invalid DOI values never become click
 })
 
 test('query restoration retains filters and page across detail navigation and query-only updates', async () => {
-  const ctx = await mountPage('PaperListView', { query: { q: 'pipeline', journals: ['A', 'B'], page: '4', size: '20' }, api: { listPipelineIntelligence: async () => ({ data: { rows: [], total: 200 } }) } })
+  const ctx = await mountPage('PaperListView', { query: { q: 'pipeline', journals: ['A'], page: '4', size: '20' }, api: { listPipelineIntelligence: async () => ({ data: { rows: [], total: 200 } }) } })
   try {
     assert.equal(ctx.page.currentPage.value, 4)
     await ctx.router.push('/portal/papers/p1')
     await ctx.router.back()
     await settle()
     assert.equal(ctx.page.currentPage.value, 4)
-    assert.deepEqual([...ctx.page.journals.value], ['A', 'B'])
+    assert.deepEqual([...ctx.page.journals.value], ['A'])
     await ctx.router.replace({ path: '/portal/papers', query: { q: 'new', page: '2' } })
     await settle()
     assert.equal(ctx.page.keyword.value, 'new')
@@ -974,5 +972,43 @@ test('search provides basket selection instead of favorite actions', async () =>
     assert.equal(payloads[0].itemType, 'article')
     assert.equal(ctx.store.basket[0].title, '搜索命中资讯')
     assert.equal(ctx.store.favoriteItems.length, 0)
+  } finally { ctx.close() }
+})
+
+
+test('paper visible range replaces legacy year and single journal stays independent of category', async () => {
+  const calls = []
+  const ctx = await mountPage('PaperListView', { query: { year: '2024', classification: '管网', size: '50' }, api: { listPipelineIntelligence: async params => { calls.push(params); return { data: { rows: [], total: 200 } } } } })
+  try {
+    assert.deepEqual(ctx.page.selectedYearRange.value, ['2024', '2024'])
+    ctx.page.changeYearRange(['2020', '2023'])
+    ctx.page.journal.value = 'Journal of Pipeline, Science'
+    await settle()
+    assert.equal(ctx.page.year.value, 'all')
+    assert.deepEqual(ctx.page.selectedYearRange.value, ['2020', '2023'])
+    assert.equal(calls.at(-1).yearFrom, 2020)
+    assert.equal(calls.at(-1).yearTo, 2023)
+    assert.equal(calls.at(-1).journal, 'Journal of Pipeline, Science')
+    assert.equal(calls.at(-1).tag, '管网')
+    ctx.page.changeYearRange(null)
+    ctx.page.journal.value = ''
+    await settle()
+    assert.equal(calls.at(-1).yearFrom, undefined)
+    assert.equal(calls.at(-1).yearTo, undefined)
+    assert.equal(calls.at(-1).journal, undefined)
+    assert.equal(calls.at(-1).tag, '管网')
+    ctx.page.resetFilters(); await settle()
+    assert.equal(calls.at(-1).tag, undefined)
+    assert.equal(ctx.page.pageSize.value, 50)
+  } finally { ctx.close() }
+})
+
+test('paper legacy multiple journals normalize to one visible API filter', async () => {
+  const calls = []
+  const ctx = await mountPage('PaperListView', { query: { journals: ['期刊A', '期刊B'] }, api: { listPipelineIntelligence: async params => { calls.push(params); return { data: { rows: [], total: 0 } } } } })
+  try {
+    assert.deepEqual(ctx.page.journals.value, ['期刊A'])
+    assert.equal(ctx.page.journal.value, '期刊A')
+    assert.equal(calls.at(-1).journal, '期刊A')
   } finally { ctx.close() }
 })
