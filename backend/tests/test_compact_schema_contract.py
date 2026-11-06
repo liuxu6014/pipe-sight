@@ -52,7 +52,7 @@ def test_v7_adds_only_nullable_entities_to_news_articles_and_preserves_every_pri
     assert old['optional_table_definitions'] == new['optional_table_definitions']
     contract = load_contract()
     assert len(contract['tables']) == 28
-    assert sum(len(t['columns']) for t in contract['tables']) == 338
+    assert sum(len(t['columns']) for t in contract['tables']) == 340
     assert {t['name'] for t in contract['tables']} >= {'sys_user', 'papers', 'collection_runs'}
     for table in contract['tables']:
         if table['name'] not in FOUNDATION_TABLE_RENAMES.values():
@@ -165,8 +165,8 @@ def test_v4_stays_frozen_when_runtime_contract_advances() -> None:
         json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()
     ).hexdigest()
     assert digest == '88491613e027bcdc0058837512053d68eae7a757d9ebcadad16e46e92316b8bc'
-    assert load_contract() == load_contract('v10')
-    assert load_contract()['version'] == '20261103-compact-v10'
+    assert load_contract() == load_contract('v11')
+    assert load_contract()['version'] == '20261105-compact-v11'
 
 
 def test_v4_preserves_v3_physical_core_without_freezing_unstable_orm_ddl() -> None:
@@ -420,3 +420,20 @@ def test_v10_restores_only_native_departments_and_nullable_user_affiliation():
         'target': 'sys_dept',
         'target_columns': ['dept_id'],
     }
+
+
+def test_v11_adds_only_nullable_ai_insight_to_news_articles_and_papers():
+    before, after = load_contract('v10'), load_contract('v11')
+    old = {t['name']: t for t in before['tables']}
+    new = {t['name']: t for t in after['tables']}
+    assert new.keys() == old.keys()
+    extra = {'ai_insight'}
+    for name, table in old.items():
+        if name not in {'news_articles', 'papers'}:
+            assert table == new[name]
+        else:
+            assert table['columns'] == [c for c in new[name]['columns'] if c['name'] not in extra]
+            added = [c for c in new[name]['columns'] if c['name'] in extra]
+            assert len(added) == 1 and all(c['nullable'] and not c['primary_key'] for c in added)
+    assert after['foreign_keys'] == before['foreign_keys']
+    assert after['optional_table_definitions'] == before['optional_table_definitions']

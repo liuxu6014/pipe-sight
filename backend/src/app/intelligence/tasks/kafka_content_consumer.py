@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 import signal
 from datetime import datetime, timezone
 from time import monotonic
@@ -84,6 +85,33 @@ def _unix_seconds_to_iso(value: Any) -> str | None:
         return None
 
 
+_MD_LINK_RE = re.compile(r'!\[[^\]]*\]\([^)]*\)|\[([^\]]*)\]\([^)]*\)')
+
+
+def _markdown_to_plain_text(value: str) -> str:
+    """把爬虫 markdown 正文转成纯文本，保留空行作为段落分隔。"""
+    text = value.replace('\r\n', '\n').replace('\r', '\n')
+    text = _MD_LINK_RE.sub(lambda match: match.group(1) or '', text)  # 图片去掉，链接留文字
+    text = re.sub(r'(?m)^\s{0,3}#{1,6}\s*', '', text)  # 标题标记
+    text = re.sub(r'(?m)^\s{0,3}>\s?', '', text)  # 引用标记
+    text = re.sub(r'(?m)^\s*(?:[-*+]\s+|\d+[.)]\s+)', '', text)  # 列表标记
+    text = re.sub(r'[ \t]+', ' ', text)  # 折叠行内空白，保留换行
+    text = re.sub(r' *\n *', '\n', text)
+    text = re.sub(r'(\*\*|__|~~|`)', '', text)  # 行内强调/代码标记
+    text = re.sub(r'\n{2,}', '\n\n', text)
+    return text.strip()
+
+
+def _prefer_content(data: dict) -> str | None:
+    """优先取保留段落边界的正文：content_md 换行更多时用 markdown 转纯文本。"""
+    content = data.get('content')
+    content_md = data.get('content_md')
+    if isinstance(content_md, str) and content_md.strip():
+        if not isinstance(content, str) or content_md.count('\n') > content.count('\n'):
+            return _markdown_to_plain_text(content_md)
+    return content if isinstance(content, str) and content.strip() else None
+
+
 def _normalize_crawler_message(data: dict) -> KafkaContentMessage | None:
     """把 news-pipelines 爬虫侧消息格式映射进统一 envelope；缺标题/URL 返回 None。
 
@@ -97,7 +125,7 @@ def _normalize_crawler_message(data: dict) -> KafkaContentMessage | None:
         return None
     domain = data.get('domain') if isinstance(data.get('domain'), str) else ''
     site_name = data.get('site_name') if isinstance(data.get('site_name'), str) else ''
-    content = data.get('content') or data.get('content_md')
+    content = _prefer_content(data)
     return KafkaContentMessage(
         schema_version=1,
         content_type='wechat' if domain == 'mp.weixin.qq.com' else 'news',

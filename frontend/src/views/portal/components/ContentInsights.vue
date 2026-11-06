@@ -14,7 +14,7 @@
 import { computed } from 'vue'
 import { insightSections, paperInsightParagraph } from '@/utils/portal/contentPresentation'
 const props = defineProps({ item: { type: Object, default: () => ({}) }, kind: { type: String, default: 'news' } })
-const title = computed(() => props.kind === 'paper' ? 'AI 解读' : '官网洞察')
+const title = computed(() => props.kind === 'paper' ? 'AI 解读' : '管网洞察')
 const sections = computed(() => insightSections(props.item, props.kind))
 const paragraph = computed(() => props.kind === 'paper' ? paperInsightParagraph(props.item) : '')
 </script>

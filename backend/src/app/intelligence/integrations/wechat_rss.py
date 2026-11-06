@@ -43,8 +43,14 @@ BEIJING = ZoneInfo('Asia/Shanghai')
 COMMON_CONFIG = {'feed_url', 'bizid', 'account', 'limit', 'request_interval'}
 
 
+_BLOCK_TAG_RE = re.compile(
+    r'</?(?:br|p|div|section|article|h[1-6]|li|ul|ol|blockquote|pre|tr|table|figure|figcaption)\b[^>]*>',
+    re.I,
+)
+
+
 def _clean_text(value: str | None) -> str:
-    """剥去标签与空白，得到可入库的纯文本正文。"""
+    """剥去标签与空白，得到单行纯文本（用于标题）。"""
     if not value:
         return ''
     value = re.sub(r'<script\b[^>]*>.*?</script>', ' ', value, flags=re.I | re.S)
@@ -52,6 +58,21 @@ def _clean_text(value: str | None) -> str:
     value = re.sub(r'<[^>]+>', ' ', value)
     value = html.unescape(value)
     return re.sub(r'\s+', ' ', value).strip()
+
+
+def _clean_body(value: str | None) -> str:
+    """剥去标签与空白，得到保留段落边界（空行）的纯文本正文。"""
+    if not value:
+        return ''
+    value = re.sub(r'<script\b[^>]*>.*?</script>', ' ', value, flags=re.I | re.S)
+    value = re.sub(r'<style\b[^>]*>.*?</style>', ' ', value, flags=re.I | re.S)
+    value = _BLOCK_TAG_RE.sub('\n', value)  # 块级标签先转成段落分隔，避免整篇压成一段
+    value = re.sub(r'<[^>]+>', '', value)
+    value = html.unescape(value)
+    value = re.sub(r'[ \t\r\f\v]+', ' ', value)  # 折叠行内空白，保留换行
+    value = re.sub(r' *\n *', '\n', value)
+    value = re.sub(r'\n{2,}', '\n\n', value)
+    return value.strip()
 
 
 def _normalize_wechat_url(value: str | None) -> str | None:
@@ -171,7 +192,7 @@ def _to_record(account: str, item: dict[str, str]) -> dict[str, Any] | None:
         'url': url,
         'author': account or None,
         'published_at': _parse_pubdate(item.get('pub')),
-        'content': _clean_text(item.get('body')),
+        'content': _clean_body(item.get('body')),
     }
 
 

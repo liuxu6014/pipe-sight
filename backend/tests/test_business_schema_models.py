@@ -16,7 +16,7 @@ from config.database import Base
 
 register_sqlalchemy_models()
 BUSINESS_TABLES = {*BUSINESS_ID_TABLES, 'ai_models', 'basket_items', 'report_versions'}
-BUSINESS_COLUMN_COUNT = 199
+BUSINESS_COLUMN_COUNT = 201
 MISSING_DEFAULT_COUNT = 33
 MISSING_DEFAULTS = {
     'ai_models': ('parameters', 'created_at', 'updated_at'),

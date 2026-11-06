@@ -38,6 +38,50 @@ async def test_save_source_rejects_invalid_configuration(env, overrides) -> None
 
 
 @pytest.mark.asyncio
+async def test_external_spider_source_saves_without_registry_entry_and_ignores_cron(env) -> None:
+    e = env
+    s = await source(
+        e,
+        name='国家卫生健康委员会',
+        adapter='news_pipelines_spider',
+        url='http://www.nhc.gov.cn/',
+        cron='0 8 * * *',
+        config={'spider_name': '059_nhc_gov_cn'},
+    )
+    assert s['adapter'] == 'news_pipelines_spider' and s['isEnabled']
+    assert s['nextRunAt'] is None  # 外部来源不生成 cron 游标
+    row = await e.repo.source(e.db, s['id'])
+    assert row.cron is None and row.config['spider_name'] == '059_nhc_gov_cn'
+
+
+@pytest.mark.asyncio
+async def test_external_spider_source_can_be_toggled_without_registry_entry(env) -> None:
+    e = env
+    s = await source(e, adapter='news_pipelines_spider', url='http://www.nhc.gov.cn/')
+    disabled = await e.service.set_enabled(e.db, s['id'], False, registry=e.registry, clock=e.clock)
+    assert disabled['isEnabled'] is False
+    enabled = await e.service.set_enabled(e.db, s['id'], True, registry=e.registry, clock=e.clock)
+    assert enabled['isEnabled'] and enabled['nextRunAt'] is None
+
+
+@pytest.mark.asyncio
+async def test_external_source_cannot_be_manually_run(env) -> None:
+    e = env
+    s = await source(e, adapter='kafka_content_import', url=None)
+    with pytest.raises(e.collection.ConfigurationError):
+        await enqueue(e, s['id'])
+
+
+@pytest.mark.asyncio
+async def test_external_source_still_rejects_credentials_in_config(env) -> None:
+    e = env
+    with pytest.raises(e.collection.ConfigurationError):
+        await source(
+            e, adapter='news_pipelines_spider', url='http://www.nhc.gov.cn/', config={'password': 'SECRET'}
+        )
+
+
+@pytest.mark.asyncio
 async def test_update_source_rejects_missing_source(env) -> None:
     with pytest.raises(env.conflict, match='数据源不存在'):
         await source(env, source_id='999999')

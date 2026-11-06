@@ -15,7 +15,7 @@ from app.business_time import format_business_time
 from app.intelligence.models.collection import PipelineCrawlRun as Run
 from app.intelligence.models.collection import PipelineSource as Source
 from app.intelligence.repositories.collection_repository import CollectionConflict, CollectionRepository, aware
-from app.intelligence.services.collection import ADAPTERS, ConfigurationError
+from app.intelligence.services.collection import ADAPTERS, ConfigurationError, validate_config
 from app.intelligence.services.collection_translation import CollectionTranslationService, TranslationConfigurationError
 
 UTC = timezone.utc
@@ -27,6 +27,15 @@ RETRYABLE_ERRORS = {
     '候选条目分类失败，请检查后台类别模型后重试',
     '候选条目自动翻译失败，请检查模型后重试',
 }
+
+# External crawlers（news-pipelines 的 150 个站点 spider、Kafka 内容导入）在本服务中
+# 只做「目录 + 启停」：adapter 名称是标记，不是 ADAPTERS 注册项，也不由本采集器调度或执行。
+# 因此不套用 registry 的 URL/type/config 校验，也不生成 cron 游标。
+EXTERNAL_SOURCE_ADAPTERS = frozenset({'news_pipelines_spider', 'kafka_content_import'})
+
+
+def _is_external_adapter(adapter) -> bool:
+    return adapter in EXTERNAL_SOURCE_ADAPTERS
 
 
 def transaction(method) -> Any:
@@ -170,6 +179,10 @@ class IntelligenceSourceService:
         if not isinstance(is_enabled, bool):
             raise ConfigurationError('is_enabled 必须为布尔值')
         cron = (cron or '').strip() or None
+        external = _is_external_adapter(adapter)
+        if external:
+            # 外部采集来源自行调度，pipe-sight 只负责目录与启停，不生成游标。
+            cron = None
         next_time = next_occurrence(cron, timezone, now)  # Validate even disabled sources.
         effective = {
             'adapter': adapter,
@@ -178,7 +191,10 @@ class IntelligenceSourceService:
             'config': config if config is not None else {},
             'model_id': model_id,
         }
-        registry.validate(effective)
+        if external:
+            validate_config(effective['config'])  # 仍拒绝在 config 中保存明文凭证
+        else:
+            registry.validate(effective)
         source = (
             await CollectionRepository.source(db, source_id, lock=True)
             if source_id is not None
@@ -208,7 +224,7 @@ class IntelligenceSourceService:
         if not isinstance(enabled, bool):
             raise ConfigurationError('启停值必须为布尔值')
         source = await CollectionRepository.source(db, source_id, lock=True)
-        if enabled:
+        if enabled and not _is_external_adapter(source.adapter):
             registry.validate(snapshot(source))
         cursor = next_occurrence(source.cron, source.timezone, now) if enabled else None
         source = await CollectionRepository.set_enabled(db, source_id, enabled, now=now, next_run_at=cursor)
@@ -220,6 +236,8 @@ class IntelligenceSourceService:
         source_id = parse_business_id(source_id)
         now = (clock or (lambda: datetime.now(timezone.utc)))()
         source = await CollectionRepository.source(db, source_id, lock=True)
+        if _is_external_adapter(source.adapter):
+            raise ConfigurationError('外部采集来源由外部系统调度，不支持在本平台手动运行')
         if request_id:
             previous = (await db.execute(select(Run).where(Run.request_id == request_id))).scalars().first()
             if previous:

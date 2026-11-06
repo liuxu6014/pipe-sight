@@ -33,6 +33,7 @@ class IntelligenceCatalogService:
             'sourceUrl': item.url,
             'author': item.author or '',
             'entities': item.entities if isinstance(getattr(item, 'entities', None), list) else [],
+            'ai_insight': item.ai_insight if isinstance(getattr(item, 'ai_insight', None), dict) else None,
             'is_pushed': item.is_pushed,
         }
         if detail:
@@ -64,6 +65,7 @@ class IntelligenceCatalogService:
             'authors': [name.strip() for name in (item.authors or '').split(';') if name.strip()],
             'journal': item.journal or '',
             'entities': item.entities if isinstance(getattr(item, 'entities', None), list) else [],
+            'ai_insight': item.ai_insight if isinstance(getattr(item, 'ai_insight', None), dict) else None,
             'is_pushed': item.is_pushed,
         }
         if detail:

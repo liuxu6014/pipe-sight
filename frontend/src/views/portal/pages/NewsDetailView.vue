@@ -19,9 +19,10 @@
           </div>
           <el-tag v-if="categoryName && !article.tags.includes(categoryName)" effect="plain">{{ categoryName }}</el-tag>
         </header>
-        <el-tabs v-model="activeTab" class="ps-content-tabs" aria-label="资讯内容切换">
+        <div class="ps-content-tabs-row">
+          <el-tabs v-model="activeTab" class="ps-content-tabs" aria-label="资讯内容切换">
           <el-tab-pane label="摘要" name="summary"><section id="article-summary" class="ps-news-summary"><div class="summary-heading"><h2>内容摘要</h2><el-button v-if="summaryText" plain @click="copySummary">复制摘要</el-button></div><p>{{ summaryText || '当前记录暂未提供摘要。' }}</p></section></el-tab-pane>
-          <el-tab-pane label="全文" name="fulltext"><div class="ps-translation-toolbar"><el-radio-group v-if="content.hasTranslation" v-model="language" aria-label="文章语言"><el-radio-button value="original">原文</el-radio-button><el-radio-button value="zh">已保存中文</el-radio-button></el-radio-group><el-tooltip v-else content="按需翻译与结果入库接口待接入；不会自动翻译或覆盖原文。"><span><el-button disabled plain>翻译为中文 · 待接入</el-button></span></el-tooltip></div>
+          <el-tab-pane label="全文" name="fulltext"><div v-if="content.hasTranslation" class="ps-translation-toolbar"><el-radio-group v-model="language" aria-label="文章语言"><el-radio-button value="original">原文</el-radio-button><el-radio-button value="zh">已保存中文</el-radio-button></el-radio-group></div>
         <div class="ps-article-body">
           <template v-if="language === 'original' && article.body_blocks?.length">
             <template v-for="(block, index) in article.body_blocks" :key="index">
@@ -32,12 +33,14 @@
           <template v-else><p v-for="(paragraph, index) in visibleBody" :key="index">{{ paragraph }}</p><el-empty v-if="!visibleBody.length" description="当前资料未提供全文，可查看摘要或打开标题原文。" :image-size="64" /></template>
         </div>
           </el-tab-pane>
-          <el-tab-pane label="官网洞察" name="insight"><ContentInsights :item="article" /></el-tab-pane>
-        </el-tabs>
+          <el-tab-pane label="管网洞察" name="insight"><ContentInsights :item="article" /></el-tab-pane>
+          </el-tabs>
+          <div class="ps-tabs-extra" role="toolbar" aria-label="翻译操作"><el-tooltip v-if="!content.hasTranslation" content="按需翻译与结果入库接口待接入；不会自动翻译或覆盖原文。"><span><el-button disabled plain>翻译为中文 · 待接入</el-button></span></el-tooltip></div>
+        </div>
         <ContentEntities :entities="article.entities" />
       </article>
       <aside class="ps-reading-aside">
-        <section class="ps-panel ps-article-toc"><h3>阅读导航</h3><el-button plain @click="activeTab = 'summary'">内容摘要</el-button><el-button plain @click="activeTab = 'fulltext'">文章全文</el-button><el-button plain @click="activeTab = 'insight'">官网洞察</el-button></section>
+        <section class="ps-panel ps-article-toc"><h3>阅读导航</h3><el-button plain @click="activeTab = 'summary'">内容摘要</el-button><el-button plain @click="activeTab = 'fulltext'">文章全文</el-button><el-button plain @click="activeTab = 'insight'">管网洞察</el-button></section>
         <section v-if="relatedNews.length" class="ps-panel"><h3>其他资讯</h3><el-link underline="never" :href="$router.resolve(`/portal/news/${item.id}` || '/portal').href" v-for="item in relatedNews" :key="item.id" class="ps-related-item ps-ui-title" @click.prevent="openPortalContent(router, `/portal/news/${item.id}`)"><strong>{{ item.title }}</strong><small>{{ item.source }}<template v-if="item.time"> · {{ newsDate(item.time) }}</template></small></el-link></section>
         <section v-if="paperItems.length" class="ps-panel"><h3>其他论文</h3><el-link underline="never" :href="$router.resolve(`/portal/papers/${paper.id}` || '/portal').href" v-for="paper in paperItems.slice(0, 2)" :key="paper.id" class="ps-related-item ps-ui-title" @click.prevent="openPortalContent(router, `/portal/papers/${paper.id}`)"><strong>{{ paper.titleZh }}</strong><small>{{ paper.journal }} · {{ paper.year }}</small></el-link></section>
       </aside>
@@ -150,10 +153,11 @@ watch(() => route.params.itemId, loadArticle)
 </script>
 
 <style scoped>
-.ps-content-tabs { margin-top: 16px; }.ps-news-summary { padding: 16px 18px; background: var(--ps-blue-soft); border-radius: 8px; }.summary-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }.summary-heading h2 { margin: 0; font-size: 16px; }.ps-news-summary p { line-height: 1.9; white-space: pre-wrap; margin: 12px 0 0; }.ps-translation-toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.ps-content-tabs-row { position: relative; margin-top: 16px; }.ps-tabs-extra { position: absolute; top: 0; right: 0; z-index: 2; height: 40px; display: flex; align-items: center; gap: 8px; }.ps-news-summary { padding: 16px 18px; background: var(--ps-blue-soft); border-radius: 8px; }.summary-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }.summary-heading h2 { margin: 0; font-size: 16px; }.ps-news-summary p { line-height: 1.9; white-space: pre-wrap; margin: 12px 0 0; }.ps-translation-toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
 .ps-article { padding-top: 22px; }
 .ps-article-head h1 { margin: 0; font-size: 24px; font-weight: 600; line-height: 1.45; letter-spacing: 0; overflow-wrap: anywhere; }
 @media (max-width: 600px) {
+  .ps-tabs-extra { position: static; height: auto; justify-content: flex-end; padding: 6px 0 2px; }
   .ps-article { padding-top: 16px; }
   .ps-article-head h1 { font-size: 20px; }
 }

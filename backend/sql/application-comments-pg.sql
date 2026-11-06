@@ -1,7 +1,7 @@
--- compact-v10中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；恢复若依部门表及用户dept_id。
+-- compact-v11中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；恢复若依部门表及用户dept_id。
 -- 27个业务created_at/updated_at为北京时间timestamp(0)无时区；其他运行时间字段保持原类型。
 -- 普通不透明令牌保留；系统幂等键内嵌ID、显式JSON引用及语义指纹按实体映射核验。
--- 28张基线表338字段，2张保留功能表23字段；共30张物理表361字段。
+-- 28张基线表340字段，2张保留功能表23字段；共30张物理表363字段。
 -- 仅COMMENT及存在性保护块；调用方管理事务，不修改字段、约束或业务数据。
 
 COMMENT ON TABLE public."news_articles" IS '网站与公众号新闻原文及中文译文；每篇最多关联一个类别，无人工审核流程';
@@ -15,6 +15,7 @@ COMMENT ON COLUMN public."news_articles"."content" IS '抓取的原文正文；�
 COMMENT ON COLUMN public."news_articles"."content_zh" IS '中文正文或译文；为空时展示回退content，不重复复制中文原文';
 COMMENT ON COLUMN public."news_articles"."summary" IS '约200字中文摘要，基于原文生成；正常正文控制180至220字符，短原文不凑字数；未处理时为空，不以正文截断冒充摘要';
 COMMENT ON COLUMN public."news_articles"."entities" IS '核心事件实体JSON数组；每项含type(地点/时间/政策/人物/机构/技术)与name；通常3至5项、最多6项，类型不凑齐；机构和技术各最多2项，其余类型各最多1项；为空表示未处理或无核心实体';
+COMMENT ON COLUMN public."news_articles"."ai_insight" IS '管网洞察六字段JSON对象：organization/people/policy/technology/policy_focus/scenario；仅官网来源新闻有值，普通新闻为NULL；每字段为附原文依据的中文字符串，缺少证据用null';
 COMMENT ON COLUMN public."news_articles"."category_id" IS '唯一类别ID，关联categories.id；未分类或未命中为空，不以空值推断审核失败；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串';
 COMMENT ON COLUMN public."news_articles"."is_pushed" IS '推送成功标志；true仅表示收到真实渠道成功回执，默认false';
 COMMENT ON COLUMN public."news_articles"."created_at" IS '新闻平台入库时间，不代替原文发表时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss';
@@ -33,6 +34,7 @@ COMMENT ON COLUMN public."papers"."published_date" IS '真实发表日期及精�
 COMMENT ON COLUMN public."papers"."abstract" IS '原文摘要或已明确标识的历史导读摘要；不存论文全文';
 COMMENT ON COLUMN public."papers"."abstract_zh" IS '中文摘要；与原文摘要分别保存，不作为论文全文存储';
 COMMENT ON COLUMN public."papers"."entities" IS '核心研究实体JSON数组；每项含type与name，仅依据标题和已有摘要，通常3至5项、最多6项；机构和技术各最多2项、其余类型各最多1项，不推测作者机构、不声称读取全文';
+COMMENT ON COLUMN public."papers"."ai_insight" IS '论文AI解读四字段JSON对象：institutions/research/effect/scenario；仅依据标题和摘要，缺少证据的字段为null';
 COMMENT ON COLUMN public."papers"."category_id" IS '唯一类别ID，关联categories.id；未分类或未命中为空，类别删除受限；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串';
 COMMENT ON COLUMN public."papers"."is_pushed" IS '论文推送成功标志；真实渠道成功后为true，默认false，不表示审核结果';
 COMMENT ON COLUMN public."papers"."created_at" IS '论文平台入库时间，不能代替真实发表日期；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss';

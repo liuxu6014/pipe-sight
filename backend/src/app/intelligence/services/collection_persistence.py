@@ -128,6 +128,17 @@ class CollectionPersistenceService:
             entities = validated_entities(record['entities'], title=title, content=entity_content)
             if entities is not None:
                 values['entities'] = entities
+        if isinstance(record.get('ai_insight'), dict):
+            from app.intelligence.services.entities import (  # noqa: PLC0415
+                NEWS_INSIGHT_FIELDS,
+                PAPER_INSIGHT_FIELDS,
+                validated_insight,
+            )
+
+            insight_fields = PAPER_INSIGHT_FIELDS if source.type == 'paper' else NEWS_INSIGHT_FIELDS
+            insight = validated_insight(record['ai_insight'], fields=insight_fields)
+            if insight is not None:
+                values['ai_insight'] = insight
         # Serializes normalized-identity writes across different source workers.
         if db.get_bind().dialect.name == 'postgresql':
             for key in sorted(locks):

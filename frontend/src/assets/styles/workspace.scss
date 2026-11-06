@@ -1,6 +1,5 @@
 // 登录后的公共内容边界。变量不放在 :root，登录页不继承此规范。
 .ps-workspace-surface {
-  --ws-content-max: 1600px;
   --ws-gutter: clamp(16px, 2.5vw, 32px);
   --ws-page-space: 24px;
   --ws-section-gap: 20px;
@@ -11,7 +10,7 @@
 
 // 同一尺寸体系覆盖门户页面、管网管理页面及基础系统管理页面。
 .ps-portal .ps-workspace-surface > .ps-page {
-  width: min(var(--ws-content-max), calc(100% - var(--ws-gutter) * 2));
+  width: calc(100% - var(--ws-gutter) * 2);
   padding-block: var(--ws-page-space) 12px;
 }
 

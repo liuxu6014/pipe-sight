@@ -28,7 +28,7 @@ export function collectionTime(item = {}) {
 
 function paragraphs(value) {
   if (Array.isArray(value)) return value.filter(value => typeof value === 'string' && value.trim())
-  return typeof value === 'string' ? value.split(/\n\s*\n/).map(value => value.trim()).filter(Boolean) : []
+  return typeof value === 'string' ? value.split(/[\r\n]+/).map(value => value.trim()).filter(Boolean) : []
 }
 
 export function readingContent(item = {}) {
@@ -53,14 +53,16 @@ export function insightSections(item = {}, kind = 'news') {
     ['效果与证据', ['effect', 'effects', 'result', 'results', '效果', '研究效果', '效果与证据']],
     ['技术与应用场景', ['scenario', 'scenarios', 'application', 'technology', '应用场景', '技术与应用场景']]
   ] : [
-    ['机构与人物', ['institution', 'organization', 'people', '机构与人物']],
+    ['机构与人物', ['organization', 'institution', 'people', '机构与人物']],
     ['政策背景', ['policy', 'policy_background', '政策背景']],
-    ['主要进展', ['research', 'work', 'summary', '主要进展']],
     ['技术重点', ['technology', 'technical_points', 'technicalPoints', '技术重点']],
     ['政策重点', ['policy_focus', 'policyFocus', '政策重点']],
     ['应用场景', ['scenario', 'application', '应用场景']]
   ]
-  const sections = fields.map(([label, keys]) => ({ label, content: keys.map(key => text(entries[key]) || (key !== 'summary' ? text(item[key]) : '')).find(Boolean) || '' }))
+  const sections = fields.map(([label, keys]) => ({
+    label,
+    content: [...new Set(keys.map(key => text(entries[key]) || (key !== 'summary' ? text(item[key]) : '')).filter(Boolean))].join('；')
+  }))
   // Preserve additional, actually stored interpretation without dropping evidence.
   for (const [label, value] of Object.entries(entries)) {
     if (!fields.some(([, keys]) => keys.includes(label)) && text(value)) sections.push({ label, content: text(value) })

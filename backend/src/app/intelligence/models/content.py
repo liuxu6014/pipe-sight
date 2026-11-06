@@ -90,6 +90,11 @@ class PipelineArticle(Base):
         nullable=True,
         comment='核心事件实体JSON数组；每项含type与name，通常3至5项，最多6项；不为凑数补齐类型',
     )
+    ai_insight = Column(
+        JSON().with_variant(JSONB(), 'postgresql'),
+        nullable=True,
+        comment='管网洞察六字段JSON对象；仅官网来源新闻有值，普通新闻为NULL；每字段为附原文依据的中文字符串',
+    )
     category_id = Column(
         BigInteger,
         ForeignKey('categories.id', ondelete='RESTRICT'),
@@ -165,6 +170,11 @@ class PipelinePaper(Base):
         JSON().with_variant(JSONB(), 'postgresql'),
         nullable=True,
         comment='核心研究实体JSON数组；仅依据标题及摘要，最多6项，不推测作者机构或论文全文',
+    )
+    ai_insight = Column(
+        JSON().with_variant(JSONB(), 'postgresql'),
+        nullable=True,
+        comment='论文AI解读四字段JSON对象；仅依据标题和摘要，缺少证据的字段为null',
     )
     category_id = Column(
         BigInteger, ForeignKey('categories.id', ondelete='RESTRICT'), nullable=True, comment='唯一类别ID'
