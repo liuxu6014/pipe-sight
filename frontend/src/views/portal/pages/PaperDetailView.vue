@@ -13,7 +13,6 @@
       <div class="ps-paper-detail-meta">
         <el-tag v-if="paper.journal" type="primary" size="small">{{ paper.journal }}</el-tag>
         <span v-if="paper.publishedDate || paper.year">发表于 {{ paper.publishedDate || paper.year }}</span>
-        <el-tag :type="contentCategory(paper) ? 'primary' : 'info'" size="small" effect="plain">分类：{{ contentCategory(paper) || '未分类' }}</el-tag>
         <a v-if="doiUrl" :href="doiUrl" class="ps-paper-doi-link" target="_blank" rel="noopener noreferrer">DOI: {{ paper.doi }}</a>
         <span v-else-if="paper.doi && paper.doi !== '待补充'">DOI: {{ paper.doi }}</span>
         <a v-if="!doiUrl && sourceUrl" :href="sourceUrl" class="ps-paper-doi-link" target="_blank" rel="noopener noreferrer">查看原文</a>
@@ -42,7 +41,9 @@
           <div v-if="paper.keywords?.length" class="ps-paper-detail-keywords"><h3>关键词</h3><div class="ps-tag-row"><el-tag v-for="tag in paper.keywords" :key="tag" effect="plain">{{ tag }}</el-tag></div></div>
         </section>
         <section v-else class="ps-paper-section ps-paper-insights" aria-label="论文 AI 解读"><ContentInsights :item="paper" kind="paper" /></section>
-        <ContentEntities v-if="paper.entities?.length" class="ps-paper-core-entities" :entities="paper.entities" />
+        <ContentEntities class="ps-paper-core-entities" :entities="paper.entities">
+          <template #prepend><ContentCategory :name="contentCategory(paper)" /></template>
+        </ContentEntities>
       </article>
       <aside class="ps-reading-aside"><section v-if="newsItems.length" class="ps-panel"><h3>其他新闻资讯</h3><el-link underline="never" :href="$router.resolve(`/portal/news/${item.id}` || '/portal').href" v-for="item in newsItems.slice(0, 3)" :key="item.id" class="ps-related-item ps-ui-title" @click.prevent="openPortalContent(router, `/portal/news/${item.id}`)"><strong>{{ item.title }}</strong><small>{{ item.source }}</small></el-link></section><section v-if="relatedPapers.length" class="ps-panel"><h3>其他论文</h3><el-link underline="never" :href="$router.resolve(`/portal/papers/${item.id}` || '/portal').href" v-for="item in relatedPapers" :key="item.id" class="ps-related-item ps-ui-title" @click.prevent="openPortalContent(router, `/portal/papers/${item.id}`)"><strong>{{ item.titleZh }}</strong><small>{{ item.journal }} · {{ item.year }}</small></el-link></section></aside>
     </div>
@@ -61,6 +62,7 @@ import { useListWorkspace } from '@/utils/portal/listQuery'
 import { normalizePortalPaper } from '@/store/modules/portal'
 import { openPortalContent, returnFromPaperDetail } from '@/utils/portal/openContent'
 import PortalEmptyState from '../components/PortalEmptyState.vue'
+import ContentCategory from '../components/ContentCategory.vue'
 import ContentInsights from '../components/ContentInsights.vue'
 import ContentEntities from '../components/ContentEntities.vue'
 import { contentCategory } from '@/utils/portal/contentPresentation'

@@ -1,7 +1,7 @@
 <template>
   <div class="ps-page ps-list-page ps-search-list-page">
     <PortalPageHeader title="全局搜索">
-      <template #actions><el-button @click="clearFilters">清除筛选</el-button></template>
+      <template v-if="hasActiveFilters" #actions><el-button @click="clearFilters">清除筛选</el-button></template>
     </PortalPageHeader>
 
     <div class="ps-search-mode ps-segmented-row"><el-segmented v-model="searchMode" :options="[{ label: '关键词搜索', value: 'keyword' }, { label: '语义搜索（待接入）', value: 'semantic' }]" aria-label="检索方式"  /></div>
@@ -47,7 +47,7 @@
           </article>
         </div>
         <PortalEmptyState v-else-if="loadError && !loading" title="搜索失败" :description="loadError" action-label="重新加载" @action="reload" />
-        <PortalEmptyState v-else-if="!loading" title="没有找到匹配结果" description="请减少筛选条件或尝试同义关键词。" action-label="清除筛选" @action="clearFilters" />
+        <PortalEmptyState v-else-if="!loading" title="没有找到匹配结果" description="请减少筛选条件或尝试同义关键词。" :action-label="hasActiveFilters ? '清除筛选' : ''" @action="clearFilters" />
         </div>
         <div v-if="total > 0 && !loading && !loadError" class="ps-pagination" aria-label="搜索结果分页">
           <el-pagination
@@ -89,6 +89,8 @@ const query = useListQuery({ q: '', mode: 'keyword', type: 'all', date: 'all', s
 function applySavedSearch(filters) { if (!applySavedSearchQuery(query, filters, 'search')) reload() }
 const { q: queryKeyword, type: activeType, date: dateRange, source, directions, page: currentPage, size: pageSize } = toRefs(query)
 const searchMode = computed({ get: () => query.mode === 'semantic' ? 'semantic' : 'keyword', set: value => { query.mode = value === 'semantic' ? 'semantic' : 'keyword' } })
+const hasActiveFilters = computed(() => searchMode.value === 'keyword'
+  && Boolean(queryKeyword.value || activeType.value !== 'all' || dateRange.value !== 'all' || source.value !== 'all' || directions.value.length))
 const draftKeyword = ref(queryKeyword.value)
 const { inBasket, busy, toggleBasket } = useListWorkspace(portalStore, { save: savePipelineWorkspaceItem, remove: deletePipelineWorkspaceItem })
 let pageCursors = {}

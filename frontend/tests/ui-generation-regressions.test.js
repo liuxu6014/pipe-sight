@@ -116,9 +116,9 @@ test('G08: schedule cards reflect real policy and distinguish missing history fr
   assert.equal(status({ lastStatus: 'failed' }), '执行失败')
   assert.equal(status({ lastStatus: 'no_data' }), '无匹配资料，已跳过')
   assert.equal(status({ lastStatus: 'completed', hasResult: true }), '已生成')
-  const target = action('DigestListView', 'scheduleResultPath')
-  assert.equal(target({ latestReportId: '96', hasResult: false }), '')
-  assert.equal(target({ latestReportId: '96', hasResult: true }), '/portal/digests/96')
+  const target = action('DigestListView', 'scheduleTaskPath')
+  assert.equal(target({ latestTaskId: '' }), '')
+  assert.equal(target({ latestTaskId: '97' }), '/portal/research/tasks/97')
 })
 
 test('G09: object sources render readable fields and missing quotes never overwrite authored text', () => {

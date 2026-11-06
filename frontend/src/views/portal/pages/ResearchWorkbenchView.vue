@@ -6,7 +6,6 @@
         <el-select v-model="status" placeholder="全部状态" aria-label="报告生成状态"><el-option label="全部状态" value="" /><el-option v-for="item in reportStatuses" :key="item.value" :label="item.label" :value="item.value" /></el-select>
         <el-select v-model="sort" aria-label="报告排序"><el-option label="最近更新" value="updated-desc" /><el-option label="最早更新" value="updated-asc" /><el-option label="名称排序" value="title" /></el-select>
         <div class="ps-research-toolbar-actions">
-          <el-button :loading="refreshing" @click="refreshWorkspace">刷新</el-button>
           <el-button v-if="keyword || status" @click="keyword = ''; status = ''">重置</el-button>
           <el-button type="primary" :icon="Plus" @click="router.push('/portal/research/create')">新建报告</el-button>
         </div>

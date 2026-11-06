@@ -14,10 +14,9 @@
           </div>
           <div class="ps-article-actions"><el-button :icon="Collection" :loading="busy(article)" :disabled="busy(article)" @click="addToBasket">{{ inBasket(article) ? '取消加入资料库' : '加入资料库' }}</el-button></div>
           </div>
-          <div v-if="article.tags.length" class="ps-article-head-bottom">
-          <div class="ps-tag-row"><span v-for="tag in article.tags" :key="tag" class="ps-tag">{{ tag }}</span></div>
+          <div v-if="articleTags.length" class="ps-article-head-bottom">
+          <div class="ps-tag-row"><span v-for="tag in articleTags" :key="tag" class="ps-tag">{{ tag }}</span></div>
           </div>
-          <el-tag v-if="categoryName && !article.tags.includes(categoryName)" effect="plain">{{ categoryName }}</el-tag>
         </header>
         <div class="ps-content-tabs-row">
           <el-tabs v-model="activeTab" class="ps-content-tabs" aria-label="资讯内容切换">
@@ -37,7 +36,9 @@
           </el-tabs>
           <div class="ps-tabs-extra" role="toolbar" aria-label="翻译操作"><el-tooltip v-if="!content.hasTranslation" content="按需翻译与结果入库接口待接入；不会自动翻译或覆盖原文。"><span><el-button disabled plain>翻译为中文 · 待接入</el-button></span></el-tooltip></div>
         </div>
-        <ContentEntities :entities="article.entities" />
+        <ContentEntities :entities="article.entities">
+          <template #prepend><ContentCategory :name="article.categoryName" /></template>
+        </ContentEntities>
       </article>
       <aside class="ps-reading-aside">
         <section class="ps-panel ps-article-toc"><h3>阅读导航</h3><el-button plain @click="activeTab = 'summary'">内容摘要</el-button><el-button plain @click="activeTab = 'fulltext'">文章全文</el-button><el-button plain @click="activeTab = 'insight'">管网洞察</el-button></section>
@@ -58,9 +59,10 @@ import { getPipelineIntelligenceDetail, savePipelineWorkspaceItem, deletePipelin
 import { useListWorkspace } from '@/utils/portal/listQuery'
 import { normalizePortalIntelligence } from '@/store/modules/portal'
 import PortalEmptyState from '../components/PortalEmptyState.vue'
+import ContentCategory from '../components/ContentCategory.vue'
 import ContentEntities from '../components/ContentEntities.vue'
 import ContentInsights from '../components/ContentInsights.vue'
-import { contentCategory, readingContent } from '@/utils/portal/contentPresentation'
+import { readingContent } from '@/utils/portal/contentPresentation'
 import { newsDate } from '@/utils/portal/discovery'
 import { openPortalContent, returnFromNewsDetail } from '@/utils/portal/openContent'
 
@@ -74,7 +76,7 @@ const detailLoading = ref(true)
 const activeTab = ref('summary')
 const language = ref('original')
 const article = computed(() => detailError.value ? null : liveArticle.value)
-const categoryName = computed(() => contentCategory(article.value || {}))
+const articleTags = computed(() => (article.value?.tags || []).filter(tag => tag !== (article.value?.categoryName || '未分类')))
 const content = computed(() => readingContent(article.value || {}))
 const visibleBody = computed(() => language.value === 'zh' ? content.value.translated : content.value.original)
 const summaryText = computed(() => (article.value?.summary || '').replace(/^导读摘要（据公开资料整理）\s*[:：]\s*/, ''))

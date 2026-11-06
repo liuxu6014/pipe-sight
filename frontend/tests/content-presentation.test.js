@@ -34,7 +34,9 @@ test('AI interpretation has four fixed questions and missing evidence stays empt
   assert.equal(sections[3].content, '管道检测')
   assert.ok(insightSections({}, 'paper').every(section => section.content === ''))
   assert.ok(insightSections({ summary: '只有摘要，不是 AI 解读' }, 'paper').every(section => section.content === ''))
-  assert.equal(insightSections({}, 'news').length, 6)
+  const news = insightSections({}, 'news')
+  assert.deepEqual(news.map(section => section.label), ['机构与人物', '政策背景', '技术重点', '政策重点', '应用场景'])
+  assert.ok(news.every(section => section.content === ''))
 })
 
 test('paper interpretation reads as one paragraph while preserving stored evidence and limitations', () => {

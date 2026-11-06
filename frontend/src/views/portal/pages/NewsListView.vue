@@ -4,7 +4,7 @@
       <div class="ps-search-inline"><Search /><input v-model.trim="keyword" aria-label="搜索新闻资讯" placeholder="搜索标题、摘要或正文" @keydown.enter="reload" /><el-button class="ps-ui-action" v-if="keyword" aria-label="清空资讯关键词" @click="keyword = ''">清空</el-button></div>
       <el-select v-model="sourceType" aria-label="资讯来源" style="width: 150px"><el-option label="全部来源" value="全部" /><el-option label="新闻网站" value="新闻网站" /><el-option label="微信公众号" value="微信公众号" /></el-select>
       <el-select :model-value="activeTags[0] || ''" clearable filterable placeholder="全部类别" aria-label="资讯类别" style="width: 200px" @update:model-value="setCategory"><el-option v-for="tag in tags" :key="tag" :label="tag" :value="tag" /></el-select>
-      <el-button @click="resetFilters">重置筛选</el-button>
+      <el-button v-if="hasActiveFilters" @click="resetFilters">重置筛选</el-button>
       <div class="ps-view-switch ps-segmented-row"><el-segmented v-model="viewMode" :options="[{ label: '列表', value: 'list' }, { label: '卡片', value: 'card' }]" aria-label="资讯展示方式"  /></div>
     </div>
     <div class="ps-news-content ps-list-stack">
@@ -45,7 +45,7 @@
           </div></div>
         </article>
         <PortalEmptyState v-if="loadError && !loading" title="资讯加载失败" :description="loadError" action-label="重新加载" @action="reload" />
-        <PortalEmptyState v-else-if="!newsItems.length && !loading" title="没有匹配的资讯" description="请调整标签、来源或搜索关键词。" action-label="重置筛选" @action="resetFilters" />
+        <PortalEmptyState v-else-if="!newsItems.length && !loading" title="没有匹配的资讯" description="请调整标签、来源或搜索关键词。" :action-label="hasActiveFilters ? '重置筛选' : ''" @action="resetFilters" />
         </div>
         <div v-if="total > 0 && !loading && !loadError" class="ps-pagination" aria-label="资讯列表分页">
           <el-pagination
@@ -79,6 +79,7 @@ import { cleanSummary, newsDate } from '@/utils/portal/discovery'
 const portalStore = usePortalStore()
 const query = useListQuery({ q: '', source: '全部', category: '全部', tag: [], view: 'list', page: 1, size: 10 })
 const { q: keyword, source: sourceType, tag: activeTags, view: viewMode, page: currentPage, size: pageSize } = toRefs(query)
+const hasActiveFilters = computed(() => Boolean(keyword.value || sourceType.value !== '全部' || activeTags.value.length))
 // Old category links referred to tags; migrate them into the single visible filter.
 watch(() => [query.category, query.tag], () => {
   const legacy = query.category
@@ -123,7 +124,7 @@ async function addToBasket(item) {
   } catch (error) { ElMessage.error(error?.msg || '资料库更新失败，请重试') }
 }
 function resetFilters() {
-  const unchanged = !keyword.value && sourceType.value === '全部' && !activeTags.value.length && currentPage.value === 1
+  const unchanged = !hasActiveFilters.value && currentPage.value === 1
   keyword.value = ''; sourceType.value = '全部'; query.category = '全部'; activeTags.value = []; currentPage.value = 1
   if (unchanged) reload()
 }

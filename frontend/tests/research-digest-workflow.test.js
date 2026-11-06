@@ -131,8 +131,8 @@ test('render groups references at the end while preserving authored sections and
     assert.doesNotMatch(read('pages/DigestEditorView'), /class="ps-digest-news"/)
   } finally { v.close() }
 })
-test('legacy daily plans remain readable but every list mutation and payload creation is blocked', async () => {
-  const row = { id: '51', name: '日报旧计划', reportType: 'daily', templateId: '31', enabled: true, scheduleTime: '08:00' }
+test('legacy daily plans retain history protection and can only be deleted when eligible', async () => {
+  const row = { id: '51', name: '日报旧计划', reportType: 'daily', templateId: '31', enabled: true, scheduleTime: '08:00', canDelete: false }
   assert.equal(newScheduleForm().frequency, 'weekly')
   const original = JSON.stringify(row), form = readScheduleForm(row)
   assert.equal(form.frequency, 'daily'); assert.match(scheduleSummary(form), /每天/)
@@ -144,6 +144,24 @@ test('legacy daily plans remain readable but every list mutation and payload cre
     assert.equal(v.writes(), 0)
     assert.ok(!v.tabs.includes('历史日报')); assert.ok(!v.tabs.includes('日报'))
   } finally { v.close() }
+
+  const eligible = { ...row, id: '52', enabled: false, canDelete: true }
+  const deleted = []
+  let confirmed = false
+  const deletion = setup('pages/DigestListView', 'removeSchedule, schedules', {
+    ElMessageBox: { confirm: async () => { if (!confirmed) throw Error('cancel') } },
+    deletePipelineDigestSchedule: async id => { deleted.push(id) },
+  })
+  try {
+    deletion.schedules.value = [row, eligible]
+    await deletion.removeSchedule(eligible)
+    assert.deepEqual(deleted, [])
+    assert.equal(deletion.schedules.value.length, 2)
+    confirmed = true
+    await deletion.removeSchedule(eligible)
+    assert.deepEqual(deleted, ['52'])
+    assert.deepEqual(Array.from(deletion.schedules.value, item => item.id), ['51'])
+  } finally { deletion.close() }
 })
 test('all changed Vue files compile and retain scoped styles; citation shading is presentation only', () => {
   for (const name of ['pages/ResearchCreateView', 'pages/DigestCreateView', 'pages/DigestListView', 'pages/DigestEditorView', 'components/DigestScheduleDialog']) {

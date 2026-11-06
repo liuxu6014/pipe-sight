@@ -1,6 +1,6 @@
 <template>
   <div class="ps-page ps-list-page ps-digest-page">
-    <div class="ps-toolbar ps-digest-toolbar"><div class="ps-search-inline"><Search /><input v-model.trim="keyword" aria-label="搜索简报或计划名称" placeholder="搜索简报或计划名称" /></div><template v-if="activeTab !== '自动任务'"><el-date-picker v-model="date" aria-label="简报覆盖周期" type="daterange" value-format="YYYY-MM-DD" start-placeholder="覆盖开始日期" end-placeholder="覆盖结束日期" /><el-select v-model="status" aria-label="简报状态" style="width: 130px"><el-option label="全部状态" value="all" /><el-option v-for="value in reportStatuses" :key="value" :label="value" :value="value" /></el-select></template><el-button v-if="keyword || date?.length || status !== 'all'" @click="resetFilters">清除筛选</el-button><el-button :loading="schedulesLoading" @click="refreshCurrent">刷新</el-button><el-button :icon="Plus" @click="editSchedule()">新建自动计划</el-button><el-button type="primary" :icon="Plus" @click="router.push('/portal/digests/create')">新建简报</el-button></div>
+    <div class="ps-toolbar ps-digest-toolbar"><div class="ps-search-inline"><Search /><input v-model.trim="keyword" aria-label="搜索简报或计划名称" placeholder="搜索简报或计划名称" /></div><template v-if="activeTab !== '自动任务'"><el-date-picker v-model="date" aria-label="简报覆盖周期" type="daterange" value-format="YYYY-MM-DD" start-placeholder="覆盖开始日期" end-placeholder="覆盖结束日期" /><el-select v-model="status" aria-label="简报状态" style="width: 130px"><el-option label="全部状态" value="all" /><el-option v-for="value in reportStatuses" :key="value" :label="value" :value="value" /></el-select></template><el-button v-if="hasActiveFilters" @click="resetFilters">清除筛选</el-button><el-button :icon="Plus" @click="editSchedule()">新建自动计划</el-button><el-button type="primary" :icon="Plus" @click="router.push('/portal/digests/create')">新建简报</el-button></div>
     <div v-if="currentError" class="ps-inline-state is-warning" role="alert"><span>{{ currentError }}</span><el-button plain @click="refreshCurrent">重试</el-button></div>
     <div class="ps-tabs-line ps-segmented-row"><el-segmented v-model="activeTab" :options="tabs" aria-label="简报与自动计划"  /></div>
     <section v-if="activeTab !== '自动任务'" ref="listRegion" class="ps-panel ps-digest-list ps-list-scroll" tabindex="0" aria-label="简报列表">
@@ -55,7 +55,26 @@
           </template>
         </el-table-column>
         <el-table-column label="下次执行" width="180" header-align="center"><template #default="{ row: schedule }"><span class="ps-schedule-next-run">{{ schedule.enabled ? (formatBusinessTime(schedule.nextRunTime) || '等待调度确认') : '计划已停用' }}</span></template></el-table-column>
-        <el-table-column label="操作" width="260" header-align="center" align="right"><template #default="{ row: schedule }"><div class="ps-schedule-actions"><el-button v-if="scheduleResultPath(schedule)" type="primary" plain @click="router.push(scheduleResultPath(schedule))">查看简报</el-button><el-button v-if="scheduleTaskPath(schedule)" plain @click="router.push(scheduleTaskPath(schedule))">任务进度</el-button><el-button plain @click="editSchedule(schedule)">{{ isDaily(schedule) ? '查看计划' : '编辑计划' }}</el-button><template v-if="!isDaily(schedule)"><el-button type="primary" plain :loading="runningScheduleId === schedule.id" :disabled="!schedule.enabled || !!runningScheduleId" @click="runSchedule(schedule)">立即补跑</el-button><el-switch :model-value="schedule.enabled" :loading="changingScheduleId === schedule.id" :disabled="!!changingScheduleId" :aria-label="`${schedule.name}自动计划开关`" active-text="启用" inactive-text="停用" @change="toggleSchedule(schedule)" /><el-button type="danger" plain :disabled="schedule.canDelete === false" :title="schedule.canDelete === false ? '已有生成历史，请停用计划，保留历史关联' : '删除未产生生成记录的计划'" @click="removeSchedule(schedule)">删除</el-button></template></div></template></el-table-column>
+        <el-table-column label="操作" width="260" header-align="center" align="right">
+          <template #default="{ row: schedule }">
+            <div class="ps-schedule-actions">
+              <el-button v-if="scheduleTaskPath(schedule)" plain @click="router.push(scheduleTaskPath(schedule))">任务进度</el-button>
+              <el-button plain @click="editSchedule(schedule)">{{ isDaily(schedule) ? '查看计划' : '编辑计划' }}</el-button>
+              <template v-if="!isDaily(schedule)">
+                <el-button type="primary" plain :loading="runningScheduleId === schedule.id" :disabled="!schedule.enabled || !!runningScheduleId" @click="runSchedule(schedule)">立即补跑</el-button>
+                <el-switch :model-value="schedule.enabled" :loading="changingScheduleId === schedule.id" :disabled="!!changingScheduleId" :aria-label="`${schedule.name}自动计划开关`" active-text="启用" inactive-text="停用" @change="toggleSchedule(schedule)" />
+              </template>
+              <el-button
+                type="danger"
+                plain
+                :loading="deletingScheduleId === schedule.id"
+                :disabled="schedule.canDelete !== true || !!deletingScheduleId"
+                :title="schedule.canDelete === true ? '删除自动计划' : '已有生成历史，无法删除'"
+                @click="removeSchedule(schedule)"
+              >删除</el-button>
+            </div>
+          </template>
+        </el-table-column>
       </el-table>
       <el-skeleton v-if="schedulesLoading && !schedules.length" :rows="4" animated />
       <div v-else-if="!filteredSchedules.length && !currentError && !schedulesLoading" class="ps-empty-state" role="status">暂无自动任务</div>
@@ -97,6 +116,8 @@ const keyword = ref('')
 const date = ref([])
 const status = ref('all')
 const activeTab = ref(route.query.tab === 'schedules' ? '自动任务' : '全部')
+const hasActiveFilters = computed(() => Boolean(keyword.value
+  || (activeTab.value !== '自动任务' && (date.value?.length || status.value !== 'all'))))
 const scheduleDialog = ref(false), editingSchedule = ref(null)
 function editSchedule(row = null) { editingSchedule.value = row; scheduleDialog.value = true }
 async function scheduleSaved() { activeTab.value = '自动任务'; await loadSchedules() }
@@ -113,6 +134,7 @@ const digestRows = computed(() => portalStore.digestReports
 const reportStatuses = computed(() => [...new Set(digestRows.value.map(item => item.status).filter(Boolean))])
 const runningScheduleId = ref('')
 const changingScheduleId = ref('')
+const deletingScheduleId = ref('')
 const tabs = ['全部', '周报', '月报', '自动任务']
 function isDaily(row) { return ['daily', '日报'].includes(row?.reportType || row?.type) }
 const filteredReports = computed(() => digestRows.value.filter(item => {
@@ -132,7 +154,6 @@ function statusClass(value) { return ({ '已完成': 'success', '待审核': 'wa
 function scheduleType(value) { return ({ daily: '日报', weekly: '周报', monthly: '月报' })[value] || value }
 function scheduleStatus(schedule) { return ({ never: '暂无执行记录', queued: '等待生成', running: '生成中', completed: schedule.hasResult ? '已生成' : '任务完成，正文待确认', no_data: '无匹配资料，已跳过', skipped: '按节假日策略跳过', failed: '执行失败', cancelled: '已取消' })[schedule.lastStatus] || '暂无执行记录' }
 function scheduleHolidayPolicy(schedule) { return schedule.config?.holiday_policy === 'skip' ? '节假日跳过' : '节假日照常执行' }
-function scheduleResultPath(schedule) { return schedule.hasResult && /^[1-9]\d*$/.test(String(schedule.latestReportId || '')) ? `/portal/digests/${schedule.latestReportId}` : '' }
 function scheduleTaskPath(schedule) { return /^[1-9]\d*$/.test(String(schedule.latestTaskId || '')) ? `/portal/research/tasks/${schedule.latestTaskId}` : '' }
 function scheduleFilters(schedule) {
   const config = schedule.config || {}
@@ -228,17 +249,28 @@ async function runSchedule(schedule) {
   }
 }
 async function removeSchedule(schedule) {
-  if (isDaily(schedule)) return
-  if (schedule.canDelete === false) return ElMessage.warning('计划已有生成历史，请停用，不能删除历史关联')
+  if (deletingScheduleId.value || schedule.canDelete !== true) return
+  const account = portalStore.workspaceEpoch
+  deletingScheduleId.value = schedule.id
   try {
-    await ElMessageBox.confirm(`删除“${schedule.name}”后不再派发新任务，已生成简报不会删除。`, '删除自动计划', { type: 'warning', confirmButtonText: '删除计划', cancelButtonText: '取消' })
-  } catch { return }
-  try {
+    try {
+      await ElMessageBox.confirm(`删除“${schedule.name}”后将停止派发，确定删除？`, '删除自动计划', {
+        type: 'warning', confirmButtonText: '删除计划', cancelButtonText: '取消',
+      })
+    } catch { return }
+    if (disposed || account !== portalStore.workspaceEpoch) return
     await deletePipelineDigestSchedule(schedule.id)
+    if (disposed || account !== portalStore.workspaceEpoch) return
+    // Invalidate a list request started before the deletion was acknowledged.
+    scheduleRequest++
+    schedulesLoading.value = false
     schedules.value = schedules.value.filter(item => item.id !== schedule.id)
+    queueScheduleRefresh()
     ElMessage.success('自动计划已删除')
   } catch (error) {
-    ElMessage.error(error?.msg || '自动计划删除失败')
+    if (!disposed && account === portalStore.workspaceEpoch) ElMessage.error(error?.msg || '自动计划删除失败')
+  } finally {
+    deletingScheduleId.value = ''
   }
 }
 onMounted(loadSchedules)

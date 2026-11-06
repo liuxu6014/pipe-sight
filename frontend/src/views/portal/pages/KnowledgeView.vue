@@ -25,7 +25,7 @@
         <el-option label="已隔离" value="已隔离" />
         <el-option label="扫描失败" value="扫描失败" />
       </el-select>
-      <el-button @click="clearFilters">重置筛选</el-button>
+      <el-button v-if="hasFilters" @click="clearFilters">重置筛选</el-button>
     </div>
     <section ref="listRegion" class="ps-material-list" :aria-busy="isInitialLoading" aria-label="资料列表">
       <el-skeleton v-if="isInitialLoading" :rows="4" animated />

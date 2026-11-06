@@ -319,7 +319,7 @@ test('automatic plan execution refresh preserves pagination and stops after term
     await fn(); await settle()
     assert.equal(ctx.page.schedules.value[0].lastStatus,'completed')
     assert.equal(ctx.page.currentPage.value,2)
-    assert.equal(ctx.page.scheduleResultPath(ctx.page.schedules.value[0]),'/portal/digests/96')
+    assert.equal(ctx.page.scheduleTaskPath(ctx.page.schedules.value[0]),'/portal/research/tasks/97')
     assert.equal(timers.size,0)
   } finally { ctx.close() }
 })
