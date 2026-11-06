@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.business_ids import parse_business_id
@@ -115,6 +115,7 @@ class ResearchDao:
         if job.attempts >= max_attempts:
             job.status, job.error, job.finished_at = 'failed', '执行次数已达上限', now
             job.execution_token = job.lease_expires_at = None
+            await cls.record_schedule_generation(db, job)
             await db.commit()
             return None
         job.status = 'running'
@@ -256,6 +257,17 @@ class ResearchDao:
     @staticmethod
     async def list_digest_schedules(db, user_id) -> list[Schedule]:
         return list(await db.scalars(select(Schedule).where(Schedule.user_id == user_id)))
+
+    @staticmethod
+    async def record_schedule_generation(db, job: Job) -> None:
+        if job.schedule_id is None:
+            return
+        counter = {'completed': Schedule.success_count, 'failed': Schedule.failure_count}[job.status]
+        await db.execute(
+            update(Schedule)
+            .where(Schedule.id == job.schedule_id)
+            .values({counter: counter + 1, Schedule.updated_at: Schedule.updated_at})
+        )
 
     @staticmethod
     async def latest_schedule_jobs(db, user_id, schedule_ids) -> dict[int, tuple[Job, Report]]:

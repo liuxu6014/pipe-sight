@@ -102,6 +102,7 @@ class ResearchExecutionService:
                 from app.research.services.exports import ResearchReportExportService  # noqa: PLC0415
 
                 await ResearchReportExportService.queue_images(result_db, job, report)
+                await ResearchDao.record_schedule_generation(result_db, job)
                 await result_db.commit()
         except asyncio.CancelledError:
             raise
@@ -124,6 +125,7 @@ class ResearchExecutionService:
                     if isinstance(error, ManuscriptValidationError):
                         job.result_content = content
                     job.execution_token = job.lease_expires_at = None
+                    await ResearchDao.record_schedule_generation(error_db, job)
                     await error_db.commit()
         finally:
             heartbeat.cancel()

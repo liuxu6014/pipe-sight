@@ -1,11 +1,14 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from test_digest_schedule_generation_guard import dispatch_fixture, setup_template
+from test_research_model_generation import execution_context
 from test_research_simplified_20261025 import db as memory_db
 from test_research_simplified_20261025 import env as memory_env
 from test_research_simplified_20261025 import no_external_network as offline_network
+from test_research_simplified_20261025 import payload
 
 env, db, no_external_network = memory_env, memory_db, offline_network
 
@@ -23,6 +26,7 @@ async def test_no_match_dispatch_persists_summary_without_job(env, db, monkeypat
     data = env.schedules.DigestScheduleService.serialize(row)
     assert data['lastStatus'] == 'no_data' and data['matchedCount'] == 0
     assert data['lastRunTime'] and not data['hasResult']
+    assert data['resultStats'] == {'success': 0, 'failed': 0, 'skipped': 1}
 
 
 @pytest.mark.asyncio
@@ -32,7 +36,21 @@ async def test_dispatch_failure_preserves_cursor_and_records_safe_reason(env, db
     assert result['failed'] == 1
     assert env.repo.ResearchDao.aware(row.next_run_at) == before
     assert row.last_status == 'failed' and row.last_error
-    assert env.schedules.DigestScheduleService.serialize(row)['lastError']
+    service = env.schedules.DigestScheduleService
+    assert service.serialize(row)['lastError']
+    assert row.failure_count == 1
+
+    async def dispatch():
+        return await service.dispatch_due(
+            stage_labels=[], job_serializer=dict, template_service=env.template.PipelineTemplateService
+        )
+
+    assert (await dispatch())['failed'] == 1
+    assert row.failure_count == 1
+    row.next_run_at = before + timedelta(days=1)
+    await db.commit()
+    assert (await dispatch())['failed'] == 1
+    assert row.failure_count == 2
 
 
 @pytest.mark.asyncio
@@ -43,6 +61,7 @@ async def test_holiday_skip_is_recorded_without_model_or_queue(env, db, monkeypa
     )
     assert result['skipped'] == 1 and row.last_status == 'skipped'
     assert row.last_run_at and row.last_error is None
+    assert row.skipped_count == 1
     queue.assert_not_awaited()
     query.assert_not_awaited()
 
@@ -82,11 +101,13 @@ async def test_history_uses_existing_task_without_backfilling_and_new_skip_wins(
     data = service.serialize(row, latest_job=job, report=report)
     assert data['lastStatus'] == 'completed' and data['hasResult']
     assert data['latestTaskId'] == '802' and data['latestReportId'] == '801'
+    assert data['latestTaskProgress'] == 100
     assert data['matchedCount'] == 1
     assert row.last_status is None and row.last_run_at is None
     row.last_status, row.last_run_at = 'no_data', datetime(2026, 10, 28, tzinfo=timezone.utc)
     data = service.serialize(row, latest_job=job, report=report)
     assert data['lastStatus'] == 'no_data' and not data['hasResult']
+    assert data['latestTaskProgress'] is None
     assert data['latestReportId'] == ''
     assert created['lastStatus'] == 'never'
 
@@ -128,3 +149,47 @@ async def test_latest_history_is_owner_scoped_and_links_only_nonempty_completed_
     report.content = ''
     await db.commit()
     assert not (await service.list(db, 7))['rows'][0]['hasResult']
+
+
+@pytest.mark.asyncio
+async def test_schedule_counts_worker_results_once_and_keeps_them_after_report_removal(env, db, monkeypatch) -> None:
+    template, _ = await setup_template(env, db)
+    service = env.schedules.DigestScheduleService
+    created = await service.create(
+        db,
+        user_id=7,
+        owner_name='',
+        template_service=env.template.PipelineTemplateService,
+        payload={'name': '累计计划', 'template_id': str(template.id), 'report_type': 'daily', 'enabled': False},
+    )
+    monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
+    execution, _ = execution_context(env, db, monkeypatch)
+    valid = '## 分析\n\n资料记录了检测结果[file:101]。\n\n## 参考资料\n\n[file:101] 本地资料'
+    generate = AsyncMock(side_effect=[valid, RuntimeError('模型不可用')])
+    monkeypatch.setattr(execution.ResearchModelGenerationService, 'generate_content', generate)
+
+    report_ids = []
+    for expected in ('completed', 'failed'):
+        result = await env.schedules.ResearchJobService.queue(
+            db,
+            user_id=7,
+            owner_name='',
+            payload=payload(report_type='daily', request_id=f'stats-{expected}'),
+            stage_labels=[],
+            job_serializer=env.app.ResearchApplicationService.job_dict,
+            template_service=env.template.PipelineTemplateService,
+            schedule_id=created['id'],
+        )
+        job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
+        for _ in range(2):
+            await execution.ResearchExecutionService.process(job_id=job.id, user_id=7)
+        db.s.expire_all()
+        assert job.status == expected
+        report_ids.append(result['reportId'])
+
+    for report_id in report_ids:
+        await env.app.ResearchReportService.delete_report(db, user_id=7, report_id=report_id)
+
+    assert generate.await_count == 2
+    data = await service.list(db, 7)
+    assert data['rows'][0]['resultStats'] == {'success': 1, 'failed': 1, 'skipped': 0}

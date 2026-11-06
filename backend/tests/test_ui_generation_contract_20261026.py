@@ -183,6 +183,8 @@ async def test_schedule_rebuilds_current_period_without_mutating_saved_preferenc
         run_time=time(8),
         timezone='Asia/Shanghai',
         next_run_at=datetime(2026, 10, 26, tzinfo=timezone.utc),
+        last_failed_due_at=None,
+        failure_count=0,
         selection_config={'keywords': ['漏损'], 'limit': 5},
         generation_config={
             'requirements': '报告周期：2020-01-01；来源范围：新闻网站；自定义关注管网',
@@ -235,7 +237,7 @@ async def test_schedule_rejects_mismatched_cadence_and_honors_image_off(env):
 async def test_generated_version_records_normalization_separately_from_unrun_checks(env, monkeypatch, requested):
     execution = importlib.import_module('app.research.services.execution')
     snapshot = {'request': {'citation_check': requested}, 'template': {'id': '201'}, 'report_start_version': 1}
-    job = NS(execution_token='token', config_snapshot=snapshot, materials=[], report_id=301)
+    job = NS(execution_token='token', config_snapshot=snapshot, materials=[], report_id=301, schedule_id=None)
     report = NS(id=301, version=1, title='报告', content='', template_id=201)
     db = AsyncMock()
     monkeypatch.setattr(execution, 'AsyncSessionLocal', lambda: mock_session(db))

@@ -384,9 +384,11 @@ class DigestScheduleService:
             'lastError': error,
             'matchedCount': len(job.materials or []) if job else (0 if state == 'no_data' else None),
             'latestTaskId': wire_id(job.id) if job else '',
+            'latestTaskProgress': job.progress if job else None,
             'latestReportId': wire_id(report.id) if has_result else '',
             'hasResult': has_result,
             'canDelete': latest_job is None,
+            'resultStats': {'success': row.success_count, 'failed': row.failure_count, 'skipped': row.skipped_count},
         }
 
     @staticmethod
@@ -608,12 +610,12 @@ class DigestScheduleService:
             result['found'] = len(schedules)
             for row in schedules:
                 checked_at = research_models.utcnow().replace(microsecond=0)
+                run_at = ResearchDao.aware(row.next_run_at)
                 try:
                     async with db.begin_nested():
                         generation = cls._generation_config(
                             row.generation_config if row.generation_config is not None else {}
                         )
-                        run_at = ResearchDao.aware(row.next_run_at)
                         local = run_at.astimezone(ZoneInfo(row.timezone))
                         config = cls._selection_config(
                             row.selection_config, keywords=generation.get('keywords'), options=generation.get('options')
@@ -675,10 +677,16 @@ class DigestScheduleService:
                                 result['queued'] += 1
                                 status = 'queued'
                         row.next_run_at = cls.next_run(row, run_at)
+                        if status in ('no_data', 'skipped'):
+                            row.skipped_count += 1
                         row.last_run_at, row.last_status, row.last_error = checked_at, status, None
                 except Exception as exc:
                     result['failed'] += 1
                     # 保存摘要，但保留原游标；保存点回滚不抹掉失败原因。
+                    previous_failure = row.last_failed_due_at
+                    if previous_failure is None or ResearchDao.aware(previous_failure) != run_at:
+                        row.failure_count += 1
+                        row.last_failed_due_at = run_at
                     row.last_run_at, row.last_status = checked_at, 'failed'
                     row.last_error = (
                         cls.safe_error(getattr(exc, 'message', None))

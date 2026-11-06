@@ -1,7 +1,7 @@
--- compact-v11中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；恢复若依部门表及用户dept_id。
+-- compact-v12中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；自动计划累计执行结果。
 -- 27个业务created_at/updated_at为北京时间timestamp(0)无时区；其他运行时间字段保持原类型。
 -- 普通不透明令牌保留；系统幂等键内嵌ID、显式JSON引用及语义指纹按实体映射核验。
--- 28张基线表340字段，2张保留功能表23字段；共30张物理表363字段。
+-- 28张基线表344字段，2张保留功能表23字段；共30张物理表367字段。
 -- 仅COMMENT及存在性保护块；调用方管理事务，不修改字段、约束或业务数据。
 
 COMMENT ON TABLE public."news_articles" IS '网站与公众号新闻原文及中文译文；每篇最多关联一个类别，无人工审核流程';
@@ -173,6 +173,10 @@ COMMENT ON COLUMN public."digest_schedules"."next_run_at" IS '下次触发的带
 COMMENT ON COLUMN public."digest_schedules"."last_run_at" IS '最近派发检查时间；北京时间Asia/Shanghai，timestamp(0)无时区，精度到秒，YYYY-MM-DD HH:mm:ss；历史为空不回填';
 COMMENT ON COLUMN public."digest_schedules"."last_status" IS '最近派发结果：queued入队、no_data无匹配、skipped节假日跳过、failed失败；历史为空；生成进度读取关联任务';
 COMMENT ON COLUMN public."digest_schedules"."last_error" IS '最近派发失败原因，脱敏后保存；成功或跳过时清空，不包含模型密钥或内部堆栈';
+COMMENT ON COLUMN public."digest_schedules"."success_count" IS '自动计划累计成功生成次数，基于已完成的关联生成任务';
+COMMENT ON COLUMN public."digest_schedules"."failure_count" IS '自动计划累计派发和生成失败次数，同一周期的重复派发失败只计一次';
+COMMENT ON COLUMN public."digest_schedules"."skipped_count" IS '自动计划累计跳过次数，包含无匹配资料和按节假日策略跳过';
+COMMENT ON COLUMN public."digest_schedules"."last_failed_due_at" IS '最近已计数的派发失败周期时间，带时区，用于防止重复计数';
 COMMENT ON COLUMN public."digest_schedules"."created_at" IS '周期计划创建时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss';
 COMMENT ON COLUMN public."digest_schedules"."updated_at" IS '周期计划配置或调度游标最近更新时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss';
 

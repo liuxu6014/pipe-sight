@@ -146,6 +146,10 @@ class PipelineDigestSchedule(Base):
     last_run_at = Column(BeijingAuditTime(), comment='最近派发检查时间，北京时间，精确到秒')
     last_status = Column(String(16), comment='最近派发结果；生成状态从关联任务读取')
     last_error = Column(Text, comment='最近派发失败原因，脱敏后保存')
+    success_count = Column(BigInteger, nullable=False, server_default=text('0'), comment='累计成功生成次数')
+    failure_count = Column(BigInteger, nullable=False, server_default=text('0'), comment='累计派发和生成失败次数')
+    skipped_count = Column(BigInteger, nullable=False, server_default=text('0'), comment='累计未匹配资料和节假日跳过次数')
+    last_failed_due_at = Column(DateTime(timezone=True), comment='最近已计数的派发失败周期时间')
     created_at = Column(BeijingAuditTime(), nullable=False, default=audit_now, server_default=server_now())
     updated_at = Column(
         BeijingAuditTime(),
