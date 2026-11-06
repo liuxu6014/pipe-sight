@@ -51,6 +51,50 @@ PipeSight/
 详细目录与新增文件约定见 [当前项目结构](docs/project-structure.md)。
 部署文件见 [部署目录说明](deploy/README.md)，维护工具见 [后端脚本说明](backend/scripts/README.md)。
 
+## 平台怎么工作
+
+门户负责检索和成果，管理端负责来源、任务、模板、模型和系统配置。主链路是：
+
+采集 → 翻译 / 分类 / 有效性校验 → 写入 PostgreSQL → 门户检索 → 模板 + 大模型 → 情报简报或科研报告。
+
+内容分三类：新闻网站（`website`）、微信公众号（`wechat`）、论文（`paper`）。新闻和公众号进 `news_articles`，论文进 `papers`。门户按这三类浏览和关键词检索；简报（日报 / 周报 / 月报）和科研报告分开存放。资料库里的内部资料是另一条线：上传解析后进入资料篮，再创建科研任务，不经过下面的采集入库。
+
+源码位置见 [PipeSight 全流程](docs/architecture/pipeline-flow.md)。本节只写对照当前代码，以及对照 [news-pipelines](https://github.com/liuxu6014/news-pipelines) 当前 `main` 能够确认的事实。
+
+### 两条入库路径
+
+**A. Kafka 消费端（本仓库已实现消费，不依赖站内适配器）**
+
+`pipesight-kafka-consumer`（`backend/src/app/intelligence/tasks/kafka_content_consumer.py`）订阅主题 `news_pipeline`。消息优先解析为统一 envelope `KafkaContentMessage`（`schema_version=1`，`content_type` 为 `news` / `wechat` / `paper`）。对象不符合该 envelope 时，再尝试爬虫侧扁平 JSON `{title,url,author,ctime,content,content_md,site_name,domain}`：`domain` 为 `mp.weixin.qq.com` 时记为公众号，否则记为新闻。扁平格式只覆盖新闻和公众号，论文要走 envelope。通过后按来源配置翻译、按已启用类别分类，并由 `CollectionPersistenceService` 写入 `news_articles` / `papers`。第一次见到的来源记为 `adapter=kafka_content_import`，并且默认停用。字段表见 [Kafka 统一内容采集格式](docs/architecture/kafka-unified-format.md)。
+
+这个消费端不要求消息来自 news-pipelines。对照该仓库当前代码：有 Kafka **消费**实现（`app/runtime/kafka_consumer.py`、`tools/kafka_consume.py`，消费组缺省 `news-pipelines-rss-consumer`），没有把抓取结果发到 Kafka 的生产者。Scrapy 的 `ITEM_PIPELINES` 也只注册字段清洗和可选 MySQL，不发布消息。「爬虫发布、平台消费」因此还没有在爬虫侧接通。`docs/architecture/kafka-unified-format.md` 和 `docs/architecture/pipeline-flow.md` 里把 news-pipelines 写成生产者的说法，以该仓库代码为准，不能当成已经落地的集成。
+
+**B. 站内适配器（不依赖 news-pipelines）**
+
+`collection_scheduler` 每 15 秒扫描 `data_sources` 里已启用且到期的来源，只执行已经注册的适配器：
+
+| adapter | 类型 | 行为 |
+|---------|------|------|
+| `pipechina_group_news` | `website` | 抓取国家管网新闻 |
+| `wechat_rss` | `wechat` | 拉取来源 `config.feed_url` 里的公众号 RSS |
+| `crossref_works` | `paper` | 抓取 Crossref；默认只入库摘要 |
+
+正文经 `CollectionTranslationService`（来源配置了翻译模型且原文需要翻译时）和 `CategoryService.classify` 后，由 `CollectionPersistenceService.save_batch` 写入。
+
+默认的任务 Worker 会跑这套调度。API 是否也注册它，取决于 `PIPELINE_TASK_SCHEDULER_ENABLED`：代码缺省为 `true`；`docker-compose.pg.yml` 里 API 显式设为 `false`，Worker 设为 `true`。本地如果 API 和 Worker 同时开着，又没有关掉 API 的这个开关，两边都会尝试调度。来源领取使用数据库租约，同一来源不会被两个执行方同时拿走，但本地仍应只留一个调度进程。
+
+### 来源控制面
+
+来源表是 `data_sources`（模型 `PipelineSource`）。站内来源使用 `adapter`、五段 `cron`、`timezone`、`is_enabled` 和 JSON `config`。`type` 只能是 `website`、`wechat`、`paper`。
+
+`news_pipelines_spider` 和 `kafka_content_import` 只是外部标记，不是站内适配器。保存这两类来源时平台会清掉 `cron`，不生成下次执行时间，任务 Worker 也不会去跑它们。news-pipelines 在 `PIPESIGHT_SOURCE_GATE=1` 时（该仓库缺省是 `0`，门控关闭）只读取 `adapter=news_pipelines_spider` 的行，用 `config.spider_name` 对应 spider 名，再看 `is_enabled`。门控关闭时，爬虫按自己的运行清单执行，不看这张表。
+
+### 双写注意
+
+`news_articles.url` 有 `md5(url)` 唯一索引。本仓库入库前会规范化 URL，重复 URL 不再插入。news-pipelines 的 `NewsArticlesPipeline` 在 `PG_ENABLED=1` 时也会写入同一张表（`ON CONFLICT (md5(url))`），并可能用 `adapter=kafka` 新建来源；它使用消息里的原始 URL，不经过本仓库的规范化。两边同时写时，完全相同的 URL 会撞上同一索引，写法不同的同一原文可能变成两行。会写 `news_articles` 的是 news-pipelines 的 Kafka 消费脚本，不是 spider 抓取本身。
+
+在确认只有一个写入方之前，不要同时打开本仓库的 Kafka 消费端和 news-pipelines 的 PostgreSQL 写入。
+
 ## 业务功能
 
 ### 当前范围 (MVP)
@@ -64,10 +108,10 @@ PipeSight/
 | **报告管理** | 查看科研报告与科技情报简报（日报/周报/月报），支持导出 Markdown、DOCX、PDF |
 | **内部资料** | 上传、解析、授权访问并将研究资料加入资料篮 |
 | **科研任务** | 从资料篮创建任务，执行资料处理、结果审核、重试/驳回并导出成果 |
-| **数据处理** | 采集内容经 Kafka 统一接入后进入 `public.news_articles`，支持翻译、分类、有效性校验与去重 |
+| **数据处理** | 站内采集，以及 Kafka 消费端收到的消息，经翻译、分类、有效性校验后写入 `news_articles` / `papers`；新闻按规范化 URL 去重，论文按 DOI 或 URL 去重 |
 | **模型与 Prompt** | 管理 `data-filter` 等场景的 Prompt、模型和路由；实际外部来源处理前必须具备已发布配置 |
 | **认证授权** | 基于 JWT 的登录认证、角色-菜单-按钮权限控制、动态路由 |
-| **系统管理** | 用户/角色/菜单/字典/参数管理；不包含部门、岗位和通知公告模块 |
+| **系统管理** | 用户/角色/菜单/部门/字典/参数管理。部门是用户管理下的组织树；数据权限仍只有全部数据与仅本人。岗位和通知公告没有恢复 |
 | **监控管理** | 在线用户、操作日志、登录日志、定时任务、服务监控、缓存监控 |
 | **业务 AI 生成** | 管理员配置文本与图片模型，用于报告、简报及分类；未使用的个人聊天功能已移除 |
 
@@ -76,10 +120,10 @@ PipeSight/
 - 本仓库提供采集任务、PostgreSQL 持久化和任务 Worker；具体爬虫脚本、来源授权和生产级来源接入仍需按来源逐一验收。
 - 当前内置采集适配器支持国家管网新闻（`pipechina_group_news`）、Crossref 论文（`crossref_works`）与公众号 RSS（`wechat_rss`，管理员在来源管理中添加公众号 feed 链接即可采集）。其余生产级来源仍需按来源逐一验收。
 - 当前默认检索使用 PostgreSQL 查询能力；Elasticsearch、Milvus 等外部基础设施不是默认运行时，不能在未完成数据一致性、权限和运维验收前作为已交付能力宣称。
-- MinIO/S3、Embedding 回填和语义检索属于可选能力，只有启用对应 Compose profile、密钥和验收数据后才生效。
+- 上传资料、导出文件和论文全文预览默认写在上传目录（`UploadConfig.UPLOAD_PATH`）。本仓库的 Compose 没有编排 MinIO、Elasticsearch、Milvus 或 Kafka Dashboard；依赖清单中的 `miniopy-async` 在当前源码里没有接入。这些都不能当作已经交付的默认运行时。Embedding 回填和语义检索同样不是默认检索。
 - 生产化仍需补齐备份恢复、容量压测、网络/模型/Redis/数据库故障演练和告警接入。
 - 证据词严格过滤依赖领域规则文件（如 `*_proofwords.txt`）；当前仓库未内置业务词表，未提供词表时不能把严格证据词过滤视为已启用。
-- 知识问答功能和 Kafka Dashboard 不属于当前交付范围；统一采集由 `pipesight-kafka-consumer` 常驻消费端处理（订阅爬虫侧 `news_pipeline` 主题，统一 envelope + 爬虫历史格式兼容），采集后处理由后端任务 Worker 承担。
+- 知识问答不属于当前交付范围。Kafka 消费端只负责消费 `news_pipeline`；它不证明爬虫侧已经在发布。站内采集、科研生成、报告导出和资料解析由任务 Worker 承担，Compose 中的 API 不再重复调度。
 - 后端不再维护全局 `backend/utils/` 或 `module_*` 业务包；新的公共能力按职责进入 `common/`、`app.infrastructure` 或所属业务模块。
 
 ## 快速开始
@@ -209,7 +253,30 @@ npm install
 npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
 ```
 
-前端开发服务器运行在 `http://127.0.0.1:5173/`，并通过 Vite proxy 将 `/dev-api` 代理到后端 `http://127.0.0.1:9099`。
+前端开发服务器运行在 `http://127.0.0.1:5173/`，并通过 Vite proxy 将 `/dev-api` 代理到后端 `http://127.0.0.1:9099`（`frontend/vite.config.js` 的缺省目标；可用 `VITE_BACKEND_TARGET` 覆盖）。
+
+一键脚本只启动 API 和 Vite。任务 Worker、Kafka 消费端要另开进程。`docker-compose.pg.yml` 包含 `pipesight-task-worker`，不包含 Kafka 消费端。
+
+任务 Worker：
+
+```powershell
+cd backend
+uv run --project . --no-sync pipesight-task-worker --env=dev
+```
+
+它负责站内采集调度、科研生成、报告导出和资料解析。Docker 中的对应命令是 `pipesight-task-worker --env dockerpg`。
+
+Kafka 消费端只在需要消费 `news_pipeline` 时启动。真实写库只接受 `172.16.4.183` 上的 `pipesight` 库，连到其他库会直接拒绝；`--dry-run` 不写库，也不做这项目标库检查。
+
+```powershell
+cd backend
+uv run --project . --no-sync pipesight-kafka-consumer --env=dev
+
+# 只打印映射、不写库
+uv run --project . --no-sync pipesight-kafka-consumer --env=dev --from-earliest --limit 10 --dry-run
+```
+
+`KafkaSettings` 的缺省值是 `172.16.4.182:9092`、主题 `news_pipeline`、消费组 `pipesight_news_consumer`。所选 `.env.*` 里的 `KAFKA_BOOTSTRAP_SERVERS`、`KAFKA_TOPIC`、`KAFKA_GROUP_ID` 会覆盖这三项。没有消息发布方时，这个进程会连上主题并空转，不会自己产生采集数据。
 
 ## 项目级验证
 
@@ -385,15 +452,15 @@ cd backend
 uv run alembic upgrade head
 ```
 
-设计说明见 [PipeSight 全系统数据库设计](docs/plans/2026-08-14-full-system-database-design.md)。最终结构共 23 张表：平台 14 张、采集与内容 4 张、知识与报告 5 张。部门、岗位、通知公告、代码生成持久化及未落地的预建业务表均不进入新库；数据权限仅保留“全部数据 / 仅本人”。历史未知试验表不会被自动删除，曾预建的业务表只有在空表时才由迁移清理。
+设计说明见 [精简数据库设计](docs/architecture/compact-database-design.md) 和 [部门管理恢复说明](docs/architecture/department-management.md)。2026-11-03 起已恢复 `sys_dept` 和用户所属部门；岗位、通知公告仍不建表，数据权限仍只有全部数据与仅本人。更早设计稿中的「23 张表」不是当前库的表数，以数据库字典为准。历史未知试验表不会被自动删除，曾预建的业务表只有在空表时才由迁移清理。
 
-数据库统一使用 `172.16.4.183` 上的 `pipesight` 库（`public` schema），项目不再随 Compose 启动本地 PostgreSQL。根 Compose 只编排 `pipesight-db-migrate`（先执行 `alembic upgrade head`）、`ruoyi-backend-pg`、`ruoyi-frontend`、`pipesight-task-worker` 和 `ruoyi-redis`：
+数据库统一使用 `172.16.4.183` 上的 `pipesight` 库（`public` schema），项目不再随 Compose 启动本地 PostgreSQL。根 Compose 编排 `pipesight-db-migrate`（先执行 `alembic upgrade head`）、`ruoyi-backend-pg`、`ruoyi-frontend`、`pipesight-task-worker` 和 `ruoyi-redis`，不包含 Kafka 消费端：
 
 ```bash
 docker compose -p pipesight-pg -f docker-compose.pg.yml up -d --build
 ```
 
-其中 `pipesight-task-worker` 负责数据源采集、科研生成、报告导出和资料解析持久队列；API 通过 `PIPELINE_TASK_SCHEDULER_ENABLED=false` 不再重复调度。采集来源使用 PostgreSQL 数据库租约，多个 Worker 实例不会同时领取同一个来源。手工运行后端任务进程可使用 `cd backend && uv run pipesight-task-worker`。本地端口：PipeSight API `19099`、前端 `12580`、Redis `16379`。数据库连接凭据经 `DATA_DB_PASSWORD` 注入，生产环境必须覆盖示例密码并使用密钥注入。
+其中 `pipesight-task-worker` 负责数据源采集、科研生成、报告导出和资料解析持久队列；API 通过 `PIPELINE_TASK_SCHEDULER_ENABLED=false` 不再重复调度。采集来源使用 PostgreSQL 数据库租约，多个 Worker 实例不会同时领取同一个来源。手工启动命令见上文「手动启动前端」之后的任务 Worker 与 Kafka 消费端。Compose 映射端口：PipeSight API `19099`、前端 `12580`、Redis `16379`。数据库连接凭据经 `DATA_DB_PASSWORD` 注入，生产环境必须覆盖示例密码并使用密钥注入。
 
 ## CLI 命令行工具
 
@@ -429,6 +496,7 @@ ruoyi --help
 
 - [项目全流程说明（面向领导）](docs/项目全流程说明.md)
 - [PipeSight 全流程（技术版）](docs/architecture/pipeline-flow.md)
+- [Kafka 统一内容采集格式](docs/architecture/kafka-unified-format.md)（消费端契约；其中把 news-pipelines 写成生产者的部分，以该仓库当前代码为准）
 - [设计方案](docs/requirements/设计方案.docx)
 - [平台功能需求分析与进度规划](docs/requirements/平台功能需求分析与进度规划.pdf)
 - [平台设计文档](docs/plans/2026-07-13-pipeline-intelligence-platform-design.md)
