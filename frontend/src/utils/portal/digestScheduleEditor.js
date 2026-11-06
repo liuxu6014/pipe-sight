@@ -22,10 +22,10 @@ export function readScheduleForm(row) {
     hotAnalysis: options.hotAnalysis ?? true, duplicateMerge: options.duplicateMerge ?? true,
     requirements: generation.requirements || '', generation, selection: config }
 }
-export function scheduleSummary(form) {
+export function scheduleSummary(form, { showTimezone = true } = {}) {
   const day = form.frequency === 'weekly' ? `每${['周一', '周二', '周三', '周四', '周五', '周六', '周日'][form.weekday]}`
     : form.frequency === 'monthly' ? `每月${form.monthDay}日` : '每天'
-  return `${day} ${form.time}（北京时间）`
+  return `${day} ${form.time}${showTimezone ? '（北京时间）' : ''}`
 }
 export function schedulePayload(form, template) {
   if (!form.name.trim() || form.name.trim().length > 255) throw new Error('请填写 1 至 255 字的计划名称')

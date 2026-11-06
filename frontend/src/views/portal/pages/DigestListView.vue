@@ -35,10 +35,9 @@
     </section>
     <section v-else ref="listRegion" class="ps-panel ps-digest-list ps-schedule-list ps-list-scroll" tabindex="0" aria-label="简报自动任务列表">
       <el-table v-if="pagedSchedules.length" :data="pagedSchedules" row-key="id" :max-height="listHeight" class="ps-digest-records-table ps-schedule-table" style="width: 100%">
-        <el-table-column label="计划名称与筛选条件" min-width="172" header-align="center">
+        <el-table-column label="名称" min-width="172" header-align="center">
           <template #default="{ row: schedule }">
-            <div class="ps-schedule-identity"><h2>{{ schedule.name }}</h2><el-tag :type="schedule.enabled ? 'success' : 'info'">{{ schedule.enabled ? '已启用' : '已停用' }}</el-tag></div>
-            <p class="ps-schedule-rules">{{ scheduleFilters(schedule) }}</p>
+            <h2 class="ps-schedule-name">{{ schedule.name }}</h2>
           </template>
         </el-table-column>
         <el-table-column label="关键词" min-width="106" header-align="center">
@@ -51,40 +50,10 @@
             <el-tag effect="plain">{{ scheduleType(schedule.reportType) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="执行时间" min-width="124" header-align="center">
-          <template #default="{ row: schedule }"><div class="ps-schedule-timing"><span>{{ scheduleTimeDescription(schedule) }}</span><small>{{ scheduleHolidayPolicy(schedule) }}</small></div></template>
+        <el-table-column label="执行时间" min-width="108" header-align="center">
+          <template #default="{ row: schedule }"><span class="ps-schedule-timing">{{ scheduleTimeDescription(schedule) }}</span></template>
         </el-table-column>
-        <el-table-column label="最近执行结果" min-width="170" header-align="center">
-          <template #default="{ row: schedule }">
-            <div class="ps-schedule-result-head"><el-tag :type="schedule.lastStatus === 'failed' ? 'danger' : schedule.hasResult ? 'success' : 'info'">{{ scheduleStatus(schedule) }}</el-tag><span v-if="Number.isInteger(schedule.matchedCount)" class="ps-schedule-count">选材 {{ schedule.matchedCount }} 篇</span></div>
-            <time v-if="schedule.lastRunTime" class="ps-schedule-last-run">{{ formatBusinessTime(schedule.lastRunTime) }}</time>
-            <p v-if="schedule.lastStatus === 'no_data'" class="ps-schedule-result-note">本周期无匹配的有效文章，未创建生成任务。</p>
-            <p v-else-if="schedule.lastStatus === 'skipped'" class="ps-schedule-result-note">执行日属于配置的节假日，未创建生成任务。</p>
-            <p v-else-if="schedule.lastStatus === 'failed'" class="ps-schedule-result-note is-failure" role="status">{{ schedule.lastError || '此次失败未记录具体原因，请打开任务进度查看或联系管理员检查日志。' }}</p>
-            <router-link
-              v-if="scheduleTaskPath(schedule)"
-              :to="scheduleTaskPath(schedule)"
-              class="ps-schedule-progress-link"
-              :aria-label="Number.isInteger(schedule.latestTaskProgress) ? `查看进度，${scheduleProgressText(schedule)}` : undefined"
-            >
-              <el-progress
-                v-if="Number.isInteger(schedule.latestTaskProgress)"
-                type="circle"
-                :width="52"
-                :stroke-width="4"
-                :percentage="schedule.latestTaskProgress"
-                :status="({ completed: 'success', failed: 'exception', cancelled: 'warning' })[schedule.lastStatus]"
-                aria-hidden="true"
-              >
-                <template #default>
-                  <span class="ps-schedule-progress-text">{{ scheduleProgressText(schedule) }}</span>
-                </template>
-              </el-progress>
-              <span class="ps-schedule-progress-label">查看进度<el-icon aria-hidden="true"><ArrowRight /></el-icon></span>
-            </router-link>
-          </template>
-        </el-table-column>
-        <el-table-column label="结果统计" width="72" align="center">
+        <el-table-column label="结果统计" min-width="164" align="center">
           <template #header><span title="累计执行结果，包含已有记录和后续执行">结果统计</span></template>
           <template #default="{ row: schedule }">
             <div v-if="schedule.resultStats" class="ps-schedule-stats">
@@ -95,7 +64,7 @@
             <span v-else aria-label="暂无统计">—</span>
           </template>
         </el-table-column>
-        <el-table-column label="下次执行" min-width="113" header-align="center"><template #default="{ row: schedule }"><span class="ps-schedule-next-run">{{ schedule.enabled ? (formatBusinessTime(schedule.nextRunTime) || '等待调度确认') : '计划已停用' }}</span></template></el-table-column>
+        <el-table-column label="下次执行" min-width="113" header-align="center"><template #default="{ row: schedule }"><span class="ps-schedule-next-run">{{ schedule.enabled ? (formatBusinessTime(schedule.nextRunTime) || '等待调度确认') : '停用' }}</span></template></el-table-column>
         <el-table-column label="操作" min-width="171" header-align="center" align="right">
           <template #default="{ row: schedule }">
             <div class="ps-schedule-actions">
@@ -129,7 +98,7 @@ import { formatBusinessTime } from '@/utils/portal/businessTime'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowRight, Document, Plus, Search } from '@element-plus/icons-vue'
+import { Document, Plus, Search } from '@element-plus/icons-vue'
 import usePortalStore from '@/store/modules/portal'
 import { exportPipelineResearchReport } from '@/api/pipeline/intelligence'
 import { deletePipelineDigestSchedule, listPipelineDigestSchedules, runPipelineDigestSchedule, updatePipelineDigestSchedule } from '@/api/pipeline/intelligence'
@@ -161,7 +130,7 @@ const hasActiveFilters = computed(() => Boolean(keyword.value
 const scheduleDialog = ref(false), editingSchedule = ref(null)
 function editSchedule(row = null) { editingSchedule.value = row; scheduleDialog.value = true }
 async function scheduleSaved() { activeTab.value = '自动任务'; await loadSchedules() }
-function scheduleTimeDescription(row) { return scheduleSummary(readScheduleForm(row)) }
+function scheduleTimeDescription(row) { return scheduleSummary(readScheduleForm(row), { showTimezone: false }) }
 const exportingId = ref('')
 const schedules = ref([])
 const schedulesLoading = ref(false)
@@ -192,17 +161,6 @@ watch(listTotal, count => { currentPage.value = Math.min(currentPage.value, Math
 function typeClass(value) { return ({ '日报': 'daily', '周报': 'weekly', '月报': 'monthly', '自动任务': 'auto' })[value] || 'daily' }
 function statusClass(value) { return ({ '已完成': 'success', '待审核': 'warning', '草稿': 'muted', '运行中': 'running' })[value] || 'muted' }
 function scheduleType(value) { return ({ daily: '日报', weekly: '周报', monthly: '月报' })[value] || value }
-function scheduleStatus(schedule) { return ({ never: '暂无执行记录', queued: '等待生成', running: '生成中', completed: schedule.hasResult ? '已生成' : '任务完成，正文待确认', no_data: '无匹配资料，已跳过', skipped: '按节假日策略跳过', failed: '执行失败', cancelled: '已取消' })[schedule.lastStatus] || '暂无执行记录' }
-function scheduleHolidayPolicy(schedule) { return schedule.config?.holiday_policy === 'skip' ? '节假日跳过' : '节假日照常执行' }
-function scheduleTaskPath(schedule) { return /^[1-9]\d*$/.test(String(schedule.latestTaskId || '')) ? `/portal/research/tasks/${schedule.latestTaskId}` : '' }
-function scheduleProgressText(schedule) {
-  return schedule.lastStatus === 'running' && schedule.latestTaskProgress === 0 ? '生成中' : `${schedule.latestTaskProgress}%`
-}
-function scheduleFilters(schedule) {
-  const config = schedule.config || {}
-  const sources = (config.source_types || []).map(value => ({ website: '新闻网站', wechat: '微信公众号' })[value] || value)
-  return `类别：${(config.category_names || []).join('、') || '不限'}；来源：${sources.join('、') || '不限'}`
-}
 function digestReportState(report) {
   if (hasReportOutput(report)) return { hasOutput: true, path: `/portal/digests/${report.id}`, status: report.status }
   const task = (portalStore.tasks || []).find(item => String(item.reportId) === String(report.id))
@@ -339,31 +297,15 @@ onMounted(loadSchedules)
 .ps-schedule-table :deep(td.el-table__cell) { padding-block: 14px; vertical-align: top; }
 .ps-schedule-table :deep(.cell) { padding-inline: 10px; overflow-wrap: anywhere; }
 .ps-schedule-table :deep(td.ps-schedule-type-cell .cell) { display: flex; justify-content: center; padding-inline: 6px; }
-.ps-schedule-identity { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.ps-schedule-identity h2 { margin: 0; color: var(--ps-ink); font-size: 15px; font-weight: 600; line-height: 1.6; overflow-wrap: anywhere; }
-.ps-schedule-rules { margin: 8px 0 0; color: var(--ps-muted); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.ps-schedule-name { margin: 0; color: var(--ps-ink); font-size: 15px; font-weight: 600; line-height: 1.6; overflow-wrap: anywhere; }
 .ps-schedule-keywords { color: var(--ps-ink); font-size: 13px; }
-.ps-schedule-timing { display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.6; }
-.ps-schedule-timing small { color: var(--ps-muted); font-size: 12px; }
-.ps-schedule-result-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
-.ps-schedule-count { color: var(--ps-muted); font-size: 12px; }
-.ps-schedule-stats { display: grid; gap: 4px; color: var(--ps-muted); font-size: 12px; font-variant-numeric: tabular-nums; line-height: 1.6; }
-.ps-schedule-stats strong { color: var(--ps-ink); font-weight: 600; }
-.ps-schedule-last-run { display: block; margin-top: 6px; }
-.ps-schedule-result-note { margin: 6px 0 0; color: var(--ps-muted); font-size: 12px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
-.ps-schedule-result-note.is-failure { color: var(--el-color-danger-dark-2); padding: 6px 8px; border-radius: 4px; background: var(--el-color-danger-light-9); }
+.ps-schedule-timing { font-size: 13px; line-height: 1.6; }
+.ps-schedule-stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 10px; color: var(--ps-muted); font-size: 12px; font-variant-numeric: tabular-nums; line-height: 1.4; }
+.ps-schedule-stats > span { display: grid; justify-items: center; }
+.ps-schedule-stats strong { grid-row: 1; color: var(--ps-ink); font-size: 14px; font-weight: 600; }
 .ps-schedule-next-run { color: var(--ps-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
 .ps-schedule-actions { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 8px; }
 .ps-schedule-actions > .el-button, .ps-schedule-actions > .el-switch { margin: 0; }
-.ps-schedule-progress-link { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; margin-top: 8px; padding: 2px 6px 2px 2px; border-radius: 6px; color: var(--el-color-primary-dark-2); font-size: 13px; }
-.ps-schedule-progress-link:hover { background: var(--el-color-primary-light-9); color: var(--el-color-primary-dark-2); }
-.ps-schedule-progress-link:hover .ps-schedule-progress-label { text-decoration: underline; }
-.ps-schedule-progress-link:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: 2px; }
-.ps-schedule-progress-text { color: var(--ps-ink); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.ps-schedule-progress-label { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
-@media (prefers-reduced-motion: reduce) {
-  .ps-schedule-progress-link :deep(.el-progress-circle__path) { transition: none !important; }
-}
 @media (min-width: 1051px) {
   .ps-digest-toolbar > .ps-search-inline { flex: 1 1 160px; }
   .ps-digest-toolbar :deep(.el-date-editor) { flex: 0 1 260px; width: 260px; }

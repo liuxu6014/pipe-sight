@@ -308,18 +308,19 @@ test('automatic plan execution refresh preserves pagination and stops after term
     api: { listPipelineDigestSchedules: async () => ({data:{rows:Array.from({length:23}, (_,i) => ({
       id:String(i+1), name:`计划${i+1}`, enabled:false,
       lastStatus:i===0 ? (++calls===1 ? 'running':'completed'):'never',
-      latestTaskId:i===0?'97':'', latestReportId:i===0?'96':'', hasResult:i===0 && calls>1,
+      resultStats: { success: i === 0 && calls > 1 ? 1 : 0, failed: 0, skipped: 0 },
     }))}}) },
     timers:{setTimeout(fn,ms){assert.equal(ms,15000);timers.set(++token,fn);return token},clearTimeout(id){timers.delete(id)}} })
   try {
     ctx.page.currentPage.value=2
     assert.equal(timers.size,1)
+    assert.equal(ctx.page.schedules.value[0].resultStats.success, 0)
     const [id,fn]=timers.entries().next().value
     timers.delete(id)
     await fn(); await settle()
     assert.equal(ctx.page.schedules.value[0].lastStatus,'completed')
     assert.equal(ctx.page.currentPage.value,2)
-    assert.equal(ctx.page.scheduleTaskPath(ctx.page.schedules.value[0]),'/portal/research/tasks/97')
+    assert.equal(ctx.page.schedules.value[0].resultStats.success, 1)
     assert.equal(timers.size,0)
   } finally { ctx.close() }
 })
@@ -718,11 +719,29 @@ test('upload library only manages files and ignores legacy type filters', async 
     ctx.page.keyword.value = '上传11'
     await settle()
     assert.deepEqual(ctx.page.filteredDocuments.value.map(item => item.id), ['111'])
-    ctx.page.editDocument(ctx.page.filteredDocuments.value[0])
+    ctx.page.openDocument(ctx.page.filteredDocuments.value[0])
     await settle()
     assert.equal(ctx.router.currentRoute.value.path, '/portal/knowledge/111')
-    assert.equal(ctx.router.currentRoute.value.query.mode, 'edit')
     assert.equal(ctx.store.basket.length, 2)
+  } finally { ctx.close() }
+})
+
+test('library status filters group parsing and scan states and support old filter links', async () => {
+  const statuses = ['已解析', '解析中', '待解析', '等待解析', '待安全扫描', '解析失败', '已隔离', '扫描失败']
+  const ctx = await mountPage('KnowledgeView', {
+    query: { status: '扫描失败' },
+    documents: statuses.map((status, index) => ({ id: String(100 + index), name: `资料${index}`, status }))
+  })
+  try {
+    const matchingStatuses = () => ctx.page.filteredDocuments.value.map(doc => doc.status)
+    assert.equal(ctx.page.parseStatus.value, '异常')
+    assert.deepEqual(matchingStatuses(), statuses.slice(5))
+    ctx.page.parseStatus.value = '处理中'
+    await settle()
+    assert.deepEqual(matchingStatuses(), statuses.slice(1, 5))
+    assert.equal(ctx.router.currentRoute.value.query.status, '处理中')
+    ctx.page.parseStatus.value = '已解析'
+    assert.deepEqual(matchingStatuses(), ['已解析'])
   } finally { ctx.close() }
 })
 

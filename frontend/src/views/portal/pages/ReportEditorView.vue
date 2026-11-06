@@ -16,7 +16,7 @@
         <el-button v-if="!isReadOnly" :type="isEditing ? 'default' : 'primary'" @click="toggleEditing">{{ isEditing ? '完成编辑' : '编辑报告' }}</el-button>
         <el-button :icon="CollectionTag" v-if="isEditing" :disabled="isReadOnly" :loading="versionSaving" @click="saveVersion">保存修改</el-button>
         <el-button :icon="Picture" v-if="isEditing" :disabled="report.readOnly" @click="router.push(`/portal/research/reports/${report.id}/diagram`)">查看配图</el-button>
-        <el-button :icon="View" @click="openCurrentPreview">预览</el-button>
+        <el-button v-if="isDigest" :icon="View" @click="openCurrentPreview">预览</el-button>
         <el-button :icon="CircleCheck" v-if="report.requiresReview" :disabled="isReadOnly" type="success" @click="finalizeReport">确认复核并定稿</el-button>
         <el-dropdown trigger="click" @command="exportReport">
           <el-button :icon="Download" type="primary" :disabled="report.readOnly">{{ report.requiresReview ? '导出草稿' : '导出报告' }}<ArrowDown /></el-button>
@@ -29,7 +29,7 @@
       </div>
     </header>
     <el-alert v-if="report.readOnly" title="正在只读查看其他用户的报告" description="可查看正文和引用；编辑及导出文件由报告所有者操作。" type="info" :closable="false" show-icon />
-    <el-alert v-else-if="isReadOnly" title="当前报告已正式发布，处于只读状态" description="预览、引用查看和导出仍可使用；如需修改，请先由管理员撤销发布。" type="info" :closable="false" show-icon />
+    <el-alert v-else-if="isReadOnly" title="当前报告已正式发布，处于只读状态" description="可阅读正文、查看引用和导出报告。如需修改，请先由管理员撤销发布。" type="info" :closable="false" show-icon />
     <el-alert v-if="report.requiresReview" title="当前报告为待复核草稿" :description="report.generationWarning || '该报告未完成全量模型生成，请配置可用模型或人工复核后再作为正式成果使用。'" type="warning" :closable="false" show-icon />
     <div class="ps-editor-layout" :style="{ '--report-columns': `${outlineVisible ? '220px ' : ''}minmax(0, 1fr)${inspectorVisible ? ' 300px' : ''}` }" :class="{ 'is-reading': !isEditing }">
       <aside v-if="outlineVisible" ref="outlinePanelRef" class="ps-outline-panel">
@@ -67,7 +67,7 @@
       </template>
       <template #footer><el-button :disabled="rewriteBusy" @click="rewriteVisible = false">取消</el-button><el-button :loading="rewriteBusy" @click="generateRewrite">{{ rewriteResult ? '重新生成' : '生成建议' }}</el-button><el-button type="primary" :disabled="rewriteBusy || !rewriteResult" @click="acceptRewrite">确认替换</el-button></template>
     </el-dialog>
-    <el-dialog v-model="previewVisible" title="报告预览" width="880px"><div class="ps-preview-paper"><h1>{{ previewDocument.title }}</h1><template v-for="(section, index) in previewDocument.sections" :key="section.id || index"><h2>{{ index + 1 }}. {{ section.title }}</h2><p v-for="paragraph in String(section.content || '本章节暂无正文').split(/\n+/).filter(Boolean)" :key="paragraph" :class="{ 'ps-report-body-paragraph': isBodyParagraph(paragraph, section.title) }"><template v-for="(part, partIndex) in reportCitationParts(paragraph, section.title, previewDocument.citations?.length ?? citations.length)" :key="partIndex"><sup v-if="part.citation" class="ps-report-citation">{{ part.text }}</sup><template v-else>{{ part.text }}</template></template></p></template></div></el-dialog>
+    <el-dialog v-if="isDigest" v-model="previewVisible" title="报告预览" width="880px"><div class="ps-preview-paper"><h1>{{ previewDocument.title }}</h1><template v-for="(section, index) in previewDocument.sections" :key="section.id || index"><h2>{{ index + 1 }}. {{ section.title }}</h2><p v-for="paragraph in String(section.content || '本章节暂无正文').split(/\n+/).filter(Boolean)" :key="paragraph" :class="{ 'ps-report-body-paragraph': isBodyParagraph(paragraph, section.title) }"><template v-for="(part, partIndex) in reportCitationParts(paragraph, section.title, previewDocument.citations?.length ?? citations.length)" :key="partIndex"><sup v-if="part.citation" class="ps-report-citation">{{ part.text }}</sup><template v-else>{{ part.text }}</template></template></p></template></div></el-dialog>
     </template>
   </div>
 </template>

@@ -107,20 +107,6 @@ test('G06: task output entry requires a completed task and recorded report outpu
   assert.equal(canOpen({ reportId: '12', status: 'completed', reportStatus: 'completed' }), true)
 })
 
-test('G08: schedule cards reflect real policy and distinguish missing history from zero', () => {
-  const policy = action('DigestListView', 'scheduleHolidayPolicy')
-  const status = action('DigestListView', 'scheduleStatus')
-  assert.equal(policy({ config: { holiday_policy: 'skip' }, holidayPolicy: 'run' }), '节假日跳过')
-  assert.equal(policy({}), '节假日照常执行')
-  assert.equal(status({}), '暂无执行记录')
-  assert.equal(status({ lastStatus: 'failed' }), '执行失败')
-  assert.equal(status({ lastStatus: 'no_data' }), '无匹配资料，已跳过')
-  assert.equal(status({ lastStatus: 'completed', hasResult: true }), '已生成')
-  const target = action('DigestListView', 'scheduleTaskPath')
-  assert.equal(target({ latestTaskId: '' }), '')
-  assert.equal(target({ latestTaskId: '97' }), '/portal/research/tasks/97')
-})
-
 test('G09: object sources render readable fields and missing quotes never overwrite authored text', () => {
   const label = action('DigestEditorView', 'citationSourceLabel')
   assert.equal(label({ source: { name: '管网新闻', url: 'https://example.org' } }), '管网新闻')

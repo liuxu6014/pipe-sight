@@ -18,12 +18,8 @@
       <el-select v-model="parseStatus" aria-label="按解析状态筛选">
         <el-option label="全部状态" value="all" />
         <el-option label="已解析" value="已解析" />
-        <el-option label="解析中" value="解析中" />
-        <el-option label="待解析" value="待解析" />
-        <el-option label="解析失败" value="解析失败" />
-        <el-option label="待安全扫描" value="待安全扫描" />
-        <el-option label="已隔离" value="已隔离" />
-        <el-option label="扫描失败" value="扫描失败" />
+        <el-option label="处理中" value="处理中" />
+        <el-option label="异常" value="异常" />
       </el-select>
       <el-button v-if="hasFilters" @click="clearFilters">重置筛选</el-button>
     </div>
@@ -54,7 +50,6 @@
         <el-table-column label="操作" width="320" header-align="center" align="right">
           <template #default="{ row: doc }"><div class="ps-row-actions">
           <el-button plain type="primary" @click="openDocument(doc)">查看</el-button>
-          <el-button v-if="doc.canManage === true" @click="editDocument(doc)">编辑</el-button>
           <el-button v-if="doc.canManage !== false" plain :loading="isReparsing(doc.id)" :disabled="Boolean(deletingId)" :aria-label="`${doc.status === '解析失败' ? '重试解析' : '重新解析'}：${doc.name}`" @click="reparse(doc)">{{ doc.status === '解析失败' ? '重试解析' : '重新解析' }}</el-button>
           <el-button v-if="doc.canManage === true" plain type="danger" :loading="deletingId === `${doc.kind}:${doc.id}`" :disabled="Boolean(deletingId)" @click="deleteLibraryItem(doc)">删除</el-button>
 
@@ -135,7 +130,11 @@ const route = useRoute()
 const portalStore = usePortalStore()
 const query = useListQuery({ q: '', status: 'all', classification: '', page: 1, size: 10 })
 function applySavedSearch(filters) { if (!applySavedSearchQuery(query, filters, 'knowledge')) refreshDocuments() }
-const { q: keyword, status: parseStatus, classification, page: currentPage, size: pageSize } = toRefs(query)
+const { q: keyword, classification, page: currentPage, size: pageSize } = toRefs(query)
+const parseStatus = computed({
+  get: () => parseStatusGroup(query.status) || 'all',
+  set: value => { query.status = value }
+})
 const listRegion = ref(null)
 const listHeight = ref()
 let listResizeObserver
@@ -206,7 +205,7 @@ const filteredDocuments = computed(() => {
   return libraryItems.value.filter(item => {
     const searchText = [item.name, item.summary, item.owner, item.source, item.journal, ...(safeTags(item))].filter(Boolean).join(' ').toLocaleLowerCase('zh-CN')
     return (!classification.value || contentCategory(item) === classification.value)
-      && (parseStatus.value === 'all' || (item.status === '等待解析' ? '待解析' : item.status) === parseStatus.value)
+      && (parseStatus.value === 'all' || parseStatusGroup(item.status) === parseStatus.value)
       && (!query || searchText.includes(query))
   })
 })
@@ -219,9 +218,16 @@ function safeTags(doc) { return Array.isArray(doc?.tags) ? doc.tags : [] }
 function scanStatusLabel(status) {
   return { pending: '等待安全扫描', quarantined: '已隔离', failed: '扫描失败' }[status] || '未通过安全检查'
 }
-function statusClass(status) { return { 'is-processing': ['解析中', '待解析', '等待解析', '待安全扫描'].includes(status), 'is-failed': ['解析失败', '已隔离', '扫描失败'].includes(status) } }
+function parseStatusGroup(status) {
+  if (['处理中', '解析中', '待解析', '等待解析', '待安全扫描'].includes(status)) return '处理中'
+  if (['异常', '解析失败', '已隔离', '扫描失败'].includes(status)) return '异常'
+  return status === '已解析' ? status : ''
+}
+function statusClass(status) {
+  const group = parseStatusGroup(status)
+  return { 'is-processing': group === '处理中', 'is-failed': group === '异常' }
+}
 function openDocument(doc) { const path = libraryItemPath(doc); if (path) router.push(path) }
-function editDocument(doc) { router.push({ path: `/portal/knowledge/${doc.id}`, query: { mode: 'edit' } }) }
 function openUpload() { uploadVisible.value = true }
 function clearFilters() { keyword.value = ''; parseStatus.value = 'all'; classification.value = ''; currentPage.value = 1 }
 async function deleteLibraryItem(item) {

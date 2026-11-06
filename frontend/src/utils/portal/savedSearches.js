@@ -9,7 +9,7 @@ const DEFAULTS = {
 const ENUMS = {
   news: { source: ['全部', '新闻网站', '微信公众号'] },
   search: { mode: ['keyword'], type: ['all', 'news', 'paper', 'document', 'report'], date: ['all', 'week', 'year'], source: ['all', 'public', 'internal'] },
-  knowledge: { status: ['all', '已解析', '解析中', '待解析', '解析失败', '待安全扫描', '已隔离', '扫描失败'] },
+  knowledge: { status: ['all', '已解析', '处理中', '异常', '解析中', '待解析', '解析失败', '待安全扫描', '已隔离', '扫描失败'] },
 }
 
 export function normalizeSearchFilters(kind, input = {}) {
