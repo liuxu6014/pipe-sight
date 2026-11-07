@@ -143,3 +143,45 @@ def test_template_model_references_preserve_large_ids_and_nulls_in_output(env) -
     row.model_id = row.image_model_id = None
     result = env.template.PipelineTemplateService._dict(row)
     assert result['modelId'] is None and result['imageModelId'] is None
+
+
+@pytest.mark.asyncio
+async def test_report_type_binding_is_saved_and_not_inferred_from_name(env, db) -> None:
+    saved = await env.template.PipelineTemplateService.save_draft(
+        db,
+        template_key=None,
+        payload={
+            'purpose': 'research',
+            'report_type': 'technology-route',
+            'name': '专用规范 A',
+            'prompt': '按规范写作',
+        },
+        operator_id=7,
+        operator_name='管理员',
+    )
+    assert saved['reportType'] == 'technology-route'
+    result = await env.template.PipelineTemplateService.save_draft(
+        db,
+        template_key=saved['id'],
+        payload={'purpose': 'research', 'name': '科研需求报告', 'prompt': '修改规则'},
+        operator_id=7,
+        operator_name='管理员',
+    )
+    assert result['reportType'] == 'technology-route'
+    listed = await env.template.PipelineTemplateService.list_templates(db, category='research')
+    assert listed['rows'][0]['reportType'] == 'technology-route'
+
+
+@pytest.mark.asyncio
+async def test_report_template_type_mismatch_is_rejected_before_model_call(env, db) -> None:
+    from test_research_simplified_20261025 import payload, queue
+
+    template, _ = seed(env, db)
+    template.report_type = 'research-demand'
+    await db.commit()
+    with raises(env, '报告类型'):
+        await queue(env, db, payload(report_type='technology-route'))
+    template.report_type = None
+    await db.commit()
+    with raises(env, '报告类型'):
+        await queue(env, db, payload(report_type='research-demand'))

@@ -63,8 +63,7 @@ async function mount(name, { query = {}, api = {}, basket = [], timers = {} } = 
   // Evidence scenarios use completed task parameters and an explicit weekly period.
   // Blank first-step validation is exercised separately in research-digest-workflow.test.js.
   if (name === 'ResearchCreateView') {
-    page.form.name = '选材契约测试报告'
-    page.form.direction = '管道检测'
+    page.form.project = '选材契约测试报告'
   } else {
     page.form.period = [new Date(2026, 9, 13), new Date(2026, 9, 19)]
   }
@@ -81,11 +80,11 @@ test('mounted research wizard validates parameters before template and evidence 
     listPipelineTemplates: async () => ({ data: { rows: templates } })
   } })
   try {
-    ctx.page.form.name = ''; ctx.page.form.direction = ''
+    ctx.page.form.project = ''
     ctx.page.nextStep()
     assert.equal(ctx.page.activeStep.value, 0)
     assert.equal(ctx.page.nextStepBlocked.value, true)
-    ctx.page.form.name = '管道检测任务'; ctx.page.form.direction = '检测技术'
+    ctx.page.form.project = '管道检测任务'
     ctx.page.form.reportType = 'technology-route'
     await settle()
     ctx.page.nextStep()
@@ -156,7 +155,7 @@ test('digest writing outline follows the selected template instead of invented c
 
 test('NULL model templates stay selectable and research submission makes no generation request', async () => {
   const ctx = await mount('ResearchCreateView', { api: {
-    listPipelineTemplates: async () => ({ data: { rows: [{ id: '101', name: '待配置模板', purpose: 'research', modelId: null, modelConfigured: false, sections: [] }] } })
+    listPipelineTemplates: async () => ({ data: { rows: [{ id: '101', name: '待配置模板', purpose: 'research', reportType: 'research-demand', modelId: null, modelConfigured: false, sections: [] }] } })
   } })
   try {
     assert.equal(ctx.page.selectedTemplate.value.id, '101')
@@ -194,7 +193,7 @@ test('research upload dialog closes after success and adds the returned material
     return pending.promise
   } } })
   try {
-    ctx.page.activeStep.value = 2
+    ctx.page.activeStep.value = 1
     ctx.page.uploadDialogVisible.value = true
     const file = new Blob(['test material'], { type: 'text/plain' })
     Object.defineProperty(file, 'name', { value: 'material.txt' })
@@ -235,7 +234,7 @@ test('research material list exposes parse state before selection and blocks fai
     ctx.page.selectedIds.value = ['505']
     await ctx.page.verifySelected()
     assert.equal(ctx.page.availableMaterials.value[0].reason, '解析失败')
-    ctx.page.activeStep.value = 2
+    ctx.page.activeStep.value = 1
     assert.equal(ctx.page.nextStepBlocked.value, true)
   } finally { ctx.close() }
 })
@@ -389,7 +388,7 @@ test('catalog rows without review status can be selected and are verified agains
     assert.equal(row.state, 'unchecked')
     assert.equal(row.ready, false)
     assert.equal(row.reason, '选择后核验')
-    ctx.page.activeStep.value = 2
+    ctx.page.activeStep.value = 1
     ctx.page.toggleMaterial(row.id, true)
     assert.equal(calls, 1)
     assert.equal(ctx.page.nextStepBlocked.value, true)
@@ -637,9 +636,9 @@ test('research keeps missing and denied IDs visible and blocks payloads instead 
     assert.equal(ctx.page.selectedMaterials.value[1].title, '选材 108')
     assert.match(ctx.page.selectionProblems.value[0].reason, /无权访问/)
     assert.throws(() => ctx.page.buildResearchPayload(), /不可用/)
-    ctx.page.activeStep.value = 2
+    ctx.page.activeStep.value = 1
     ctx.page.nextStep()
-    assert.equal(ctx.page.activeStep.value, 2)
+    assert.equal(ctx.page.activeStep.value, 1)
     ctx.page.toggleMaterial('108', false)
     await settle()
     assert.deepEqual(ctx.page.buildResearchPayload().selectedItemIds, ['115'])
@@ -700,7 +699,7 @@ test('old copied task responses and removed-selection details cannot overwrite n
     oldTask.resolve({ data: { title: '旧任务', config: { selectedItemIds: ['120'] } } })
     await old
     await settle()
-    assert.equal(ctx.page.form.name, '新任务（副本）')
+    assert.equal(ctx.page.form.project, '新任务')
     assert.deepEqual([...ctx.page.selectedIds.value], ['125'])
     ctx.page.setSelection([{ id: '126', type: 'article' }])
     ctx.page.toggleMaterial('126', false)
@@ -966,14 +965,14 @@ test('stale template IDs warn without replacing authored text or outline on temp
   const ctx = await mount('ResearchCreateView', { query: { template: 'template-01' } })
   try {
     ctx.page.form.requirements = '用户输入的需求正文'
-    ctx.page.form.name = '用户填写标题'
+    ctx.page.form.project = '用户填写标题'
     ctx.page.outline.value = [{ id: 1, title: '用户编辑章节', content: '用户章节正文', words: 1000 }]
     await ctx.page.loadTemplates()
     await settle()
     assert.equal(ctx.page.form.template, 'template-01')
     assert.match(ctx.page.templateUpgradeNotice.value, /编号已升级/)
     assert.equal(ctx.page.form.requirements, '用户输入的需求正文')
-    assert.equal(ctx.page.form.name, '用户填写标题')
+    assert.equal(ctx.page.form.project, '用户填写标题')
     assert.equal(ctx.page.outline.value[0].content, '用户章节正文')
     await ctx.page.submitTask()
     assert.equal(ctx.mutations, 0)
@@ -999,7 +998,7 @@ test('both generation forms select the real large decimal template ID without ha
   for (const name of names) {
     const id = '9007199254740993'
     const ctx = await mount(name, { api: {
-      listPipelineTemplates: async () => ({ data: { rows: [{ id, name: '真实模板编号', purpose: name === 'DigestCreateView' ? 'digest' : 'research', digestCadence: name === 'DigestCreateView' ? 'weekly' : null, modelId: null, modelConfigured: false, sections: [] }] } })
+      listPipelineTemplates: async () => ({ data: { rows: [{ id, name: '真实模板编号', purpose: name === 'DigestCreateView' ? 'digest' : 'research', reportType: name === 'DigestCreateView' ? 'digest' : 'research-demand', digestCadence: name === 'DigestCreateView' ? 'weekly' : null, modelId: null, modelConfigured: false, sections: [] }] } })
     } })
     try {
       assert.equal(ctx.page.form.template, id)

@@ -24,6 +24,7 @@ class PipelineTemplateSaveModel(BaseModel):
 
     name: str = Field(min_length=1, max_length=255)
     purpose: Literal['article', 'research', 'digest']
+    report_type: Literal['research-demand', 'technology-route', 'project-demand'] | None = None
     prompt: str = Field(min_length=1, max_length=100000)
     description: str = Field(default='', max_length=1000)
     model_id: BusinessId | None = None
@@ -64,10 +65,11 @@ class PipelineResearchJobCreateModel(BaseModel):
     template_version: str | None = Field(default=None, description='模板版本显示值快照')
     direction: str = Field(default='', description='研究方向')
     project: str = Field(default='', description='项目名称')
+    project_description: str = Field(default='', max_length=3000, description='本次项目的背景、问题及目标描述')
     scenario: str = Field(default='', description='业务场景')
     period: list[str] = Field(default_factory=list, description='起止时间')
     keywords: list[str] = Field(default_factory=list, description='关键词')
-    requirements: str = Field(default='', description='生成要求')
+    requirements: str = Field(default='', max_length=5000, description='仅用于本次任务的生成提示词')
     diagram: bool = Field(default=False, description='是否生成结构化图形')
     citation_check: bool = Field(default=True, description='是否检查引用')
     selected_item_ids: list[BusinessId] = Field(default_factory=list, description='选中资料ID')

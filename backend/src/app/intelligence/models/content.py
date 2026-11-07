@@ -166,6 +166,7 @@ class PipelinePaper(Base):
     published_date = Column(String(10), nullable=True, comment='真实发表日期：YYYY或YYYY-MM或YYYY-MM-DD')
     abstract = Column(Text, nullable=True, comment='原文摘要')
     abstract_zh = Column(Text, nullable=True, comment='中文摘要')
+    summary = Column(Text, nullable=True, comment='采集处理时生成的中文概述，不替换原始论文摘要')
     entities = Column(
         JSON().with_variant(JSONB(), 'postgresql'),
         nullable=True,

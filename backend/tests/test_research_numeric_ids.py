@@ -183,3 +183,17 @@ def test_manuscript_ids_use_the_same_strict_wire_protocol(env) -> None:
     assert dto.model_dump(by_alias=True)['templateId'] == str(LARGE_ID)
     with pytest.raises(ValidationError):
         schema.ManuscriptGenerateModel(topic='题目', templateId='old-uuid')
+
+
+def test_project_description_dto_limit_and_old_request_fingerprints(env) -> None:
+    schema = importlib.import_module('app.intelligence.schemas.pipeline')
+    ids = importlib.import_module('app.business_ids')
+    dto = schema.PipelineResearchJobCreateModel(**payload())
+    old = ids.generation_request_data(dto)
+    assert 'project_description' not in old
+    assert ids.generation_request_fingerprint(old, []) == ids.generation_request_fingerprint(dto, [])
+    with_text = schema.PipelineResearchJobCreateModel(**payload(), projectDescription='项目背景说明')
+    assert with_text.project_description == '项目背景说明'
+    assert ids.generation_request_fingerprint(with_text, []) != ids.generation_request_fingerprint(old, [])
+    with pytest.raises(ValidationError):
+        schema.PipelineResearchJobCreateModel(**payload(), projectDescription='字' * 3001)

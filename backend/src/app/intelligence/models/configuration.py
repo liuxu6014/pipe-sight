@@ -32,6 +32,10 @@ class PipelineTemplateVersion(Base):
     __tablename__ = 'templates'
     __table_args__ = (
         CheckConstraint("purpose IN ('article','research','digest')", name='ck_templates_purpose'),
+        CheckConstraint(
+            "report_type IS NULL OR (purpose = 'research' AND report_type IN ('research-demand','technology-route','project-demand'))",
+            name='ck_templates_report_type',
+        ),
         CheckConstraint('length(trim(name)) > 0 AND length(trim(prompt)) > 0', name='ck_templates_name_prompt'),
         CheckConstraint("jsonb_typeof(sections)='array'", name='ck_templates_sections').ddl_if(dialect='postgresql'),
         CheckConstraint("jsonb_typeof(image_config)='object'", name='ck_templates_image_config').ddl_if(
@@ -41,6 +45,7 @@ class PipelineTemplateVersion(Base):
     id = business_pk()
     name = Column(String(255), nullable=False)
     purpose = Column(String(16), nullable=False)
+    report_type = Column(String(32), nullable=True)
     description = Column(Text)
     prompt = Column(Text, nullable=False)
     model_id = Column(BigInteger, ForeignKey('ai_models.id', ondelete='RESTRICT'), nullable=True)

@@ -54,7 +54,8 @@ def test_template_cadence_is_explicit_and_keeps_legacy_fields(env, name, purpose
     row.name, row.purpose = name, purpose
     result = env.template.PipelineTemplateService._dict(row)
     assert result.get('digestCadence', 'missing') == expected
-    assert result['purpose'] == result['reportType'] == purpose
+    assert result['purpose'] == purpose
+    assert result['reportType'] is None
 
 
 def queue_mocks(env, monkeypatch, row):

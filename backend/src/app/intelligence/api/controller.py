@@ -221,7 +221,11 @@ async def create_template(payload: PipelineTemplateSaveModel, query_db: DB) -> R
 async def update_template(identity: BusinessId, payload: PipelineTemplateSaveModel, query_db: DB) -> Response:
     return ResponseUtil.success(
         data=await PipelineTemplateService.save_draft(
-            query_db, template_key=identity, payload=payload.model_dump(), operator_id=None, operator_name=''
+            query_db,
+            template_key=identity,
+            payload=payload.model_dump(exclude_unset=True),
+            operator_id=None,
+            operator_name='',
         )
     )
 

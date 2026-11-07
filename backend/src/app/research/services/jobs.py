@@ -98,6 +98,13 @@ class ResearchJobService:
         purpose = 'digest' if kind in {'daily', 'weekly', 'monthly'} else kind
         if template.purpose != purpose:
             raise ServiceException(message='模板用途与成果类型不匹配')
+        requested_type = data.get('report_type')
+        if (
+            purpose == 'research'
+            and requested_type in {'research-demand', 'technology-route', 'project-demand'}
+            and getattr(template, 'report_type', None) != requested_type
+        ):
+            raise ServiceException(message='模板尚未绑定当前报告类型，请选择该类型下的模板')
         if purpose == 'digest':
             PipelineTemplateService.validate_digest_cadence(template, kind)
         image_config = PipelineTemplateService.effective_image_config(template.image_config, data)
@@ -155,6 +162,7 @@ class ResearchJobService:
                 'name': template.name,
                 'prompt': prompt,
                 'purpose': template.purpose,
+                'report_type': getattr(template, 'report_type', None),
                 'digestCadence': PipelineTemplateService.digest_cadence(template),
                 'sections': deepcopy(template.sections),
                 'image_config': image_config,

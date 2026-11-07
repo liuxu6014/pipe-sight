@@ -20,7 +20,7 @@ test('a preselected template receives its published version and outline after as
     useRouter: () => ({}),
     usePortalStore: () => ({ newsItems: [], paperItems: [], knowledgeDocuments: [], basket: [] }),
     listPipelineTemplates: async () => ({ data: { rows: [{
-      templateKey: '9007199254740993', name: '自定义报告', version: 'V4.0',
+      templateKey: '9007199254740993', name: '自定义报告', reportType: 'research-demand', version: 'V4.0',
       sections: [{ id: 1, title: '实际发布的章节', words: 1500 }]
     }] } })
   })

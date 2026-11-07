@@ -50,7 +50,7 @@ class PipelineTemplateService:
             'name': row.name,
             'purpose': row.purpose,
             'category': row.purpose,
-            'reportType': row.purpose,
+            'reportType': getattr(row, 'report_type', None),
             'digestCadence': PipelineTemplateService.digest_cadence(row),
             'description': row.description or '',
             'prompt': row.prompt,
@@ -142,6 +142,11 @@ class PipelineTemplateService:
             image = await ResearchDao.get_model(db, payload['image_model_id'])
             if not image or 'image_generate' not in (image.capabilities or []):
                 raise ServiceException(message='图片模型须具备 image_generate 能力')
+        selected_type = payload.get('report_type')
+        if selected_type is not None and (
+            purpose != 'research' or selected_type not in {'research-demand', 'technology-route', 'project-demand'}
+        ):
+            raise ServiceException(message='请选择有效的科研报告类型')
         template_key = parse_business_id(template_key) if template_key is not None else None
         row = await ResearchDao.get_template(db, template_key) if template_key is not None else None
         if template_key is not None and row is None:
@@ -151,6 +156,9 @@ class PipelineTemplateService:
             db.add(row)
         for field in ('name', 'description', 'model_id', 'image_model_id'):
             setattr(row, field, payload.get(field))
+        # Older clients may omit the binding; preserve it on content-only updates.
+        if purpose != 'research' or 'report_type' in payload or row.id is None:
+            row.report_type = selected_type
         row.purpose, row.prompt = purpose, prompt
         row.sections = deepcopy(payload.get('sections') or [])
         row.image_config = deepcopy(payload.get('image_config') or {})

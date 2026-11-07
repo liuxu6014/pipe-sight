@@ -18,3 +18,16 @@
 这些脚本并非全部只读或默认 dry-run。初始化、导入、回填、清理及演练工具可能修改数据，运行前需确认目标环境、适用数据和备份要求；以各脚本参数和说明为准。`verify_schema.py` 会连接实际配置库，不属于离线目录检查。此次目录整理不执行以上数据工具。
 
 脚本的文件清单、论文资源和输出仍指向原有的 `backend/data/`、`backend/vf_admin/`、根目录 `.runtime/` 等位置。历史论文辅助工具保留用于追溯，不意味着用户端已启用论文全文功能。
+
+## 科研报告分类模板
+
+`bootstrap/seed_research_templates.py` 读取 `data/templates/research-presets-v1.json`，为科研需求、技术路线和科技项目需求填报三类各提供 3 份具体模板。模板包含独立正文提示词、章节说明和篇幅规划；模型不自动选择，配图默认关闭。
+
+部署时先备份数据库并执行 `alembic upgrade head`，再从 `backend/` 目录预览和追加：
+
+```sh
+PYTHONPATH=src:. .venv/bin/python scripts/bootstrap/seed_research_templates.py
+PYTHONPATH=src:. .venv/bin/python scripts/bootstrap/seed_research_templates.py --apply
+```
+
+默认仅预览；`--apply` 仅追加缺少的模板，以报告类型和模板名称匹配，不覆盖已有提示词、章节、模型或启停状态。已有通用模板需在模板管理中明确绑定报告类型，不从名称猜测。新建报告的基本信息、选材、模板和大纲按四步完成；项目描述及本次写作要求随任务快照保存。

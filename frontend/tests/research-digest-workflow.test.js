@@ -51,7 +51,7 @@ test('wizard starts with task parameters, keeps multiple real templates per type
     assert.equal(v.activeStep.value, 0)
     assert.equal(v.nextStepBlocked.value, true)
     v.nextStep(); assert.equal(v.activeStep.value, 0)
-    v.form.name = '测试任务'; v.form.direction = '检测'; v.form.keywords = ['自定义词']
+    v.form.projectDescription = '生产中需要研究腐蚀检测的适用边界'; v.form.project = '测试任务'; v.form.keywords = ['自定义词']; v.form.requirements = '按企业规范编制，不得编造结论'
     v.nextStep(); assert.equal(v.activeStep.value, 1)
     await v.loadTemplates(); await nextTick()
     for (const reportType of reportTypes) {
@@ -62,6 +62,11 @@ test('wizard starts with task parameters, keeps multiple real templates per type
       v.selection.selectedIds.value = ['9007199254740993']
       const p = v.buildResearchPayload()
       assert.equal(p.reportType, reportType)
+      assert.equal(p.title, '测试任务')
+      assert.equal(p.project, p.title)
+      assert.equal('direction' in p, false)
+      assert.equal(p.projectDescription, '生产中需要研究腐蚀检测的适用边界')
+      assert.equal(p.requirements, '按企业规范编制，不得编造结论')
       assert.equal(p.templateId, v.form.template)
       assert.equal(p.templateVersion, 'V3')
       assert.equal(p.outline[0].words, 1700)
@@ -79,13 +84,13 @@ test('wizard starts with task parameters, keeps multiple real templates per type
     assert.equal(v.writes(), 0)
   } finally { v.close() }
 })
-test('generic published research templates remain reusable for all three report types', async () => {
+test('unbound legacy templates are not silently assigned to every report type', async () => {
   const v = setup('pages/ResearchCreateView', 'form, availableReportTemplates, loadTemplates', {
     listPipelineTemplates: async () => ({ data: { rows: [{ ...templates[0], reportType: 'research' }, { ...templates[1], reportType: undefined }] } })
   })
   try {
     await v.loadTemplates()
-    for (const type of reportTypes) { v.form.reportType = type; await nextTick(); assert.equal(v.availableReportTemplates.value.length, 2) }
+    for (const type of reportTypes) { v.form.reportType = type; await nextTick(); assert.equal(v.availableReportTemplates.value.length, 0) }
   } finally { v.close() }
 })
 test('daily creation deep links fall back to weekly and daily payloads and source-task copies are blocked', async () => {
@@ -173,4 +178,38 @@ test('all changed Vue files compile and retain scoped styles; citation shading i
   }
   assert.match(read('pages/DigestEditorView'), /\.ps-citation-marker \{[^}]*background:/)
   assert.doesNotMatch(read('pages/ResearchCreateView').split('<script setup>')[0], /公开资料补充/)
+})
+
+test('wizard selects evidence before templates and model readiness blocks only final generation', async () => {
+  const v = setup('pages/ResearchCreateView', 'form, activeStep, nextStepBlocked, finalGenerationError, nextStep, loadTemplates', {
+    listPipelineTemplates: async () => ({ data: { rows: [{ ...templates[0], modelId: null, modelConfigured: false }] } })
+  })
+  try {
+    await v.loadTemplates(); await nextTick()
+    v.form.project = '真实项目'
+    assert.equal(v.nextStepBlocked.value, false)
+    v.nextStep(); assert.equal(v.activeStep.value, 1)
+    assert.equal(v.nextStepBlocked.value, true)
+    v.selection.selectedIds.value = ['101']
+    assert.equal(v.nextStepBlocked.value, false)
+    v.nextStep(); assert.equal(v.activeStep.value, 2)
+    assert.equal(v.nextStepBlocked.value, false)
+    v.nextStep(); assert.equal(v.activeStep.value, 3)
+    assert.ok(v.finalGenerationError.value)
+    assert.equal(v.writes(), 0)
+  } finally { v.close() }
+})
+
+test('copied research tasks restore project descriptions from API naming styles or a legacy research direction', async () => {
+  for (const descriptionKey of ['projectDescription', 'project_description', 'direction']) {
+    const v = setup('pages/ResearchCreateView', 'form, loadSourceTask', {
+      getPipelineResearchJob: async () => ({ data: { title: '原报告', config: { project: '原项目', [descriptionKey]: '原项目背景与待研究问题' } } })
+    })
+    try {
+      await v.loadSourceTask('41')
+      assert.equal(v.form.project, '原项目')
+      assert.equal(v.form.projectDescription, '原项目背景与待研究问题')
+      assert.equal(v.writes(), 0)
+    } finally { v.close() }
+  }
 })

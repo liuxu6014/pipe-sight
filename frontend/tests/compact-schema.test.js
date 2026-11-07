@@ -135,9 +135,9 @@ test('template saves canonical configuration with NULL models and never invokes 
     createPipelineTemplate: async payload => { saved = payload }, listPipelineTemplates: async () => ({ data: { rows: [] } })
   }, 'form, saveTemplate')
   try {
-    Object.assign(h.form, { name: '模板', prompt: '依据资料生成', modelId: null, imageModelId: null })
+    Object.assign(h.form, { name: '模板', reportType: 'research-demand', prompt: '依据资料生成', modelId: null, imageModelId: null })
     await h.saveTemplate()
-    assert.deepEqual(Object.keys(saved).sort(), ['name','purpose','prompt','description','modelId','imageModelId','sections','imageConfig','isEnabled'].sort())
+    assert.deepEqual(Object.keys(saved).sort(), ['name','purpose','reportType','prompt','description','modelId','imageModelId','sections','imageConfig','isEnabled'].sort())
     assert.equal(saved.modelId, null); assert.equal(saved.isEnabled, true)
   } finally { h.close() }
 })

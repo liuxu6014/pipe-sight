@@ -315,8 +315,9 @@
 }
 
 .ps-workspace-surface {
+  .el-range-input:focus-visible { outline: none; }
   :is(button, a, summary):focus-visible,
-  :is(input, textarea):not(:where(.el-input__inner, .el-textarea__inner, .el-select__input, .el-input-tag__input)):focus-visible {
+  :is(input, textarea):not(:where(.el-input__inner, .el-textarea__inner, .el-select__input, .el-input-tag__input, .el-range-input)):focus-visible {
     outline: 3px solid #409eff;
     outline-offset: 3px;
   }

@@ -275,9 +275,20 @@ async def test_truncated_provider_output_is_not_accepted_as_a_deliverable(env, d
 
 @pytest.mark.asyncio
 async def test_gateway_uses_frozen_template_prompt_and_returns_provider_content(env, db, monkeypatch) -> None:
-    seed(env, db)
+    template, _ = seed(env, db)
+    template.report_type = 'research-demand'
+    await db.commit()
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
-    result = await queue(env, db)
+    result = await queue(
+        env,
+        db,
+        payload(
+            report_type='research-demand',
+            project_description='现场腐蚀检测存在适用条件限制，需要开展方法对比研究',
+            requirements='本次按企业规范撰写，只引用所选资料',
+            outline=[{'title': '本次章节', 'words': 1600, 'description': '只讨论可验证问题'}],
+        ),
+    )
     job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
     model = await db.get(env.ai.AiModels, 1)
     snapshot = job.config_snapshot
@@ -305,6 +316,15 @@ async def test_gateway_uses_frozen_template_prompt_and_returns_provider_content(
     assert '不要在句首或句中重复引用' in sent['messages'][0]['content']
     assert '不要附加来源类型和日期的括号说明' in sent['messages'][0]['content']
     assert job.materials[0]['content'] in sent['messages'][1]['content']
+    assert '本次按企业规范撰写，只引用所选资料' in sent['messages'][1]['content']
+    assert '现场腐蚀检测存在适用条件限制，需要开展方法对比研究' in sent['messages'][1]['content']
+    assert snapshot['request']['project_description'] == '现场腐蚀检测存在适用条件限制，需要开展方法对比研究'
+    assert '本次章节' in sent['messages'][1]['content']
+    assert '只讨论可验证问题' in sent['messages'][1]['content']
+    assert 'research-demand' in sent['messages'][1]['content']
+    assert snapshot['request']['requirements'] == '本次按企业规范撰写，只引用所选资料'
+    assert snapshot['template']['report_type'] == 'research-demand'
+    assert (await env.repo.ResearchDao.get_template(db, '201')).prompt == '只使用资料'
     assert sent['model'] == model.code
     assert db.s.scalars(select(env.configuration.PipelineModelCallAudit)).one().task_id == job.id
 

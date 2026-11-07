@@ -54,10 +54,13 @@ body:has(.ps-portal) {
 
 .ps-portal button:focus-visible,
 .ps-portal a:focus-visible,
-.ps-portal :is(input, textarea):not(:where(.el-input__inner, .el-textarea__inner, .el-select__input, .el-input-tag__input)):focus-visible {
+.ps-portal :is(input, textarea):not(:where(.el-input__inner, .el-textarea__inner, .el-select__input, .el-input-tag__input, .el-range-input)):focus-visible {
   outline: 2px solid var(--ps-blue);
   outline-offset: 2px;
 }
+
+// 日期范围是复合控件，焦点由 Element Plus 外框承接，内部输入框不叠加描边。
+.ps-portal .el-range-input:focus-visible { outline: none; }
 
 .ps-header {
   position: fixed;
