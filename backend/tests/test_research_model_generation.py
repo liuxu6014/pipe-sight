@@ -31,6 +31,14 @@ db = refactor_db
 no_external_network = refactor_no_external_network
 
 
+@pytest.mark.parametrize('chapter_prompt', [123, None, '字' * 3001])
+def test_chapter_prompt_rejects_invalid_text_before_model_call(env, chapter_prompt) -> None:
+    with raises(env, '文本' if not isinstance(chapter_prompt, str) else '3000'):
+        env.gateway.ResearchModelGenerationService.generation_outline(
+            {'request': {'outline': [{'title': '研究目标', 'prompt': chapter_prompt}]}}
+        )
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('raw', ['## 分析\n\n无法对应的结论[99]。', '## 分析\n\n没有引用的事实正文。'])
 async def test_invalid_manuscript_fails_without_overwriting_report(env, db, monkeypatch, raw) -> None:
@@ -274,7 +282,8 @@ async def test_truncated_provider_output_is_not_accepted_as_a_deliverable(env, d
 
 
 @pytest.mark.asyncio
-async def test_gateway_uses_frozen_template_prompt_and_returns_provider_content(env, db, monkeypatch) -> None:
+@pytest.mark.parametrize('template_prompt', [None, '本次以技术验证为主线，采用用户调整后的章节重点', ''])
+async def test_gateway_uses_frozen_template_prompt_and_returns_provider_content(env, db, monkeypatch, template_prompt) -> None:
     template, _ = seed(env, db)
     template.report_type = 'research-demand'
     await db.commit()
@@ -286,7 +295,8 @@ async def test_gateway_uses_frozen_template_prompt_and_returns_provider_content(
             report_type='research-demand',
             project_description='现场腐蚀检测存在适用条件限制，需要开展方法对比研究',
             requirements='本次按企业规范撰写，只引用所选资料',
-            outline=[{'title': '本次章节', 'words': 1600, 'description': '只讨论可验证问题'}],
+            template_prompt=template_prompt,
+            outline=[{'title': '本次章节', 'words': 1600, 'description': '只讨论可验证问题', 'prompt': '先比较现场检测盲区，再列出需要试验验证的方案'}],
         ),
     )
     job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
@@ -311,7 +321,12 @@ async def test_gateway_uses_frozen_template_prompt_and_returns_provider_content(
 
     sent = json.loads(requests[0].content)
     assert content == '只来自离线供应商的正文' and requests[0].url.path == '/v1/chat/completions'
-    assert snapshot['template']['prompt'] in sent['messages'][0]['content']
+    if template_prompt is None:
+        assert snapshot['template']['prompt'] in sent['messages'][0]['content']
+    else:
+        assert template_prompt in sent['messages'][0]['content']
+        assert snapshot['template']['prompt'] not in sent['messages'][0]['content']
+        assert snapshot['request']['template_prompt'] == template_prompt
     assert '正文引用只放在句末' in sent['messages'][0]['content']
     assert '不要在句首或句中重复引用' in sent['messages'][0]['content']
     assert '不要附加来源类型和日期的括号说明' in sent['messages'][0]['content']
@@ -321,6 +336,9 @@ async def test_gateway_uses_frozen_template_prompt_and_returns_provider_content(
     assert snapshot['request']['project_description'] == '现场腐蚀检测存在适用条件限制，需要开展方法对比研究'
     assert '本次章节' in sent['messages'][1]['content']
     assert '只讨论可验证问题' in sent['messages'][1]['content']
+    assert '先比较现场检测盲区，再列出需要试验验证的方案' in sent['messages'][1]['content']
+    assert snapshot['request']['outline'][0]['prompt'] == '先比较现场检测盲区，再列出需要试验验证的方案'
+    assert 'prompt 是作者为本次任务填写' in sent['messages'][0]['content']
     assert 'research-demand' in sent['messages'][1]['content']
     assert snapshot['request']['requirements'] == '本次按企业规范撰写，只引用所选资料'
     assert snapshot['template']['report_type'] == 'research-demand'

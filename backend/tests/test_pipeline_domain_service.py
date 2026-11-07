@@ -252,7 +252,7 @@ def test_job_execution_display_matches_real_terminal_state(env, status) -> None:
         assert not any(row['key'] == 'result' and row['status'] == 'completed' for row in result['stages'])
 
 
-@pytest.mark.parametrize('name', ['科研需求报告', '科技项目需求填报表', ''])
+@pytest.mark.parametrize('name', ['科研需求报告', '科技项目需求填报表', '科技项目需求表', '自定义项目需求模板', ''])
 def test_job_template_name_uses_frozen_template_not_request_id(env, name) -> None:
     job = env.models.PipelineResearchJob(
         id=701,
@@ -268,7 +268,7 @@ def test_job_template_name_uses_frozen_template_not_request_id(env, name) -> Non
         },
     )
     result = env.app.ResearchApplicationService.job_dict(job)
-    assert result['templateName'] == name
+    assert result['templateName'] == ('科技项目需求表' if name == '科技项目需求填报表' else name)
     assert result['config']['template_id'] == '31'
 
 

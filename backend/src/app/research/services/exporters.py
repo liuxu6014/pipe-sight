@@ -203,7 +203,7 @@ def _metadata_line(report: Any) -> str:
     report_type = {
         'research-demand': '科研需求报告',
         'technology-route': '技术路线报告',
-        'project-demand': '科技项目需求填报表',
+        'project-demand': '科技项目需求表',
         'daily': '科技情报日报',
         'weekly': '科技情报周报',
         'monthly': '科技情报月报',

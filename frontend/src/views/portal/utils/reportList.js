@@ -7,7 +7,10 @@ export function sortResearchReports(reports, order = 'updated-desc') {
     return Number.isFinite(value) ? value : null
   }
   return [...reports].sort((a, b) => {
-    if (order === 'title') return String(a.title || '').localeCompare(String(b.title || ''), 'zh-CN')
+    if (order === 'title' || order === 'title-desc') {
+      const byTitle = String(a.title || '').localeCompare(String(b.title || ''), 'zh-CN')
+      return order === 'title-desc' ? -byTitle : byTitle
+    }
     const left = timestamp(a)
     const right = timestamp(b)
     if (left === null) return right === null ? 0 : 1

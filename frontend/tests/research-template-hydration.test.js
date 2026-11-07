@@ -21,7 +21,7 @@ test('a preselected template receives its published version and outline after as
     usePortalStore: () => ({ newsItems: [], paperItems: [], knowledgeDocuments: [], basket: [] }),
     listPipelineTemplates: async () => ({ data: { rows: [{
       templateKey: '9007199254740993', name: '自定义报告', reportType: 'research-demand', version: 'V4.0',
-      sections: [{ id: 1, title: '实际发布的章节', words: 1500 }]
+      prompt: '模板配置的正文生成提示词', sections: [{ id: 1, title: '实际发布的章节', words: 1500, description: '模板配置的章节要求' }]
     }] } })
   })
   const scope = effectScope()
@@ -32,6 +32,13 @@ test('a preselected template receives its published version and outline after as
     assert.equal(context.testing.form.version, 'V4.0')
     assert.equal(context.testing.outline.value.length, 1)
     assert.equal(context.testing.outline.value[0].title, '实际发布的章节')
+    assert.equal(context.testing.form.templatePrompt, '模板配置的正文生成提示词')
+    assert.equal(context.testing.outline.value[0].prompt, '模板配置的章节要求')
+    context.testing.form.templatePrompt = ''
+    context.testing.outline.value[0].prompt = '用户改写的章节要求'
+    await context.testing.loadTemplates(); await nextTick()
+    assert.equal(context.testing.form.templatePrompt, '')
+    assert.equal(context.testing.outline.value[0].prompt, '用户改写的章节要求')
   } finally {
     scope.stop()
   }

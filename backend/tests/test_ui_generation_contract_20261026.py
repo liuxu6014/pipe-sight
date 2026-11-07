@@ -58,6 +58,15 @@ def test_template_cadence_is_explicit_and_keeps_legacy_fields(env, name, purpose
     assert result['reportType'] is None
 
 
+def test_project_template_display_name_is_consistent_without_mutating_legacy_config(env):
+    row = template()
+    row.name, row.purpose, row.report_type = '科技项目需求填报表', 'research', 'project-demand'
+    result = env.template.PipelineTemplateService._dict(row)
+    assert result['name'] == '科技项目需求表'
+    assert result['reportType'] == 'project-demand'
+    assert row.name == '科技项目需求填报表'
+
+
 def queue_mocks(env, monkeypatch, row):
     jobs = importlib.import_module('app.research.services.jobs')
     model = NS(id=1, provider='compatible', code='offline', base_url='https://offline.invalid', parameters={})

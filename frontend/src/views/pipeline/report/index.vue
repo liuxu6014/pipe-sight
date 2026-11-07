@@ -18,7 +18,7 @@
     <el-card v-else shadow="never" class="table-card report-review-table ws-list-panel">
       <el-table v-loading="loading" :data="filteredRows" row-key="id" border height="100%" empty-text="当前条件下暂无成果">
         <el-table-column prop="title" label="成果名称" :min-width="reportKind === 'digest' ? 200 : 260" show-overflow-tooltip />
-        <el-table-column prop="type" label="材料类型" :width="reportKind === 'digest' ? 90 : 160" show-overflow-tooltip />
+        <el-table-column prop="type" label="材料类型" :width="reportKind === 'digest' ? 90 : 160" show-overflow-tooltip><template #default="{ row }">{{ reportTypeLabel(row.reportType || row.type) }}</template></el-table-column>
         <el-table-column prop="owner" label="作者" :width="reportKind === 'digest' ? 80 : 140" show-overflow-tooltip />
         <el-table-column v-if="reportKind === 'digest'" prop="period" label="覆盖周期" min-width="140" />
         <el-table-column prop="status" label="业务状态" :width="reportKind === 'digest' ? 105 : 120"><template #default="{ row }"><el-tag :type="getReportStatusMeta(row.status).type" effect="light">{{ getReportStatusMeta(row.status).label }}</el-tag></template></el-table-column>
@@ -72,6 +72,19 @@ async function loadReports() {
   } finally {
     loading.value = false
   }
+}
+
+const reportTypeLabels = {
+  research: '科研报告',
+  'research-demand': '科研需求报告',
+  'technology-route': '技术路线报告',
+  'project-demand': '科技项目需求表',
+  daily: '日报',
+  weekly: '周报',
+  monthly: '月报'
+}
+function reportTypeLabel(type) {
+  return reportTypeLabels[type] || type || (reportKind.value === 'digest' ? '情报简报' : '科研报告')
 }
 
 function downloadMarkdown(fileName, content) {

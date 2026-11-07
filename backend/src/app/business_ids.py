@@ -60,7 +60,7 @@ def wire_id(value) -> str | None:
 
 
 def generation_request_data(payload) -> dict:
-    """保留配图显式选择；空项目描述不改变旧请求的幂等指纹。"""
+    """保留显式配图和提示词覆盖；未提供的扩展字段不改变旧请求指纹。"""
     if hasattr(payload, 'model_dump'):
         data = payload.model_dump(by_alias=False)
         if 'diagram' not in payload.model_fields_set:
@@ -69,6 +69,8 @@ def generation_request_data(payload) -> dict:
         data = dict(payload)
     if not data.get('project_description'):
         data.pop('project_description', None)
+    if data.get('template_prompt') is None:
+        data.pop('template_prompt', None)
     return data
 
 

@@ -7,6 +7,7 @@ import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 import * as ids from '../src/utils/portal/businessId.js'
 import * as times from '../src/utils/portal/businessTime.js'
 import { templatePreview } from '../src/utils/portal/researchWorkspace.js'
+import { allocateReportWords } from '../src/utils/portal/reportLength.js'
 import { templateGenerationError } from '../src/utils/pipeline/compactContract.js'
 import { cleanReportCitationNotes, reportCitationParts } from '../src/utils/portal/reportDocument.js'
 import { newScheduleForm, readScheduleForm, schedulePayload, scheduleSummary } from '../src/utils/portal/digestScheduleEditor.js'
@@ -19,7 +20,7 @@ function setup(name, expose, overrides = {}) {
   const selection = { selectedIds: ref([]), selectedMaterials: ref([]), verifying: ref(false), problems: ref([]), setHint() {}, setSelection() {}, verifySelected: async () => true, refreshEvidence() {} }
   const store = { workspaceEpoch: 1, digestReports: [], tasks: [], sectionErrors: {}, basket: [], hydrate: async () => {} }
   const context = vm.createContext({
-    Date, computed, reactive, ref, watch, nextTick, ...ids, ...times, templatePreview, templateGenerationError,
+    Date, computed, reactive, ref, watch, nextTick, ...ids, ...times, templatePreview, templateGenerationError, allocateReportWords,
     cleanReportCitationNotes, reportCitationParts, newScheduleForm, readScheduleForm, schedulePayload, scheduleSummary,
     onMounted() {}, onBeforeUnmount(fn) { callbacks.push(fn) }, onBeforeRouteLeave() {}, onBeforeRouteUpdate() {},
     useRoute: () => reactive({ query: {}, params: { id: '41' } }), useRouter: () => ({ push() {} }), usePortalStore: () => store,
@@ -59,6 +60,7 @@ test('wizard starts with task parameters, keeps multiple real templates per type
       assert.equal(v.availableReportTemplates.value.length, 2)
       v.form.template = v.availableReportTemplates.value[1].id; await nextTick()
       v.outline.value[0].words = 1700; v.outline.value[0].description = '修改后的边界'
+      v.outline.value[0].prompt = '先讨论现场检测盲区，再比较两种技术的验证方案'
       v.selection.selectedIds.value = ['9007199254740993']
       const p = v.buildResearchPayload()
       assert.equal(p.reportType, reportType)
@@ -71,6 +73,7 @@ test('wizard starts with task parameters, keeps multiple real templates per type
       assert.equal(p.templateVersion, 'V3')
       assert.equal(p.outline[0].words, 1700)
       assert.equal(p.outline[0].description, '修改后的边界')
+      assert.equal(p.outline[0].prompt, '先讨论现场检测盲区，再比较两种技术的验证方案')
       assert.equal(p.outline[0].required, true)
       assert.equal(p.selectedItemIds[0], '9007199254740993')
       assert.equal(p.keywords[0], '自定义词')
@@ -84,6 +87,31 @@ test('wizard starts with task parameters, keeps multiple real templates per type
     assert.equal(v.writes(), 0)
   } finally { v.close() }
 })
+test('chapter prompts stay with their chapter across steps, reordering and template switches without changing public templates', async () => {
+  const v = setup('pages/ResearchCreateView', 'form, activeStep, nextStep, outline, moveOutline, loadTemplates, buildResearchPayload', {
+    listPipelineTemplates: async () => ({ data: { rows: templates } })
+  })
+  try {
+    await v.loadTemplates(); await nextTick()
+    v.form.project = '验证章节意图'; v.selection.selectedIds.value = ['12']
+    v.activeStep.value = 2
+    v.outline.value[0].prompt = '第一章作者的写作意图'
+    v.outline.value.push({ id: 2, title: '第二章', words: 800, description: '', prompt: '第二章的证据要求' })
+    v.nextStep(); assert.equal(v.activeStep.value, 3)
+    assert.equal(v.outline.value[0].prompt, '第一章作者的写作意图')
+    v.moveOutline(0, 1)
+    assert.equal(v.buildResearchPayload().outline[1].prompt, '第一章作者的写作意图')
+    v.form.template = '32'; await nextTick()
+    assert.equal(v.outline.value[0].prompt, '原始要求')
+    v.outline.value[0].prompt = '另一模板的作者意图'
+    v.form.template = '31'; await nextTick()
+    assert.deepEqual(Array.from(v.outline.value, section => section.prompt), ['第二章的证据要求', '第一章作者的写作意图'])
+    assert.equal(templates[0].sections.length, 1)
+    assert.equal(templates[0].sections[0].prompt, undefined)
+    v.outline.value[0].prompt = '字'.repeat(3001)
+    assert.throws(() => v.buildResearchPayload(), /3000/)
+  } finally { v.close() }
+})
 test('unbound legacy templates are not silently assigned to every report type', async () => {
   const v = setup('pages/ResearchCreateView', 'form, availableReportTemplates, loadTemplates', {
     listPipelineTemplates: async () => ({ data: { rows: [{ ...templates[0], reportType: 'research' }, { ...templates[1], reportType: undefined }] } })
@@ -92,6 +120,69 @@ test('unbound legacy templates are not silently assigned to every report type', 
     await v.loadTemplates()
     for (const type of reportTypes) { v.form.reportType = type; await nextTick(); assert.equal(v.availableReportTemplates.value.length, 0) }
   } finally { v.close() }
+})
+test('length presets and custom totals update the submitted outline without losing authored prompts', async () => {
+  const configured = { ...templates[0], sections: [{ id: 1, title: '问题', words: 1700, description: '说明问题' }, { id: 2, title: '方案', words: 3000, description: '说明方案' }] }
+  const v = setup('pages/ResearchCreateView', 'form, outline, totalWords, lengthTarget, changeLengthMode, applyCustomLength, customLengthPending, loadTemplates, buildResearchPayload', {
+    listPipelineTemplates: async () => ({ data: { rows: [configured] } })
+  })
+  try {
+    await v.loadTemplates(); await nextTick()
+    v.form.project = '篇幅验证'; v.selection.selectedIds.value = ['12']
+    assert.equal(v.totalWords.value, 4700)
+    v.outline.value[0].prompt = '用户保留的重点'
+    v.form.length = 'compact'; v.changeLengthMode('compact')
+    assert.equal(v.totalWords.value, 3300)
+    v.form.length = 'long'; v.changeLengthMode('long')
+    assert.equal(v.totalWords.value, 7100)
+    v.form.length = 'custom'; v.changeLengthMode('custom'); v.lengthTarget.value = 5701
+    assert.equal(v.customLengthPending.value, true)
+    assert.throws(() => v.buildResearchPayload(), /应用到大纲/)
+    v.applyCustomLength()
+    assert.equal(v.customLengthPending.value, false)
+    const payload = v.buildResearchPayload()
+    assert.equal(payload.outline.reduce((sum, section) => sum + section.words, 0), 5701)
+    assert.equal(payload.options.length, 'custom')
+    assert.equal(payload.outline[0].prompt, '用户保留的重点')
+    v.outline.value[0].words += 100
+    assert.equal(v.lengthTarget.value, 5801)
+    assert.equal(v.customLengthPending.value, false)
+    assert.deepEqual(configured.sections.map(section => section.words), [1700, 3000])
+  } finally { v.close() }
+})
+test('template writing defaults can be submitted unchanged and edits survive template switches and task copies', async () => {
+  const configured = [
+    { ...templates[0], prompt: '模板一的正文要求', sections: [{ id: 1, title: '章一', words: 1200, description: '章一的默认写作要求' }] },
+    { ...templates[1], prompt: '模板二的正文要求', sections: [{ id: 2, title: '章二', words: 800, description: '参考说明', prompt: '章二专属提示词' }] }
+  ]
+  for (const key of ['templatePrompt', 'template_prompt']) {
+    const v = setup('pages/ResearchCreateView', 'form, outline, loadTemplates, buildResearchPayload, loadSourceTask', {
+      listPipelineTemplates: async () => ({ data: { rows: configured } }),
+      getPipelineResearchJob: async () => ({ data: { title: '原报告', config: { templateId: '31', [key]: '原任务修改后的提示词' }, outline: [{ id: 1, title: '章一', words: 1200, prompt: '' }] } })
+    })
+    try {
+      await v.loadTemplates(); await nextTick()
+      v.form.project = '测试默认提示词'; v.selection.selectedIds.value = ['12']
+      let payload = v.buildResearchPayload()
+      assert.equal(payload.templatePrompt, '模板一的正文要求')
+      assert.equal(payload.outline[0].prompt, '章一的默认写作要求')
+      v.form.templatePrompt = '只用于本次任务的正文要求'
+      v.outline.value[0].prompt = ''
+      v.form.template = '32'; await nextTick()
+      assert.equal(v.form.templatePrompt, '模板二的正文要求')
+      assert.equal(v.outline.value[0].prompt, '章二专属提示词')
+      v.form.template = '31'; await nextTick()
+      payload = v.buildResearchPayload()
+      assert.equal(payload.templatePrompt, '只用于本次任务的正文要求')
+      assert.equal(payload.outline[0].prompt, '')
+      await v.loadSourceTask('41'); await nextTick()
+      assert.equal(v.form.templatePrompt, '原任务修改后的提示词')
+      assert.equal(v.outline.value[0].prompt, '')
+      assert.equal(configured[0].prompt, '模板一的正文要求')
+      assert.equal(configured[0].sections[0].prompt, undefined)
+      assert.equal(v.writes(), 0)
+    } finally { v.close() }
+  }
 })
 test('daily creation deep links fall back to weekly and daily payloads and source-task copies are blocked', async () => {
   const v = setup('pages/DigestCreateView', 'form, buildDigestPayload, buildReportPeriod, loadSourceTask, sourceTaskError', {

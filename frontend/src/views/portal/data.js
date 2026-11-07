@@ -159,14 +159,14 @@ export const knowledgeDocuments = [
   { id: 'doc-001', name: '津华管道多元检测数据缺陷智能化分析算法及应用', type: '内部文献', format: 'DOCX', pages: 68, owner: '科研团队', permission: '仅自己可见', status: '已解析', updatedAt: '2026-08-03', summary: '项目技术路线、数据治理方案、算法验证指标与工程应用计划。', tags: ['多元检测', '缺陷识别'] },
   { id: 'doc-002', name: '基于磁各向异性原理的管道本体应力监测技术研究', type: '历史项目', format: 'PDF', pages: 112, owner: '科研管理部', permission: '项目组可见', status: '已解析', updatedAt: '2026-08-01', summary: '应力监测原理、试验设计、现场标定和工程示范结果。', tags: ['应力监测', '磁各向异性'] },
   { id: 'doc-003', name: 'Pipeline Integrity Management Recommended Practice 2026', type: '英文报告', format: 'PDF', pages: 184, owner: '情报分析组', permission: '全员可见', status: '已解析', updatedAt: '2026-07-29', summary: '国际管道完整性管理推荐实践与典型失效案例。', tags: ['完整性管理', '国际标准'] },
-  { id: 'doc-004', name: '科技项目需求填报表模板（2026版）', type: '模板', format: 'DOCX', pages: 16, owner: '科研管理部', permission: '全员可见', status: '已解析', updatedAt: '2026-07-25', summary: '包括封面字段、需求背景、研究内容、技术指标与预算表。', tags: ['项目申报', '模板'] },
+  { id: 'doc-004', name: '科技项目需求表模板（2026版）', type: '模板', format: 'DOCX', pages: 16, owner: '科研管理部', permission: '全员可见', status: '已解析', updatedAt: '2026-07-25', summary: '包括封面字段、需求背景、研究内容、技术指标与预算表。', tags: ['项目申报', '模板'] },
   { id: 'doc-005', name: '华北区域第三方施工风险事件汇编', type: '其他', format: 'XLSX', pages: 32, owner: '安全运行部', permission: '受限', status: '解析中', updatedAt: '2026-07-22', summary: '近三年第三方施工风险事件及处置结果汇编。', tags: ['第三方施工', '案例'] }
 ]
 
 export const researchReports = [
   { id: 'report-001', title: '多元检测数据缺陷智能化分析技术路线报告', type: '技术路线报告', status: '待修改', version: 'V1.3', progress: 100, updatedAt: '今天 10:24', words: 12680 },
   { id: 'report-002', title: '管道本体应力监测科研需求报告', type: '科研需求报告', status: '生成中', version: 'V0.8', progress: 68, updatedAt: '今天 09:42', words: 8240 },
-  { id: 'report-003', title: '智能阴保监测科技项目需求填报表', type: '科技项目需求填报表', status: '已完成', version: 'V2.0', progress: 100, updatedAt: '昨天 16:20', words: 9380 },
+  { id: 'report-003', title: '智能阴保监测科技项目需求表', type: '科技项目需求表', status: '已完成', version: 'V2.0', progress: 100, updatedAt: '昨天 16:20', words: 9380 },
   { id: 'report-004', title: '高后果区风险动态评价研究综述', type: '研究综述', status: '草稿', version: 'V0.2', progress: 12, updatedAt: '07-30 14:08', words: 1680 }
 ]
 

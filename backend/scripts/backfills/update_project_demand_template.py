@@ -8,6 +8,7 @@ from pathlib import Path
 
 from sqlalchemy import text
 
+from app.research.services.report_labels import display_template_name
 from app.research.services.writing_rules import PROJECT_DEMAND_PROMPT
 from config.database import create_async_db_engine
 
@@ -56,7 +57,7 @@ async def run(apply: bool, backup: Path | None) -> None:
     try:
         async with engine.begin() as connection:
             row = (await connection.execute(text('SELECT * FROM templates WHERE id=31 FOR UPDATE'))).mappings().one()
-            if row['name'] != '科技项目需求填报表' or row['purpose'] != 'research':
+            if display_template_name(row['name']) != '科技项目需求表' or row['purpose'] != 'research':
                 raise RuntimeError('模板身份已变化，停止更新')
             old_report = (await connection.execute(text('SELECT content FROM reports WHERE id=40'))).scalar_one()
             digest = hashlib.sha256(old_report.encode()).hexdigest()

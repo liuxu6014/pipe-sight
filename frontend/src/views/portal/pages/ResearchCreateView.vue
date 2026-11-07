@@ -27,12 +27,12 @@
         </div>
       </div>
       <div v-else-if="activeStep === MATERIAL_STEP" class="ps-step-content ps-material-step">
+        <p class="ps-step-explanation">选择作为本次报告依据的资讯、论文或内部资料。</p>
         <div class="ps-material-picker">
           <div class="ps-material-source">
             <div class="ps-research-material-toolbar">
               <div class="ps-search-inline"><Search /><input v-model="materialKeyword" aria-label="搜索研究资料" placeholder="搜索资讯、论文或内部资料" /></div>
               <el-button :disabled="submitting || materialLoading || Boolean(materialError) || !selectableMaterialPageIds.length" @click="selectCurrentMaterialPage">{{ currentMaterialPageSelected ? '取消当前页选择' : '全选当前页' }}</el-button>
-              <el-button :disabled="uploading || submitting" @click="uploadDialogVisible = true">上传资料</el-button>
               <span class="ps-material-selected-count" role="status">已选 {{ selectedIds.length }} 条</span>
             </div>
             <div class="ps-tabs-line ps-segmented-row"><el-segmented v-model="materialTab" :options="materialTabs" aria-label="资料类型"  /></div>
@@ -51,28 +51,74 @@
         </div>
       </div>
       <div v-else-if="activeStep === TEMPLATE_STEP" class="ps-step-content" tabindex="0" aria-label="报告模板设置滚动区">
+        <p class="ps-step-explanation">为<strong>{{ reportTypes.find(type => type.value === form.reportType)?.label }}</strong>选择写作模板；下一步再调整大纲与逐章提示词。</p>
         <div v-if="templatesLoading" class="ps-inspector-empty">正在加载已发布模板…</div>
         <PortalEmptyState v-else-if="templatesError || !availableReportTemplates.length" title="暂无可用报告模板" :description="templatesError || '当前报告类型暂无已绑定模板，请联系管理员在模板管理中设置报告类型并启用。'" action-label="重新加载" @action="loadTemplates" />
-        <div v-else class="ps-template-choice"><el-button :auto-insert-space="false" class="ps-ui-control" v-for="template in availableReportTemplates" :key="template.id" native-type="button" :class="{ 'is-selected': form.template === template.id }" @click="form.template = template.id"><i :style="{ background: template.color }"></i><Check v-if="form.template === template.id" /><strong>{{ template.name }}</strong><p>{{ template.description }}</p></el-button></div>
-        <details v-if="selectedTemplate" class="ps-template-structure">
-          <summary>查看模板结构<span>{{ selectedTemplatePreview.sections.length }} 章<template v-if="selectedTemplatePreview.words"> · 约 {{ selectedTemplatePreview.words.toLocaleString() }} 字</template></span></summary>
-          <div><p class="ps-template-model-state">{{ selectedTemplatePreview.modelLabel }}</p><ol v-if="selectedTemplatePreview.sections.length"><li v-for="section in selectedTemplatePreview.sections" :key="section.number"><div><strong>{{ section.title }}</strong><span>{{ section.words ? `约 ${section.words.toLocaleString()} 字` : '篇幅待设置' }}</span></div><p v-if="section.description">{{ section.description }}</p></li></ol><p v-else>此模板尚未设置章节，请联系管理员补充。</p><small>这是章节与篇幅配置预览，不是已生成的正文；后续可在确认大纲时调整。</small></div>
-        </details>
-        <div class="ps-form-grid ps-template-options">
-          <label>输出语言<el-select v-model="form.language"><el-option label="简体中文" value="zh" /><el-option label="中英双语（暂未开放）" value="bilingual" disabled /></el-select></label>
-          <label>预计篇幅<el-select v-model="form.length"><el-option :label="totalWords > 0 ? `按大纲规划（约 ${totalWords.toLocaleString()} 字）` : '按确认的大纲规划'" value="standard" /><el-option label="详细（暂未开放）" value="long" disabled /></el-select></label>
-        </div>
+        <div v-else class="ps-template-choice"><el-button :auto-insert-space="false" class="ps-ui-control" v-for="template in availableReportTemplates" :key="template.id" native-type="button" :class="{ 'is-selected': form.template === template.id }" @click="form.template = template.id"><i :style="{ background: template.color }"></i><Check v-if="form.template === template.id" /><strong>{{ templateDisplayName(template) }}</strong><p>{{ template.description }}</p></el-button></div>
+        <section v-if="selectedTemplate" class="ps-template-structure" aria-label="模板结构预览">
+          <el-collapse>
+            <el-collapse-item name="structure">
+              <template #title><div class="ps-chapter-summary"><strong>查看所选模板结构</strong><span>{{ selectedTemplatePreview.sections.length }} 章 · 约 {{ selectedTemplatePreview.words.toLocaleString() }} 字</span></div></template>
+              <ol v-if="selectedTemplatePreview.sections.length" class="ps-template-chapters">
+                <li v-for="section in selectedTemplatePreview.sections" :key="section.number">
+                  <div class="ps-chapter-summary"><strong>{{ section.title }}</strong><span>约 {{ section.words.toLocaleString() }} 字</span></div>
+                  <p v-if="section.description">{{ section.description }}</p>
+                </li>
+              </ol>
+              <p v-else class="ps-step-explanation">此模板尚未设置章节，可在下一步新增。</p>
+            </el-collapse-item>
+          </el-collapse>
+        </section>
       </div>
 
       <div v-else class="ps-step-content ps-outline-step">
         <section class="ps-task-writing" aria-label="本次写作要求">
-          <label for="research-writing-prompt">本次生成提示词</label>
-          <el-input id="research-writing-prompt" v-model="form.requirements" type="textarea" :rows="4" :maxlength="5000" show-word-limit placeholder="补充本次报告的格式规范、章节重点、技术边界、字数和引用要求" />
-          <p>仅用于本次任务，与确认的大纲一起保存，不修改公共模板。</p>
+          <label for="research-writing-prompt">正文生成提示词</label>
+          <el-input id="research-writing-prompt" v-model="form.templatePrompt" type="textarea" :autosize="{ minRows: 5, maxRows: 12 }" :maxlength="100000" show-word-limit placeholder="模板尚未配置正文提示词，可在此填写本次报告的写作要求" />
+          <p>已带入所选模板的提示词，可按需修改；仅用于本次任务，不修改公共模板。</p>
+          <label v-if="form.requirements" for="research-extra-requirements">原任务附加要求<el-input id="research-extra-requirements" v-model="form.requirements" type="textarea" :rows="2" :maxlength="5000" /></label>
+        </section>
+        <div class="ps-outline-heading"><h2>确认大纲与章节提示词</h2><p>调整章节标题与篇幅，并逐章描述您的写作意图。仅影响本次报告。</p></div>
+        <div class="ps-outline-editor">
+          <div v-for="(section, index) in outline" :key="section.id" class="ps-outline-row">
+            <span class="ps-outline-index">{{ index + 1 }}</span>
+            <el-input v-model="section.title" :aria-label="`第 ${index + 1} 章标题`" />
+            <el-input-number v-model="section.words" :aria-label="`第 ${index + 1} 章目标字数`" :step="100" :min="1" :max="8000" />
+            <span class="ps-outline-controls"><el-button :icon="ArrowUp" circle plain :disabled="index === 0" :aria-label="`上移${section.title}`" @click="moveOutline(index, -1)" /><el-button :icon="ArrowDown" circle plain :disabled="index === outline.length - 1" :aria-label="`下移${section.title}`" @click="moveOutline(index, 1)" /><el-button :icon="Delete" circle plain type="danger" :disabled="outline.length <= 1" :aria-label="`删除${section.title}`" @click="removeOutline(section.id)" /></span>
+            <ResearchChapterPrompt v-model="section.prompt" class="ps-outline-description" :index="index" />
+          </div>
+          <el-button :icon="Plus" class="ps-block-action" @click="addOutline">新增章节</el-button>
+        </div>
+        <section class="ps-generation-settings" aria-label="报告生成设置">
+          <h2>生成设置</h2>
+          <div class="ps-form-grid ps-template-options">
+            <label>输出语言<el-select v-model="form.language"><el-option label="简体中文" value="zh" /><el-option label="中英双语（暂未开放）" value="bilingual" disabled /></el-select></label>
+            <div class="ps-length-setting">
+              <label for="research-length-mode">预计篇幅</label>
+              <el-select id="research-length-mode" v-model="form.length" aria-label="预计篇幅" @change="changeLengthMode">
+                <el-option :label="`按当前大纲（约 ${totalWords.toLocaleString()} 字）`" value="standard" />
+                <el-option :label="`精简（约 ${presetWordTarget(.7).toLocaleString()} 字）`" value="compact" />
+                <el-option :label="`详细（约 ${presetWordTarget(1.5).toLocaleString()} 字）`" value="long" />
+                <el-option label="自定义总字数" value="custom" />
+              </el-select>
+              <div v-if="form.length === 'custom'" class="ps-length-custom">
+                <el-input-number :key="totalWords" v-model="lengthTarget" aria-label="报告目标总字数" :min="outline.length || 1" :max="Math.max(1, outline.length) * 8000" :step="100" :precision="0" controls-position="right" @keyup.enter="applyCustomLength" />
+                <span>字</span><el-button :disabled="!customLengthPending || !Number.isInteger(lengthTarget)" @click="applyCustomLength">应用到大纲</el-button>
+              </div>
+              <small>精简、详细和自定义会按章节比例分配字数，仍可逐章调整。</small>
+            </div>
+          </div>
           <div class="ps-option-row"><el-checkbox v-model="form.diagram">生成配图</el-checkbox><el-checkbox v-model="form.citationCheck">提交前执行引用完整性检查</el-checkbox></div>
         </section>
-        <div class="ps-outline-heading"><h2>确认大纲</h2><p>调整本次报告的章节、篇幅与写作重点。</p></div>
-        <div class="ps-outline-editor"><div v-for="(section, index) in outline" :key="section.id" class="ps-outline-row"><span class="ps-outline-index">{{ index + 1 }}</span><el-input v-model="section.title" :aria-label="`第 ${index + 1} 章标题`" /><el-input-number v-model="section.words" :aria-label="`第 ${index + 1} 章目标字数`" :step="100" :min="1" :max="8000" /><span class="ps-outline-controls"><el-button :icon="ArrowUp" circle plain :disabled="index === 0" :aria-label="`上移${section.title}`" @click="moveOutline(index, -1)" /><el-button :icon="ArrowDown" circle plain :disabled="index === outline.length - 1" :aria-label="`下移${section.title}`" @click="moveOutline(index, 1)" /><el-button :icon="Delete" circle plain type="danger" :disabled="outline.length <= 1" :aria-label="`删除${section.title}`" @click="removeOutline(section.id)" /></span><el-input v-model="section.description" class="ps-outline-description" type="textarea" :rows="2" :aria-label="`第 ${index + 1} 章写作描述`" placeholder="说明本章关注问题、分析边界与写作要求" /></div><el-button :icon="Plus" class="ps-block-action" @click="addOutline">新增章节</el-button></div><div class="ps-submit-review"><div><span>报告类型 / 模板</span><strong>{{ reportTypes.find(type => type.value === form.reportType)?.label }} / {{ selectedTemplate?.name }}</strong></div><div><span>已选资料</span><strong>{{ selectedIds.length }} 条</strong></div><div><span>预计篇幅</span><strong>{{ totalWords.toLocaleString() }} 字</strong></div><div><span>生成配图</span><strong>{{ form.diagram ? '是' : '否' }}</strong></div></div></div>
+        <el-descriptions class="ps-report-review" title="生成信息" :column="2" border>
+          <el-descriptions-item label="报告类型">{{ reportTypes.find(type => type.value === form.reportType)?.label }}</el-descriptions-item>
+          <el-descriptions-item label="所选模板">{{ templateDisplayName(selectedTemplate) }}</el-descriptions-item>
+          <el-descriptions-item label="已选资料">{{ selectedIds.length }} 条</el-descriptions-item>
+          <el-descriptions-item label="预计篇幅">{{ totalWords.toLocaleString() }} 字</el-descriptions-item>
+          <el-descriptions-item label="章节提示词">{{ outline.filter(section => section.prompt?.trim()).length }} / {{ outline.length }} 章已填写</el-descriptions-item>
+          <el-descriptions-item label="生成配图">{{ form.diagram ? '是' : '否' }}</el-descriptions-item>
+        </el-descriptions>
+      </div>
       <div v-if="activeStep === MATERIAL_STEP && !materialError" class="ps-pagination ps-material-pagination" aria-label="研究资料列表分页">
         <el-pagination v-model:current-page="materialPage" v-model:page-size="materialPageSize" :page-sizes="[10, 20, 50]" :total="materialTotal" :pager-count="5" :disabled="materialLoading || submitting" layout="total, sizes, ->, prev, pager, next, jumper" background />
       </div>
@@ -99,6 +145,7 @@
 
 <script setup>
 import { templatePreview } from '@/utils/portal/researchWorkspace'
+import { allocateReportWords } from '@/utils/portal/reportLength'
 import { displayId, decimalId, requireBusinessId, ID_UPGRADE_NOTICE } from '@/utils/portal/businessId'
 import { templateGenerationError } from '@/utils/pipeline/compactContract'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
@@ -107,6 +154,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowDown, ArrowUp, Back, Check, Delete, Plus, Search, UploadFilled } from '@element-plus/icons-vue'
 import PortalEmptyState from '../components/PortalEmptyState.vue'
+import ResearchChapterPrompt from '../components/ResearchChapterPrompt.vue'
 import usePortalStore from '@/store/modules/portal'
 import { createPipelineResearchJob, getPipelineResearchJob, getPipelineIntelligenceDetail, getPipelineKnowledgeDocument, listPipelineTemplates, uploadPipelineKnowledgeDocument, searchPipelineResearchMaterials, reparsePipelineKnowledgeDocument } from '@/api/pipeline/intelligence'
 import { mapEvidence, materialParseLabel, selectionReferences, useEvidenceSelection } from '@/utils/portal/evidenceInput'
@@ -145,9 +193,9 @@ const { selectedIds, selectedMaterials, verifying, problems: selectionProblems, 
 const reportTypes = [
   { value: 'research-demand', label: '科研需求报告' },
   { value: 'technology-route', label: '技术路线报告' },
-  { value: 'project-demand', label: '科技项目需求填报表' }
+  { value: 'project-demand', label: '科技项目需求表' }
 ]
-const form = reactive({ reportType: 'research-demand', template: String(route.query.template || ''), version: '', language: 'zh', length: 'standard', project: '', projectDescription: '', period: [], keywords: [], requirements: '', diagram: false, publicSupplement: false, citationCheck: true })
+const form = reactive({ reportType: 'research-demand', template: String(route.query.template || ''), version: '', language: 'zh', length: 'standard', project: '', projectDescription: '', period: [], keywords: [], templatePrompt: '', requirements: '', diagram: false, publicSupplement: false, citationCheck: true })
 watch(() => route.query.template, value => {
   if (value === undefined) return
   form.template = String(value)
@@ -296,14 +344,42 @@ watch(() => form.reportType, () => {
 })
 const selectedTemplate = computed(() => availableReportTemplates.value.find(item => item.id === form.template || item.templateKey === form.template))
 const selectedTemplatePreview = computed(() => templatePreview(selectedTemplate.value))
+const templateDrafts = new Map()
+function templateDisplayName(template) {
+  if (!template) return ''
+  const typeLabel = reportTypes.find(type => type.value === templateReportType(template))?.label
+  return template.name === typeLabel ? '通用模板' : template.name
+}
 const totalWords = computed(() => outline.value.reduce((sum, item) => sum + (Number(item.words) || 0), 0))
-const finalGenerationError = computed(() => selectedTemplate.value ? templateGenerationError(selectedTemplate.value, { images: form.diagram }) : '请选择报告模板')
+const lengthTarget = ref(0)
+watch(totalWords, value => { lengthTarget.value = value }, { immediate: true, flush: 'sync' })
+const customLengthPending = computed(() => form.length === 'custom' && lengthTarget.value !== totalWords.value)
+function presetWordTarget(ratio) {
+  const baseline = selectedTemplatePreview.value.words || totalWords.value
+  return Math.max(outline.value.length, Math.min(outline.value.length * 8000, Math.round(baseline * ratio / 100) * 100))
+}
+function changeLengthMode(mode) {
+  if (mode === 'compact' || mode === 'long') {
+    try { outline.value = allocateReportWords(outline.value, presetWordTarget(mode === 'compact' ? .7 : 1.5)) }
+    catch (error) { ElMessage.warning(error.message) }
+  } else lengthTarget.value = totalWords.value
+}
+function applyCustomLength() {
+  try { outline.value = allocateReportWords(outline.value, lengthTarget.value) }
+  catch (error) { ElMessage.warning(error.message) }
+}
+const finalGenerationError = computed(() => {
+  if (customLengthPending.value) return '请先将自定义总字数应用到大纲'
+  if (!selectedTemplate.value) return '请选择报告模板'
+  return templateGenerationError(selectedTemplate.value, { images: form.diagram })
+})
 const nextStepBlocked = computed(() => activeStep.value === 0 ? !form.project.trim()
   : activeStep.value === TEMPLATE_STEP ? !selectedTemplate.value || templatesLoading.value
   : activeStep.value === MATERIAL_STEP ? uploading.value || !selectedIds.value.length || verifying.value || Boolean(selectionProblems.value.length) || sourceTaskLoading.value || Boolean(sourceTaskError.value) : false)
 function materialDescription(item) {
   const detail = item.detail || {}
-  return [detail.journal || detail.source || detail.owner, detail.year || detail.publish_time || detail.publishTime].filter(Boolean).join(' · ') || item.meta || (item.itemType === 'material' ? '内部资料' : '')
+  const metadata = [detail.journal || detail.source || detail.owner, detail.year || detail.publish_time || detail.publishTime].filter(Boolean).join(' · ') || item.meta || (item.itemType === 'material' ? '内部资料' : '')
+  return metadata.replace(/\s*[（(][^（）()]*(?:转载|官网|核验|核实)[^（）()]*[）)]/g, '').replace(/\s*·\s*$/, '').trim()
 }
 function selectCurrentMaterialPage() {
   if (submitting.value || materialLoading.value || materialError.value) return
@@ -326,7 +402,7 @@ function moveOutline(index, direction) {
   const [section] = outline.value.splice(index, 1)
   outline.value.splice(target, 0, section)
 }
-function addOutline() { outline.value.push({ id: Date.now(), title: '新增章节', words: 1000, description: '', sources: 0 }) }
+function addOutline() { outline.value.push({ id: Date.now(), title: '新增章节', words: 1000, description: '', prompt: '', sources: 0 }) }
 function nextStep() {
   if (activeStep.value === TEMPLATE_STEP && !selectedTemplate.value) return ElMessage.warning('请选择一个已发布的报告模板')
   if (activeStep.value === MATERIAL_STEP && !selectedIds.value.length) return ElMessage.warning('请至少选择一条可用资料')
@@ -349,12 +425,17 @@ function ensureRequestId(payload) {
   return requestId.value
 }
 // 同时响应模板编码和异步模板数据，不能只监听初始 URL 中的编码。
-watch(selectedTemplate, configured => {
+watch(selectedTemplate, (configured, previous) => {
+  if (previous) templateDrafts.set(`${previous.id}:${previous.version || ''}`, { outline: outline.value.map(item => ({ ...item })), prompt: form.templatePrompt, length: form.length, lengthTarget: lengthTarget.value })
   if (!configured) return
   templateUpgradeNotice.value = ''
   form.version = configured?.version || ''
   form.diagram = Boolean(configured?.imageConfig?.enabled)
-  outline.value = (configured?.sections || []).map(item => ({ ...item }))
+  const draft = templateDrafts.get(`${configured.id}:${configured.version || ''}`)
+  form.templatePrompt = draft ? draft.prompt : String(configured.prompt || '')
+  outline.value = draft ? draft.outline.map(item => ({ ...item })) : (configured.sections || []).map(item => ({ ...item, prompt: item.prompt || item.description || '' }))
+  form.length = draft?.length || 'standard'
+  lengthTarget.value = draft?.lengthTarget ?? totalWords.value
 }, { immediate: true })
 async function uploadResearchMaterial(event) {
   const file = event.target.files?.[0]
@@ -417,6 +498,7 @@ async function submitTask() {
   }
 }
 function buildResearchPayload() {
+  if (customLengthPending.value) throw new Error('请先将自定义总字数应用到大纲')
   if (!selectedTemplate.value || templateReportType(selectedTemplate.value) !== form.reportType) throw new Error('请重新选择当前报告类型下的启用模板')
   const modelError = templateGenerationError(selectedTemplate.value, { images: form.diagram })
   if (modelError) throw new Error(modelError)
@@ -426,6 +508,7 @@ function buildResearchPayload() {
   if (!reportTypes.some(type => type.value === form.reportType)) throw new Error('请选择报告类型')
   if (!form.project.trim()) throw new Error('请填写项目名称')
   if (!outline.value.length || outline.value.some(item => !String(item.title || '').trim() || !Number.isInteger(item.words) || item.words < 1 || item.words > 8000)) throw new Error('请完善章节标题及 1 至 8000 的整数字数')
+  if (outline.value.some(item => item.prompt != null && (typeof item.prompt !== 'string' || item.prompt.length > 3000))) throw new Error('每章写作提示词须为不超过 3000 字的文本')
   return {
       title: form.project.trim(),
       reportType: resolveReportType(),
@@ -436,6 +519,7 @@ function buildResearchPayload() {
       period: (form.period || []).map(formatDate).filter(Boolean),
       keywords: form.keywords,
       requirements: form.requirements,
+      templatePrompt: form.templatePrompt,
       diagram: form.diagram,
       citationCheck: form.citationCheck,
       selectedItemIds: selectedIds.value.map(requireBusinessId),
@@ -504,7 +588,10 @@ async function loadSourceTask(taskId) {
     const copiedOutline = Array.isArray(task.outline) && task.outline.length
       ? task.outline
       : outline.value
-    outline.value = copiedOutline.map(item => ({ ...item }))
+    outline.value = copiedOutline.map(item => ({ ...item, prompt: item.prompt ?? item.description ?? '' }))
+    form.templatePrompt = config.templatePrompt ?? config.template_prompt ?? form.templatePrompt
+    form.length = config.options?.length || 'standard'
+    lengthTarget.value = totalWords.value
     setSelection([...selectionReferences(task.selectedItems || []), ...selectionReferences(config.selectedItemIds || config.selected_item_ids || [])])
     ElMessage.success('已载入原任务配置及全部选材 ID，正在核验当前授权和可用性')
   } catch (error) {
@@ -521,7 +608,7 @@ async function loadSourceTask(taskId) {
 .ps-create-back svg { width: 18px; height: 18px; }
 .ps-create-back:hover { border-color: var(--ps-blue); background: var(--ps-blue-soft); }
 .ps-create-back:hover svg { transform: none; }
-.ps-outline-heading h2 { margin: 0; font-size: 17px; }
+.ps-outline-heading h2, .ps-generation-settings h2 { margin: 0; font-size: 17px; }
 .ps-outline-heading p, .ps-task-writing p { margin: 8px 0 16px; color: var(--ps-muted); font-size: 13px; line-height: 1.6; }
 .ps-task-writing { margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--ps-line); }
 .ps-task-writing > label { display: block; margin-bottom: 10px; font-weight: 600; }
@@ -535,15 +622,29 @@ async function loadSourceTask(taskId) {
 .ps-outline-editor .ps-outline-description { grid-column: 2 / -1; width: 100%; }
 .ps-outline-row { gap: 8px 12px; align-items: start; }
 .ps-template-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.ps-template-structure { margin: 16px 0; border: 1px solid var(--ps-line); border-radius: 8px; background: #fff; }
-.ps-template-structure > summary { padding: 12px 16px; cursor: pointer; font-weight: 600; color: var(--ps-ink); }
-.ps-template-structure > summary > span { margin-left: 12px; font-weight: 400; color: var(--ps-muted); font-size: 13px; }
-.ps-template-structure > div { padding: 0 16px 16px; }
-.ps-template-structure ol { margin: 12px 0; padding-left: 24px; }
-.ps-template-structure li { padding: 10px 0; border-top: 1px solid var(--ps-line-soft); }
-.ps-template-structure li > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
-.ps-template-structure li p { margin: 6px 0 0; line-height: 1.6; color: var(--ps-muted); }
-.ps-template-structure li span, .ps-template-structure small, .ps-template-model-state { color: var(--ps-muted); font-size: 13px; }
+.ps-template-structure { margin: 20px 0; padding: 16px; border: 1px solid var(--ps-line); border-radius: 8px; background: #fff; }
+.ps-step-explanation { flex-shrink: 0; margin: 0 0 16px; color: var(--ps-muted); font-size: 13px; line-height: 1.7; }
+.ps-step-explanation strong { margin-inline: 4px; color: var(--ps-ink); }
+.ps-template-chapters { margin: 0; padding-left: 24px; }
+.ps-template-chapters li { padding-bottom: 10px; border-bottom: 1px solid var(--ps-line-soft); }
+.ps-template-chapters li:last-child { border-bottom: 0; }
+.ps-template-chapters p { margin: 0 0 4px; color: var(--ps-muted); line-height: 1.7; }
+.ps-generation-settings { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--ps-line); }
+.ps-generation-settings .ps-template-options { margin-top: 16px; }
+.ps-length-setting { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ps-length-setting > label { color: var(--ps-ink); font-weight: 600; }
+.ps-length-setting > small { color: var(--ps-muted); font-size: 12px; line-height: 1.6; }
+.ps-length-custom { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.ps-length-custom > .el-input-number { flex: 1; min-width: 140px; }
+.ps-length-custom > .el-button { margin: 0; }
+.ps-chapter-summary { display: flex; align-items: center; gap: 12px; width: 100%; min-width: 0; padding: 10px 12px 10px 0; line-height: 1.6; }
+.ps-chapter-summary strong { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.ps-chapter-summary > span { flex-shrink: 0; color: var(--ps-muted); font-size: 12px; }
+.ps-template-structure :deep(.el-collapse-item__header) { height: auto; min-height: 52px; }
+.ps-template-structure :deep(.el-collapse-item__content) { padding: 4px 0 20px; }
+.ps-outline-row > .ps-outline-description { margin: 4px 0 12px; }
+.ps-report-review { margin-top: 24px; }
+.ps-report-review :deep(.el-descriptions__body) { overflow-wrap: anywhere; }
 .ps-research-create-page .ps-material-picker { grid-template-columns: minmax(0, 1fr); }
 .ps-research-create-page .ps-material-source { min-height: 0; padding: 0; border: 0; }
 .ps-research-create-page .ps-material-step { display: flex; flex-direction: column; overflow: hidden; }

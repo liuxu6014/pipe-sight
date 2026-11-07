@@ -1,5 +1,5 @@
 <template>
-  <el-dialog :model-value="modelValue" :title="record ? '编辑自动计划' : '新建自动计划'" width="min(820px, calc(100vw - 24px))" class="ps-schedule-dialog" :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving" @update:model-value="close">
+  <el-dialog :model-value="modelValue" :title="record ? '编辑自动计划' : '新建任务'" width="min(820px, calc(100vw - 24px))" class="ps-schedule-dialog" :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving" @update:model-value="close">
     <div v-loading="loading" class="ps-schedule-form">
       <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
       <p class="ps-schedule-intro">独立保存计划，不立即生成简报。每次执行时重新筛选资料，没有匹配文章则跳过。</p>

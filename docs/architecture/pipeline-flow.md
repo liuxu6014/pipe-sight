@@ -79,7 +79,7 @@
 
 | 报告类型 | 展示名 |
 |---|---|
-| `project-demand` | 科技项目需求填报表 |
+| `project-demand` | 科技项目需求表 |
 | `research-demand` | 科研需求报告 |
 | `technology-route` | 技术路线报告 |
 | `daily` | 科技情报日报 |
@@ -101,7 +101,7 @@
 | 文件 | 对应报告类型 | 内容 |
 |---|---|---|
 | `docs/reference/技术需求模板及撰写指南.doc` | `project-demand` 的撰写指南 | 技术需求调研表 + 七章节逐条编写说明 |
-| `docs/reference/文本生成示例.docx` / `文本生成示例2.docx` | `project-demand` 的填写样例 | 两份「科技项目需求填报表」成品，含经费预算表 |
+| `docs/reference/文本生成示例.docx` / `文本生成示例2.docx` | `project-demand` 的填写样例 | 两份「科技项目需求表」成品，含经费预算表 |
 | `docs/reference/生物安全日报示例.docx` | `daily` 的样例 | 按类别分节，每节 = 标题 + 摘要 + 洞察 + 数据源引用 |
 
 模板提示词的结构化底稿见 `docs/reference/模板提示词底稿.md`。

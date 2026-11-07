@@ -19,6 +19,7 @@ from app.research.services.report_content import (
     number_report_citations,
     sections_from_markdown,
 )
+from app.research.services.report_labels import display_template_name
 from app.research.services.report_revision import report_revision
 from app.research.services.reports import ResearchReportService
 from app.research.services.workspace import ResearchWorkspaceService
@@ -145,7 +146,7 @@ class ResearchApplicationService:
             'requestId': job.request_id,
             'reportId': wire_id(job.report_id),
             'title': snapshot.get('title', ''),
-            'templateName': (snapshot.get('template') or {}).get('name') or '',
+            'templateName': display_template_name((snapshot.get('template') or {}).get('name')),
             'type': snapshot.get('type', ''),
             'status': job.status,
             'statusLabel': labels.get(job.status, job.status),

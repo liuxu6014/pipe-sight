@@ -70,6 +70,7 @@ class PipelineResearchJobCreateModel(BaseModel):
     period: list[str] = Field(default_factory=list, description='起止时间')
     keywords: list[str] = Field(default_factory=list, description='关键词')
     requirements: str = Field(default='', max_length=5000, description='仅用于本次任务的生成提示词')
+    template_prompt: str | None = Field(default=None, max_length=100000, description='本次正文提示词，未提供时沿用模板配置')
     diagram: bool = Field(default=False, description='是否生成结构化图形')
     citation_check: bool = Field(default=True, description='是否检查引用')
     selected_item_ids: list[BusinessId] = Field(default_factory=list, description='选中资料ID')

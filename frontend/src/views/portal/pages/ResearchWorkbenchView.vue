@@ -4,7 +4,6 @@
       <div class="ps-research-toolbar-row">
         <el-input class="ps-search-input" v-model.trim="keyword" clearable aria-label="搜索报告" placeholder="搜索报告名称或类型" :prefix-icon="Search" />
         <el-select v-model="status" placeholder="全部状态" aria-label="报告生成状态"><el-option label="全部状态" value="" /><el-option v-for="item in reportStatuses" :key="item.value" :label="item.label" :value="item.value" /></el-select>
-        <el-select v-model="sort" aria-label="报告排序"><el-option label="最近更新" value="updated-desc" /><el-option label="最早更新" value="updated-asc" /><el-option label="名称排序" value="title" /></el-select>
         <div class="ps-research-toolbar-actions">
           <el-button v-if="keyword || status" @click="keyword = ''; status = ''">重置</el-button>
           <el-button type="primary" :icon="Plus" @click="router.push('/portal/research/create')">新建报告</el-button>
@@ -17,8 +16,8 @@
         <el-skeleton v-if="portalStore.dataLoading && !portalStore.dataLoaded" :rows="5" animated />
         <template v-else>
           <div ref="listRegion" class="ps-list-scroll ps-report-list-region" aria-label="科研报告列表">
-            <el-table :data="pagedReports" row-key="key" :max-height="listHeight" style="width: 100%" class="ps-report-records-table">
-              <el-table-column prop="title" label="报告名称" min-width="320">
+            <el-table :data="pagedReports" row-key="key" :max-height="listHeight" style="width: 100%" class="ps-report-records-table" :default-sort="{ prop: 'updatedAt', order: 'descending' }" @sort-change="changeReportSort">
+              <el-table-column prop="title" label="报告名称" min-width="320" sortable="custom" :sort-orders="['ascending', 'descending']">
                 <template #default="{ row: report }">
                   <div class="ps-report-identity">
                     <el-icon class="ps-report-file-icon" aria-hidden="true"><Document /></el-icon>
@@ -34,7 +33,7 @@
               <el-table-column label="状态" width="104">
                 <template #default="{ row: report }"><el-tag :type="({ success: 'success', danger: 'danger', running: 'primary' })[statusClass(report.status)] || 'info'">{{ report.statusLabel }}</el-tag></template>
               </el-table-column>
-              <el-table-column prop="updatedAt" label="更新时间" width="180" show-overflow-tooltip>
+              <el-table-column prop="updatedAt" label="更新时间" width="180" show-overflow-tooltip sortable="custom" :sort-orders="['descending', 'ascending']">
                 <template #default="{ row }"><time>{{ row.updatedAt || '时间未提供' }}</time></template>
               </el-table-column>
               <el-table-column label="操作" width="232" align="right">
@@ -136,6 +135,10 @@ watch(() => route.query, query => { keyword.value = String(query.q || ''); statu
 const currentPage = ref(1)
 const pageSize = ref(10)
 const sort = ref('updated-desc')
+function changeReportSort({ prop, order }) {
+  sort.value = prop === 'title' && order ? (order === 'descending' ? 'title-desc' : 'title')
+    : order === 'ascending' ? 'updated-asc' : 'updated-desc'
+}
 const reportStatuses = [{ value: 'active', label: '生成中' }, { value: 'generated', label: '已生成' }, { value: 'failed', label: '失败' }, { value: 'cancelled', label: '已取消' }, { value: 'unavailable', label: '暂无正文' }]
 const loadError = computed(() => portalStore.sectionErrors.reports || portalStore.sectionErrors.tasks || portalStore.sectionErrors.digests)
 const filteredReports = computed(() => researchReports.value.filter(item => (!status.value || item.status === status.value) && (!keyword.value || `${item.title} ${item.typeLabel}`.toLocaleLowerCase().includes(keyword.value.toLocaleLowerCase()))))
@@ -151,7 +154,7 @@ onBeforeUnmount(() => { listResizeObserver?.disconnect(); disposed = true; clear
 
 <style scoped>
 .ps-research-workspace > .ps-research-toolbar { overflow-x: auto; }
-.ps-research-toolbar-row { display: grid; grid-template-columns: minmax(160px, 1fr) 124px 124px max-content; align-items: center; gap: 8px; width: 100%; min-width: 0; --el-component-size: 40px; }
+.ps-research-toolbar-row { display: grid; grid-template-columns: minmax(160px, 1fr) 124px max-content; align-items: center; gap: 8px; width: 100%; min-width: 0; --el-component-size: 40px; }
 .ps-research-toolbar-row > .el-input, .ps-research-toolbar-row > .el-select { min-width: 0; width: 100%; }
 .ps-research-toolbar-actions { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; }
 .ps-research-toolbar-actions :deep(.el-button) { flex-shrink: 0; height: 40px; margin-left: 0; }

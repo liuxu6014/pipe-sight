@@ -191,9 +191,17 @@ def test_project_description_dto_limit_and_old_request_fingerprints(env) -> None
     dto = schema.PipelineResearchJobCreateModel(**payload())
     old = ids.generation_request_data(dto)
     assert 'project_description' not in old
+    assert 'template_prompt' not in old
     assert ids.generation_request_fingerprint(old, []) == ids.generation_request_fingerprint(dto, [])
     with_text = schema.PipelineResearchJobCreateModel(**payload(), projectDescription='项目背景说明')
     assert with_text.project_description == '项目背景说明'
     assert ids.generation_request_fingerprint(with_text, []) != ids.generation_request_fingerprint(old, [])
     with pytest.raises(ValidationError):
         schema.PipelineResearchJobCreateModel(**payload(), projectDescription='字' * 3001)
+    edited = schema.PipelineResearchJobCreateModel(**payload(), templatePrompt='本次修改后的正文提示词')
+    assert ids.generation_request_data(edited)['template_prompt'] == '本次修改后的正文提示词'
+    assert ids.generation_request_fingerprint(edited, []) != ids.generation_request_fingerprint(old, [])
+    cleared = schema.PipelineResearchJobCreateModel(**payload(), templatePrompt='')
+    assert ids.generation_request_data(cleared)['template_prompt'] == ''
+    with pytest.raises(ValidationError):
+        schema.PipelineResearchJobCreateModel(**payload(), templatePrompt='字' * 100001)

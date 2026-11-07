@@ -21,7 +21,7 @@
 
 ## 科研报告分类模板
 
-`bootstrap/seed_research_templates.py` 读取 `data/templates/research-presets-v1.json`，为科研需求、技术路线和科技项目需求填报三类各提供 3 份具体模板。模板包含独立正文提示词、章节说明和篇幅规划；模型不自动选择，配图默认关闭。
+`bootstrap/seed_research_templates.py` 读取 `data/templates/research-presets-v1.json`，为科研需求、技术路线和科技项目需求表三类各提供 3 份具体模板。模板包含独立正文提示词、章节说明和篇幅规划；模型不自动选择，配图默认关闭。
 
 部署时先备份数据库并执行 `alembic upgrade head`，再从 `backend/` 目录预览和追加：
 

@@ -185,8 +185,8 @@ test('failed, cancelled and queued task fallback states are not shown as running
 
 test('task template displays actual name and never falls back to the numeric ID', () => {
   const view = taskPage({})
-  view.state.task.value = { templateName: '科技项目需求填报表', config: { template_id: '31' } }
-  assert.equal(view.state.templateName.value, '科技项目需求填报表')
+  view.state.task.value = { templateName: '科技项目需求表', config: { template_id: '31' } }
+  assert.equal(view.state.templateName.value, '科技项目需求表')
   view.state.task.value = { config: { template_id: '31' } }
   assert.equal(view.state.templateName.value, '模板名称未记录')
   view.unmount()

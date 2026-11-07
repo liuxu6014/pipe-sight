@@ -71,7 +71,7 @@ let requestEpoch = 0
 const currentUserName = computed(() => userStore.nickName || userStore.name || '管网用户')
 const templateName = computed(() => task.value.templateName || '模板名称未记录')
 const progress = computed(() => { const value = Number(task.value.progress); return Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : 0 })
-const reportTypeLabel = computed(() => ({ research: '科研报告', 'research-demand': '科研需求报告', 'technology-route': '技术路线报告', 'project-demand': '科技项目需求填报表', daily: '日报', weekly: '周报', monthly: '月报' })[task.value.type] || task.value.type || '科研报告')
+const reportTypeLabel = computed(() => ({ research: '科研报告', 'research-demand': '科研需求报告', 'technology-route': '技术路线报告', 'project-demand': '科技项目需求表', daily: '日报', weekly: '周报', monthly: '月报' })[task.value.type] || task.value.type || '科研报告')
 const isDigest = computed(() => ['daily', 'weekly', 'monthly', '日报', '周报', '月报'].includes(String(task.value.type || task.value.reportType || '')))
 const taskHomePath = computed(() => isDigest.value ? '/portal/digests' : '/portal/research')
 const taskHomeLabel = computed(() => isDigest.value ? '情报简报' : '科研工作台')

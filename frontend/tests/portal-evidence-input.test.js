@@ -10,6 +10,7 @@ import * as businessTimes from '../src/utils/portal/businessTime.js'
 import * as businessIds from '../src/utils/portal/businessId.js'
 import * as evidence from '../src/utils/portal/evidenceInput.js'
 import { resolveBasketSelection } from '../src/utils/portal/basketSelection.js'
+import { allocateReportWords } from '../src/utils/portal/reportLength.js'
 
 const names = ['ResearchCreateView', 'DigestCreateView']
 const sources = Object.fromEntries(names.map(name => [name, readFileSync(new URL(`../src/views/portal/pages/${name}.vue`, import.meta.url), 'utf8')]))
@@ -26,8 +27,8 @@ async function mount(name, { query = {}, api = {}, basket = [], timers = {} } = 
   let mutations = 0
   const forbidden = () => { mutations++; throw new Error('This test must never generate, upload or schedule') }
   const dependencies = {
-    ...vue, useRoute, useRouter, ...businessIds, ...businessTimes, ...evidence, templateGenerationError, resolveBasketSelection,
-    usePortalStore: () => store, PortalPageHeader: {}, PortalEmptyState: {}, DigestScheduleDialog: {},
+    ...vue, useRoute, useRouter, ...businessIds, ...businessTimes, ...evidence, templateGenerationError, resolveBasketSelection, allocateReportWords,
+    usePortalStore: () => store, PortalPageHeader: {}, PortalEmptyState: {}, DigestScheduleDialog: {}, ResearchChapterPrompt: {},
     ElMessage: Object.fromEntries(['success', 'warning', 'error'].map(level => [level, text => messages.push({ level, text })])),
     ...Object.fromEntries(['ArrowLeft', 'Check', 'Close', 'Delete', 'Plus', 'Rank', 'Search', 'UploadFilled', 'Refresh', 'Warning'].map(icon => [icon, {}])),
     getPipelineIntelligenceDetail: async id => ({ data: article(id) }),

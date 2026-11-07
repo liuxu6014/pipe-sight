@@ -148,7 +148,7 @@ function normalizeDocument(item) {
 
 function normalizeReport(item) {
   item = normalizeBusinessData(item)
-  const typeMap = { daily: '日报', weekly: '周报', monthly: '月报', 'research-demand': '科研需求报告', 'technology-route': '技术路线报告', 'project-demand': '科技项目需求填报表' }
+  const typeMap = { daily: '日报', weekly: '周报', monthly: '月报', 'research-demand': '科研需求报告', 'technology-route': '技术路线报告', 'project-demand': '科技项目需求表' }
   const statusMap = { reviewing: '审核中', draft: '待复核草稿', planned: '待生成', completed: '已完成', published: '已发布', archived: '已归档' }
   const requiresReview = Boolean(item.requiresReview) || ['draft', 'reviewing'].includes(item.status)
   return {

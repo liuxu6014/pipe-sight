@@ -71,9 +71,9 @@ const editorVisible = ref(false), previewVisible = ref(false), previewingTemplat
 const saving = ref(false), loading = ref(false), templateError = ref('')
 const canSaveTemplate = computed(() => checkPermi(['pipeline:template:save']))
 // These are the portal report keys, not new values for the API's purpose enum.
-const categories = [{ name: '全部模板', value: 'all', icon: Files }, { name: '科研需求报告', value: 'research-demand', icon: Document }, { name: '技术路线报告', value: 'technology-route', icon: Document }, { name: '科技项目需求填报表', value: 'project-demand', icon: Document }]
+const categories = [{ name: '全部模板', value: 'all', icon: Files }, { name: '科研需求报告', value: 'research-demand', icon: Document }, { name: '技术路线报告', value: 'technology-route', icon: Document }, { name: '科技项目需求表', value: 'project-demand', icon: Document }]
 function reportTypeOf(item) { return ['research-demand', 'technology-route', 'project-demand'].find(key => key === item?.reportType || key === item?.purpose) || '' }
-function reportTypeLabel(item) { return ({ 'research-demand': '科研需求报告', 'technology-route': '技术路线报告', 'project-demand': '科技项目需求填报表' })[reportTypeOf(item)] || '报告类型待绑定' }
+function reportTypeLabel(item) { return ({ 'research-demand': '科研需求报告', 'technology-route': '技术路线报告', 'project-demand': '科技项目需求表' })[reportTypeOf(item)] || '报告类型待绑定' }
 const templates = ref([]), models = ref([]), modelError = ref('')
 const unassignedCount = computed(() => templates.value.filter(item => !reportTypeOf(item)).length)
 const textModels = computed(() => modelsFor(models.value, 'text_generate'))

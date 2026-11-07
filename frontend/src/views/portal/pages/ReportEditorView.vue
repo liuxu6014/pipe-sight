@@ -270,7 +270,7 @@ watch([currentSectionId, outlinePanelRef], keepActiveOutlineVisible, { flush: 'p
 const reportTypeLabel = computed(() => {
   const type = report.value.reportType || report.value.type
   if (isDigestType(type)) return ({ daily: '日报', weekly: '周报', monthly: '月报' })[type] || '情报简报'
-  return ({ research: '科研报告', 'research-demand': '科研需求报告', 'technology-route': '技术路线报告', 'project-demand': '科技项目需求填报表' })[type] || type || '科研报告'
+  return ({ research: '科研报告', 'research-demand': '科研需求报告', 'technology-route': '技术路线报告', 'project-demand': '科技项目需求表' })[type] || type || '科研报告'
 })
 const reportDateLabel = computed(() => {
   const value = report.value.createdAt || report.value.created_at || report.value.updatedAt || report.value.updated_at || ''

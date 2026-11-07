@@ -8,6 +8,7 @@ from app.business_time import format_business_time
 from app.intelligence.models.configuration import PipelineTemplateVersion
 from app.research.repositories.research_repository import ResearchDao
 from app.research.services.model_generation import ModelGateway
+from app.research.services.report_labels import display_template_name
 from exceptions.exception import ServiceException
 
 
@@ -47,7 +48,7 @@ class PipelineTemplateService:
         return {
             'id': wire_id(row.id),
             'templateKey': wire_id(row.id),
-            'name': row.name,
+            'name': display_template_name(row.name),
             'purpose': row.purpose,
             'category': row.purpose,
             'reportType': getattr(row, 'report_type', None),
