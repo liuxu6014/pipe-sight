@@ -8,7 +8,8 @@ const MODULES = [
   { key: 'reports', title: '报告管理', icon: 'documentation', direct: true },
   { key: 'digests', title: '简报管理', icon: 'documentation', direct: true },
   { key: 'templates', title: '模板管理', icon: 'documentation', direct: true },
-  { key: 'model', title: '模型与类别提示词', icon: 'ai-model', direct: true },
+  { key: 'model', title: '模型管理', icon: 'ai-model', direct: true },
+  { key: 'categoryPrompts', title: '类别提示词', icon: 'dict', direct: true },
   { key: 'settings', title: '系统配置', icon: 'system' },
   { key: 'logs', title: '运行日志', icon: 'log' }
 ]
@@ -27,8 +28,9 @@ const ENTRIES = {
   '/pipeline/manuscript': ['reports', '论文生成'],
   '/pipeline/digest': ['digests', '简报管理'],
   '/pipeline/template': ['templates', '模板管理'],
-  '/pipeline/model': ['model', '模型与类别提示词'],
-  '/ai/model': ['model', '模型与类别提示词'],
+  '/pipeline/model': ['model', '模型管理'],
+  '/ai/model': ['model', '模型管理'],
+  '/pipeline/category-prompts': ['categoryPrompts', '类别提示词'],
   '/system/menu': ['settings', '菜单配置'],
   '/system/config': ['settings', '系统参数'],
   '/system/dict': ['settings', '字典管理']
@@ -138,7 +140,7 @@ export function buildManagementNavigation(routes = [], {
   }
   visit(routes)
 
-  // 两个现有模型页维护相同模型数据，优先综合配置页；旧路由仍由原路由树注册。
+  // 两个模型路由维护相同数据，导航优先使用管网管理路径。
   const model = entries.find(entry => entry.route.path === '/pipeline/model')
   const legacyModel = entries.find(entry => entry.route.path === '/ai/model')
   if (model && legacyModel) {

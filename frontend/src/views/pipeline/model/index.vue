@@ -1,28 +1,29 @@
 <template>
  <div class="app-container pipeline-page pipeline-model-page ws-list-page">
 
-  <el-tabs v-model="activeTab" class="model-tabs">
-   <template v-if="canModelQuery">
-    <el-tab-pane v-for="group in modelGroups" :key="group.name" :label="group.label" :name="group.name">
-  <div class="model-management-toolbar">
-   <el-input v-model="modelKeyword" :prefix-icon="Search" clearable aria-label="搜索模型" placeholder="搜索模型名称、编码或服务商" />
-   <el-button v-if="canModelQuery" :icon="Refresh" :loading="modelLoading" @click="loadModels">刷新</el-button>
-   <el-button v-if="canModelAdd" :icon="Plus" @click="openModelDialog('text')">添加文本模型</el-button>
-   <el-button v-if="canModelAdd" type="primary" :icon="Picture" @click="openModelDialog('image')">添加图像模型</el-button>
-  </div>
+  <template v-if="showModelSection">
+   <el-tabs v-model="activeTab" class="model-type-tabs" aria-label="模型分类">
+    <el-tab-pane v-for="group in modelGroups" :key="group.value" :name="group.value" :label="group.label">
+     <template #label><span class="model-tab-label">{{ group.label }}<span v-if="!modelLoading && !modelError" class="model-tab-count">{{ modelCounts[group.value] }}</span></span></template>
+     <template v-if="activeTab === group.value">
+   <div class="model-management-toolbar">
+    <el-input v-model="modelKeyword" :prefix-icon="Search" clearable aria-label="搜索模型" placeholder="搜索模型名称、编码或服务商" />
+    <el-dropdown v-if="canModelAdd" trigger="click" @command="openModelDialog">
+     <el-button type="primary" :icon="Plus">添加模型<el-icon class="model-add-arrow"><ArrowDown /></el-icon></el-button>
+     <template #dropdown><el-dropdown-menu><el-dropdown-item command="text" :icon="Cpu">文本模型</el-dropdown-item><el-dropdown-item command="image" :icon="Picture">图像模型</el-dropdown-item></el-dropdown-menu></template>
+    </el-dropdown>
+   </div>
+   <section class="ws-list-scroll" tabindex="0" :aria-label="activeModelGroup.label + '列表'" :aria-busy="modelLoading">
      <div v-if="modelLoading" class="model-empty">正在加载模型配置…</div>
      <el-alert v-else-if="modelError" :title="modelError" type="error" :closable="false" show-icon><template #default><el-button @click="loadModels">重新加载</el-button></template></el-alert>
-     <el-empty v-else-if="!modelsInGroup(group.name).length" :description="modelKeyword ? '没有匹配的模型' : `尚未配置${group.label}`" :image-size="72">
-      <el-button v-if="canModelAdd && !modelKeyword" type="primary" :icon="Plus" @click="openModelDialog(group.name === 'images' ? 'image' : 'text')">{{ group.name === 'images' ? '添加图像模型' : '添加文本模型' }}</el-button>
-     </el-empty>
-     <div v-else class="model-grid">
-      <article v-for="model in modelsInGroup(group.name)" :key="model.modelId">
+     <el-empty v-else-if="!visibleModels.length" :description="modelKeyword.trim() ? '没有匹配的模型' : activeTab === 'all' ? '尚未配置模型' : `尚未配置${activeModelGroup.label}`" :image-size="72" />
+     <div v-else class="model-list">
+      <article v-for="model in visibleModels" :key="model.modelId">
        <header>
-        <span class="model-logo"><el-icon><Picture v-if="group.name === 'images'" /><Cpu v-else /></el-icon></span>
-        <div><strong>{{ model.modelName || model.modelCode }}</strong><small>{{ model.provider }}</small></div>
-        <el-switch v-if="canModelEdit" :aria-label="(model.modelName || model.modelCode) + '启用状态'" :model-value="model.status === '0'" :loading="modelToggling === model.modelId" :disabled="modelToggling !== null" @change="toggleModel(model, $event)" />
+        <span class="model-logo"><el-icon><Picture v-if="modelCapabilities(model).includes('image_generate')" /><Cpu v-else /></el-icon></span>
+        <div class="model-identity"><strong>{{ model.modelName || model.modelCode }}</strong><small>{{ model.provider }}</small></div>
+        <div class="model-capabilities"><el-tag v-for="capability in modelCapabilities(model)" :key="capability" type="info" effect="plain">{{ capabilityLabel(capability) }}</el-tag></div>
        </header>
-       <div class="model-capabilities"><el-tag v-for="capability in modelCapabilities(model)" :key="capability" type="info" effect="plain">{{ capabilityLabel(capability) }}</el-tag></div>
        <dl>
         <div><dt>模型编码</dt><dd>{{ model.modelCode }}</dd></div>
         <div><dt>接口地址</dt><dd>{{ model.baseUrl || '未配置' }}</dd></div>
@@ -36,13 +37,18 @@
          <div><dt>温度参数</dt><dd>{{ model.temperature ?? '模型默认' }}</dd></div>
         </template>
        </dl>
-       <footer><el-tag :type="model.status === '0' ? 'success' : 'info'">{{ model.status === '0' ? '已启用' : '已停用' }}</el-tag><el-button v-if="canModelEdit" plain type="primary" :icon="Edit" @click="editModel(model)">配置</el-button></footer>
+       <footer>
+        <div class="model-status"><span>{{ model.status === '0' ? '已启用' : '已停用' }}</span><el-switch v-if="canModelEdit" :aria-label="(model.modelName || model.modelCode) + '启用状态'" :model-value="model.status === '0'" :loading="modelToggling === model.modelId" :disabled="modelToggling !== null" @change="toggleModel(model, $event)" /></div>
+        <el-button v-if="canModelEdit" plain type="primary" :icon="Edit" @click="editModel(model)">配置</el-button>
+       </footer>
       </article>
      </div>
+   </section>
+     </template>
     </el-tab-pane>
-   </template>
-
-   <el-tab-pane v-if="canCategoryList" label="类别提示词" name="categories">
+   </el-tabs>
+  </template>
+  <section v-if="showCategorySection" class="category-panel ws-list-scroll" aria-label="类别提示词">
     <div class="category-toolbar">
      <el-input v-model="categoryKeyword" :prefix-icon="Search" clearable placeholder="搜索类别名称或分类要求" aria-label="搜索类别" />
      <el-select v-model="categoryStatus" aria-label="类别状态"><el-option label="全部状态" value="all" /><el-option label="已启用" value="enabled" /><el-option label="已停用" value="disabled" /></el-select>
@@ -58,13 +64,17 @@
      <el-table-column label="操作" width="250" align="center"><template #default="{ row }"><el-button v-if="canCategorySave" plain type="primary" :disabled="categoryBusy" @click="openCategory(row)">编辑</el-button><el-button v-if="canCategorySave" plain :disabled="!row.isEnabled || categoryBusy" :loading="categoryDisabling === row.id" @click="disableCategory(row)">停用</el-button><el-button v-if="canCategorySave" plain type="danger" :disabled="categoryBusy" :loading="categoryDeleting === row.id" @click="deleteCategory(row)">删除</el-button></template></el-table-column>
     </el-table>
 
-   </el-tab-pane>
-   <el-tab-pane v-if="canModelQuery" label="图片存储说明" name="storage">
-    <el-alert title="部署说明（只读），不是当前部署状态；配置读取与保存接口待接入。" type="info" :closable="false" />
-    <el-descriptions :column="1" border class="storage-description"><el-descriptions-item label="受控文件">现有文件服务使用 UploadConfig.UPLOAD_PATH 上传根目录，文件读写由后端控制。</el-descriptions-item><el-descriptions-item label="对象存储">交接文档记载 MinIO 的 MINIO_ENDPOINT / MINIO_BUCKET_NAME，示例桶为 news-images；需由部署侧核实配置和可用性。</el-descriptions-item><el-descriptions-item label="说明来源">backend/config/env.py；docs/handover/数据库设计/数据库设计.md</el-descriptions-item><el-descriptions-item label="待接入">图片存储配置的脱敏读取、受权限控制的保存与连通性校验接口；本页不提供保存按钮。</el-descriptions-item></el-descriptions>
-   </el-tab-pane>
-  </el-tabs>
-  <el-drawer v-if="canCategoryList" v-model="previewVisible" title="综合提示词预览" size="min(860px, 100vw)" append-to-body destroy-on-close class="processing-drawer">
+  </section>
+  <el-dialog
+   v-if="showCategorySection"
+   v-model="previewVisible"
+   title="综合提示词预览"
+   width="min(860px, calc(100vw - 32px))"
+   class="ps-centered-dialog"
+   align-center
+   append-to-body
+   destroy-on-close
+  >
     <section class="processing-preview" aria-labelledby="processing-preview-title">
      <header class="preview-header">
       <div><h2 id="processing-preview-title">预览范围</h2><p>查看当前启用类别如何组合成提示词。仅本地预览，不调用模型。</p></div>
@@ -94,15 +104,38 @@
      </template>
     </section>
    <template #footer><el-button @click="previewVisible = false">关闭</el-button></template>
-  </el-drawer>
-    <el-dialog v-model="modelDialogVisible" class="model-config-dialog" :title="modelDialogTitle" width="min(620px, calc(100vw - 32px))"><el-form label-position="top"><div class="model-form-grid"><el-form-item label="模型名称"><el-input v-model="modelForm.name" /></el-form-item><el-form-item label="服务商"><el-select v-model="modelForm.provider" filterable placeholder="请选择已支持的服务商" style="width:100%"><el-option v-for="provider in providers" :key="provider.value" :label="provider.label" :value="provider.value" /></el-select></el-form-item><el-form-item label="接口地址（其他服务商请选 compatible 并填写兼容端点）" class="is-full"><el-input v-model="modelForm.endpoint" /></el-form-item><el-form-item label="模型编码"><el-input v-model="modelForm.modelId" placeholder="填写服务商提供的模型编码" /></el-form-item><el-form-item label="能力（分别配置，识图不代表能生图）" class="is-full"><el-checkbox-group v-model="modelForm.capabilities"><el-checkbox value="text_generate">数据处理（文本）</el-checkbox><el-checkbox value="image_generate">图片生成</el-checkbox><el-checkbox value="image_input">图片输入（识图）</el-checkbox><el-checkbox value="reasoning">推理</el-checkbox></el-checkbox-group></el-form-item><el-form-item v-if="hasTextCapability" label="最大输出 Token"><el-input-number v-model="modelForm.maxTokens" :min="1" :max="32768" :controls="false" style="width: 100%" /></el-form-item><el-form-item v-if="hasTextCapability" label="温度参数"><el-input-number v-model="modelForm.temperature" :min="0" :max="2" :step="0.1" :controls="false" style="width: 100%" /></el-form-item><template v-if="hasImageGeneration">
- <el-form-item label="图片尺寸"><el-input v-model="modelForm.imageSize" clearable placeholder="模型默认，例如 1024x1024" /></el-form-item>
- <el-form-item label="图片质量"><el-input v-model="modelForm.imageQuality" clearable placeholder="模型默认，例如 standard" /></el-form-item>
- <el-form-item label="图片风格"><el-input v-model="modelForm.imageStyle" clearable placeholder="模型默认，例如 natural" /></el-form-item>
- <p class="model-field-help is-full">尺寸、质量和风格按服务商支持的值填写，留空使用模型默认设置。</p>
- </template><el-form-item label="API 密钥" class="is-full"><el-input v-model="modelForm.apiKey" type="password" show-password :placeholder="editingModel ? '留空保留原密钥' : '填写服务商 API 密钥，加密保存'" /></el-form-item></div></el-form><template #footer><el-button @click="modelDialogVisible = false">取消</el-button><el-button v-if="canModelSave" type="primary" @click="saveModel" :loading="modelSaving">保存配置</el-button></template></el-dialog>
+  </el-dialog>
+  <el-dialog v-if="showModelSection" v-model="modelDialogVisible" class="model-config-dialog ps-centered-dialog" :title="modelDialogTitle" width="min(660px, calc(100vw - 32px))" align-center>
+   <el-form label-position="top" class="model-config-form" autocomplete="off">
+    <div class="model-form-grid">
+     <el-form-item label="模型名称"><el-input v-model="modelForm.name" placeholder="例如：DeepSeek 文本生成" autocomplete="off" /></el-form-item>
+     <el-form-item label="服务商"><el-select v-model="modelForm.provider" filterable placeholder="选择服务商"><el-option v-for="provider in providers" :key="provider.value" :label="provider.label" :value="provider.value" /></el-select></el-form-item>
+     <el-form-item label="模型编码" class="is-full"><el-input v-model="modelForm.modelId" placeholder="填写服务商提供的模型编码" autocomplete="off" /></el-form-item>
+     <el-form-item label="接口地址" class="is-full model-help-field">
+      <el-input v-model="modelForm.endpoint" placeholder="https://api.example.com/v1" autocomplete="off" />
+      <p class="model-field-help">其他服务商请选 compatible，并填写兼容接口地址。</p>
+     </el-form-item>
+     <el-form-item label="模型能力" class="is-full model-help-field">
+      <el-checkbox-group v-model="modelForm.capabilities" class="model-capability-options" aria-label="模型能力">
+       <el-checkbox value="text_generate" border>数据处理（文本）</el-checkbox><el-checkbox value="image_generate" border>图片生成</el-checkbox><el-checkbox value="image_input" border>图片输入（识图）</el-checkbox><el-checkbox value="reasoning" border>推理</el-checkbox>
+      </el-checkbox-group>
+      <p class="model-field-help">可多选；图片输入与图片生成需分别配置。</p>
+     </el-form-item>
+     <el-form-item v-if="hasTextCapability" label="最大输出 Token"><el-input-number v-model="modelForm.maxTokens" aria-label="最大输出 Token" :min="1" :max="32768" :controls="false" placeholder="模型默认" /></el-form-item>
+     <el-form-item v-if="hasTextCapability" label="温度参数"><el-input-number v-model="modelForm.temperature" aria-label="温度参数" :min="0" :max="2" :step="0.1" :controls="false" /></el-form-item>
+     <template v-if="hasImageGeneration">
+      <el-form-item label="图片尺寸"><el-input v-model="modelForm.imageSize" clearable placeholder="例如：1024x1024" /></el-form-item>
+      <el-form-item label="图片质量"><el-input v-model="modelForm.imageQuality" clearable placeholder="例如：standard" /></el-form-item>
+      <el-form-item label="图片风格" class="is-full"><el-input v-model="modelForm.imageStyle" clearable placeholder="例如：natural" autocomplete="off" /></el-form-item>
+      <p class="model-field-help is-full">尺寸、质量和风格按服务商支持的值填写，留空使用模型默认设置。</p>
+     </template>
+     <el-form-item label="API 密钥" class="is-full"><el-input v-model="modelForm.apiKey" type="password" name="model-api-key" autocomplete="new-password" show-password :placeholder="editingModel ? '留空保留原密钥' : '填写服务商 API 密钥，加密保存'" /></el-form-item>
+    </div>
+   </el-form>
+   <template #footer><el-button @click="modelDialogVisible = false">取消</el-button><el-button v-if="canModelSave" type="primary" @click="saveModel" :loading="modelSaving">保存配置</el-button></template>
+  </el-dialog>
 
-  <el-dialog v-model="categoryDialogVisible" :title="editingCategory ? '编辑类别' : '新增类别'" width="min(720px, calc(100vw - 32px))" class="category-config-dialog" :close-on-click-modal="!categorySaving" :close-on-press-escape="!categorySaving" :show-close="!categorySaving" destroy-on-close>
+  <el-dialog v-if="showCategorySection" v-model="categoryDialogVisible" :title="editingCategory ? '编辑类别' : '新增类别'" width="min(720px, calc(100vw - 32px))" class="category-config-dialog" :close-on-click-modal="!categorySaving" :close-on-press-escape="!categorySaving" :show-close="!categorySaving" destroy-on-close>
    <el-form label-position="top" class="category-config-form" :disabled="categorySaving">
     <div v-if="!editingCategory" class="category-examples"><span>使用示例</span><el-button v-for="preset in categoryPresets" :key="preset.name" plain :disabled="categoryBusy" @click="prefillCategory(preset)">{{ preset.name }}</el-button></div>
     <div class="category-basic-grid">
@@ -130,23 +163,31 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, Refresh, Picture, Cpu, Edit } from '@element-plus/icons-vue'
+import { Plus, Search, Picture, Cpu, Edit, ArrowDown } from '@element-plus/icons-vue'
 import { addModel, listModelAll, updateModel } from '@/api/ai/model'
 import { listPipelineCategories, createPipelineCategory, updatePipelineCategory, deletePipelineCategory } from '@/api/pipeline/categories'
 import { categoryPayload, modelCapabilities, modelsFor } from '@/utils/pipeline/compactContract'
 import { CATEGORY_PRESETS, categoryPresetDraft, categoryPromptText, buildProcessingPrompt } from '@/utils/pipeline/processingPrompt'
 import { checkPermi, checkRole } from '@/utils/permission'
+const props = defineProps({ section: { type: String, default: 'models' } })
 const providers = [{ value: 'openai', label: 'OpenAI' }, { value: 'openai-compatible', label: 'OpenAI 兼容' }, { value: 'compatible', label: '其他服务商的兼容端点' }, { value: 'deepseek', label: 'DeepSeek' }]
 function capabilityLabel(value) { return ({ text_generate: '数据处理（文本）', image_input: '图片输入', image_generate: '图片生成', reasoning: '推理' })[value] || value }
-const activeTab = ref('models')
+const activeTab = ref('all')
 const modelKeyword = ref(''), modelToggling = ref(null)
-const modelGroups = [{ name: 'models', label: '文本模型' }, { name: 'images', label: '图像模型' }]
-function modelsInGroup(group) {
- const keyword = modelKeyword.value.trim().toLocaleLowerCase()
+const modelGroups = [
+ { value: 'all', label: '全部模型' },
+ { value: 'models', label: '文本模型', kind: 'text' },
+ { value: 'images', label: '图像模型', kind: 'image' }
+]
+const activeModelGroup = computed(() => modelGroups.find(group => group.value === activeTab.value))
+const visibleModels = computed(() => modelsInGroup(activeTab.value))
+const modelCounts = computed(() => Object.fromEntries(modelGroups.map(group => [group.value, modelsInGroup(group.value, false).length])))
+function modelsInGroup(group, useKeyword = true) {
+ const keyword = useKeyword ? modelKeyword.value.trim().toLocaleLowerCase() : ''
  return models.value.filter(model => {
   const capabilities = modelCapabilities(model)
   const image = capabilities.includes('image_generate') || capabilities.includes('image_input')
-  const inGroup = group === 'images' ? image : capabilities.includes('text_generate') || !image
+  const inGroup = group === 'all' || (group === 'images' ? image : capabilities.includes('text_generate') || !image)
   return inGroup && (!keyword || [model.modelName, model.modelCode, model.provider].filter(Boolean).join(' ').toLocaleLowerCase().includes(keyword))
  })
 }
@@ -158,6 +199,8 @@ const canModelEdit = computed(() => checkPermi(['ai:model:edit']))
 const canModelSave = computed(() => editingModel.value ? canModelEdit.value : canModelAdd.value)
 const canCategoryList = computed(() => checkRole(['admin']))
 const canCategorySave = computed(() => checkRole(['admin']))
+const showModelSection = computed(() => props.section === 'models' && canModelQuery.value)
+const showCategorySection = computed(() => props.section === 'categories' && canCategoryList.value)
 const modelForm = reactive({ modelId: '', name: '', provider: '', endpoint: '', capabilities: [], maxTokens: null, temperature: 0.2, apiKey: '', imageSize: '', imageQuality: '', imageStyle: '' })
 const hasTextCapability = computed(() => modelForm.capabilities.includes('text_generate'))
 const hasImageGeneration = computed(() => modelForm.capabilities.includes('image_generate'))
@@ -290,7 +333,10 @@ async function deleteCategory(item) {
  } finally { categoryDeleting.value = null }
 }
 
-onMounted(() => { if (!canModelQuery.value && canCategoryList.value) activeTab.value = 'categories'; if (canModelQuery.value) loadModels(); if (canCategoryList.value) loadCategories() })
+onMounted(() => {
+ if (canModelQuery.value) loadModels()
+ if (showCategorySection.value) loadCategories()
+})
 </script>
 <style scoped>
 .preset-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; font-size: 13px; }
@@ -316,12 +362,25 @@ onMounted(() => { if (!canModelQuery.value && canCategoryList.value) activeTab.v
 .preview-prompt :deep(.el-textarea__inner) { font-size: 14px; line-height: 1.8; padding: 12px; }
 @media (max-width: 600px) { .preview-header { flex-direction: column; align-items: stretch; gap: 10px; } .preview-source { width: 100%; } .preview-rule { padding: 12px; } }
 .preview-warning { color: var(--el-color-warning-dark-2); font-size: 13px; line-height: 1.6; }
-.storage-description { margin-top: 16px; overflow-wrap: anywhere; }
-.model-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; }
+.model-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 16px; }
 .model-form-grid .is-full { grid-column: 1 / -1; }
-.model-grid article, .model-grid header > div { min-width: 0; }
-.model-grid dd { overflow-wrap: anywhere; text-align: right; padding-left: 12px; }
-@media (max-width: 760px) { .model-form-grid { grid-template-columns: minmax(0, 1fr); } }
+.model-config-form :deep(.el-form-item) { margin-bottom: 0; min-width: 0; }
+.model-config-form :deep(.el-form-item__label) { margin-bottom: 8px; padding: 0; line-height: 20px; font-weight: 500; color: var(--el-text-color-primary); }
+.model-config-form :deep(.el-select), .model-config-form :deep(.el-input-number) { width: 100%; }
+.model-config-form :deep(.el-input__wrapper), .model-config-form :deep(.el-select__wrapper) { min-height: 40px; padding-inline: 12px; border-radius: 6px; background: var(--el-bg-color); outline: none; box-sizing: border-box; }
+.model-config-form :deep(.el-input__inner) { height: 38px; font-size: 14px; text-align: left; }
+.model-config-form :deep(.el-input__inner:focus), .model-config-form :deep(.el-input__inner:focus-visible), .model-config-form :deep(.el-select__input:focus-visible) { outline: none; box-shadow: none; }
+.model-config-form :deep(.el-input__wrapper.is-focus), .model-config-form :deep(.el-select__wrapper.is-focused) { outline: none; box-shadow: 0 0 0 1px var(--el-color-primary) inset, 0 0 0 3px var(--el-color-primary-light-9); }
+.model-help-field :deep(.el-form-item__content) { display: block; }
+.model-capability-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.model-capability-options :deep(.el-checkbox.is-bordered) { width: 100%; height: auto; min-height: 40px; margin: 0; padding: 10px 12px; border-radius: 6px; }
+.model-capability-options :deep(.el-checkbox.is-checked) { background: var(--el-color-primary-light-9); }
+.model-capability-options :deep(.el-checkbox__label) { white-space: normal; line-height: 20px; }
+@media (max-width: 600px) {
+ .model-form-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+ .model-config-form :deep(.el-input__wrapper), .model-config-form :deep(.el-select__wrapper), .model-capability-options :deep(.el-checkbox.is-bordered) { min-height: 44px; }
+ .model-config-form :deep(.el-input__inner) { font-size: 16px; height: 42px; }
+}
 .category-config-dialog { max-height: 88dvh; display: flex; flex-direction: column; }
 .category-config-dialog :deep(.el-dialog__body) { min-height: 0; overflow-y: auto; }
 .category-config-dialog :deep(.el-dialog__footer) { flex-shrink: 0; }
@@ -343,34 +402,52 @@ onMounted(() => { if (!canModelQuery.value && canCategoryList.value) activeTab.v
 .category-config-form :deep(.el-select__wrapper.is-focused) { box-shadow: 0 0 0 1px #7da6c0 inset, 0 0 0 2px #409eff10; }
 .category-config-form :deep(.el-textarea__inner:focus) { box-shadow: 0 0 0 1px #7da6c0 inset, 0 0 0 2px #409eff10; }
 @media (max-width: 520px) { .category-basic-grid { grid-template-columns: minmax(0, 1fr); gap: 0; } .category-options-row { gap: 24px; flex-wrap: wrap; } }
-/* Number inputs use the rounded wrapper as their single focus indicator. */
-.model-form-grid :deep(.el-input-number .el-input__inner:focus),
-.model-form-grid :deep(.el-input-number .el-input__inner:focus-visible) { outline: none; box-shadow: none; }
-.model-form-grid :deep(.el-input-number .el-input__wrapper.is-focus) { box-shadow: 0 0 0 1px #7da6c0 inset, 0 0 0 2px #409eff10; }
-.pipeline-model-page .model-management-toolbar { display: flex; align-items: center; gap: 10px; padding: 12px 16px; margin-bottom: 16px; border: 1px solid var(--el-border-color-light); border-radius: 8px; background: var(--el-bg-color); }
-.model-management-toolbar .el-input { flex: 1; min-width: 180px; }
-.model-management-toolbar .el-button { margin: 0; }
-.pipeline-model-page .model-tabs { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; padding: 0 16px 16px; border: 1px solid var(--el-border-color-light); border-radius: 8px; background: var(--el-bg-color); }
-.model-tabs :deep(.el-tabs__header) { flex-shrink: 0; margin-bottom: 16px; }
-.model-tabs :deep(.el-tabs__content) { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; }
+.model-type-tabs { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+.model-type-tabs > :deep(.el-tabs__header) { flex-shrink: 0; margin: 0 0 16px; }
+.model-type-tabs > :deep(.el-tabs__header .el-tabs__item) { height: 44px; }
+.model-type-tabs > :deep(.el-tabs__content) { flex: 1; min-height: 0; }
+.model-type-tabs :deep(.el-tab-pane) { display: flex; flex-direction: column; height: 100%; min-height: 0; gap: 12px; }
+.model-tab-label { display: inline-flex; align-items: center; gap: 8px; }
+.model-tab-count { min-width: 20px; padding-inline: 5px; border-radius: 4px; background: var(--el-fill-color); color: var(--el-text-color-regular); font-size: 12px; font-weight: 400; line-height: 20px; text-align: center; font-variant-numeric: tabular-nums; }
+.model-type-tabs :deep(.is-active) .model-tab-count { color: var(--el-color-primary); background: var(--el-color-primary-light-9); }
+.model-management-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 16px; border: 1px solid var(--el-border-color-light); border-radius: 8px; background: var(--el-bg-color); }
+.model-management-toolbar > .el-input { flex: 1 1 220px; min-width: 0; }
+.model-management-toolbar > .el-dropdown { flex-shrink: 0; margin-inline-start: auto; }
+.model-add-arrow { margin-left: 8px; }
+.pipeline-model-page .category-panel { padding: 16px; border: 1px solid var(--el-border-color-light); border-radius: 8px; background: var(--el-bg-color); }
 .model-empty { padding: 40px 16px; text-align: center; color: var(--el-text-color-secondary); }
-.model-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.model-grid article { display: flex; flex-direction: column; padding: 18px; border: 1px solid var(--el-border-color-light); border-radius: 8px; }
-.model-grid header { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 10px; align-items: center; }
-.model-logo { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 8px; background: var(--el-color-primary-light-9); color: var(--el-color-primary); font-size: 22px; }
-.model-grid header > div { display: flex; flex-direction: column; gap: 4px; }
-.model-grid header strong { font-size: 16px; overflow-wrap: anywhere; color: var(--el-text-color-primary); }
-.model-grid header small { font-size: 13px; color: var(--el-text-color-secondary); }
-.model-capabilities { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
-.model-grid dl { display: grid; gap: 12px; margin: 18px 0; font-size: 13px; }
-.model-grid dl > div { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 12px; }
-.model-grid dt { color: var(--el-text-color-secondary); }
-.model-grid dd { margin: 0; padding: 0; text-align: left; color: var(--el-text-color-regular); }
-.model-grid footer { display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: 14px; border-top: 1px solid var(--el-border-color-lighter); }
-:deep(.model-config-dialog) { display: flex; flex-direction: column; max-height: 88vh; max-height: 88dvh; margin-top: 6vh; }
-:deep(.model-config-dialog .el-dialog__body) { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-:deep(.model-config-dialog .el-dialog__header), :deep(.model-config-dialog .el-dialog__footer) { flex-shrink: 0; }
-.model-field-help { margin: 0 0 18px; color: var(--el-text-color-secondary); font-size: 13px; line-height: 1.6; }
+.model-list { display: grid; gap: 12px; }
+.model-list article { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px 24px; align-items: center; min-width: 0; padding: 20px 24px 0; border: 1px solid var(--el-border-color-light); border-radius: 8px; background: var(--el-bg-color); overflow: hidden; }
+.model-list header { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px 12px; align-items: center; min-width: 0; }
+.model-logo { grid-row: 1 / 3; display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--el-color-primary-light-8); border-radius: 10px; background: var(--el-color-primary-light-9); color: var(--el-color-primary); font-size: 22px; }
+.model-identity { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; min-width: 0; }
+.model-list header strong { font-size: 17px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; color: var(--el-text-color-primary); }
+.model-list header small { font-size: 13px; overflow-wrap: anywhere; color: var(--el-text-color-regular); }
+.model-capabilities { grid-column: 2; display: flex; flex-wrap: wrap; gap: 6px; }
+.model-capabilities :deep(.el-tag) { --el-tag-bg-color: var(--el-fill-color-light); --el-tag-border-color: transparent; --el-tag-text-color: var(--el-text-color-regular); }
+.model-list dl { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) repeat(2, minmax(0, .65fr)); gap: 18px 24px; min-width: 0; margin: 0 -24px; padding: 16px 24px 18px; border-top: 1px solid var(--el-border-color-lighter); background: var(--el-fill-color-lighter); font-size: 13px; line-height: 1.6; }
+.model-list dl > div { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.model-list dt { color: var(--el-text-color-regular); font-size: 12px; }
+.model-list dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; color: var(--el-text-color-primary); }
+.model-list footer { grid-column: 2; grid-row: 1; display: flex; align-items: center; gap: 20px; }
+.model-list footer > .el-button { margin: 0; }
+.model-status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--el-text-color-regular); white-space: nowrap; }
+@container workspace (max-width: 820px) {
+ .model-list dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+ .model-list footer { gap: 12px; }
+}
+@container workspace (max-width: 560px) {
+ .model-list article { gap: 16px; padding: 16px 16px 0; }
+ .model-list header { grid-column: 1 / -1; }
+ .model-list footer { grid-column: 1 / -1; grid-row: 3; justify-content: space-between; margin-top: -16px; padding-block: 12px; border-top: 1px solid var(--el-border-color-lighter); }
+ .model-list dl { gap: 16px; margin-inline: -16px; padding: 16px; }
+ .model-list footer > .el-button, .model-status { min-height: 44px; }
+}
+:deep(.model-config-dialog) { display: flex; flex-direction: column; max-height: calc(100dvh - 32px); padding: 0; border-radius: 12px; overflow: hidden; }
+:deep(.model-config-dialog .el-dialog__body) { min-height: 0; padding: 20px 24px 24px; overflow-y: auto; overscroll-behavior: contain; }
+:deep(.model-config-dialog .el-dialog__header) { flex-shrink: 0; margin: 0; padding: 20px 48px 16px 24px; border-bottom: 1px solid var(--el-border-color-lighter); }
+:deep(.model-config-dialog .el-dialog__footer) { flex-shrink: 0; padding: 16px 24px; border-top: 1px solid var(--el-border-color-lighter); }
+.model-field-help { margin: 7px 0 0; color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.6; }
 .category-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .category-toolbar > .el-input { flex: 1; min-width: 160px; }
 .category-toolbar > .el-select { width: 140px; flex-shrink: 0; }
@@ -385,12 +462,7 @@ onMounted(() => { if (!canModelQuery.value && canCategoryList.value) activeTab.v
 .category-prompt-summary { margin: 0; font-size: 14px; line-height: 1.7; color: var(--el-text-color-regular); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .category-prompt-tooltip-content { max-width: min(520px, 80vw); max-height: 40vh; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
 @media (max-width: 760px) { .category-toolbar { flex-wrap: wrap; gap: 8px; } .category-toolbar > .el-input { flex-basis: calc(100% - 150px); min-width: 0; } .category-toolbar-actions { width: 100%; justify-content: flex-end; } }
-@media(max-width:1400px) { .model-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media(max-width:760px) {
- .model-grid { grid-template-columns: minmax(0, 1fr); }
- .pipeline-model-page .model-management-toolbar { flex-wrap: wrap; padding: 12px; }
- .model-management-toolbar .el-input { flex: 1 1 100%; min-width: 0; }
- .pipeline-model-page .model-tabs { padding-inline: 12px; }
- .model-grid article { padding: 14px; }
+ .model-management-toolbar { padding: 12px; }
 }
 </style>

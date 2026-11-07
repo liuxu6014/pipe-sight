@@ -90,6 +90,9 @@ function filterAsyncRouter(asyncRouterMap, lastRouter = false, type = false) {
       } else if (route.component === 'InnerLink') {
         route.component = InnerLink
       } else {
+        if (['pipeline/model/index', 'ai/model/index'].includes(route.component)) {
+          route.meta = { ...route.meta, title: '模型管理' }
+        }
         route.component = loadView(route.component)
       }
     }

@@ -105,7 +105,7 @@ test('real backend query-empty shape survives generation and Settings reload alo
   t.after(drawer.stop)
   await Vue.nextTick()
   assert.deepEqual(Array.from(store.sidebarRouters, menu => menu.meta.title), [
-    '管理首页', '用户管理', '采集管理', '数据管理', '资料库管理', '报告管理', '简报管理', '模板管理', '系统配置', '运行日志'
+    '管理首页', '用户管理', '采集管理', '情报查询', '资料库管理', '报告管理', '简报管理', '模板管理', '模型管理', '类别提示词', '运行日志'
   ])
   assert.equal(store.routes[2].children[0].query, '')
   assert.equal(store.routes[2].children.at(-1).hidden, true)
@@ -118,7 +118,15 @@ test('the real filter management entry remains absent without review-list permis
   })
   await store.generateRoutes({ roles: ['admin'] })
   assert.equal(addedRoutes.some(route => route.path === '/pipeline/filter'), false)
-  assert.deepEqual(Array.from(store.navigationRoutes, menu => menu.meta.title), ['资料库管理', '简报管理'])
+  assert.deepEqual(Array.from(store.navigationRoutes, menu => menu.meta.title), ['资料库管理', '简报管理', '类别提示词'])
+  assert.deepEqual(addedRoutes.find(route => route.path === '/pipeline/category-prompts').children[0].props.section, 'categories')
+})
+
+test('category prompts do not register or appear for wildcard managers without the admin role', async () => {
+  const { store, addedRoutes } = permissionStore(async () => ({ data: [] }), { dynamicRoutes: projectDynamicRoutes() })
+  await store.generateRoutes({ roles: ['common'], permissions: ['*:*:*'] })
+  assert.equal(addedRoutes.some(route => route.path === '/pipeline/category-prompts'), false)
+  assert.equal(store.navigationRoutes.some(route => route.path === '/pipeline/category-prompts'), false)
 })
 
 test('Settings immediate watcher after a page refresh retains management navigation, not defaultRoutes', async t => {
@@ -144,7 +152,7 @@ test('Settings mounted before async routes also keeps the new navigation after l
   assert.equal(store.sidebarRouters.length, 0)
   await store.generateRoutes({ roles: ['admin'] })
   await Vue.nextTick()
-  assert.deepEqual(Array.from(store.sidebarRouters, menu => menu.meta.title), ['管理首页', '用户管理', '采集管理', '系统配置'])
+  assert.deepEqual(Array.from(store.sidebarRouters, menu => menu.meta.title), ['管理首页', '用户管理', '采集管理', '模型管理'])
 })
 
 test('switching mixed, top and side layouts restores independent navigation without mutating route data', async t => {
@@ -351,8 +359,10 @@ test('personal chat is not registered while shared system monitor and model rout
   assert.ok(!JSON.stringify(registered).includes('ai:chat:list'))
   assert.ok(!JSON.stringify(store.defaultRoutes).includes('ai/chat/index'))
   const settings = store.navigationRoutes.find(menu => menu.meta.title === '系统配置')
+  assert.equal(store.navigationRoutes.find(menu => menu.path === '/pipeline/model')?.meta.title, '模型管理')
+  assert.equal(registered.find(route => route.path === '/pipeline').children[0].meta.title, '模型管理')
   assert.deepEqual(Array.from(settings.children, menu => menu.path), [
-    '/pipeline/model', '/system/config', '/system/dict', '/system/menu', 'https://example.com/docs'
+    '/system/config', '/system/dict', '/system/menu', 'https://example.com/docs'
   ])
   assert.deepEqual(Array.from(store.navigationRoutes.find(menu => menu.meta.title === '运行日志').children, menu => menu.path), ['/monitor/server'])
 })

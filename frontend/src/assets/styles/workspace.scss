@@ -8,6 +8,44 @@
   container-name: workspace;
 }
 
+// 居中弹窗由内容区消化超出的高度，标题和操作区保持可见。
+.el-dialog.ps-centered-dialog.is-align-center {
+  margin: auto !important;
+  padding: 0;
+  max-height: calc(100dvh - 32px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+
+  > .el-dialog__header {
+    flex-shrink: 0;
+    padding: 16px 48px 16px 24px;
+    border-bottom: 1px solid var(--el-border-color-lighter);
+  }
+  > .el-dialog__body {
+    min-height: 0;
+    padding: 20px 24px;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  > .el-dialog__footer {
+    flex-shrink: 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 24px;
+    border-top: 1px solid var(--el-border-color-lighter);
+    .el-button { margin: 0; }
+  }
+
+  @media (max-width: 540px) {
+    > .el-dialog__header { padding-left: 16px; }
+    > .el-dialog__body { padding: 14px; }
+    > .el-dialog__footer { padding-inline: 14px; }
+  }
+}
+
 // 同一尺寸体系覆盖门户页面、管网管理页面及基础系统管理页面。
 .ps-portal .ps-workspace-surface > .ps-page {
   width: calc(100% - var(--ws-gutter) * 2);

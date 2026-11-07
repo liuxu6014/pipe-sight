@@ -136,7 +136,7 @@ export const constantRoutes = [
     path: '/pipeline/model',
     component: Layout,
     hidden: true,
-    children: [{ path: '', component: () => import('@/views/pipeline/model/index.vue'), name: 'PipelineModel', meta: { title: '模型与类别提示词', icon: 'ai' } }]
+    children: [{ path: '', component: () => import('@/views/pipeline/model/index.vue'), name: 'PipelineModel', meta: { title: '模型管理', icon: 'ai' } }]
   },
   {
     path: "/:pathMatch(.*)*",
@@ -166,6 +166,19 @@ export const constantRoutes = [
 
 // 动态路由，基于用户权限动态去加载
 export const dynamicRoutes = [
+  {
+    path: '/pipeline/category-prompts',
+    component: Layout,
+    roles: ['admin'],
+    meta: { managementEntry: true },
+    children: [{
+      path: '',
+      name: 'PipelineCategoryPrompts',
+      component: () => import('@/views/pipeline/model/index.vue'),
+      props: { section: 'categories' },
+      meta: { title: '类别提示词', icon: 'dict' }
+    }]
+  },
   {
     path: '/pipeline/digest',
     component: Layout,

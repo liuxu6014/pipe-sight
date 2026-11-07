@@ -145,6 +145,7 @@ test('template saves canonical configuration with NULL models and never invokes 
 test('category UI rejects invalid enabling before making an API request and allows a disabled save', async () => {
   let calls = 0
   const h = page('views/pipeline/model/index.vue', {
+    defineProps: () => ({ section: 'categories' }),
     getCurrentInstance: () => ({ proxy: { useDict: () => ({ ai_provider_type: [] }) } }),
     createPipelineCategory: async data => { calls++; assert.equal(data.isEnabled, false); assert.equal(data.modelId, null) },
     listPipelineCategories: async () => ({ data: { rows: [] } })

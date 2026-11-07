@@ -64,14 +64,14 @@ test('backend default empty and whitespace query strings keep every available mo
   const paths = [
     '/pipeline/dashboard', '/system/user', '/pipeline/source',
     '/pipeline/intelligence', '/pipeline/knowledge', '/pipeline/report', '/pipeline/digest',
-    '/pipeline/template', '/pipeline/model', '/monitor/server'
+    '/pipeline/template', '/pipeline/model', '/pipeline/category-prompts', '/monitor/server'
   ]
   const data = paths.map((path, index) => page(path, path, { hidden: false, query: index % 2 ? '  \n  ' : '' }))
   const snapshot = JSON.stringify(data)
   const menus = buildManagementNavigation(data.toReversed())
   assert.deepEqual(menus.map(menu => menu.meta.title), [
     '管理首页', '用户管理', '采集管理', '情报查询', '资料库管理',
-    '报告管理', '简报管理', '模板管理', '模型与类别提示词', '运行日志'
+    '报告管理', '简报管理', '模板管理', '模型管理', '类别提示词', '运行日志'
   ])
   assert.deepEqual(leafMenus(menus).map(menu => menu.path), paths)
   assert.ok(leafMenus(menus).every(menu => menu.query === undefined))
@@ -131,15 +131,20 @@ test('unmapped authorized pages and external links remain reachable without inve
   assert.deepEqual(leafMenus(buildManagementNavigation(inputs)).map(menu => menu.path), ['/tool/custom', 'https://example.com/docs'])
 })
 
-test('model configuration is direct and system configuration starts with parameters and dictionaries', () => {
+test('model and category prompt management are direct entries with independent active states', () => {
   const inputs = [
     directory('/system', [page('menu'), page('dict'), page('config')]),
     directory('/tool', [page('custom')]),
-    directory('/pipeline', [page('model')])
+    directory('/pipeline', [page('model'), page('category-prompts')])
   ]
   const original = JSON.stringify(inputs)
   const menus = buildManagementNavigation(inputs)
-  assert.equal(menus.find(menu => menu.path === '/pipeline/model')?.meta.title, '模型与类别提示词')
+  for (const [path, title] of [['/pipeline/model', '模型管理'], ['/pipeline/category-prompts', '类别提示词']]) {
+    const item = menus.find(menu => menu.path === path)
+    assert.equal(item?.meta.title, title)
+    assert.equal(item.children, undefined)
+    assert.equal(resolveActiveNavigation({ path }, menus), path)
+  }
   assert.deepEqual(menus.find(menu => menu.meta.title === '系统配置').children.map(menu => menu.path), [
     '/system/config', '/system/dict', '/system/menu', '/tool/custom'
   ])

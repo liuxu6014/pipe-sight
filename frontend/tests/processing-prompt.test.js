@@ -15,7 +15,7 @@ const category = (id, extra = {}) => ({ id, name: `类别${id}`, prompt: `原文
 function page(name, names, mocks = {}) {
   const messages = [], writes = []
   const dependencies = {
-    computed, reactive, ref, onMounted() {}, ...prompts, ...contract,
+    computed, reactive, ref, onMounted() {}, defineProps: () => ({ section: 'models' }), ...prompts, ...contract,
     Files: {}, Document: {}, Plus: {},
     checkPermi: () => true, checkRole: () => true,
     ElMessage: Object.fromEntries(['success', 'warning', 'error', 'info'].map(level => [level, text => messages.push({ level, text })])),
@@ -122,6 +122,29 @@ test('live preview reacts to enabled categories, scope, text changes and load fa
   assert.deepEqual(h.writes, [])
 })
 
+test('model management and category prompts expose separate sections and load only authorized data', async () => {
+  for (const [section, admin, expected] of [
+    ['models', true, ['models']],
+    ['categories', true, ['models', 'categories']],
+    ['categories', false, []]
+  ]) {
+    let mounted
+    const calls = []
+    const h = page('model', 'showModelSection, showCategorySection', {
+      defineProps: () => ({ section }),
+      checkRole: () => admin,
+      checkPermi: () => admin,
+      onMounted: callback => { mounted = callback },
+      listModelAll: async () => { calls.push('models'); return { data: [] } },
+      listPipelineCategories: async () => { calls.push('categories'); return { data: { rows: [] } } }
+    })
+    mounted()
+    assert.equal(h.showModelSection.value, section === 'models' && admin)
+    assert.equal(h.showCategorySection.value, section === 'categories' && admin)
+    assert.deepEqual(calls, expected)
+  }
+})
+
 test('category disable uses UPDATE false with full existing config, even if its model is unavailable', async () => {
   const h = page('model', 'disableCategory, categoryDisabling')
   const row = category('90071992547409931', { modelId: '90071992547409932', sortOrder: 41 })
@@ -207,13 +230,21 @@ test('image model edits preserve other configuration and blank secrets while all
 })
 
 test('model groups show disabled and multimodal configurations without treating image input as generation', () => {
-  const h = page('model', 'models, modelsInGroup, modelKeyword')
+  const h = page('model', 'models, visibleModels, activeModelGroup, activeTab, modelKeyword, modelCounts')
   h.models.value = [model('1', ['text_generate']), model('2', ['image_generate'], '1'), model('3', ['text_generate', 'image_input']), model('4', [])]
-  assert.deepEqual(h.modelsInGroup('models').map(item => item.modelId), ['1', '3', '4'])
-  assert.deepEqual(h.modelsInGroup('images').map(item => item.modelId), ['2', '3'])
+  assert.equal(h.activeTab.value, 'all')
+  assert.deepEqual(h.visibleModels.value.map(item => item.modelId), ['1', '2', '3', '4'])
+  assert.deepEqual(h.modelCounts.value, { all: 4, models: 3, images: 2 })
+  h.activeTab.value = 'models'
+  assert.deepEqual(h.visibleModels.value.map(item => item.modelId), ['1', '3', '4'])
+  assert.equal(h.activeModelGroup.value.kind, 'text')
+  h.activeTab.value = 'images'
+  assert.deepEqual(h.visibleModels.value.map(item => item.modelId), ['2', '3'])
+  assert.equal(h.activeModelGroup.value.kind, 'image')
   assert.deepEqual(h.models.value[2].capabilities, ['text_generate', 'image_input'])
   h.modelKeyword.value = 'not-matching'
-  assert.equal(h.modelsInGroup('images').length, 0)
+  assert.equal(h.visibleModels.value.length, 0)
+  assert.deepEqual(h.modelCounts.value, { all: 4, models: 3, images: 2 })
 })
 
 test('category and model mutations respect existing admin and permission guards', async () => {
@@ -284,7 +315,7 @@ test('template permissions prevent writes and avoid querying models without perm
   assert.equal(h.editorVisible.value, false); assert.equal(queries, 0); assert.deepEqual(h.writes, [])
 })
 
-test('scoped pages compile with Element Plus; storage is read-only and no destructive or model-test endpoint is imported', () => {
+test('scoped pages compile with Element Plus and model management omits the storage description', () => {
   for (const name of ['model', 'template']) {
     const source = read(`views/pipeline/${name}/index.vue`)
     const { descriptor, errors } = parse(source)
@@ -297,9 +328,7 @@ test('scoped pages compile with Element Plus; storage is read-only and no destru
   const source = read('views/pipeline/model/index.vue')
   assert.doesNotMatch(source, /label="排序"|canCategoryDelete/)
   assert.match(source, /@click="deleteCategory\(row\)">删除<\/el-button>/)
-  const storage = source.split('label="图片存储说明"')[1].split('</el-tab-pane>')[0]
-  assert.match(storage, /只读/); assert.match(storage, /待接入/)
-  assert.doesNotMatch(storage, /@click|v-model|<el-button/)
+  assert.doesNotMatch(source, /图片存储说明/)
 })
 
 
