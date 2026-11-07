@@ -12,7 +12,8 @@
 └───────────────────┬────────────────────────────────┘
                     ▼
         ┌──── 两条入库通道 ────┐
-        │ A. 外部爬虫(news-pipelines) ─→ Kafka(news_pipeline) ─→ 统一消费端 ─→ 处理写库
+        │ A. Kafka 主题 news_pipeline ─→ 本仓库消费端 ─→ 处理写库
+        │    （news-pipelines 当前代码没有对应生产者）
         │ B. 站内定时采集(adapter) ─→ 翻译/分类 ─→ 写库
         └──────────┬──────────┘
                    ▼
@@ -40,13 +41,15 @@
 
 ## 2. 入库的两条通道
 
-**A. 外部爬虫（news-pipelines）经 Kafka 统一接入**
+**A. Kafka 消费端（本仓库已实现消费）**
 
-外部爬虫（`news-pipelines`，独立仓库）把采集内容发布到 Kafka 主题 `news_pipeline`（`172.16.4.182:9092`）。`pipesight-kafka-consumer`（`intelligence/tasks/kafka_content_consumer.py`）常驻订阅：先解析统一 envelope `KafkaContentMessage`，兼容爬虫历史格式 `{title,url,author,ctime,content,content_md,site_name,domain}`（映射进 envelope），再走与站内采集相同的翻译/分类/有效性裁决后写入 183 的 `public.news_articles`（与站内采集共用同一份紧凑内容契约）。
+`pipesight-kafka-consumer`（`intelligence/tasks/kafka_content_consumer.py`）订阅主题 `news_pipeline`（代码缺省 broker `172.16.4.182:9092`）。消息优先解析统一 envelope `KafkaContentMessage`；不符合时再映射扁平 JSON `{title,url,author,ctime,content,content_md,site_name,domain}`（只覆盖新闻和公众号），然后走与站内采集相同的翻译、分类和有效性裁决，写入 `public.news_articles` / `papers`。
+
+news-pipelines 是独立仓库。对照其当前 `main`：存在 Kafka 消费代码（`app/runtime/kafka_consumer.py`、`tools/kafka_consume.py`），没有把抓取结果发到 `news_pipeline` 的生产者。因此「爬虫发布、平台消费」还没有在爬虫侧接通。字段和双写边界见 [Kafka 统一内容采集格式](kafka-unified-format.md)。
 
 **B. 站内定时采集（adapter 直接抓取）**
 
-`intelligence/tasks/collection_scheduler.py` 每 15 秒扫 `data_sources` 里到期的来源，执行对应 adapter；adapter 注册在 `public_source_bridge.py`：
+`intelligence/tasks/collection_scheduler.py` 每 15 秒扫描 `data_sources` 里已启用且 `next_run_at` 到期的来源，只执行已注册适配器。`pipechina_group_news` 与 `crossref_works` 在 `public_source_bridge.py` 注册，`wechat_rss` 在 `intelligence/services/collection.py` 注册：
 
 - `pipechina_group_news` → `website`（国家管网新闻）
 - `wechat_rss` → `wechat`（公众号 RSS，feed 地址放在 `config.feed_url`，`url` 列仍受全局 HTTPS 白名单约束）

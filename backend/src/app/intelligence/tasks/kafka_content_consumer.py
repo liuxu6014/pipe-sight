@@ -1,10 +1,12 @@
 """常驻 Kafka 内容消费端：统一 envelope → 处理（翻译/分类）→ 入库有效数据。
 
-真实爬虫（news-pipelines）把 news / wechat / paper 三类内容推送到
-`172.16.4.182:9092` 的 topic `news_pipeline`。优先解析统一 envelope
-`KafkaContentMessage`（见 `app.intelligence.schemas.kafka_message`）；同时兼容
-爬虫侧历史消息格式 ``{title,url,author,ctime,content,content_md,site_name,domain}``
-（映射进统一 envelope 再走同一条处理链路）。本进程订阅该 topic，使用独立消费组
+本进程订阅 `news_pipeline`（`KafkaSettings` 缺省 broker 为 `172.16.4.182:9092`）。
+优先解析统一 envelope `KafkaContentMessage`（见 `app.intelligence.schemas.kafka_message`）；
+对象不符合 envelope 时，再兼容扁平 JSON
+``{title,url,author,ctime,content,content_md,site_name,domain}``
+（映射进统一 envelope 再走同一条处理链路，只覆盖新闻和公众号）。该形状与
+news-pipelines 的 `NewsArticlesPipeline.map_message` 读取格式一致。news-pipelines
+当前代码没有把抓取结果发到这个主题的生产者。本进程使用独立消费组
 （缺省 `pipesight_news_consumer`），不与其他消费端争抢分区：
 
 - 解析并校验统一 envelope，非法消息跳过（提交 offset，不阻塞分区）；
@@ -113,9 +115,9 @@ def _prefer_content(data: dict) -> str | None:
 
 
 def _normalize_crawler_message(data: dict) -> KafkaContentMessage | None:
-    """把 news-pipelines 爬虫侧消息格式映射进统一 envelope；缺标题/URL 返回 None。
+    """把扁平爬虫 JSON 映射进统一 envelope；缺标题/URL 返回 None。
 
-    爬虫侧 `NewsArticlesPipeline.map_message` 消费的是
+    news-pipelines 的 `NewsArticlesPipeline.map_message` 读取的是
     ``{title,url,author,ctime(unix秒),content,content_md,site_name,domain}``，
     ``domain == 'mp.weixin.qq.com'`` 视为公众号，其余视为新闻。
     """

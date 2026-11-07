@@ -1,10 +1,11 @@
 """统一 Kafka 采集消息契约：news / wechat / paper 三类共用一条 envelope。
 
-真实爬虫（news-pipelines）把每一条采集内容推送到 `172.16.4.182:9092` 的 topic
-`news_pipeline`。本 envelope 是规范契约：`content_type` 区分三类，类型专属字段
-只在该类型下使用；字段是三类的并集，按 `content_type` 取子集。爬虫侧仍在用的
-历史格式 ``{title,url,author,ctime,content,content_md,site_name,domain}`` 由
+本 envelope 是 `pipesight-kafka-consumer` 接受的规范契约，不表示已有生产者在发布。
+`content_type` 区分三类，类型专属字段只在该类型下使用；字段是三类的并集，按
+`content_type` 取子集。扁平 JSON
+``{title,url,author,ctime,content,content_md,site_name,domain}`` 由
 `kafka_content_consumer._normalize_crawler_message` 映射进本契约，不在此重复。
+该形状是 news-pipelines 消费端读取的消息，不是该仓库当前的发布格式。
 
 业务有效性（URL/DOI 规范化、标题非空、去重）由
 `CollectionPersistenceService.save_record` 统一裁决，不在本契约重复实现。
