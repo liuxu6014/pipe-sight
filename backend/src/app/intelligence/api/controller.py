@@ -12,6 +12,7 @@ from app.intelligence.repositories.content_repository import ContentDao
 from app.intelligence.schemas.pipeline import PipelineListModel, PipelineTemplateSaveModel
 from app.intelligence.services.application import IntelligenceApplicationService
 from app.intelligence.services.categories import CategoryService
+from app.intelligence.services.collection_translation import translate_paper_abstract, translate_paper_title
 from app.intelligence.services.templates import PipelineTemplateService
 from app.system.api.dependencies import CurrentUserDependency, CurrentUserModel, PreAuthDependency
 from common.aspect.db_seesion import DBSessionDependency
@@ -134,6 +135,16 @@ async def get_pipeline_intelligence_detail(
 ) -> Response:
     data = await IntelligenceApplicationService.get_intelligence_detail(query_db, item_id)
     return ResponseUtil.success(data=data)
+
+
+@controller.post('/intelligence/{item_id}/translate-title', summary='翻译并保存论文标题')
+async def translate_pipeline_paper_title(item_id: BusinessId, query_db: DB) -> Response:
+    return ResponseUtil.success(data={'titleZh': await translate_paper_title(query_db, item_id)})
+
+
+@controller.post('/intelligence/{item_id}/translate-abstract', summary='翻译并保存论文摘要')
+async def translate_pipeline_paper_abstract(item_id: BusinessId, query_db: DB) -> Response:
+    return ResponseUtil.success(data={'abstractZh': await translate_paper_abstract(query_db, item_id)})
 
 
 @controller.get('/search', summary='统一检索情报和用户资料', response_model=DataResponseModel[PipelineListModel])

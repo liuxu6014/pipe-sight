@@ -25,6 +25,7 @@ RETRYABLE_ERRORS = {
     '执行器租约过期',
     '执行器中断',
     '候选条目分类失败，请检查后台类别模型后重试',
+    '候选条目处理失败，请检查内容处理模型及类别规则后重试',
     '候选条目自动翻译失败，请检查模型后重试',
 }
 
@@ -90,7 +91,10 @@ def snapshot(source) -> dict:
 
 async def frozen_snapshot(db, source) -> dict:
     try:
-        return await CollectionTranslationService.freeze(db, snapshot(source))
+        from app.intelligence.services.content_processing import ContentProcessingService  # noqa: PLC0415
+
+        frozen = await ContentProcessingService.freeze(db, snapshot(source))
+        return await CollectionTranslationService.freeze(db, frozen)
     except TranslationConfigurationError as exc:
         raise ConfigurationError(str(exc)) from None
 

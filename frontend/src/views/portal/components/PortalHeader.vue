@@ -22,10 +22,13 @@
       </nav>
 
       <div class="ps-header-tools">
-        <form class="ps-header-search" role="search" @submit.prevent="submitSearch">
-          <Search />
-          <input v-model.trim="keyword" aria-label="搜索平台内容" placeholder="搜索资讯、论文、资料" />
-        </form>
+        <el-button
+          class="ps-header-search ps-ui-control"
+          :icon="Search"
+          aria-label="搜索平台内容"
+          aria-haspopup="dialog"
+          @click="searchOpen = true"
+        >搜索资讯、论文、资料</el-button>
 
         <el-button :auto-insert-space="false"
           v-if="store.dataError || store.dataLoading"
@@ -81,11 +84,13 @@
     </div>
 
     <nav v-if="mobileOpen" id="portal-mobile-nav" class="ps-mobile-nav" aria-label="移动端主导航" @keydown.esc="mobileOpen = false">
-      <form class="ps-mobile-search ps-search-inline" role="search" @submit.prevent="submitSearch">
-        <Search />
-        <input v-model.trim="keyword" aria-label="搜索平台内容（移动端）" placeholder="搜索资讯、论文、资料" />
-        <el-button :auto-insert-space="false" class="ps-ui-control" native-type="submit">搜索</el-button>
-      </form>
+      <el-button
+        class="ps-mobile-search ps-ui-control"
+        :icon="Search"
+        aria-label="搜索平台内容（移动端）"
+        aria-haspopup="dialog"
+        @click="searchOpen = true"
+      >搜索资讯、论文、资料</el-button>
       <el-button :auto-insert-space="false" class="ps-ui-control"
         v-for="item in portalNavigation"
         :key="item.path"
@@ -97,6 +102,25 @@
         {{ item.label }}
       </el-button>
     </nav>
+
+    <el-dialog
+      v-model="searchOpen"
+      class="ps-global-search-dialog"
+      width="min(820px, calc(100vw - 24px))"
+      align-center
+      center
+      append-to-body
+      destroy-on-close
+      @opened="dialogSearch?.focusSearch()"
+    >
+      <template #header="{ titleId, titleClass }">
+        <div class="ps-global-search-heading">
+          <h2 :id="titleId" :class="titleClass">全局搜索</h2>
+          <span class="ps-global-search-status" role="status">{{ dialogSearch?.dialogStatus }}</span>
+        </div>
+      </template>
+      <SearchView ref="dialogSearch" in-dialog @result-opened="searchOpen = false" />
+    </el-dialog>
   </header>
 </template>
 
@@ -109,22 +133,20 @@ import usePortalStore from '@/store/modules/portal'
 import useUserStore from '@/store/modules/user'
 import logoUrl from '@/assets/logo/pipechina-emblem.png'
 import PortalUserAvatar from './PortalUserAvatar.vue'
+import SearchView from '../pages/SearchView.vue'
 import { isManagementIdentity } from '@/utils/portal/auth'
 
 const route = useRoute()
 const router = useRouter()
 const store = usePortalStore()
 const userStore = useUserStore()
-const keyword = ref('')
+const searchOpen = ref(false)
+const dialogSearch = ref(null)
 const mobileOpen = ref(false)
 watch(() => route.fullPath, () => { mobileOpen.value = false })
+watch(() => route.path, () => { searchOpen.value = false })
 const currentUserName = computed(() => userStore.nickName || userStore.name || '管网用户')
 const isAdministrator = computed(() => isManagementIdentity(userStore.roles, userStore.permissions))
-
-function submitSearch() {
-  if (!keyword.value) return
-  router.push({ path: '/portal/search', query: { q: keyword.value } })
-}
 
 function handleCommand(command) {
   if (command === 'profile') {
@@ -154,4 +176,30 @@ onMounted(() => store.hydrate())
   .ps-main-nav, .ps-basket-button { display: none; }
 }
 .ps-user-account-actions { display: flex; align-items: center; }
+.ps-header-search.el-button, .ps-mobile-search.el-button {
+  justify-content: flex-start;
+  column-gap: 6px;
+  background: #f6f8fb;
+  color: var(--ps-muted);
+}
+.ps-header-search.el-button:hover, .ps-mobile-search.el-button:hover { color: var(--ps-blue); }
+.ps-mobile-search.el-button { grid-column: 1 / -1; min-width: 0; }
+:global(.ps-global-search-dialog.el-dialog.is-align-center) {
+  --el-dialog-padding-primary: clamp(12px, 2.5vw, 20px);
+  --el-dialog-border-radius: 12px;
+  margin-top: auto !important; /* Override the legacy dialog top offset. */
+}
+:global(.ps-global-search-dialog .el-dialog__header.show-close) {
+  padding-inline: calc(var(--el-dialog-padding-primary) + var(--el-message-close-size, 16px));
+}
+.ps-global-search-heading { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; }
+.ps-global-search-heading h2 { margin: 0; font-weight: 500; }
+.ps-global-search-status { color: var(--ps-muted); font-size: 14px; }
+.ps-global-search-status:not(:empty) { margin-inline-start: 10px; }
+@media (min-width: 1051px) and (max-width: 1280px) {
+  .ps-header-search.el-button { display: inline-flex; }
+}
+@media (max-width: 1050px) {
+  .ps-header-search.el-button { display: none; }
+}
 </style>

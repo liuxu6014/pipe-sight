@@ -47,9 +47,13 @@ class ReportRewriteService:
         if payload.mode not in MODES:
             raise ServiceException(message='不支持的改写方式')
         template = await ResearchDao.get_template(db, report.template_id)
-        model = await ResearchDao.get_model(db, template.model_id) if template else None
+        from app.intelligence.services.templates import PipelineTemplateService  # noqa: PLC0415
+
+        purpose = 'digest' if report.type in {'daily', 'weekly', 'monthly'} else report.type
+        model_id, _ = await PipelineTemplateService.generation_model_ids(db, purpose, template, required=True)
+        model = await ResearchDao.get_model(db, model_id) if model_id is not None else None
         if not model or not model.is_enabled or 'text_generate' not in (model.capabilities or []):
-            raise ServiceException(message='当前模板未配置可用的文本模型，请联系管理员')
+            raise ServiceException(message='当前用途未配置可用的文本模型，请联系管理员')
         snapshot = {
             'id': model.id,
             'provider': model.provider,

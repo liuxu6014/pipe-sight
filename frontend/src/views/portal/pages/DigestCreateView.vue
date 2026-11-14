@@ -3,7 +3,6 @@
     <header class="ps-create-context">
       <el-button :icon="Back" circle class="ps-ui-action ps-create-back" aria-label="返回情报简报" title="返回情报简报" @click="router.push('/portal/digests')" />
       <div class="ps-create-heading"><h1>新建简报</h1></div>
-      <el-button class="ps-create-plan-button" @click="planDialog = true">新建自动计划</el-button>
     </header>
     <section class="ps-panel ps-digest-filters" aria-label="筛选简报资料">
         <div class="ps-form-grid ps-digest-filter-grid">
@@ -50,7 +49,6 @@
                 </el-button>
               </div>
             </div>
-            <small>每次添加一条，最多 20 个词；已添加内容可单独删除。</small>
           </label>
         </div>
     </section>
@@ -93,7 +91,6 @@
         <div class="ps-digest-submit-actions"><el-button @click="router.push('/portal/digests')">取消</el-button><el-button type="primary" :loading="submitting" :disabled="templatesLoading || !availableTemplates.length || refreshing || Boolean(previewError) || !selectedCandidateIds.length || sourceTaskLoading || Boolean(sourceTaskError)" @click="createDigest">开始生成</el-button></div>
       </footer>
     </section>
-    <DigestScheduleDialog v-model="planDialog" @saved="router.push('/portal/digests?tab=schedules')" />
   </div>
 </template>
 
@@ -107,7 +104,6 @@ import { ElMessage } from 'element-plus'
 import { Back } from '@element-plus/icons-vue'
 import usePortalStore from '@/store/modules/portal'
 import { createPipelineResearchJob, getPipelineContentFilters, getPipelineIntelligenceDetail, getPipelineResearchJob, listPipelineTemplates, searchPipelineDigestCandidates } from '@/api/pipeline/intelligence'
-import DigestScheduleDialog from '../components/DigestScheduleDialog.vue'
 import { DIGEST_SELECTION_LIMIT, digestCandidate, fetchDigestPage, mapEvidence, preciseDate, verifyEvidence } from '@/utils/portal/evidenceInput'
 
 const route = useRoute()
@@ -116,7 +112,6 @@ const portalStore = usePortalStore()
 const refreshing = ref(false)
 const previewError = ref('')
 const settingsExpanded = ref(false)
-const planDialog = ref(false)
 const previewPage = ref(1)
 const previewPageSize = ref(10)
 const previewPageKey = computed(() => `${previewPageSize.value}:${previewPage.value}`)
@@ -454,6 +449,10 @@ onMounted(async () => {
 .ps-digest-filter-grid > .ps-digest-direction-field, .ps-digest-filter-grid > .ps-digest-keyword-field { grid-column: span 3; }
 .ps-digest-create-page .ps-digest-output-grid { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr); }
 .ps-digest-create-page .ps-form-grid :deep(.el-date-editor), .ps-digest-create-page .ps-form-grid :deep(.el-input-number) { width: 100%; }
+.ps-digest-filter-grid :deep(.el-range-input:focus-visible) { outline: none; }
+.ps-digest-filter-grid :deep(.el-range-editor:has(.el-range-input:focus-visible)) {
+  box-shadow: 0 0 0 1px var(--el-input-focus-border-color) inset;
+}
 .ps-keyword-editor { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; padding: 6px 8px; border: 1px solid var(--ps-line); border-radius: 6px; background: #fff; transition: border-color .18s ease, box-shadow .18s ease; }
 .ps-keyword-editor:focus-within { border-color: color-mix(in srgb, var(--ps-blue), #fff 38%); box-shadow: 0 0 0 2px #409eff12; }
 .ps-keyword-tags { display: flex; flex: 0 1 auto; flex-wrap: wrap; gap: 6px; min-width: 0; max-width: 100%; }
@@ -469,7 +468,6 @@ onMounted(async () => {
 .ps-digest-settings-toggle[aria-expanded="true"] > span { transform: rotate(90deg); }
 .ps-digest-submit-actions { display: flex; align-items: center; flex-shrink: 0; gap: 8px; margin-left: auto; }
 .ps-digest-template-notice { margin: 0; padding: 10px 20px; color: var(--ps-muted); }
-.ps-create-plan-button { margin-left: auto; flex-shrink: 0; }
 .ps-digest-create-page .ps-digest-submit { position: sticky; bottom: 0; z-index: 10; display: flex; align-items: center; flex-wrap: nowrap; justify-content: space-between; gap: 16px; background: #fff; border: 0; border-radius: 10px; }
 .ps-digest-settings:has(.ps-digest-settings-toggle[aria-expanded="true"]) .ps-digest-submit { border-top: 1px solid var(--ps-line); border-top-left-radius: 0; border-top-right-radius: 0; }
 @media (max-width: 1050px) {

@@ -35,16 +35,23 @@
     <div class="ps-editor-layout ps-digest-editor-layout">
       <aside class="ps-outline-panel">
         <div class="ps-editor-panel-head"><span>栏目目录</span><el-button :icon="Plus" circle class="ps-ui-action" aria-label="新增栏目" :disabled="isReadOnly" @click="addSection" /></div>
-        <el-button :auto-insert-space="false" class="ps-ui-control" v-for="(section, index) in bodySections" :key="section.id" native-type="button" :class="['ps-outline-item', { 'is-active': currentSectionId === section.id }]" @click="currentSectionId = section.id">
+        <el-button :auto-insert-space="false" class="ps-ui-control" v-for="(section, index) in bodySections" :key="section.id" native-type="button" :class="['ps-outline-item', { 'is-active': currentSectionId === section.id }]" @click="selectSection(section.id)">
           <span class="ps-outline-number">{{ index + 1 }}</span><span class="ps-outline-copy"><strong>{{ section.title }}</strong><small>{{ section.words || 0 }} 字 · {{ sectionSources(section).length }} 条来源</small></span><i class="ps-outline-status" :class="`is-${section.status || 'draft'}`"></i>
         </el-button>
         <el-button :icon="Plus" class="ps-ui-action ps-add-section" :disabled="isReadOnly" @click="addSection">新增栏目</el-button>
       </aside>
 
       <main class="ps-digest-canvas">
-        <article class="ps-digest-paper">
-          <header><span>管网科技情报简报</span><h1>{{ digest.title }}</h1><p>{{ digest.readOnly ? '当前仅供查阅，修改和文件导出由简报所有者操作。' : isLegacyDaily ? '历史日报仅供查阅，来源查看与导出仍可使用。' : isReadOnly ? '正式发布后内容锁定，来源查看与导出仍可使用。' : '所有栏目均可编辑，引用可回到来源条目，保存后跨会话保留。' }}</p><div><span>{{ digestPeriod }}</span><span>{{ digest.owner || '编制人待补充' }}</span></div></header>
-          <section v-if="currentSection">
+        <article class="ps-digest-paper" :class="{ 'is-reference-digest': referenceDigest }">
+          <header v-if="referenceDigest" class="ps-reference-digest-header"><h1>{{ referenceTitle }}</h1><p>{{ referencePeriod }}</p></header>
+          <header v-else><span>管网科技情报简报</span><h1>{{ digest.title }}</h1><p>{{ digest.readOnly ? '当前仅供查阅，修改和文件导出由简报所有者操作。' : isLegacyDaily ? '历史日报仅供查阅，来源查看与导出仍可使用。' : isReadOnly ? '正式发布后内容锁定，来源查看与导出仍可使用。' : '所有栏目均可编辑，引用可回到来源条目，保存后跨会话保留。' }}</p><div><span>{{ digestPeriod }}</span><span>{{ digest.owner || '编制人待补充' }}</span></div></header>
+          <template v-if="referenceDigest">
+            <section v-for="(section, index) in bodySections" :id="`digest-section-${section.id}`" :key="section.id">
+              <h2>{{ categoryNumber(index + 1) }}、{{ section.title }}</h2>
+              <DigestSectionContent v-model:content="section.content" :editable="!isReadOnly" @update:content="updateDigestSection(section)" />
+            </section>
+          </template>
+          <section v-else-if="currentSection">
             <div class="ps-digest-section-title">
               <span>{{ sectionNumber }}</span>
               <div><h2>{{ currentSection.title }}</h2><p>本栏目关联 {{ currentSectionSources.length }} 条来源</p></div>
@@ -53,7 +60,7 @@
             <div :key="currentSection.id" class="ps-digest-intro" aria-label="栏目正文" role="textbox" aria-multiline="true" :class="{ 'is-empty': !currentSection.content }" data-placeholder="当前栏目暂无正文，请在此补充。" :contenteditable="!isReadOnly" @input="updateSectionContent"><template v-for="(part, partIndex) in reportCitationParts(currentSection.content, currentSection.title, Math.max(0, ...citations.map(item => Number(item.id) || 0)))" :key="partIndex"><sup v-if="part.citation" class="ps-citation-marker"><router-link v-if="citationPath(part.text)" :to="citationPath(part.text)" :contenteditable="false" :aria-label="`查看引用 ${part.text} 的资料详情`">{{ part.text }}</router-link><template v-else>{{ part.text }}</template></sup><span v-else>{{ part.text }}</span></template></div>
 
           </section>
-          <section class="ps-digest-reference-section" aria-label="文末参考资料">
+          <section v-if="!referenceDigest" class="ps-digest-reference-section" aria-label="文末参考资料">
             <h2>参考资料</h2>
             <p v-if="authoredReferences" class="ps-digest-intro">{{ authoredReferences }}</p>
             <ol v-else-if="citations.length" class="ps-digest-sources">
@@ -86,7 +93,9 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getToken } from '@/utils/auth'
-import { cleanReportCitationNotes, reportCitationParts } from '@/utils/portal/reportDocument'
+import DigestSectionContent from '../components/DigestSectionContent.vue'
+import { buildReportMarkdown, cleanReportCitationNotes, reportCitationParts } from '@/utils/portal/reportDocument'
+import { digestMasthead, digestPeriodLabel } from '@/utils/portal/digestDocument'
 import { getCitationPath } from '@/utils/portal/citationRouting'
 import ReportExportHistory from '../components/ReportExportHistory.vue'
 import DigestCandidatePicker from '../components/DigestCandidatePicker.vue'
@@ -132,6 +141,11 @@ const authoredReferences = computed(() => sections.value.filter(isReferenceSecti
 const currentSection = computed(() => bodySections.value.find(item => item.id === currentSectionId.value) || bodySections.value[0])
 const currentSectionIndex = computed(() => Math.max(bodySections.value.findIndex(item => item.id === currentSectionId.value), 0))
 const sectionNumber = computed(() => String(currentSectionIndex.value + 1).padStart(2, '0'))
+const referenceDigest = computed(() => digest.value.metadata?.modelSnapshot?.document_format === 'digest-reference-v1')
+const referencePeriod = computed(() => digestPeriodLabel(digest.value.metadata?.period))
+const referenceTitle = computed(() => digestMasthead(digest.value.title, digest.value.metadata?.period))
+function categoryNumber(number) { const digits = '零一二三四五六七八九'; return number < 10 ? digits[number] : `${number >= 20 ? digits[Math.floor(number / 10)] : ''}十${number % 10 ? digits[number % 10] : ''}` }
+function updateDigestSection(section) { section.words = section.content.length; section.status = section.content ? 'complete' : 'draft'; markSaving() }
 const digestPeriod = computed(() => digest.value.period || (digest.value.metadata?.period || []).join(' 至 ') || String(digest.value.updatedAt || '').slice(0, 10) || '当前周期')
 const reportTypeLabel = computed(() => ({ daily: '科技情报日报', weekly: '科技情报周报', monthly: '科技情报月报', 日报: '科技情报日报', 周报: '科技情报周报', 月报: '科技情报月报' })[digest.value.reportType || digest.value.type] || '科技情报简报')
 function sectionSources(section) {
@@ -151,7 +165,7 @@ function citationPath(text) {
   const id = String(text || '').replace(/^\[|\]$/g, '')
   return getCitationPath(citations.value.find(item => String(item.id) === id))
 }
-function buildMarkdown() { return [`**${digest.value.title}**`, '', ...sections.value.flatMap((section, index) => [`**${index + 1}. ${section.title}**`, '', cleanReportCitationNotes(section.content || '', section.title), '']), '**参考资料**', '', ...citations.value.map(item => `[${item.id}] ${item.title}（${citationSourceLabel(item)}，${item.location || '来源条目'}）`)].join('\n') }
+function buildMarkdown() { if (referenceDigest.value) return buildReportMarkdown({ sections: sections.value, documentFormat: 'digest-reference-v1' }); return [`**${digest.value.title}**`, '', ...sections.value.flatMap((section, index) => [`**${index + 1}. ${section.title}**`, '', cleanReportCitationNotes(section.content || '', section.title), '']), '**参考资料**', '', ...citations.value.map(item => `[${item.id}] ${item.title}（${citationSourceLabel(item)}，${item.location || '来源条目'}）`)].join('\n') }
 function markSaving() {
   if (!active || isReadOnly.value) return
   editRevision += 1
@@ -195,6 +209,10 @@ function handleBeforeUnload(event) {
   if (!dirty) return
   event.preventDefault()
   event.returnValue = ''
+}
+function selectSection(id) {
+  currentSectionId.value = id
+  if (referenceDigest.value) document.getElementById(`digest-section-${id}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' })
 }
 function addSection() { if (isReadOnly.value) return; const id = Date.now(); sections.value.push({ id, title: `新增栏目 ${sections.value.length + 1}`, content: '', words: 0, sources: 0, citations: 0, citationIds: [], status: 'draft' }); currentSectionId.value = id; markSaving() }
 function addCandidate(item) {
@@ -384,6 +402,13 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.ps-digest-paper.is-reference-digest { font-family: '仿宋_GB2312', FangSong, 'Songti SC', serif; }
+.ps-digest-paper.is-reference-digest > .ps-reference-digest-header { background: #fff; color: #111; border-bottom: 3px solid #f00; margin: 0 28px; padding: 32px 0 16px; text-align: center; }
+.ps-digest-paper.is-reference-digest > .ps-reference-digest-header h1 { font-family: inherit; color: #f00; font-size: clamp(21px, 2.2vw, 24px); font-weight: 700; text-align: center; }
+.ps-digest-paper.is-reference-digest > .ps-reference-digest-header p { margin: 0; color: #111; font-size: clamp(16px, 1.8vw, 21px); text-align: center; }
+.ps-digest-paper.is-reference-digest > section > h2 { font-family: inherit; color: #111; font-size: 20px; margin: 22px 0 14px; }
+.ps-digest-paper.is-reference-digest > section { padding: 12px 28px 28px; }
+
 .ps-digest-intro { white-space: pre-wrap; }
 .ps-citation-marker { position: static; vertical-align: super; font-size: .75em; line-height: 0; padding: 2px 4px; margin-inline: 1px; border-radius: 3px; background: var(--ps-blue-soft, #e8f1f8); color: var(--ps-blue); white-space: nowrap; }
 .ps-citation-marker a:focus-visible { outline: 2px solid var(--ps-blue); outline-offset: 2px; }

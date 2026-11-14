@@ -2,11 +2,24 @@
 
 from typing import Annotated, Literal
 
-from fastapi import Query, Request, Response
+from fastapi import HTTPException, Query, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.intelligence.schemas.ai_model import AiModelModel, AiModelPageQueryModel, DeleteAiModelModel
+from app.intelligence.schemas.ai_model import (
+    AiModelModel,
+    AiModelPageQueryModel,
+    DeleteAiModelModel,
+    TranslationModelSelection,
+)
 from app.intelligence.services.ai_model_service import AiModelService
+from app.intelligence.services.translation_settings import (
+    generation_settings,
+    processing_settings,
+    save_generation_settings,
+    save_processing_settings,
+    save_translation_settings,
+    translation_settings,
+)
 from app.system.api.dependencies import PreAuthDependency
 from common.aspect.db_seesion import DBSessionDependency
 from common.aspect.interface_auth import RoleInterfaceAuthDependency, UserInterfaceAuthDependency
@@ -61,6 +74,78 @@ async def delete_ai_model(
 ) -> Response:
     result = await AiModelService.delete_ai_model_services(query_db, DeleteAiModelModel(model_ids=model_ids))
     return ResponseUtil.success(msg=result.message)
+
+
+@ai_model_controller.get('/translation-config', dependencies=[UserInterfaceAuthDependency('ai:model:query')])
+async def get_translation_config(
+    request: Request, query_db: Annotated[AsyncSession, DBSessionDependency()]
+) -> Response:
+    try:
+        return ResponseUtil.success(data=await translation_settings(query_db))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail='翻译模型配置无效，请重新设置') from exc
+
+
+@ai_model_controller.put('/translation-config', dependencies=[UserInterfaceAuthDependency('ai:model:edit')])
+async def put_translation_config(
+    request: Request, payload: TranslationModelSelection, query_db: Annotated[AsyncSession, DBSessionDependency()]
+) -> Response:
+    try:
+        return ResponseUtil.success(
+            data=await save_translation_settings(query_db, payload.model_id), msg='翻译模型已更新'
+        )
+    except ValueError as exc:
+        await query_db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@ai_model_controller.get('/processing-config', dependencies=[UserInterfaceAuthDependency('ai:model:query')])
+async def get_processing_config(request: Request, query_db: Annotated[AsyncSession, DBSessionDependency()]) -> Response:
+    try:
+        return ResponseUtil.success(data=await processing_settings(query_db))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail='内容处理模型配置无效，请重新设置') from exc
+
+
+@ai_model_controller.put('/processing-config', dependencies=[UserInterfaceAuthDependency('ai:model:edit')])
+async def put_processing_config(
+    request: Request, payload: TranslationModelSelection, query_db: Annotated[AsyncSession, DBSessionDependency()]
+) -> Response:
+    try:
+        return ResponseUtil.success(
+            data=await save_processing_settings(query_db, payload.model_id), msg='内容处理模型已更新'
+        )
+    except ValueError as exc:
+        await query_db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@ai_model_controller.get('/purpose-config/{purpose}', dependencies=[UserInterfaceAuthDependency('ai:model:query')])
+async def get_generation_config(
+    request: Request,
+    purpose: Literal['image', 'digest', 'research'],
+    query_db: Annotated[AsyncSession, DBSessionDependency()],
+) -> Response:
+    try:
+        return ResponseUtil.success(data=await generation_settings(query_db, purpose))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail='生成模型配置无效，请重新设置') from exc
+
+
+@ai_model_controller.put('/purpose-config/{purpose}', dependencies=[UserInterfaceAuthDependency('ai:model:edit')])
+async def put_generation_config(
+    request: Request,
+    purpose: Literal['image', 'digest', 'research'],
+    payload: TranslationModelSelection,
+    query_db: Annotated[AsyncSession, DBSessionDependency()],
+) -> Response:
+    try:
+        return ResponseUtil.success(
+            data=await save_generation_settings(query_db, purpose, payload.model_id), msg='生成模型已更新'
+        )
+    except ValueError as exc:
+        await query_db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @ai_model_controller.get('/{model_id}', dependencies=[UserInterfaceAuthDependency('ai:model:query')])

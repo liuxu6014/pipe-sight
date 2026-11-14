@@ -112,3 +112,28 @@ async def test_legacy_explicit_writing_text_is_not_lost(
     await env.gateway.ResearchModelGenerationService.generate_content(None, snapshot, [], task_id=1)
     system = call.await_args.kwargs['system_prompt']
     assert '专门讨论腐蚀机理' in system and '比较方法局限' in system
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind', ['weekly', 'monthly'])
+async def test_reference_digest_protocol_reaches_actual_model_call(env, monkeypatch, kind) -> None:
+    from app.research.services.digest_document import DIGEST_FORMAT
+
+    snapshot = {
+        'document_format': DIGEST_FORMAT,
+        'type': kind,
+        'title': '管网科技情报',
+        'request': {'period': ['2026-10-01', '2026-10-31']},
+        'model': {},
+        'template': {'purpose': 'digest', 'prompt': '管理员设置的领域要求', 'sections': []},
+    }
+    call = AsyncMock(return_value='{"format":"digest-reference-v1","groups":[]}')
+    monkeypatch.setattr(env.gateway.ModelGateway, 'call', call)
+    await env.gateway.ResearchModelGenerationService.generate_content(None, snapshot, [], task_id=1)
+    system = call.await_args.kwargs['system_prompt']
+    assert system.startswith('管理员设置的领域要求')
+    assert 'sourceIds' in system and '行业洞察' in system
+    assert '数据源标题、链接、发布时间由系统从真实选材生成，缺失时不补造' in system
+    assert '不写综合导语' in system
+    assert '逐句区分资料明确记载的事实' in system
+    assert '栏目优先写连续的分析段落' not in system

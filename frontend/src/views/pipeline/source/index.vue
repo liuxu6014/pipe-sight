@@ -71,7 +71,7 @@
             </template>
           </div>
         </el-form-item>
-        <p class="source-frequency-help">{{ frequencyPreview }}<template v-if="frequency.unit !== 'off'"> · {{ editingSource?.timezone || 'Asia/Shanghai' }}</template></p>
+        <p v-if="editingSource" class="source-frequency-help">{{ frequencyPreview }}<template v-if="frequency.unit !== 'off'"> · {{ editingSource.timezone || 'Asia/Shanghai' }}</template></p>
         <p v-if="frequency.unit === 'minute' || frequency.unit === 'hour'" class="source-frequency-help">按时钟整点对齐；例如每 6 小时在 00:00、06:00、12:00、18:00 采集。</p>
         <el-alert v-if="hasExistingSchedule" title="已有指定时间计划，默认保留；选择新的采集间隔后才会替换。" type="info" :closable="false" />
         <el-alert v-if="dialogError" :title="dialogError" type="error" :closable="false" class="source-dialog-error" />

@@ -1,3 +1,4 @@
+import { isDigestType } from '../src/views/portal/utils/routing.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -8,7 +9,7 @@ const source = page => readFileSync(new URL(`../src/views/pipeline/${page}.vue`,
 function setup(page, names, mocks = {}) {
   const script = source(page).match(/<script setup>([\s\S]*?)<\/script>/)[1]
     .replace(/^import[\s\S]*?from ['"][^'"]+['"]\s*$/gm, '')
-  const dependencies = { computed, reactive, ref, watch, onMounted() {}, defineOptions() {},
+  const dependencies = { isDigestType, computed, reactive, ref, watch, onMounted() {}, defineOptions() {},
     ElMessage: { warning() {}, error() {}, success() {}, info() {} },
     checkPermi: () => true, modelsFor: () => [],
     Calendar: {}, Collection: {}, Delete: {}, Document: {}, Files: {}, Plus: {}, Rank: {}, Search: {},
@@ -145,7 +146,7 @@ test('A01 report management uses the dedicated admin transport', async () => {
   assert.equal(page.rows.value[0].owner, '其他作者')
 })
 
-test('L03 chapter row reserves six explicit tracks', () => {
+test('L03 chapter row reserves one track per chapter control', () => {
   const tracks = source('template/index').match(/\.template-section-row\s*\{[^}]*grid-template-columns:\s*([^;]+)/)[1]
-  assert.equal(tracks.match(/minmax\([^)]*\)|[^\s]+/g).length, 6)
+  assert.equal(tracks.match(/minmax\([^)]*\)|[^\s]+/g).length, 5)
 })

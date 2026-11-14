@@ -3,26 +3,19 @@
     <div class="ps-toolbar ps-paper-toolbar" role="search" aria-label="论文筛选">
       <div class="ps-paper-filter-row">
         <el-input v-model.trim="keyword" class="ps-paper-search" :prefix-icon="Search" clearable aria-label="搜索论文资料" placeholder="搜索题名、作者或摘要" @keydown.enter="reload" />
-        <el-date-picker
-          class="ps-paper-year"
-          popper-class="ps-paper-year-popper"
-          :model-value="selectedYearRange.length ? selectedYearRange : null"
-          type="yearrange"
-          value-format="YYYY"
-          start-placeholder="起始年份"
-          end-placeholder="结束年份"
-          range-separator="至"
-          clearable
-          aria-label="论文发表年份范围"
-          @update:model-value="changeYearRange"
-        />
+        <el-select class="ps-paper-year-select" :model-value="yearSelection" aria-label="论文发表年份" @change="selectYear">
+          <el-option label="全部年份" value="all" />
+          <el-option v-if="yearSelection === 'range'" :label="yearRangeLabel" value="range" />
+          <el-option v-for="option in paperYears" :key="option" :label="`${option} 年`" :value="option" />
+          <el-option label="自定义范围…" value="custom" />
+        </el-select>
         <el-select v-model="classification" clearable filterable placeholder="全部类别" aria-label="论文类别">
           <el-option v-for="name in categoryOptions" :key="name" :label="name" :value="name" />
         </el-select>
         <el-select v-model="journal" clearable filterable placeholder="全部期刊 / 会议" aria-label="论文期刊或会议">
           <el-option v-for="item in journalOptions" :key="item" :label="item" :value="item" />
         </el-select>
-        <el-button v-if="hasActiveFilters" :icon="RefreshLeft" @click="resetFilters">重置筛选</el-button>
+        <el-button v-if="hasActiveFilters" class="ps-paper-reset" :icon="RefreshLeft" @click="resetFilters">重置筛选</el-button>
       </div>
     </div>
     <div class="ps-content-with-filter ps-list-stack">
@@ -73,13 +66,30 @@
         </div>
       </section>
     </div>
+    <el-dialog v-model="yearPickerOpen" title="自定义年份范围" width="min(380px, calc(100vw - 32px))" class="ps-paper-year-dialog" align-center append-to-body>
+      <form class="ps-paper-year-form" @submit.prevent="applyYearDraft">
+        <div class="ps-paper-year-fields">
+          <label>起始年份
+            <el-input v-model.trim="draftYearFrom" aria-label="起始年份" inputmode="numeric" maxlength="4" placeholder="如 2020" />
+          </label>
+          <label>结束年份
+            <el-input v-model.trim="draftYearTo" aria-label="结束年份" inputmode="numeric" maxlength="4" placeholder="如 2024" />
+          </label>
+        </div>
+        <p v-if="yearDraftError" class="ps-paper-year-error" role="alert">{{ yearDraftError }}</p>
+        <div class="ps-paper-year-actions">
+          <el-button @click="yearPickerOpen = false">取消</el-button>
+          <el-button type="primary" native-type="submit">应用</el-button>
+        </div>
+      </form>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import ContentEntities from '../components/ContentEntities.vue'
 import ContentCategory from '../components/ContentCategory.vue'
-import { computed, toRefs, watch } from 'vue'
+import { computed, ref, toRefs, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { RefreshLeft, Search } from '@element-plus/icons-vue'
 import PortalEmptyState from '../components/PortalEmptyState.vue'
@@ -97,8 +107,29 @@ const { inBasket, busy, toggleBasket } = useListWorkspace(portalStore, { save: s
 const facets = useListRequest(() => ({}), getPipelineContentFilters)
 const categoryOptions = computed(() => [...new Set([...(facets.data.value?.paperCategories || facets.data.value?.categories || []), ...(classification.value ? [classification.value] : [])])])
 const journalOptions = computed(() => [...new Set([...(facets.data.value?.journals || []), ...journals.value])])
-// Keep older single-year links visible in the same range control.
-const selectedYearRange = computed(() => year.value !== 'all' ? [String(year.value), String(year.value)] : yearRange.value || [])
+// Keep older single-year links visible in the current year filter.
+const selectedYearRange = computed(() => {
+  const legacyYear = year.value.trim()
+  if (legacyYear && legacyYear !== 'all') return [legacyYear, legacyYear]
+  const range = yearRange.value || []
+  return range.some(value => value.trim()) ? range : []
+})
+const yearSelection = computed(() => {
+  const [from, to] = selectedYearRange.value
+  if (!selectedYearRange.value.length) return 'all'
+  return from === to && !yearRangeError(Number(from)) ? from : 'range'
+})
+const yearRangeLabel = computed(() => {
+  const [from, to] = selectedYearRange.value
+  if (yearRangeError(Number(from), to === undefined ? undefined : Number(to))) return '年份范围'
+  return to ? `${from}–${to} 年` : `${from} 年起`
+})
+const paperYears = computed(() => {
+  const years = [...(facets.data.value?.years || []).map(String), yearSelection.value]
+  return [...new Set(years.filter(value => !yearRangeError(Number(value))))].sort((a, b) => Number(b) - Number(a))
+})
+const yearPickerOpen = ref(false)
+const draftYearFrom = ref(''), draftYearTo = ref(''), yearDraftError = ref('')
 const journal = computed({ get: () => journals.value[0] || '', set: value => { journals.value = value ? [value] : [] } })
 const hasActiveFilters = computed(() => Boolean(keyword.value || selectedYearRange.value.length || classification.value || journal.value))
 // The API accepts one journal keyword; normalize legacy multi-select URLs too.
@@ -116,8 +147,8 @@ const { data, loading, loadError, reload } = useListRequest(() => {
       pageSize: pageSize.value
   }
 }, params => {
-  if ([params.yearFrom, params.yearTo].some(value => value !== undefined && (!Number.isInteger(value) || value < 1600 || value > 2200))) throw new Error('请输入 1600–2200 之间的有效年份')
-  if (params.yearFrom > params.yearTo) throw new Error('起始年份不能晚于结束年份')
+  const error = yearRangeError(params.yearFrom, params.yearTo)
+  if (error) throw new Error(error)
   return listPipelineIntelligence(params)
 })
 const filteredPapers = computed(() => (data.value?.rows || []).map(item => ({
@@ -125,12 +156,35 @@ const filteredPapers = computed(() => (data.value?.rows || []).map(item => ({
   authors: Array.isArray(item.authors) ? item.authors : item.authors ? [item.authors] : ['作者信息未提供'],
   institutions: item.institutions || [],
   journal: item.journal || item.source || item.source_name || '来源未提供',
-  abstract: cleanSummary(item.abstractZh || item.abstract_zh || item.abstract || item.summary) || '摘要未提供，请进入详情核对来源。',
+  abstract: cleanSummary(item.summary || item.abstractZh || item.abstract_zh || item.abstract) || '摘要未提供，请进入详情核对来源。',
   citationCount: item.citations ?? item.citation_count ?? '未提供'
 })))
 const total = computed(() => Number(data.value?.total || 0))
 watch(data, value => { if (value) currentPage.value = validPage(total.value, pageSize.value, currentPage.value) })
 function changeYearRange(value) { year.value = 'all'; yearRange.value = value || [] }
+function yearRangeError(from, to) {
+  if ([from, to].some(value => value !== undefined && (!Number.isInteger(value) || value < 1600 || value > 2200))) return '请输入 1600–2200 之间的有效年份'
+  return from > to ? '起始年份不能晚于结束年份' : ''
+}
+function selectYear(value) {
+  if (value === 'all') return changeYearRange([])
+  if (value === 'range') return
+  if (value !== 'custom') return changeYearRange([value, value])
+
+  const [from = '', to = ''] = selectedYearRange.value
+  draftYearFrom.value = from
+  draftYearTo.value = from === to ? '' : to
+  yearDraftError.value = ''
+  yearPickerOpen.value = true
+}
+function applyYearDraft() {
+  const from = Number(draftYearFrom.value)
+  const to = Number(draftYearTo.value)
+  yearDraftError.value = yearRangeError(from, to)
+  if (yearDraftError.value) return
+  changeYearRange([String(from), String(to)])
+  yearPickerOpen.value = false
+}
 function resetFilters() {
   const unchanged = !keyword.value && year.value === 'all' && !yearRange.value?.length && !journals.value.length && !classification.value && currentPage.value === 1
   keyword.value = ''; year.value = 'all'; yearRange.value = []; journals.value = []; classification.value = ''; currentPage.value = 1
@@ -154,33 +208,29 @@ function doiUrl(paper) {
 .ps-paper-library > .ps-paper-toolbar { container-type: inline-size; }
 .ps-paper-filter-row {
   display: grid;
-  grid-template-columns: minmax(160px, 1.7fr) minmax(224px, 1.1fr) minmax(116px, .65fr) minmax(144px, .85fr) var(--paper-reset-track,);
+  grid-template-columns: minmax(160px, 2fr) minmax(140px, .75fr) minmax(116px, .65fr) minmax(144px, .85fr) var(--paper-reset-track,);
   align-items: center;
   width: 100%;
   min-width: 0;
   gap: 8px;
   --el-component-size: 40px;
 }
-.ps-paper-filter-row:has(> .el-button) { --paper-reset-track: auto; }
-.ps-paper-filter-row > :deep(:is(.el-input, .el-select, .el-date-editor)) { width: 100%; min-width: 0; box-sizing: border-box; }
+.ps-paper-filter-row:has(> .ps-paper-reset) { --paper-reset-track: auto; }
+.ps-paper-filter-row > :deep(:is(.el-input, .el-select)) { width: 100%; min-width: 0; box-sizing: border-box; }
 .ps-paper-filter-row > .el-button { margin: 0; height: var(--el-component-size); }
-.ps-paper-filter-row :deep(.ps-paper-year .el-range-input:focus-visible) { outline: none; }
-.ps-paper-filter-row :deep(.ps-paper-year:has(.el-range-input:focus-visible)) {
-  box-shadow: 0 0 0 1px var(--el-input-focus-border-color) inset;
-}
-:global(.ps-paper-year-popper .el-date-range-picker) { width: min(480px, calc(100vw - 24px)); }
-:global(.ps-paper-year-popper .el-picker-panel__body) { display: flex; min-width: 0; }
-:global(.ps-paper-year-popper .el-date-range-picker__content) { flex: 1; min-width: 0; padding: 12px 8px; }
-:global(.ps-paper-year-popper .el-year-table td) { width: auto; padding-block: 2px; }
-:global(.ps-paper-year-popper .el-year-table .el-date-table-cell__text) { width: min(100%, 44px); }
+:global(.ps-paper-year-dialog.el-dialog.is-align-center) { margin-top: auto !important; }
+.ps-paper-year-form { display: grid; gap: 12px; }
+.ps-paper-year-actions { display: flex; justify-content: flex-end; margin-top: 4px; }
+.ps-paper-year-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.ps-paper-year-fields label { display: grid; gap: 6px; min-width: 0; }
+.ps-paper-year-error { margin: 0; color: var(--el-color-danger); font-size: 13px; }
 @container (max-width: 790px) {
-  .ps-paper-filter-row { grid-template-columns: minmax(224px, 1.4fr) minmax(110px, 1fr) minmax(132px, 1fr) var(--paper-reset-track,); }
+  .ps-paper-filter-row { grid-template-columns: minmax(140px, 1fr) minmax(110px, 1fr) minmax(132px, 1fr) var(--paper-reset-track,); }
   .ps-paper-search { grid-column: 1 / -1; }
 }
 @container (max-width: 590px) {
   .ps-paper-filter-row { grid-template-columns: repeat(2, minmax(0, 1fr)); --el-component-size: 44px; }
-  .ps-paper-filter-row > :deep(.ps-paper-year) { grid-column: 1 / -1; }
-  .ps-paper-filter-row > .el-button { grid-column: 2; justify-self: end; }
+  .ps-paper-filter-row > .ps-paper-reset { grid-column: 2; justify-self: end; }
 }
 /* Compact bibliographic header, reading content and a shared action footer. */
 .ps-paper-library .ps-paper-list { gap: 10px; align-content: start; }

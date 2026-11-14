@@ -6,6 +6,7 @@ const reportPage = readFileSync(new URL('../src/views/pipeline/report/index.vue'
 
 test('management report list wraps filters instead of showing an editorial landing page', () => {
   assert.match(reportPage, /@media \(max-width: 640px\) \{[\s\S]*?\.report-management-filters > \* \{[^}]*min-width: 0;/)
-  assert.match(reportPage, /:data="filteredRows"/)
+  assert.match(reportPage, /v-for="\(row, index\) in pagedRows"/)
+  assert.match(reportPage, /<pagination/)
   assert.doesNotMatch(reportPage, /report-masthead|report-reading|本期主报告/)
 })

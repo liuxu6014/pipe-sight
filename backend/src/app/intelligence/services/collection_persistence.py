@@ -57,6 +57,8 @@ class CollectionPersistenceService:
         # retired processing/review/model-route modules in the worker.
         from app.intelligence.models.content import PipelineArticle, PipelinePaper  # noqa: PLC0415
 
+        if isinstance(record, dict) and record.get('_processing_excluded') is True:
+            return 0
         if category_id is not None:
             category_id = parse_business_id(category_id)
 
@@ -117,6 +119,12 @@ class CollectionPersistenceService:
             values.update(title=title.strip(), url=url, published_at=published)
         else:
             raise ValueError('来源内容类型无效')
+        if source.type == 'paper' and record.get('summary'):
+            from app.intelligence.services.entities import validated_summary  # noqa: PLC0415
+
+            summary = validated_summary(record['summary'], record.get('abstract_zh') or record.get('abstract'))
+            if summary is not None:
+                values['summary'] = summary
         if isinstance(record.get('entities'), list):
             from app.intelligence.services.entities import validated_entities  # noqa: PLC0415
 
@@ -149,6 +157,11 @@ class CollectionPersistenceService:
             raise ValueError('DOI 与 URL 对应不同历史论文，需核对')
         existing = matches[0] if matches else None
         if existing:
+            if model is PipelinePaper:
+                for field in ('title', 'abstract'):
+                    target = f'{field}_zh'
+                    if getattr(existing, field) == values[field] and not values[target]:
+                        values.pop(target)
             # Preserve existing category, source identity and push receipt.
             if all(getattr(existing, key) == value for key, value in values.items()) and (
                 category_id is None or existing.category_id == category_id
@@ -193,7 +206,7 @@ class CollectionPersistenceService:
                 )
                 if classification_failed:
                     failed += 1
-                    run.error = '候选条目分类失败，请检查后台类别模型后重试'
+                    run.error = '候选条目处理失败，请检查内容处理模型及类别规则后重试'
                     continue
                 try:
                     async with db.begin_nested():

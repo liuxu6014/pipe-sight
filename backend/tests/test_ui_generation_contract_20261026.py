@@ -18,6 +18,16 @@ env = offline_env
 no_external_network = offline_network
 
 
+@pytest.fixture(autouse=True)
+def global_generation_choices(env, monkeypatch):
+    settings = importlib.import_module('app.intelligence.services.translation_settings')
+
+    async def selected(db, key):
+        return 2 if key == settings.GENERATION_PURPOSES['image'][0] else 1
+
+    monkeypatch.setattr(settings, 'configured_model_id', selected)
+
+
 def template(**updates):
     return NS(
         id=201,

@@ -261,10 +261,11 @@ test('implements digest and evidence-grounded knowledge workflows', () => {
   const jobCreateIndex = digestCreate.indexOf('const res = await createPipelineResearchJob')
   assert.ok(jobCreateIndex >= 0)
   assert.doesNotMatch(digestCreate, /await createPipelineDigestSchedule/)
-  assert.match(digestCreate, /DigestScheduleDialog/)
+  assert.match(digestList, /DigestScheduleDialog/)
   assert.match(digestCreate, /const requestId = ensureRequestId\(payload\)/)
   assert.match(digestCreate, /createPipelineResearchJob\(\{ \.\.\.payload, requestId \}\)/)
-  assert.match(digestCreate, /新建自动计划/)
+  assert.doesNotMatch(digestCreate, /新建自动计划|DigestScheduleDialog/)
+  assert.match(digestList, /新建任务/)
   assert.match(digestList, /'月报'/)
   assert.match(digestList, /'月报': 'monthly'/)
   assert.match(digestEditor, /候选资讯/)
@@ -385,7 +386,9 @@ test('keeps primary portal pages concise without repeated explanatory lead text'
     assert.match(page, /搜索.*报告|搜索简报或计划名称/)
     assert.match(page, /新建报告|新建简报/)
   }
-  assert.equal((read('../src/views/portal/pages/KnowledgeView.vue').match(/<PortalPageHeader\b/g) || []).length, 1)
+  const library = read('../src/views/portal/pages/KnowledgeView.vue')
+  assert.doesNotMatch(library, /<PortalPageHeader\b|<h1\b/)
+  assert.match(library, /class="ps-toolbar ps-knowledge-toolbar"[\s\S]*?@click="openUpload">上传资料/)
   const papers = read('../src/views/portal/pages/PaperListView.vue')
   assert.doesNotMatch(papers, /<PortalPageHeader\b|<h1\b/)
   assert.doesNotMatch(papers, /ps-paper-library-actions/)
@@ -507,7 +510,7 @@ test('portal list pagination shares the original news left-summary right-control
     const source = read(`../src/views/portal/pages/${page}.vue`)
     assert.match(source, /class="ps-pagination"/)
     assert.match(source, /:pager-count="5"/)
-    assert.match(source, /layout="total,(?: sizes,)? ->, prev, pager, next/)
+    assert.match(source, /(?:layout="total,(?: sizes,)? ->, prev, pager, next|:layout="inDialog \? 'prev, pager, next' : 'total, sizes, ->, prev, pager, next)/)
   }
   assert.match(portalStyles, /\.ps-pagination \.el-pagination\s*\{[^}]*align-items:\s*center[^}]*justify-content:\s*flex-start/)
   assert.match(portalStyles, /\.ps-pagination \.el-pagination \.el-pagination__rightwrapper\s*\{[^}]*margin-left:\s*auto[^}]*float:\s*none/)
@@ -622,7 +625,7 @@ test('protects backend report export with its explicit management permission', (
 test('keeps report reading metadata grounded in persisted records', () => {
   const reportPage = read('../src/views/pipeline/report/index.vue')
   assert.match(reportPage, /const filteredRows = computed\(\(\) =>/)
-  assert.match(reportPage, /:data="filteredRows"/)
+  assert.match(reportPage, /v-for="\(row, index\) in pagedRows"/)
   assert.match(reportPage, /当前条件下暂无成果/)
   assert.doesNotMatch(reportPage, /系统已完成来源汇聚与结构化处理/)
   assert.doesNotMatch(reportPage, /selectedReport\?\.type \|\| '科技情报日报'/)
@@ -672,7 +675,7 @@ test('keeps source and task actions aligned with backend permissions', () => {
 
 test('does not expose inaccessible management entries from the dashboard', () => {
   const dashboardPage = read('../src/views/pipeline/dashboard/index.vue')
-  assert.match(dashboardPage, /import \{ checkPermi \} from '\@\/utils\/permission'/)
+  assert.match(dashboardPage, /import \{ checkPermi, checkRole \} from '\@\/utils\/permission'/)
   assert.match(dashboardPage, /v-for="item in visibleAdminEntries"/)
   assert.match(dashboardPage, /const visibleAdminEntries = computed\(\(\) => adminEntries\.filter\(item => checkPermi\(\[item\.permission\]\)\)\)/)
   assert.doesNotMatch(dashboardPage, /canReviewList|pending_reviews/)
@@ -695,7 +698,7 @@ test('distinguishes collection and report service failures from empty lists', ()
     assert.match(page, new RegExp(rowsName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   }
   assert.match(taskPage, /class="table-card(?: [^"]*)?"/)
-  assert.match(reportPage, /<el-card v-else[^>]*class="table-card report-review-table(?: [^"]*)?"/)
+  assert.match(reportPage, /<el-card v-else[^>]*class="panel-card report-list-card ws-list-panel"/)
 })
 
 test('exposes the InsightHub handoff controls on the collection task page', () => {

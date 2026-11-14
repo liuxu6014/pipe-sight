@@ -47,7 +47,6 @@ test('research workspace keeps report entry points without a duplicate material 
   assert.doesNotMatch(workbench, /ps-research-list-heading|<h2>报告列表/)
   assert.doesNotMatch(workbench, /我的报告/)
   assert.doesNotMatch(read('pages/ResearchCreateView.vue'), /ps-research-material-link|管理研究资料/)
-  assert.match(read('pages/KnowledgeView.vue'), /title="资料库"/)
   const home = read('pages/HomeView.vue')
   assert.match(home, /path: '\/portal\/research\/create', action: '创建报告'/)
   assert.match(home, /path: '\/portal\/digests\/create', action: '生成简报'/)

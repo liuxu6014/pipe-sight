@@ -18,6 +18,33 @@ export function listModelAll() {
   });
 }
 
+function generationPurpose(purpose) {
+  if (!['image', 'digest', 'research'].includes(purpose)) throw new Error('生成模型用途不合法');
+  return purpose;
+}
+export function getGenerationModelConfig(purpose) {
+  return request({ url: `/ai/model/purpose-config/${generationPurpose(purpose)}`, method: 'get' });
+}
+export function updateGenerationModelConfig(purpose, data) {
+  return request({ url: `/ai/model/purpose-config/${generationPurpose(purpose)}`, method: 'put', data });
+}
+
+export function getProcessingModelConfig() {
+  return request({ url: '/ai/model/processing-config', method: 'get' });
+}
+
+export function updateProcessingModelConfig(data) {
+  return request({ url: '/ai/model/processing-config', method: 'put', data });
+}
+
+export function getTranslationModelConfig() {
+  return request({ url: '/ai/model/translation-config', method: 'get' });
+}
+
+export function updateTranslationModelConfig(data) {
+  return request({ url: '/ai/model/translation-config', method: 'put', data });
+}
+
 // 查询AI模型详细
 export function getModel(modelId) {
   return request({

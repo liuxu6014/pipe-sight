@@ -10,7 +10,7 @@ from app.research.repositories.research_repository import ResearchDao
 from app.research.services.model_generation import ModelOutputLimitError, ResearchModelGenerationService
 from app.research.services.report_content import (
     ManuscriptValidationError,
-    normalize_generated_report,
+    normalize_task_report,
     validate_generated_article,
 )
 from config.database import AsyncSessionLocal
@@ -52,8 +52,19 @@ class ResearchExecutionService:
                     await model_db.commit()
                     raise
                 await model_db.commit()
-            article = normalize_generated_report(content, materials, delivery=True)
-            validate_generated_article(article['content'], materials)
+            if snapshot.get('document_format') == 'digest-reference-v1':
+                from app.research.services.digest_document import normalize_digest_document  # noqa: PLC0415
+
+                try:
+                    article = normalize_digest_document(
+                        content, materials, generation_options=(snapshot.get('request') or {}).get('options') or {}
+                    )
+                except ValueError as error:
+                    raise ManuscriptValidationError(f'简报格式检查未通过：{error}；请重试生成') from error
+            else:
+                article = normalize_task_report(content, materials, snapshot)
+            cited_materials = article.get('materials', materials)
+            validate_generated_article(article['content'], cited_materials)
             async with AsyncSessionLocal() as result_db:
                 job = await ResearchDao.lock_running_research_job(result_db, job_id, user_id, token)
                 if not job:
@@ -92,7 +103,7 @@ class ResearchExecutionService:
                         owner_name,
                         result_snapshot,
                         sections=article['sections'],
-                        citations=cls.material_citations(materials),
+                        citations=cls.material_citations(cited_materials),
                         quality_issues=[],
                     )
                 job.status, job.progress, job.finished_at = 'completed', 100, utcnow()

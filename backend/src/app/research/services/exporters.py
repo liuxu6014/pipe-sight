@@ -13,6 +13,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Mm, Pt, RGBColor
+from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -21,7 +22,7 @@ from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfbase.ttfonts import TTFError, TTFont
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from reportlab.platypus.paragraph import ParaLines, cjkU, makeCJKParaLine
 
 from app.research.services.citation_format import REFERENCE_TITLES, clean_report_citations
@@ -99,16 +100,19 @@ def _pdf_font() -> str:
         return name
     # Embed a local Unicode font when available so exported Chinese text does
     # not depend on the reader installing an Adobe CJK language pack.
-    for filename in (
-        '/System/Library/Fonts/Supplemental/Arial Unicode.ttf',
-        '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc',
-        '/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf',
-        'C:/Windows/Fonts/simsun.ttc',
+    for filename, face_index in (
+        # Songti's first collection face is Black; use the regular SC face.
+        ('/System/Library/Fonts/Supplemental/Songti.ttc', 6),
+        ('C:/Windows/Fonts/simsun.ttc', 0),
+        ('/usr/local/share/fonts/simsun.ttf', 0),
+        ('/System/Library/Fonts/Supplemental/Arial Unicode.ttf', 0),
+        ('/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc', 0),
+        ('/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf', 0),
     ):
         if not Path(filename).is_file():
             continue
         try:
-            pdfmetrics.registerFont(TTFont(name, filename))
+            pdfmetrics.registerFont(TTFont(name, filename, subfontIndex=face_index))
             pdfmetrics.registerFontFamily(name, normal=name, bold=name, italic=name, boldItalic=name)
             return name
         except TTFError:
@@ -241,7 +245,67 @@ def _docx_page_number(document: Any) -> None:
     update.set(qn('w:val'), 'true')
 
 
+def _reference_digest(report: Any) -> bool:
+    from app.research.services.digest_document import is_digest_body  # noqa: PLC0415
+
+    return getattr(report, 'report_type', '') in {'weekly', 'monthly'} and is_digest_body(
+        getattr(report, 'content', '')
+    )
+
+
+def _project_form(report: Any) -> dict | None:
+    return (getattr(report, 'metadata', None) or {}).get('projectDemandForm')
+
+
+def _docx_project_cover(document: Any, form: dict) -> None:
+    for key, size, before in (('organization', 20, 85), ('title', 24, 20)):
+        paragraph = document.add_paragraph()
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        paragraph.paragraph_format.space_before = Pt(before)
+        run = paragraph.add_run(form[key])
+        run.bold = True
+        run.font.size = Pt(size)
+    for label, value in form['fields']:
+        paragraph = document.add_paragraph()
+        paragraph.paragraph_format.left_indent = Mm(17)
+        paragraph.paragraph_format.space_before = Pt(7)
+        paragraph.add_run(f'{label}：{value or "________________"}').font.size = Pt(12)
+    document.add_page_break()
+
+
+def _docx_project_budget(document: Any, form: dict) -> None:
+    document.add_page_break()
+    document.add_heading('经费预算表（万元）', 1)
+    table = document.add_table(rows=1, cols=len(form['budgetHeaders']))
+    table.style = 'Table Grid'
+    table.autofit = False
+    fixed = [12, 65]
+    widths = fixed + [(146 - sum(fixed)) / (len(form['budgetHeaders']) - 2)] * (len(form['budgetHeaders']) - 2)
+    for column, width in zip(table.columns, widths, strict=True):
+        column.width = Mm(width)
+    table.rows[0]._tr.get_or_add_trPr().append(OxmlElement('w:tblHeader'))
+    for index, values in enumerate([form['budgetHeaders'], *form['budgetRows']]):
+        cells = table.rows[0].cells if index == 0 else table.add_row().cells
+        for cell, value, width in zip(cells, values, widths, strict=True):
+            cell.width = Mm(width)
+            paragraph = cell.paragraphs[0]
+            paragraph.paragraph_format.space_before = Pt(0)
+            paragraph.paragraph_format.space_after = Pt(0)
+            paragraph.paragraph_format.line_spacing = Pt(10.5)
+            run = paragraph.add_run(value)
+            run.font.size = Pt(9)
+            run.bold = index == 0 or not values[0]
+
+
 def build_docx(report: Any, *, is_draft: bool) -> tuple[str, str, bytes]:
+    if _reference_digest(report):
+        from app.research.services.digest_export import build_digest_docx  # noqa: PLC0415
+
+        return (
+            f'{safe_file_stem(report.title, is_draft=is_draft)}.docx',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            build_digest_docx(report),
+        )
     """返回文件名、媒体类型和 DOCX 二进制内容。"""
     document = Document()
     section = document.sections[0]
@@ -251,6 +315,10 @@ def build_docx(report: Any, *, is_draft: bool) -> tuple[str, str, bytes]:
     section.bottom_margin = Inches(0.75)
     section.left_margin = Inches(0.85)
     section.right_margin = Inches(0.85)
+    form = _project_form(report)
+    if form:
+        section.top_margin = Mm(25.4)
+        section.left_margin = section.right_margin = Mm(31.7)
     _docx_page_number(document)
     normal = document.styles['Normal']
     normal.font.name = 'Songti SC'
@@ -277,12 +345,15 @@ def build_docx(report: Any, *, is_draft: bool) -> tuple[str, str, bytes]:
     document.core_properties.title = title
     document.core_properties.author = str(getattr(report, 'owner_name', '') or 'PipeSight')
     document.styles['Title'].font.size = Pt(20)
-    title_paragraph = document.add_heading(title, 0)
-    title_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    metadata_text = _metadata_line(report)
-    if metadata_text:
-        metadata = document.add_paragraph(metadata_text)
-        metadata.style = document.styles['Subtitle']
+    if form:
+        _docx_project_cover(document, form)
+    else:
+        title_paragraph = document.add_heading(title, 0)
+        title_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        metadata_text = _metadata_line(report)
+        if metadata_text:
+            metadata = document.add_paragraph(metadata_text)
+            metadata.style = document.styles['Subtitle']
 
     content = _report_body(report)
     reference = False
@@ -294,6 +365,9 @@ def build_docx(report: Any, *, is_draft: bool) -> tuple[str, str, bytes]:
         if heading:
             level, name = heading
             reference = name.casefold() in REFERENCE_TITLES
+            if reference and form:
+                _docx_project_budget(document, form)
+                form = None
             if level == 1 and name == title:
                 continue
             document.add_heading(_plain_inline(name), min(max(level - 1, 1), 6))
@@ -307,6 +381,8 @@ def build_docx(report: Any, *, is_draft: bool) -> tuple[str, str, bytes]:
             continue
         _docx_body(document, line, reference=reference)
 
+    if form:
+        _docx_project_budget(document, form)
     citation_lines = _citation_lines(report)
     if citation_lines and not _has_reference_section(content):
         document.add_heading('参考资料', 1)
@@ -330,9 +406,53 @@ def _pdf_inline(value: str, *, citation: bool = False) -> str:
     return _CITATION_RE.sub(r'<super>\g<0></super>', escaped) if citation else escaped
 
 
+def _pdf_project_cover(form: dict, title_style: ParagraphStyle, body_style: ParagraphStyle) -> list[Any]:
+    fields = ParagraphStyle('ProjectCoverFields', parent=body_style, fontSize=12, firstLineIndent=0, leftIndent=45)
+    return [
+        Spacer(1, 85),
+        Paragraph(_pdf_inline(form['organization']), title_style),
+        Spacer(1, 20),
+        Paragraph(_pdf_inline(form['title']), title_style),
+        Spacer(1, 24),
+        *(Paragraph(_pdf_inline(f'{label}：{value or "________________"}'), fields) for label, value in form['fields']),
+        PageBreak(),
+    ]
+
+
+def _pdf_project_budget(form: dict, heading_style: ParagraphStyle, width: float) -> list[Any]:
+    style = ParagraphStyle('ProjectBudget', fontName=heading_style.fontName, fontSize=9, leading=11, wordWrap='CJK')
+    columns = len(form['budgetHeaders'])
+    fixed = [12 * mm, 65 * mm]
+    widths = fixed + [(width - sum(fixed)) / (columns - 2)] * (columns - 2)
+    rows = [
+        [Paragraph(_pdf_inline(cell), style) for cell in row] for row in [form['budgetHeaders'], *form['budgetRows']]
+    ]
+    table = Table(rows, colWidths=widths, repeatRows=1, hAlign='LEFT')
+    table.setStyle(
+        TableStyle(
+            [
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('BACKGROUND', (0, 0), (-1, 0), colors.whitesmoke),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, -1), 2),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+            ]
+        )
+    )
+    return [PageBreak(), Paragraph('经费预算表（万元）', heading_style), table]
+
+
 def build_pdf(report: Any, *, is_draft: bool) -> tuple[str, str, bytes]:
     """返回文件名、媒体类型和 PDF 二进制内容，使用内置 CJK 字体避免中文变方框。"""
     font_name = _pdf_font()
+    if _reference_digest(report):
+        from app.research.services.digest_export import build_digest_pdf  # noqa: PLC0415
+
+        return (
+            f'{safe_file_stem(report.title, is_draft=is_draft)}.pdf',
+            'application/pdf',
+            build_digest_pdf(report, font_name),
+        )
     title = str(getattr(report, 'title', '') or '科研报告')
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle(
@@ -377,21 +497,26 @@ def build_pdf(report: Any, *, is_draft: bool) -> tuple[str, str, bytes]:
     )
 
     output = BytesIO()
+    form = _project_form(report)
+    margin = 31.7 * mm - 6 if form else 18 * mm
     document = SimpleDocTemplate(
         output,
         pagesize=A4,
-        rightMargin=18 * mm,
-        leftMargin=18 * mm,
-        topMargin=18 * mm,
+        rightMargin=margin,
+        leftMargin=margin,
+        topMargin=(25.4 if form else 18) * mm,
         bottomMargin=18 * mm,
         title=title,
         author=str(getattr(report, 'owner_name', '') or 'PipeSight'),
     )
-    story: list[Any] = [Paragraph(_pdf_inline(title), title_style), Spacer(1, 5 * mm)]
-    metadata_text = _metadata_line(report)
-    if metadata_text:
-        story.append(Paragraph(_pdf_inline(metadata_text), metadata_style))
-        story.append(Spacer(1, 5 * mm))
+    if form:
+        story = _pdf_project_cover(form, title_style, body_style)
+    else:
+        story = [Paragraph(_pdf_inline(title), title_style), Spacer(1, 5 * mm)]
+        metadata_text = _metadata_line(report)
+        if metadata_text:
+            story.append(Paragraph(_pdf_inline(metadata_text), metadata_style))
+            story.append(Spacer(1, 5 * mm))
 
     content = _report_body(report)
     reference = False
@@ -405,6 +530,9 @@ def build_pdf(report: Any, *, is_draft: bool) -> tuple[str, str, bytes]:
         if heading:
             level, name = heading
             reference = name.casefold() in REFERENCE_TITLES
+            if reference and form:
+                story.extend(_pdf_project_budget(form, heading_styles[2], document.width - 12))
+                form = None
             if level == 1 and name == title:
                 continue
             story.append(Paragraph(_pdf_inline(name), heading_styles[min(level, 6)]))
@@ -421,6 +549,8 @@ def build_pdf(report: Any, *, is_draft: bool) -> tuple[str, str, bytes]:
             CitationParagraph(_pdf_inline(line, citation=not reference), reference_style if reference else body_style)
         )
 
+    if form:
+        story.extend(_pdf_project_budget(form, heading_styles[2], document.width - 12))
     citation_lines = _citation_lines(report)
     if citation_lines and not _has_reference_section(content):
         story.append(Paragraph('参考资料', heading_styles[1]))

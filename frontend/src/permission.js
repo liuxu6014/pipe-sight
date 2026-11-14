@@ -6,6 +6,7 @@ import { getToken } from '@/utils/auth'
 import { isHttp } from '@/utils/validate'
 import {
   canAccessApplicationPath,
+  getDefaultLoginPath,
   getLoginRedirect,
   isPortalLoginPath,
   isPortalProtectedPath,
@@ -81,7 +82,7 @@ router.beforeEach((to, from, next) => {
         })
       } else {
         // 用户只进入业务门户和本人账号设置；管理接口仍须独立执行后端权限校验。
-        next(canAccessApplicationPath(useUserStore(), to.path) ? undefined : { path: '/portal', replace: true })
+        next(canAccessApplicationPath(useUserStore(), to.path) ? undefined : { path: getDefaultLoginPath(useUserStore()), replace: true })
       }
     }
   } else {

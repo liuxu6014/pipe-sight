@@ -1,3 +1,4 @@
+import { isDigestType } from '../src/views/portal/utils/routing.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -12,9 +13,9 @@ function setup(propose = async () => ({ data: { text: '改写正文[1]。', revi
   const scope = effectScope()
   let writes = 0, calls = 0, unmount, located
   const context = vm.createContext({ ref, computed, watch,
-    makeRewriteDraft, applyRewriteDraft, rewriteRequest, buildReportMarkdown, cleanReportCitationNotes,
+    makeRewriteDraft, applyRewriteDraft, rewriteRequest, buildReportMarkdown, cleanReportCitationNotes, isDigestType,
     onMounted() {}, onBeforeUnmount(fn) { unmount = fn }, onBeforeRouteLeave() {}, onBeforeRouteUpdate() {},
-    useRoute: () => ({ params: { id: '40' } }), useRouter: () => ({}), usePortalStore: () => ({ researchReports: [] }),
+    useRoute: () => ({ params: { id: '40' }, path: '/portal/research/reports/40' }), useRouter: () => ({}), usePortalStore: () => ({ researchReports: [], digestReports: [] }),
     setTimeout() {}, clearTimeout() {}, window: { removeEventListener() {} },
     nextTick(fn) { fn?.() }, document: { getElementById(id) { located = id; return { scrollIntoView() {} } } },
     ElMessage: { success() {}, error() {}, warning() {}, info() {} },

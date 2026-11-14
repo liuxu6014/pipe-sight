@@ -41,6 +41,22 @@ export function getPipelineIntelligenceDetail(itemId) {
   })
 }
 
+export function translatePipelinePaperTitle(itemId) {
+  return request({
+    url: `/pipeline/intelligence/${requireBusinessId(itemId)}/translate-title`,
+    method: 'post',
+    timeout: 75000
+  })
+}
+
+export function translatePipelinePaperAbstract(itemId) {
+  return request({
+    url: `/pipeline/intelligence/${requireBusinessId(itemId)}/translate-abstract`,
+    method: 'post',
+    timeout: 75000
+  })
+}
+
 export function searchPipelineIntelligence(params) {
   return request({
     url: '/pipeline/search',

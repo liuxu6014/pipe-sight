@@ -45,7 +45,7 @@ const templates = reportTypes.flatMap((reportType, index) => [0, 1].map(n => ({
   sections: [{ id: 1, title: '章节', words: 1200, description: '原始要求', required: true }]
 })))
 test('wizard starts with task parameters, keeps multiple real templates per type, and submits edited outline with original fields', async () => {
-  const v = setup('pages/ResearchCreateView', 'form, activeStep, nextStepBlocked, nextStep, outline, totalWords, loadTemplates, availableReportTemplates, buildResearchPayload', {
+  const v = setup('pages/ResearchCreateView', 'form, activeStep, nextStepBlocked, nextStep, materialKeyword, projectKeywords, outline, totalWords, loadTemplates, availableReportTemplates, buildResearchPayload', {
     listPipelineTemplates: async () => ({ data: { rows: templates } })
   })
   try {
@@ -54,6 +54,12 @@ test('wizard starts with task parameters, keeps multiple real templates per type
     v.nextStep(); assert.equal(v.activeStep.value, 0)
     v.form.projectDescription = '生产中需要研究腐蚀检测的适用边界'; v.form.project = '测试任务'; v.form.keywords = ['自定义词']; v.form.requirements = '按企业规范编制，不得编造结论'
     v.nextStep(); assert.equal(v.activeStep.value, 1)
+    assert.equal(v.materialKeyword.value, '自定义词')
+    assert.deepEqual(Array.from(v.projectKeywords.value), ['自定义词'])
+    v.materialKeyword.value = '手动检索词'
+    v.activeStep.value = 0
+    v.nextStep()
+    assert.equal(v.materialKeyword.value, '手动检索词')
     await v.loadTemplates(); await nextTick()
     for (const reportType of reportTypes) {
       v.form.reportType = reportType; await nextTick()

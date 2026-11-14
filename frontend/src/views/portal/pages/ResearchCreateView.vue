@@ -31,9 +31,16 @@
         <div class="ps-material-picker">
           <div class="ps-material-source">
             <div class="ps-research-material-toolbar">
-              <div class="ps-search-inline"><Search /><input v-model="materialKeyword" aria-label="搜索研究资料" placeholder="搜索资讯、论文或内部资料" /></div>
+              <div class="ps-search-inline"><Search /><input v-model="materialKeyword" maxlength="200" aria-label="搜索研究资料" placeholder="搜索资讯、论文或内部资料" /></div>
               <el-button :disabled="submitting || materialLoading || Boolean(materialError) || !selectableMaterialPageIds.length" @click="selectCurrentMaterialPage">{{ currentMaterialPageSelected ? '取消当前页选择' : '全选当前页' }}</el-button>
               <span class="ps-material-selected-count" role="status">已选 {{ selectedIds.length }} 条</span>
+            </div>
+            <div v-if="projectKeywords.length" class="ps-material-keywords" role="group" aria-label="项目关键词">
+              <span>项目关键词</span>
+              <el-button v-for="keyword in projectKeywords" :key="keyword" size="small" plain
+                :type="materialKeyword.trim() === keyword ? 'primary' : 'default'"
+                :aria-pressed="materialKeyword.trim() === keyword" :disabled="submitting"
+                @click="materialKeyword = materialKeyword.trim() === keyword ? '' : keyword">{{ keyword }}</el-button>
             </div>
             <div class="ps-tabs-line ps-segmented-row"><el-segmented v-model="materialTab" :options="materialTabs" aria-label="资料类型"  /></div>
             <div class="ps-research-material-scroll" tabindex="0" aria-label="研究资料滚动区">
@@ -196,6 +203,8 @@ const reportTypes = [
   { value: 'project-demand', label: '科技项目需求表' }
 ]
 const form = reactive({ reportType: 'research-demand', template: String(route.query.template || ''), version: '', language: 'zh', length: 'standard', project: '', projectDescription: '', period: [], keywords: [], templatePrompt: '', requirements: '', diagram: false, publicSupplement: false, citationCheck: true })
+const projectKeywords = computed(() => [...new Set(form.keywords.map(keyword => String(keyword ?? '').trim()).filter(Boolean))])
+let suggestedMaterialKeyword = ''
 watch(() => route.query.template, value => {
   if (value === undefined) return
   form.template = String(value)
@@ -371,7 +380,8 @@ function applyCustomLength() {
 const finalGenerationError = computed(() => {
   if (customLengthPending.value) return '请先将自定义总字数应用到大纲'
   if (!selectedTemplate.value) return '请选择报告模板'
-  return templateGenerationError(selectedTemplate.value, { images: form.diagram })
+  const error = templateGenerationError(selectedTemplate.value, { images: form.diagram })
+  return error ? error.replace('当前模板未配置可用的文本生成模型', '科研报告生成模型尚未配置').replace('请联系管理员配置后再生成', '请联系管理员在模型管理的用途配置中设置后再生成') : ''
 })
 const nextStepBlocked = computed(() => activeStep.value === 0 ? !form.project.trim()
   : activeStep.value === TEMPLATE_STEP ? !selectedTemplate.value || templatesLoading.value
@@ -407,7 +417,13 @@ function nextStep() {
   if (activeStep.value === TEMPLATE_STEP && !selectedTemplate.value) return ElMessage.warning('请选择一个已发布的报告模板')
   if (activeStep.value === MATERIAL_STEP && !selectedIds.value.length) return ElMessage.warning('请至少选择一条可用资料')
   if (activeStep.value === MATERIAL_STEP && (sourceTaskLoading.value || sourceTaskError.value || verifying.value || selectionProblems.value.length)) return ElMessage.warning('请完成全部选材核验，重试或明确移除不可用项后继续')
-  if (activeStep.value === 0 && (!form.project.trim())) return ElMessage.warning('请填写项目名称')
+  if (activeStep.value === 0) {
+    if (!form.project.trim()) return ElMessage.warning('请填写项目名称')
+    if (materialKeyword.value === suggestedMaterialKeyword) {
+      suggestedMaterialKeyword = projectKeywords.value[0] || ''
+      materialKeyword.value = suggestedMaterialKeyword
+    }
+  }
   activeStep.value += 1
 }
 function formatDate(value) {
@@ -646,6 +662,8 @@ async function loadSourceTask(taskId) {
 .ps-report-review { margin-top: 24px; }
 .ps-report-review :deep(.el-descriptions__body) { overflow-wrap: anywhere; }
 .ps-research-create-page .ps-material-picker { grid-template-columns: minmax(0, 1fr); }
+.ps-material-keywords { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; color: var(--ps-muted); font-size: 13px; }
+.ps-material-keywords .el-button { margin: 0; max-width: 100%; height: auto; min-height: 24px; white-space: normal; overflow-wrap: anywhere; }
 .ps-research-create-page .ps-material-source { min-height: 0; padding: 0; border: 0; }
 .ps-research-create-page .ps-material-step { display: flex; flex-direction: column; overflow: hidden; }
 .ps-material-step .ps-material-picker,

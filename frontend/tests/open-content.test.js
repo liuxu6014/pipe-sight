@@ -61,26 +61,24 @@ test('paper list cards omit access status badges and the retired access filter',
   assert.doesNotMatch(source, /全文状态|accessStatus/)
 })
 
-test('news and paper place Back to the left of the title in the same row', () => {
-  for (const filename of ['NewsDetailView.vue', 'PaperDetailView.vue']) {
-    const source = readFileSync(new URL(`../src/views/portal/pages/${filename}`, import.meta.url), 'utf8')
-    const { descriptor } = parse(source)
-    const root = baseParse(descriptor.template.content)
-    const rows = []
-    function visit(node) {
-      if (node.type === 1 && node.props.some(prop => prop.name === 'class' && prop.value?.content === 'ps-detail-title-row')) rows.push(node)
-      for (const child of node.children || []) visit(child)
-    }
-    visit(root)
-    assert.equal(rows.length, 1)
-    assert.deepEqual(rows[0].children.filter(child => child.type === 1).map(child => child.tag), ['el-button', 'h1'])
-    const button = rows[0].children.find(child => child.type === 1)
-    assert.equal(button.children.length, 0)
-    assert.ok(button.props.some(prop => prop.name === 'aria-label' && prop.value?.content === '返回'))
-    assert.ok(button.props.some(prop => prop.name === 'title' && prop.value?.content === '返回'))
-    assert.match(source, /class="[^"]*ps-detail-header[^"]*"/)
-    assert.doesNotMatch(source, /class="ps-(news|paper)-back"/)
+test('news places Back to the left of the title in the same row', () => {
+  const source = readFileSync(new URL('../src/views/portal/pages/NewsDetailView.vue', import.meta.url), 'utf8')
+  const { descriptor } = parse(source)
+  const root = baseParse(descriptor.template.content)
+  const rows = []
+  function visit(node) {
+    if (node.type === 1 && node.props.some(prop => prop.name === 'class' && prop.value?.content === 'ps-detail-title-row')) rows.push(node)
+    for (const child of node.children || []) visit(child)
   }
+  visit(root)
+  assert.equal(rows.length, 1)
+  assert.deepEqual(rows[0].children.filter(child => child.type === 1).map(child => child.tag), ['el-button', 'h1'])
+  const button = rows[0].children.find(child => child.type === 1)
+  assert.equal(button.children.length, 0)
+  assert.ok(button.props.some(prop => prop.name === 'aria-label' && prop.value?.content === '返回'))
+  assert.ok(button.props.some(prop => prop.name === 'title' && prop.value?.content === '返回'))
+  assert.match(source, /class="[^"]*ps-detail-header[^"]*"/)
+  assert.doesNotMatch(source, /class="ps-news-back"/)
 })
 
 test('paper return preserves in-app list history and falls back for direct or external entry', async () => {
@@ -95,21 +93,19 @@ test('paper return preserves in-app list history and falls back for direct or ex
   assert.deepEqual(calls.slice(1), Array(4).fill('/portal/papers'))
 })
 
-test('both detail pages place basket actions beside metadata in the same information row', () => {
-  for (const filename of ['NewsDetailView.vue', 'PaperDetailView.vue']) {
-    const source = readFileSync(new URL(`../src/views/portal/pages/${filename}`, import.meta.url), 'utf8')
-    const { descriptor } = parse(source)
-    const rows = []
-    function visit(node) {
-      if (node.type === 1 && node.props.some(prop => prop.name === 'class' && prop.value?.content === 'ps-detail-info-row')) rows.push(node)
-      for (const child of node.children || []) visit(child)
-    }
-    visit(baseParse(descriptor.template.content))
-    assert.equal(rows.length, 1)
-    const children = rows[0].children.filter(child => child.type === 1)
-    assert.equal(children.length, 2)
-    assert.ok(children[0].props.some(prop => ['ps-article-meta', 'ps-paper-detail-meta'].includes(prop.value?.content)))
-    assert.ok(children[1].props.some(prop => prop.value?.content === 'ps-article-actions'))
-    assert.equal(children[1].children.filter(child => child.type === 1)[0].tag, 'el-button')
+test('news detail places basket actions beside metadata in the same information row', () => {
+  const source = readFileSync(new URL('../src/views/portal/pages/NewsDetailView.vue', import.meta.url), 'utf8')
+  const { descriptor } = parse(source)
+  const rows = []
+  function visit(node) {
+    if (node.type === 1 && node.props.some(prop => prop.name === 'class' && prop.value?.content === 'ps-detail-info-row')) rows.push(node)
+    for (const child of node.children || []) visit(child)
   }
+  visit(baseParse(descriptor.template.content))
+  assert.equal(rows.length, 1)
+  const children = rows[0].children.filter(child => child.type === 1)
+  assert.equal(children.length, 2)
+  assert.ok(children[0].props.some(prop => prop.value?.content === 'ps-article-meta'))
+  assert.ok(children[1].props.some(prop => prop.value?.content === 'ps-article-actions'))
+  assert.equal(children[1].children.filter(child => child.type === 1)[0].tag, 'el-button')
 })

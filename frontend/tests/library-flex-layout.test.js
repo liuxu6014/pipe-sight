@@ -24,5 +24,5 @@ test('list alone grows and scrolls, with usable controls on short and narrow scr
   assert.match(styles, /@media \(max-height: 540px\)/)
   assert.match(styles, /\.ps-basket-page > \.ps-material-list \{ min-height: 160px/)
   assert.match(page, /\.ps-row-actions :deep\(\.el-button \+ \.el-button\) \{ margin-left: 0/)
-  assert.match(page, /:deep\(> div:first-child\) \{ flex: 0 0 auto/)
+  assert.match(page, /@media \(max-width: 760px\)[\s\S]*?\.ps-knowledge-toolbar > \.el-input \{ flex-basis: 100%/)
 })

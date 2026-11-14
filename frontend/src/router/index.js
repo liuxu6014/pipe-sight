@@ -187,13 +187,6 @@ export const dynamicRoutes = [
     children: [{ path: '', name: 'PipelineDigests', component: () => import('@/views/pipeline/report/index.vue'), meta: { title: '简报管理', icon: 'documentation' } }]
   },
   {
-    path: '/pipeline/knowledge',
-    component: Layout,
-    roles: ['admin'],
-    meta: { managementEntry: true },
-    children: [{ path: '', name: 'PipelineKnowledge', component: () => import('@/views/pipeline/knowledge/index.vue'), meta: { title: '资料库管理', icon: 'documentation' } }]
-  },
-  {
     path: '/system/user-auth',
     component: Layout,
     hidden: true,

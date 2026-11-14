@@ -25,6 +25,24 @@ import { applySavedSearchQuery } from '../src/utils/portal/savedSearches.js'
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8')
 const normalizerSource = read('../src/store/modules/portal.js')
 const normalizers = new Function('normalizeBusinessData', 'formatBusinessTime', 'contentCategory', 'collectionTime', 'entityGroups', `${normalizerSource.slice(normalizerSource.indexOf('function normalizeSourceType'), normalizerSource.indexOf('function normalizeDocument')).replaceAll('export function', 'function')}; return { normalizePortalIntelligence, normalizePortalPaper }`)(normalizeBusinessData, formatBusinessTime, contentCategory, collectionTime, entityGroups)
+
+test('source display removes verification notes while retaining publisher names and original URLs', () => {
+  for (const [source, expected] of [
+    ['瑞科仪器（官网核验微信来源）', '瑞科仪器'],
+    ['瑞科仪器 (官网未核验)', '瑞科仪器'],
+    ['新华网（国家管网官网转载）', '新华网'],
+    ['瑞科仪器（广州）（待核实）', '瑞科仪器（广州）'],
+    ['Coatings (Basel)', 'Coatings (Basel)'],
+    ['https://example.com/feed', ''],
+    ['', '']
+  ]) {
+    const item = { id: '18', source, url: 'https://example.com/article' }
+    const normalized = normalizers.normalizePortalIntelligence(item)
+    assert.equal(normalized.source, expected)
+    assert.equal(normalized.sourceUrl, item.url)
+    assert.equal(item.source, source)
+  }
+})
 const names = ['NewsListView', 'PaperListView', 'KnowledgeView', 'SearchView']
 const sources = Object.fromEntries(names.map(name => [name, read(`../src/views/portal/pages/${name}.vue`)]))
 sources.HomeView = read('../src/views/portal/pages/HomeView.vue')
@@ -652,6 +670,20 @@ test('paper default includes old and undated records, with real journal suggesti
   } finally { ctx.close() }
 })
 
+test('paper links with empty year values load without a year filter', async () => {
+  const calls = []
+  const ctx = await mountPage('PaperListView', {
+    query: { year: '', years: ['', ''] },
+    api: { listPipelineIntelligence: async params => { calls.push(params); return { data: { rows: [], total: 0 } } } }
+  })
+  try {
+    assert.equal(ctx.page.hasActiveFilters.value, false)
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].yearFrom, undefined)
+    assert.equal(calls[0].yearTo, undefined)
+  } finally { ctx.close() }
+})
+
 test('paper invalid years show a recoverable error without sending a malformed request', async () => {
   let calls = 0
   const ctx = await mountPage('PaperListView', { query: { year: 'bad-year' }, api: { listPipelineIntelligence: async () => { calls += 1; return { data: { rows: [], total: 0 } } } } })
@@ -703,7 +735,6 @@ test('knowledge paginates filtered real data and returns to a valid page after d
     await settle()
     assert.equal(ctx.page.currentPage.value, 1)
     assert.equal(ctx.page.filteredDocuments.value.length, 11)
-    assert.match(sources.KnowledgeView, /title="资料库"/)
     assert.doesNotMatch(sources.KnowledgeView, /value="项目组可见"|value="受限"/)
   } finally { ctx.close() }
 })
@@ -953,6 +984,48 @@ test('search separates draft and submitted keywords, resubmits unchanged text, a
     ctx.page.applyKeyword()
     await settle()
     assert.equal(calls.length, count + 1)
+  } finally { ctx.close() }
+})
+
+test('dialog searches as you type, paginates and clears without changing the background URL', async () => {
+  const calls = []
+  const ctx = await mountPage('SearchView', {
+    query: { q: '原页面关键词', page: '3' },
+    pageProps: { inDialog: true },
+    api: { searchPipelineIntelligence: async params => {
+      calls.push(params)
+      return { data: { rows: [{ id: 'p1', title: '管道检测', type: 'paper' }], total: 25, nextCursor: 'page-cursor' } }
+    } }
+  })
+  try {
+    const background = ctx.router.currentRoute.value.fullPath
+    assert.equal(ctx.page.draftKeyword.value, '')
+    assert.equal(calls.length, 0)
+    ctx.page.draftKeyword.value = '管道'
+    await settle()
+    ctx.page.draftKeyword.value = '管道检测'
+    await delay(280)
+    await settle()
+    assert.equal(calls.length, 1)
+    assert.equal(calls.at(-1).keyword, '管道检测')
+    assert.equal(ctx.page.filteredResults.value[0].title, '管道检测')
+
+    ctx.page.currentPage.value = 2
+    await settle()
+    assert.equal(calls.at(-1).cursor, 'page-cursor')
+    ctx.page.activeType.value = 'paper'
+    await settle()
+    assert.equal(calls.at(-1).type, 'paper')
+    assert.equal(calls.at(-1).pageNum, 1)
+
+    const callCount = calls.length
+    ctx.page.draftKeyword.value = ''
+    await settle()
+    assert.equal(ctx.page.dialogStatus.value, '')
+    assert.equal(ctx.page.filteredResults.value.length, 0)
+    await delay(280)
+    assert.equal(calls.length, callCount)
+    assert.equal(ctx.router.currentRoute.value.fullPath, background)
   } finally { ctx.close() }
 })
 

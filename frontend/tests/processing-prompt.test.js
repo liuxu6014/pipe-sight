@@ -21,6 +21,8 @@ function page(name, names, mocks = {}) {
     ElMessage: Object.fromEntries(['success', 'warning', 'error', 'info'].map(level => [level, text => messages.push({ level, text })])),
     ElMessageBox: { confirm: async () => {} },
     listModelAll: async () => ({ data: [] }),
+    getTranslationModelConfig: async () => ({ data: { modelId: null } }),
+    updateTranslationModelConfig: async data => writes.push(['translation-config', copy(data)]),
     listPipelineCategories: async () => ({ data: { rows: [] } }),
     listPipelineTemplates: async () => ({ data: { rows: [] } }),
     createPipelineCategory: async data => writes.push(['category-create', copy(data)]),
@@ -55,7 +57,7 @@ test('prompt covers light energy transport filtering, evidence, six entities and
     'institutions/research/effect/scenario', 'organization/people/policy/technology/policy_focus/scenario',
     'aiInsight', 'verificationQuestions', '不补写事实', '不以类别排列顺序作为优先级']) assert.ok(systemPrompt.includes(field), field)
   assert.match(systemPrompt, /每个字段为附原文依据的中文字符串，缺少证据使用 null/)
-  assert.match(systemPrompt, /普通新闻、来源不明或全部范围未指定实际来源时 aiInsight 返回 null/)
+  assert.match(systemPrompt, /缺少证据使用 null/)
   assert.match(systemPrompt, /通常3至5个、最多6个/)
   assert.match(systemPrompt, /不凑齐六类/)
   assert.match(systemPrompt, /主要机构包括国家管网时如实保留/)
@@ -72,14 +74,12 @@ test('untrusted source text is isolated from system instructions and returned ve
   assert.deepEqual(Object.keys(result).sort(), ['categories', 'systemPrompt', 'userPrompt', 'warnings'])
 })
 
-test('empty categories and conflicting or absent model bindings are explicit warnings, not fabricated results', () => {
+test('empty categories are explicit and legacy per-category bindings do not affect global processing', () => {
   const empty = prompts.buildProcessingPrompt({ categories: [category('1', { isEnabled: false })] })
   assert.equal(empty.categories.length, 0)
   assert.match(empty.warnings.join(''), /category_id、category_name 应均返回 null/)
   const mixed = prompts.buildProcessingPrompt({ categories: [category('1'), category('2', { modelId: '8' }), category('3', { modelId: null })] })
-  assert.equal(mixed.warnings.length, 2)
-  assert.match(mixed.warnings.join(''), /多个模型/)
-  assert.match(mixed.warnings.join(''), /未绑定模型/)
+  assert.equal(mixed.warnings.length, 0)
 })
 
 test('each preset is an independent disabled form draft with no automatic model binding', () => {
@@ -177,14 +177,12 @@ test('pending disable cannot open a second confirmation or issue a duplicate upd
   assert.equal(h.writes.length, 1)
 })
 
-test('enabling a category requires an enabled text model and preserves decimal ID strings', async () => {
+test('category model validation uses the global choice independently of the displayed model list', async () => {
   const h = page('model', 'models, categoryForm, saveCategory')
-  Object.assign(h.categoryForm, { name: '类别', prompt: '规则', modelId: '90071992547409931', isEnabled: true })
-  for (const candidate of [model('90071992547409931', ['image_input']), model('90071992547409931', ['text_generate'], '1')]) {
-    h.models.value = [candidate]; await h.saveCategory(); assert.equal(h.writes.length, 0)
-  }
-  h.models.value = [model('90071992547409931', ['text_generate'])]; await h.saveCategory()
-  assert.equal(h.writes[0][1].modelId, '90071992547409931')
+  Object.assign(h.categoryForm, { name: '类别', prompt: '规则', modelId: null, isEnabled: true })
+  h.models.value = []
+  await h.saveCategory()
+  assert.equal(h.writes[0][1].modelId, null)
 })
 
 test('model capability saves keep text, image input and image generation independent', async () => {
@@ -390,14 +388,13 @@ test('legacy prompt is readable without changing storage until its text is edite
   }
 })
 
-test('enabling without a model exposes the advanced setting and blocks saving', async () => {
-  const h = page('model', 'openCategory, categoryForm, saveCategory, categoryAdvanced')
-  h.openCategory(category('9', { isEnabled: false, modelId: '7' }))
+test('category saving delegates the unified processing model validation to the backend', async () => {
+  const h = page('model', 'openCategory, categoryForm, saveCategory')
+  h.openCategory(category('9', { isEnabled: false, modelId: null }))
   h.categoryForm.isEnabled = true
   await h.saveCategory()
-  assert.deepEqual(h.categoryAdvanced.value, ['model'])
-  assert.deepEqual(h.writes, [])
-  assert.match(h.messages.at(-1).text, /高级设置/)
+  assert.equal(h.writes[0][0], 'category-update')
+  assert.equal(h.writes[0][2].isEnabled, true)
 })
 
 test('category list filters never narrow the combined prompt or mutate saved categories', () => {

@@ -8,23 +8,24 @@ import { useListWorkspace } from '../src/utils/portal/listQuery.js'
 
 const source = readFileSync(new URL('../src/views/portal/pages/PaperDetailView.vue', import.meta.url), 'utf8')
 const { descriptor } = parse(source)
-function harness() {
-  const requests = [], opened = [], route = reactive({ params: { itemId: '3001' } })
+function harness({ translatePipelinePaperTitle, translatePipelinePaperAbstract } = {}) {
+  const requests = [], route = reactive({ params: { itemId: '3001' } })
   const store = reactive({ paperItems: [], newsItems: [], basket: [], workspaceEpoch: 0 })
   const saved = [], removed = []
   const context = vm.createContext({
-    computed, ref, watch, onMounted() {}, useRoute: () => route, useRouter: () => ({}),
+    computed, ref, watch, onBeforeUnmount() {}, onMounted() {}, useRoute: () => route, useRouter: () => ({}),
     usePortalStore: () => store, useListWorkspace,
     savePipelineWorkspaceItem: async payload => { saved.push(payload) },
     deletePipelineWorkspaceItem: async (...args) => { removed.push(args) },
     normalizePortalPaper: row => ({ ...row }), ElMessage: { error() {}, success() {} },
-    window: { location: { origin: 'https://portal.example' }, open: (...args) => opened.push(args) }, URL,
+    translatePipelinePaperTitle, translatePipelinePaperAbstract,
+    URL,
     getPipelineIntelligenceDetail: () => new Promise((resolve, reject) => requests.push({ resolve, reject }))
   })
   const scope = effectScope()
   scope.run(() => vm.runInContext(descriptor.scriptSetup.content.replace(/^import .*\n/gm, '') +
-    '\nglobalThis.reader = { paper, doiUrl, tabs, activeTab, loadPaper, detailLoading, originalTitle, paperInstitutions, add, inBasket }', context))
-  return { ...context.reader, requests, opened, route, store, saved, removed, stop: () => scope.stop() }
+    '\nglobalThis.reader = { paper, doiUrl, showingTranslation, translating, translationError, visibleAbstract, loadPaper, detailLoading, paperInstitutions, add, inBasket, toggleLanguage, visibleTitle }', context))
+  return { ...context.reader, requests, route, store, saved, removed, stop: () => scope.stop() }
 }
 const response = full_text => ({ data: { id: '3001', category: 'paper', source_url: 'https://europepmc.org/articles/PMC123', full_text } })
 
@@ -47,46 +48,82 @@ test('paper detail uses a compact responsive title without changing other readin
   assert.match(source, /@media \(max-width: 600px\)[\s\S]*?\.ps-paper-detail-hero h1\s*\{\s*font-size:\s*20px/)
 })
 
-test('paper hero suppresses repeated titles and placeholder institutions without guessing affiliations', async () => {
+test('paper hero displays one title and suppresses placeholder institutions without guessing affiliations', async () => {
   const h = harness()
   try {
     let load = h.loadPaper()
     h.requests[0].resolve({ data: { id: '3001', category: 'paper', titleZh: 'Pipeline Review', title: '  Pipeline  Review ', institutions: ['来源数据库'] } })
     await load
-    assert.equal(h.originalTitle.value, '')
+    assert.equal(h.visibleTitle.value.trim(), 'Pipeline  Review')
     assert.equal(h.paperInstitutions.value.length, 0)
     load = h.loadPaper()
     h.requests[1].resolve({ data: { id: '3001', category: 'paper', titleZh: '管道综述', title: 'Pipeline Review', institutions: ['某大学', '某大学', '', '来源数据库', '某研究院'] } })
     await load
-    assert.equal(h.originalTitle.value, 'Pipeline Review')
+    assert.equal(h.visibleTitle.value, 'Pipeline Review')
+    await h.toggleLanguage()
+    assert.equal(h.visibleTitle.value, '管道综述')
+    assert.doesNotMatch(descriptor.template.content, /ps-paper-original-title/)
     assert.deepEqual(Array.from(h.paperInstitutions.value), ['某大学', '某研究院'])
     assert.doesNotMatch(source, /ps-author-map|institutions\[index\]|institutions\[0\]/)
     assert.match(source, /paper\.authors\.join\(' · '\)/)
   } finally { h.stop() }
 })
 
-test('legacy full text is ignored while abstract and interpretation stay available', async () => {
+test('saved abstract translation switches without using legacy full text', async () => {
  const h = harness()
  try {
   const load = h.loadPaper()
-  h.requests[0].resolve(response({ status: 'publisher_preview', html: '<p>Legacy full text</p>', source_url: 'https://mdpi-res.com/d_attachment/legacy.pdf' }))
+  h.requests[0].resolve({ data: {
+    ...response({ status: 'publisher_preview', html: '<p>Legacy full text</p>' }).data,
+    abstractOriginal: 'Original abstract', abstractZh: '已保存的中文摘要'
+  } })
   await load
-  assert.deepEqual(Array.from(h.tabs.value), ['摘要', 'AI解读'])
-  assert.equal(h.activeTab.value, '摘要')
-  assert.equal(h.opened.length, 0)
+  assert.equal(h.visibleAbstract.value, 'Original abstract')
+  await h.toggleLanguage()
+  assert.equal(h.visibleAbstract.value, '已保存的中文摘要')
  } finally { h.stop() }
 })
 
-test('verified extracted publisher text adds a full-text tab while untrusted preview URLs do not', async () => {
- const h = harness()
- try {
-  const load = h.loadPaper()
-  h.requests[0].resolve(response({ status: 'publisher_preview', html: '<p>Legacy full text</p>', source_url: 'https://mdpi-res.com/d_attachment/legacy.pdf' }))
-  await load
-  assert.deepEqual(Array.from(h.tabs.value), ['摘要', 'AI解读'])
-  assert.equal(h.activeTab.value, '摘要')
-  assert.equal(h.opened.length, 0)
- } finally { h.stop() }
+test('one action translates both fields, retries just the missing one, and switches without extra requests', async () => {
+  const calls = []
+  let rejectAbstract = true
+  const h = harness({
+    translatePipelinePaperTitle: async id => {
+      calls.push(['title', id])
+      return { data: { titleZh: '管道综述' } }
+    },
+    translatePipelinePaperAbstract: async id => {
+      calls.push(['abstract', id])
+      if (rejectAbstract) throw new Error('翻译暂时失败')
+      return { data: { abstractZh: '中文摘要。' } }
+    }
+  })
+  try {
+    const load = h.loadPaper()
+    h.requests[0].resolve({ data: {
+      ...response(null).data, title: 'Pipeline Review', abstractOriginal: 'Original abstract'
+    } })
+    await load
+    const translation = h.toggleLanguage()
+    assert.equal(h.translating.value, true)
+    await h.toggleLanguage()
+    await translation
+    assert.equal(h.translationError.value, '翻译暂时失败')
+    assert.equal(h.visibleTitle.value, 'Pipeline Review')
+    assert.equal(h.visibleAbstract.value, 'Original abstract')
+
+    rejectAbstract = false
+    await h.toggleLanguage()
+    assert.equal(h.visibleTitle.value, '管道综述')
+    assert.equal(h.visibleAbstract.value, '中文摘要。')
+    await h.toggleLanguage()
+    assert.equal(h.visibleTitle.value, 'Pipeline Review')
+    assert.equal(h.visibleAbstract.value, 'Original abstract')
+    await h.toggleLanguage()
+    assert.equal(h.visibleTitle.value, '管道综述')
+    assert.equal(h.visibleAbstract.value, '中文摘要。')
+    assert.deepEqual(calls, [['title', '3001'], ['abstract', '3001'], ['abstract', '3001']])
+  } finally { h.stop() }
 })
 
 test('detail DOI resolves to the publisher independently of the licensed reading source', async () => {
@@ -112,42 +149,28 @@ test('unavailable full text keeps summary distinct and does not invent a DOI lin
     const load = h.loadPaper()
     h.requests[0].resolve(response({ status: 'unavailable' }))
     await load
-    assert.deepEqual(Array.from(h.tabs.value), ['摘要', 'AI解读'])
-    assert.equal(h.activeTab.value, '摘要')
+    assert.equal(h.visibleAbstract.value, '')
     assert.equal(h.doiUrl.value, '')
   } finally { h.stop() }
 })
 
-test('licensed source enables reading even when the outer record has no canonical URL', async () => {
- const h = harness()
- try {
-  const load = h.loadPaper()
-  h.requests[0].resolve(response({ status: 'publisher_preview', html: '<p>Legacy full text</p>', source_url: 'https://mdpi-res.com/d_attachment/legacy.pdf' }))
-  await load
-  assert.deepEqual(Array.from(h.tabs.value), ['摘要', 'AI解读'])
-  assert.equal(h.activeTab.value, '摘要')
-  assert.equal(h.opened.length, 0)
- } finally { h.stop() }
-})
-
-test('route changes reset the tab and late previous requests cannot restore old full text', async () => {
+test('route changes reset the paper language and ignore stale responses', async () => {
   const h = harness()
   try {
     const oldLoad = h.loadPaper()
-    h.activeTab.value = '全文'
+    h.showingTranslation.value = true
     h.route.params.itemId = '3002'
     await nextTick()
-    assert.equal(h.activeTab.value, '摘要')
+    assert.equal(h.showingTranslation.value, false)
     h.requests[1].resolve({ data: { id: '3002', category: 'paper' } })
     await new Promise(resolve => setImmediate(resolve))
     h.requests[0].resolve(response({ html: '<p>Old private text</p>' }))
     await oldLoad
     assert.equal(h.paper.value.id, '3002')
-    assert.ok(!h.tabs.value.includes('全文'))
   } finally { h.stop() }
 })
 
-test('reader template uses an isolated titled srcdoc iframe and attribution links', () => {
+test('paper reader compiles and retains safe links to its source', () => {
  const compiled = compileTemplate({ source: descriptor.template.content, filename: 'PaperDetailView.vue', id: 'reader' })
  assert.deepEqual(compiled.errors, [])
  assert.doesNotMatch(descriptor.template.content, /iframe|srcdoc|full_text|获取全文|全文预览/)

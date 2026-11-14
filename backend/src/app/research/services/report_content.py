@@ -6,6 +6,8 @@ from typing import NoReturn
 
 from app.business_time import format_business_time
 from app.research.services.citation_format import REFERENCE_TITLES, clean_report_citations
+from app.research.services.digest_document import is_digest_body
+from app.research.services.project_demand_document import PROJECT_DEMAND_FORMAT, unnumbered_chapter
 
 MAX_SECTIONS = 100
 DELIVERY_REFERENCE_TITLES = REFERENCE_TITLES | {'来源清单', '资料来源'}
@@ -67,7 +69,7 @@ def _normalize_headings(text: str) -> str:
         name = _heading(match.group(2))
         if level == 1:
             continue
-        lines.append(f'**{name}**' if level == 2 else name)
+        lines.append(f'**{name}**' if level == 2 else line if level == 3 and is_digest_body(text) else name)  # noqa: PLR2004
     return '\n'.join(lines)
 
 
@@ -220,7 +222,7 @@ def sections_from_markdown(content: str) -> list[dict]:
             # The report title is rendered separately by the editor/exporter.
             continue
         else:
-            lines.append(_strip_item_heading(line))
+            lines.append(line if is_digest_body(content) else _strip_item_heading(line))
     finish()
     if not sections:
         return [{'id': 1, 'title': '正文', 'content': ''}]
@@ -229,9 +231,9 @@ def sections_from_markdown(content: str) -> list[dict]:
     return sections
 
 
-def _bibliography(materials: list[dict]) -> str:
+def _bibliography(materials: list[dict], *, numbered=False) -> str:
     rows = []
-    for material in materials:
+    for index, material in enumerate(materials, 1):
         source = material.get('source') or {}
         source = source if isinstance(source, dict) else {}
         title = ' '.join(str(material.get('title') or '').split())
@@ -250,7 +252,8 @@ def _bibliography(materials: list[dict]) -> str:
         authors = source.get('authors') or ''
         if isinstance(authors, (list, tuple)):
             authors = '、'.join(str(author) for author in authors)
-        parts = [f'[资料{identity}] {title}', str(authors), str(label), str(published), str(url)]
+        ordinal = str(index) if numbered else f'资料{identity}'
+        parts = [f'[{ordinal}] {title}', str(authors), str(label), str(published), str(url)]
         rows.append('；'.join(part for part in parts if part))
     return '\n\n'.join(rows)
 
@@ -274,6 +277,10 @@ def normalize_generated_report(content: str, materials: list[dict] | None = None
             raise ValueError('Invalid structured report') from error
         if not isinstance(document, dict):
             raise ValueError('Structured report must be an object')
+        if document.get('format') == 'digest-reference-v1':
+            from app.research.services.digest_document import normalize_digest_document  # noqa: PLC0415
+
+            return normalize_digest_document(candidate, materials)
         raw_sections = document.get('sections')
         if raw_sections is None and isinstance(document.get('content'), str):
             return normalize_generated_report(document['content'], materials, delivery=delivery)
@@ -297,7 +304,9 @@ def normalize_generated_report(content: str, materials: list[dict] | None = None
         # A JSON-labeled transport block cannot be accepted as an article body.
         raise ValueError('Structured report is not a document object')
     else:
-        text = _normalize_headings(text)
+        # Recognize reference sections before legacy heading levels are flattened.
+        # Otherwise a #/### reference heading can leave model-invented sources in prose.
+        text = _normalize_headings(_without_model_references(text) if delivery and materials else text)
     if delivery:
         # Remove only parameter rows in the generated preamble. Do not redact
         # narrative limitations or rewrite historical/user-authored reports.
@@ -329,3 +338,40 @@ def normalize_generated_report(content: str, materials: list[dict] | None = None
     text = clean_report_citations(text)
     sections = sections_from_markdown(text)
     return {'content': text, 'sections': sections}
+
+
+def normalize_task_report(content: str, materials: list[dict], snapshot: dict) -> dict:
+    if snapshot.get('document_format') != PROJECT_DEMAND_FORMAT:
+        return normalize_generated_report(content, materials, delivery=True)
+
+    text = normalize_generated_report(content)['content']
+    sections = sections_from_markdown(_without_model_references(text))
+    request = snapshot.get('request') or {}
+    outline = request.get('outline') or snapshot['template'].get('sections', [])
+    expected = [unnumbered_chapter(item['title']) for item in outline]
+    # Providers may put a subtitle between the document title and the first
+    # confirmed chapter. Drop only empty leading headings, never authored prose.
+    while sections and not sections[0]['content'].strip() and unnumbered_chapter(sections[0]['title']) not in expected:
+        sections = sections[1:]
+    if sections and sections[0]['title'] in {'引言', '摘要', '编制说明'} and sections[0]['title'] not in expected:
+        sections = sections[1:]
+    if not expected or [unnumbered_chapter(section['title']) for section in sections] != expected:
+        raise ManuscriptValidationError('文稿检查未通过：填报表正文与确认的章节顺序不一致，请重试')
+
+    chapter_numbers = '一二三四五六七八九十'
+    for index, section in enumerate(sections):
+        number = chapter_numbers[index] if index < len(chapter_numbers) else str(index + 1)
+        section['title'] = f'{number}、{expected[index]}'
+    body = '\n\n'.join(f'**{section["title"]}**\n\n{section["content"]}' for section in sections)
+    numbered = number_report_citations(
+        body, [{'sourceId': str(material['id']), 'type': material.get('type')} for material in materials]
+    )
+    validate_generated_article(numbered, materials)
+    marks = re.compile(r'\[([1-9]\d*)\](?!\()')
+    used = {int(value) for value in marks.findall(numbered)}
+    cited_materials = [material for index, material in enumerate(materials, 1) if index in used]
+    ordinals = {number: index for index, number in enumerate(sorted(used), 1)}
+    text = marks.sub(lambda match: f'[{ordinals[int(match[1])]}]', numbered)
+    if cited_materials:
+        text += '\n\n**参考资料**\n\n' + _bibliography(cited_materials, numbered=True)
+    return {'content': text, 'sections': sections_from_markdown(text), 'materials': cited_materials}

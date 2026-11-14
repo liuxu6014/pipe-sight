@@ -6,7 +6,7 @@
         class="default-theme"
       >
         <!--部门数据-->
-        <pane size="16">
+        <pane v-if="deptOptions.length" size="16">
           <el-col>
             <div class="head-container">
               <el-input
@@ -33,7 +33,7 @@
           </el-col>
         </pane>
         <!--用户数据-->
-        <pane size="84">
+        <pane :size="deptOptions.length ? 84 : 100">
           <el-col>
             <el-form
               :model="queryParams"

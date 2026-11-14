@@ -10,6 +10,11 @@ const MANAGEMENT_PERMISSIONS = new Set(['*:*:*'])
 const PUBLIC_AUTH_PATHS = [UNIFIED_LOGIN_PATH, '/register', USER_PORTAL_LOGIN_PATH]
 const LEGACY_MANAGEMENT_DEFAULT_LOGIN_PATH = '/index'
 const PIPELINE_MANAGEMENT_DEFAULT_LOGIN_PATH = '/pipeline/dashboard'
+const AUDIT_PAGES = ['/system/log/operlog', '/system/log/logininfor']
+
+export function isAuditOnly(roles = []) {
+  return roles.includes('auditor') && !roles.includes('admin')
+}
 
 export function isPortalLoginPath(path = '') {
   return path === USER_PORTAL_LOGIN_PATH
@@ -28,17 +33,20 @@ export function getLoginRedirect(fullPath = '/portal') {
 }
 
 export function isManagementIdentity(roles = [], permissions = []) {
-  return roles.some(role => MANAGEMENT_ROLES.has(role)) || permissions.some(permission => MANAGEMENT_PERMISSIONS.has(permission))
+  return isAuditOnly(roles) || roles.some(role => MANAGEMENT_ROLES.has(role)) || permissions.some(permission => MANAGEMENT_PERMISSIONS.has(permission))
 }
 
 export function canAccessApplicationPath(user = {}, path = '') {
+  const isProfile = path === '/user/profile' || path.startsWith('/user/profile/')
+  if (isAuditOnly(user.roles)) return AUDIT_PAGES.includes(path) || isProfile || isPublicAuthPath(path)
   return isManagementIdentity(user.roles || [], user.permissions || [])
     || isPortalProtectedPath(path)
-    || path === '/user/profile' || path.startsWith('/user/profile/')
+    || isProfile
     || isPublicAuthPath(path)
 }
 
 export function getDefaultLoginPath(user = {}) {
+  if (isAuditOnly(user.roles)) return AUDIT_PAGES[0]
   return isManagementIdentity(user.roles || [], user.permissions || [])
     ? MANAGEMENT_DEFAULT_LOGIN_PATH
     : PORTAL_DEFAULT_LOGIN_PATH
@@ -62,6 +70,7 @@ export function resolvePostLoginPath(user = {}, requestedPath) {
   if (defaultPath === PORTAL_DEFAULT_LOGIN_PATH) {
     return isPortalProtectedPath(requestedPath) ? requestedPath : defaultPath
   }
+  if (isAuditOnly(user.roles)) return canAccessApplicationPath(user, requestedPath.split(/[?#]/)[0]) ? requestedPath : defaultPath
   return isPublicAuthPath(requestedPath.split(/[?#]/)[0]) ? defaultPath : requestedPath
 }
 

@@ -1,11 +1,5 @@
 <template>
   <div class="ps-page ps-knowledge-page ps-basket-page">
-    <PortalPageHeader title="资料库">
-      <template #actions>
-        <el-button type="primary" :icon="UploadFilled" @click="openUpload">上传资料</el-button>
-      </template>
-    </PortalPageHeader>
-
     <div v-if="documentsError || parsingRefreshError" class="ps-inline-state is-warning" role="status">
       <WarningFilled />
       <span>{{ documentsError || parsingRefreshError }}</span>
@@ -22,6 +16,7 @@
         <el-option label="异常" value="异常" />
       </el-select>
       <el-button v-if="hasFilters" @click="clearFilters">重置筛选</el-button>
+      <el-button type="primary" :icon="UploadFilled" @click="openUpload">上传资料</el-button>
     </div>
     <section ref="listRegion" class="ps-material-list" :aria-busy="isInitialLoading" aria-label="资料列表">
       <el-skeleton v-if="isInitialLoading" :rows="4" animated />
@@ -110,7 +105,6 @@ import { computed, onBeforeUnmount, onMounted, ref, toRefs, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Close, Search, UploadFilled, WarningFilled } from '@element-plus/icons-vue'
-import PortalPageHeader from '../components/PortalPageHeader.vue'
 import PortalEmptyState from '../components/PortalEmptyState.vue'
 import usePortalStore from '@/store/modules/portal'
 import {
@@ -366,6 +360,7 @@ onMounted(() => {
 .ps-knowledge-toolbar { min-height: 0; padding: 10px 12px; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
 .ps-knowledge-toolbar > .el-input { flex: 1 1 280px; min-width: 180px; }
 .ps-knowledge-toolbar > .el-select { flex: 0 0 170px; width: 170px; }
+.ps-knowledge-toolbar > .el-button { margin: 0; }
 .ps-material-list { border: 0; border-radius: 0; padding: 0; background: transparent; }
 .ps-library-table { border: 1px solid var(--ps-line); border-radius: 10px; }
 .ps-library-table :deep(.el-table__cell) { padding-block: 14px; }
@@ -387,7 +382,6 @@ onMounted(() => {
 .ps-row-actions > .el-button { margin: 0; }
 .ps-row-actions button { cursor: pointer; }
 .ps-knowledge-page.ps-basket-page { gap: 12px; }
-.ps-knowledge-page > .ps-page-header { flex-shrink: 0; margin: 0; }
 .ps-knowledge-toolbar { flex-shrink: 0; margin: 0; }
 .ps-material-list { flex: 1 1 0; min-width: 0; min-height: 0; overflow: hidden; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .ps-knowledge-page > .ps-inline-state { flex-shrink: 0; }
@@ -395,8 +389,6 @@ onMounted(() => {
 :global(.el-message-box.ps-library-delete-confirm) { width: 480px; max-width: calc(100vw - 32px); box-sizing: border-box; }
 :global(.ps-library-delete-confirm .el-message-box__message) { overflow-wrap: anywhere; }
 @media (max-width: 760px) {
-  .ps-knowledge-page > .ps-page-header { gap: 8px; }
-  .ps-knowledge-page > .ps-page-header :deep(> div:first-child) { flex: 0 0 auto; }
   .ps-knowledge-toolbar { flex-direction: row; }
   .ps-knowledge-toolbar > .el-input { flex-basis: 100%; }
   .ps-knowledge-toolbar > .el-select { flex: 1 1 140px; width: auto; }

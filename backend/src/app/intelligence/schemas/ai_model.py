@@ -1,13 +1,19 @@
 """模型管理 DTO：统一实体字段与旧界面 keys 显式适配。"""
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_serializer, model_validator
 from pydantic.alias_generators import to_camel
 from typing_extensions import Self
 
+from app.business_ids import parse_business_id
 from app.business_time import format_business_time
+
+
+class TranslationModelSelection(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra='forbid')
+    model_id: Annotated[int | None, BeforeValidator(lambda value: None if value is None else parse_business_id(value))]
 
 
 class AiModelModel(BaseModel):

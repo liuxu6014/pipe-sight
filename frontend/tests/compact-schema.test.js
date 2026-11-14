@@ -39,11 +39,11 @@ test('image input never enables image generation and disabled models are not sel
   assert.deepEqual(contract.modelsFor(models, 'text_generate').map(row => row.modelId), [1])
 })
 
-test('category payload defaults are disabled and enabling without a model is explicitly rejected', () => {
+test('category payload defaults disabled and leaves global processing validation to the server', () => {
   assert.deepEqual(contract.categoryPayload({ name: ' 类别 ', prompt: ' 依据摘要分类 ' }), {
     name: '类别', prompt: '依据摘要分类', modelId: null, appliesTo: 'all', sortOrder: 0, isEnabled: false
   })
-  assert.throws(() => contract.categoryPayload({ name: '类别', prompt: '提示词', isEnabled: true }), /请选择文本生成模型/)
+  assert.equal(contract.categoryPayload({ name: '类别', prompt: '提示词', isEnabled: true }).modelId, null)
   assert.equal(contract.categoryPayload({ name: '类别', prompt: '提示词', modelId: 1, isEnabled: true }).isEnabled, true)
 })
 
@@ -142,19 +142,18 @@ test('template saves canonical configuration with NULL models and never invokes 
   } finally { h.close() }
 })
 
-test('category UI rejects invalid enabling before making an API request and allows a disabled save', async () => {
+test('category UI surfaces global configuration validation from the server and allows disabled drafts', async () => {
   let calls = 0
   const h = page('views/pipeline/model/index.vue', {
     defineProps: () => ({ section: 'categories' }),
-    getCurrentInstance: () => ({ proxy: { useDict: () => ({ ai_provider_type: [] }) } }),
-    createPipelineCategory: async data => { calls++; assert.equal(data.isEnabled, false); assert.equal(data.modelId, null) },
+    createPipelineCategory: async data => { calls++; if (data.isEnabled) throw new Error('请先配置内容处理模型'); assert.equal(data.modelId, null) },
     listPipelineCategories: async () => ({ data: { rows: [] } })
   }, 'categoryForm, saveCategory')
   try {
     Object.assign(h.categoryForm, { name: '类别', prompt: '提示词', isEnabled: true })
-    await h.saveCategory(); assert.equal(calls, 0)
-    assert.ok(h.messages.some(item => item.text.includes('请选择文本生成模型')))
-    h.categoryForm.isEnabled = false; await h.saveCategory(); assert.equal(calls, 1)
+    await h.saveCategory(); assert.equal(calls, 1)
+    assert.ok(h.messages.some(item => item.text.includes('内容处理模型')))
+    h.categoryForm.isEnabled = false; await h.saveCategory(); assert.equal(calls, 2)
   } finally { h.close() }
 })
 

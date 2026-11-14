@@ -44,7 +44,12 @@ def test_new_manuscript_removes_parameter_cover_and_rebuilds_authoritative_refer
 def test_delivery_preserves_real_narrative_and_evidence_limitations() -> None:
     text = '## 技术分析\n\n关键词提取有助于信息检索。公开摘要尚未披露长期运行数据，不能据此判断寿命。'
     result = normalize_generated_report(text, delivery=True)
-    assert result['content'] == text
+    assert result['sections'] == [{
+        'id': 1,
+        'title': '技术分析',
+        'content': '关键词提取有助于信息检索。公开摘要尚未披露长期运行数据，不能据此判断寿命。',
+    }]
+    assert normalize_generated_report(result['content'], delivery=True) == result
 
 
 def test_legacy_normalization_does_not_remove_existing_cover_text() -> None:

@@ -124,7 +124,7 @@ test('G09: object sources render readable fields and missing quotes never overwr
 
 test('digest serialization keeps sentence-final citations and readable object sources without HTML', () => {
   const content = action('DigestEditorView', 'buildMarkdown', {
-    digest: { value: { title: '简报' } },
+    digest: { value: { title: '简报' } }, referenceDigest: { value: false },
     sections: { value: [{ title: '本期要闻', content: '[1]研究显示可行[1]。另一结论[1]。' }] },
     citations: { value: [{ id: 1, title: '研究资料', source: { name: '来源机构' } }] },
     cleanReportCitationNotes, citationSourceLabel: action('DigestEditorView', 'citationSourceLabel'),

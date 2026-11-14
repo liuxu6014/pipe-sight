@@ -1,3 +1,4 @@
+import { isDigestType } from '../src/views/portal/utils/routing.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -33,11 +34,11 @@ function editor(page, entityName, update) {
   const scope = effectScope()
   let token = 'active-session'
   const context = vm.createContext({
-    buildReportMarkdown, cleanReportCitationNotes,
+    buildReportMarkdown, cleanReportCitationNotes, isDigestType,
     computed, ref, watch, onMounted() {}, onBeforeUnmount() {},
     onBeforeRouteLeave(callback) { leave = callback },
     onBeforeRouteUpdate(callback) { updateGuard = callback },
-    useRoute: () => ({ params: { id: '9007199254740993' }, query: {} }), useRouter: () => ({}),
+    useRoute: () => ({ params: { id: '9007199254740993' }, query: {}, path: '/portal/research/reports/9007199254740993' }), useRouter: () => ({}),
     usePortalStore: () => ({ researchReports: [], digestReports: [], newsItems: [] }),
     updatePipelineResearchReport: update,
     listPipelineResearchReportVersions: async () => ({ data: { rows: [] } }),

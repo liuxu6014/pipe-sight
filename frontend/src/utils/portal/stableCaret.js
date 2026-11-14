@@ -30,3 +30,15 @@ export const vStableCaret = {
     element.ownerDocument.getSelection()?.setBaseAndExtent(...textPosition(element, offsets[0]), ...textPosition(element, offsets[1]))
   }
 }
+
+// Editable DOM belongs to the browser while typing. Vue must not also patch
+// paragraph children: an Enter/paste can otherwise leave duplicate visible text.
+export const vEditableText = {
+  mounted(element, binding) { element.textContent = String(binding.value || '') },
+  beforeUpdate(element, binding) {
+    const content = String(binding.value || '')
+    if (content !== String(binding.oldValue || '') && element.innerText.trim() !== content.trim()) {
+      element.textContent = content
+    }
+  },
+}

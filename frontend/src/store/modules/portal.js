@@ -67,11 +67,12 @@ function stripLeadingUrl(value) {
   return match && match[1].trim() ? match[1].trim() : value
 }
 
-// 来源名若本身就是一个裸链接，不在界面展示（来源类型徽标已经说明来源）。
+// 展示来源名称时省去裸链接及括号内的官网核验备注。
 function cleanSourceName(value) {
   if (typeof value !== 'string') return value
-  const v = value.trim()
-  return /^https?:\/\//i.test(v) || /^www\./i.test(v) ? '' : v
+  const sourceName = value.trim()
+  if (/^https?:\/\//i.test(sourceName) || /^www\./i.test(sourceName)) return ''
+  return sourceName.replace(/\s*[（(][^（）()]*(?:官网|核验|核实|验证)[^（）()]*[）)]/g, '').trim()
 }
 
 export function normalizePortalIntelligence(item) {
@@ -177,11 +178,13 @@ async function loadInitialPipelineIntelligence() {
 function normalizeDigestReport(item) {
   const row = normalizeReport(item)
   const statusMap = { reviewing: '待审核', draft: '草稿', planned: '运行中', completed: '已完成' }
+  const period = item.period || item.metadata?.period
+  const coverage = Array.isArray(period) ? period.filter(Boolean).join(' 至 ') : period
   return {
     ...row,
     title: item.title,
     status: statusMap[item.status] || row.status,
-    period: item.period || String(item.updated_at || item.updatedAt || '').slice(0, 10)
+    period: coverage || '未设置覆盖周期'
   }
 }
 

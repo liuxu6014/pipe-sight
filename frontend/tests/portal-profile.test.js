@@ -11,7 +11,7 @@ async function mountProfile(api = {}) {
   const script = compileScript(descriptor, { id: 'profile-test' })
   assert.deepEqual(compileTemplate({ id: 'profile-test', source: descriptor.template.content, compilerOptions: { bindingMetadata: script.bindings } }).errors, [])
   const store = vue.reactive({ id: 7, name: 'account', nickName: 'Before' }), messages = []
-  const values = { ...vue, User: {}, Lock: {}, Phone: {}, Message: {}, ArrowRight: {}, InfoFilled: {}, PortalAvatarEditor: {}, useUserStore: () => store, PortalEmptyState: {}, ElMessage: { success: text => messages.push(text) }, profileFields, validateProfile, validatePasswordChange,
+  const values = { ...vue, User: {}, Lock: {}, Phone: {}, Message: {}, ArrowRight: {}, InfoFilled: {}, PortalAvatarEditor: {}, PortalPageHeader: {}, useUserStore: () => store, PortalEmptyState: {}, ElMessage: { success: text => messages.push(text) }, profileFields, validateProfile, validatePasswordChange,
     getUserProfile: async () => ({ data: { userName: 'account', nickName: 'Before' } }), updateUserProfile: async () => {}, updateUserPwd: async () => {}, ...api }
   const entries = Object.entries(values).filter(([key]) => /^[A-Za-z_$][\w$]*$/.test(key) && key !== 'default')
   const code = script.content.replace(/^import[\s\S]*?from ['"][^'"]+['"];?\n?/gm, '').replace('export default', 'return')

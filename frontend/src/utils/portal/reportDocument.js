@@ -29,7 +29,7 @@ export function cleanReportCitationNotes(content, title = '') {
       if (isReferenceSection(name)) referenceLevel = level
       return line
     }
-    if (referenceLevel !== null) return line
+    if (referenceLevel !== null || /^\[\d+\] .+【/.test(line)) return line
     const protectedText = []
     const protect = value => {
       protectedText.push(value)
@@ -54,7 +54,7 @@ export function cleanReportCitationNotes(content, title = '') {
 
 export function reportCitationParts(paragraph, title, citationCount) {
   const text = cleanReportCitationNotes(paragraph, title).trimStart()
-  if (isReferenceSection(title)) return [{ text, citation: false }]
+  if (isReferenceSection(title) || /^\[\d+\] .+【/.test(text)) return [{ text, citation: false }]
   const parts = []
   let offset = 0
   for (const match of text.matchAll(/\[([1-9]\d*)\](?!\()/g)) {
@@ -105,7 +105,7 @@ function referenceLines(citations) {
   })
 }
 
-export function buildReportMarkdown({ title = '', sections = [], citations = [] } = {}) {
+export function buildReportMarkdown({ title = '', sections = [], citations = [], documentFormat = '' } = {}) {
   const references = referenceLines(citations).join('\n')
   const hasReferences = sections.some(section => isReferenceSection(section.title))
   const blocks = sections.map(section => {
@@ -114,6 +114,6 @@ export function buildReportMarkdown({ title = '', sections = [], citations = [] 
     const content = isReferenceSection(heading) && !String(section.content || '').trim() ? references : cleanReportCitationNotes(numberedCitations(section.content, citations), heading)
     return `**${heading}**\n\n${content}`
   })
-  if (!hasReferences && references) blocks.push(`**参考资料**\n\n${references}`)
-  return [`**${title}**`, ...blocks].join('\n\n')
+  if (documentFormat !== 'digest-reference-v1' && !hasReferences && references) blocks.push(`**参考资料**\n\n${references}`)
+  return (documentFormat === 'digest-reference-v1' ? blocks : [`**${title}**`, ...blocks]).join('\n\n')
 }

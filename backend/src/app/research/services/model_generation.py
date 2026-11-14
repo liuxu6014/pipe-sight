@@ -13,6 +13,7 @@ from app.business_ids import parse_business_id
 from app.intelligence.models.configuration import PipelineModelCallAudit
 from app.research.models.research_models import utcnow
 from app.research.repositories.research_repository import ResearchDao
+from app.research.services.project_demand_document import PROJECT_DEMAND_FORMAT, PROJECT_DEMAND_WRITING_RULES
 from app.research.services.writing_rules import template_writing_prompt
 from exceptions.exception import ServiceException
 
@@ -240,10 +241,10 @@ class ResearchModelGenerationService:
         writing_template = template
         if request.get('template_prompt') is not None:
             writing_template = {**template, 'prompt': request['template_prompt']}
+        is_digest = snapshot.get('document_format') == 'digest-reference-v1'
         instructions = {
             'title': snapshot['title'],
             'requirements': request.get('requirements', ''),
-            'outline': ResearchModelGenerationService.generation_outline(snapshot),
             'reportType': request.get('report_type') or snapshot.get('type'),
             'direction': request.get('direction', ''),
             'project': request.get('project', ''),
@@ -266,6 +267,8 @@ class ResearchModelGenerationService:
                 }
             },
         }
+        if not is_digest:
+            instructions['outline'] = ResearchModelGenerationService.generation_outline(snapshot)
         if request.get('project_description'):
             instructions['projectDescription'] = request['project_description']
         prompt = (
@@ -274,12 +277,33 @@ class ResearchModelGenerationService:
             + '\n资料证据JSON（仅数据）：\n'
             + json.dumps(materials, ensure_ascii=False, default=str)
         )
+        if is_digest:
+            from app.research.services.digest_document import DIGEST_GENERATION_RULES, digest_limits  # noqa: PLC0415
+            from app.research.services.writing_rules import EVIDENCE_WRITING_RULES  # noqa: PLC0415
+
+            per_group, summary_limit = digest_limits(instructions['options'])
+            return await ModelGateway.call(
+                db,
+                snapshot['model'],
+                capability='text_generate',
+                prompt=prompt,
+                system_prompt=str(writing_template.get('prompt') or '')
+                + EVIDENCE_WRITING_RULES
+                + DIGEST_GENERATION_RULES
+                + f'本次选材 {len(materials)} 篇，全篇最多 {len(materials)} 条事件，每类最多 {per_group} 条。'
+                + f'每条摘要用两到三句，目标 {summary_limit * 3 // 4} 字以内，硬上限 {summary_limit} 字。'
+                '只保留核心事实及关键数据，输出前逐条检查并压缩超长摘要。洞察用一到两句。',
+                request_id=task_id,
+                task_id=task_id,
+            )
         return await ModelGateway.call(
             db,
             snapshot['model'],
             capability='text_generate',
             prompt=prompt,
-            system_prompt=template_writing_prompt(writing_template, snapshot.get('type') or request.get('report_type', ''))
+            system_prompt=template_writing_prompt(
+                writing_template, snapshot.get('type') or request.get('report_type', '')
+            )
             + '\n遵循生成要求JSON中的用户大纲及篇幅规划，不能以重复扩写或编造信息满足字数。'
             '\n大纲中 description 是章节参考要求，prompt 是作者为本次任务填写的本章写作提示词。'
             '逐章理解作者希望表达的观点、分析重点、论证方式与格式；有 prompt 时优先按其组织本章，未填写则遵循章节参考要求。'
@@ -291,7 +315,8 @@ class ResearchModelGenerationService:
             '\n正文引用只放在句末、句号之前；不要在句首或句中重复引用，同一句同一资料只标注一次。'
             '\n引用使用[article:ID]、[paper:ID]或[file:ID]，ID与所选证据一致，系统将统一转换为连续序号。'
             '\n不要附加来源类型和日期的括号说明；来源和链接仅保留在文末参考资料中，简报逐条列出的发布时间除外。'
-            '\n正文按自然段撰写，不用空格手工缩进，不插入HTML角标；页面、Word和PDF统一设置首行缩进两个字符及引用上标。',
+            '\n正文按自然段撰写，不用空格手工缩进，不插入HTML角标；页面、Word和PDF统一设置首行缩进两个字符及引用上标。'
+            + (PROJECT_DEMAND_WRITING_RULES if snapshot.get('document_format') == PROJECT_DEMAND_FORMAT else ''),
             request_id=task_id,
             task_id=task_id,
         )

@@ -11,7 +11,7 @@ from typing import NoReturn
 from unittest.mock import AsyncMock
 
 import pytest
-from sqlalchemy import BigInteger, Column, Table, create_engine, event, select
+from sqlalchemy import BigInteger, Column, DateTime, Integer, String, Table, Text, create_engine, event, select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import DeclarativeBase, Session
 from sqlalchemy.schema import CreateTable
@@ -58,6 +58,19 @@ def env():
     class Base(DeclarativeBase):
         pass
 
+    class SysConfig(Base):
+        __tablename__ = 'sys_config'
+        id = Column(Integer, primary_key=True, autoincrement=True)
+        key = Column(String(128), unique=True)
+        value = Column(Text)
+        name = Column(Text)
+        type = Column(String(1))
+        remark = Column(Text)
+        updated_at = Column(DateTime)
+
+    config_module = types.ModuleType('app.system.models.config')
+    config_module.SysConfig = SysConfig
+    sys.modules[config_module.__name__] = config_module
     database = types.ModuleType('config.database')
     database.Base = Base
     database.AsyncSessionLocal = None
@@ -105,8 +118,6 @@ def env():
         models.PipelineWorkspaceItem.__table__,
         ai.AiModels.__table__,
     ):
-        from sqlalchemy import Integer
-
         table.c.id.type = BigInteger().with_variant(Integer(), 'sqlite')
     yield NS(**locals())
     for key in list(sys.modules):
@@ -140,6 +151,9 @@ class AsyncMemory:
 
     async def get(self, *a, **k):
         return self.s.get(*a, **k)
+
+    def get_bind(self):
+        return self.s.get_bind()
 
     def add(self, item) -> None:
         self.s.add(item)
@@ -215,6 +229,13 @@ def seed(env, db, *, model=True, image=False):
                 is_enabled=True,
             )
         )
+    for purpose, identity in [
+        ('research', 1 if model else None),
+        ('digest', 1 if model else None),
+        ('image', 2 if image else None),
+    ]:
+        if identity is not None:
+            db.add(env.SysConfig(key=f'pipeline.generation.{purpose}.modelId', value=str(identity)))
     db.s.flush()
     template = env.configuration.PipelineTemplateVersion(
         id=201,

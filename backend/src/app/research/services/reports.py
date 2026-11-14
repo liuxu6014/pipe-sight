@@ -13,8 +13,9 @@ from app.research.models.research_models import PipelineReportAsset, PipelineRes
 from app.research.repositories.research_repository import ResearchDao
 from app.research.services.execution import ResearchExecutionService
 from app.research.services.exporters import build_file, safe_file_stem
+from app.research.services.project_demand_document import project_demand_form
 from app.research.services.report_content import (
-    normalize_generated_report,
+    normalize_task_report,
     number_report_citations,
     validate_generated_article,
 )
@@ -163,11 +164,17 @@ class ResearchReportService:
         template_id = await cls._live_template_id(db, template_id)
         if template_id is None:
             raise ServiceException(message='任务快照关联模板已不存在，不能应用')
-        normalized = normalize_generated_report(job.result_content, job.materials, delivery=True)
         try:
+            if job.config_snapshot.get('document_format') == 'digest-reference-v1':
+                from app.research.services.digest_document import normalize_digest_document  # noqa: PLC0415
+
+                normalized = normalize_digest_document(job.result_content, job.materials)
+            else:
+                normalized = normalize_task_report(job.result_content, job.materials, job.config_snapshot)
+            cited_materials = normalized.get('materials', job.materials)
             # Older tasks may contain uncited prose; do not silently repair it,
             # but reject broken markers and incomplete structures on application.
-            validate_generated_article(normalized['content'], job.materials, require_citations=False)
+            validate_generated_article(normalized['content'], cited_materials, require_citations=False)
         except ValueError as error:
             raise ServiceException(message=str(error)) from None
         await ResearchExecutionService.save_version(db, report, 'before_apply', user_id, owner_name)
@@ -183,7 +190,7 @@ class ResearchReportService:
             owner_name,
             job.config_snapshot,
             sections=normalized['sections'],
-            citations=ResearchExecutionService.material_citations(job.materials),
+            citations=ResearchExecutionService.material_citations(cited_materials),
             quality_issues=[],
         )
         await db.commit()
@@ -228,6 +235,9 @@ class ResearchReportService:
         period = (snapshot.get('request') or {}).get('period')
         if period:
             metadata['period'] = deepcopy(period)
+        form = project_demand_form(snapshot, report.title)
+        if form:
+            metadata['projectDemandForm'] = form
         citations = deepcopy(history.citations or []) if history else []
         sections = deepcopy(history.sections or []) if history else []
         for section in sections:

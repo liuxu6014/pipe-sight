@@ -92,10 +92,10 @@ test('does not expose editor defaults before the real report is loaded', () => {
 
 test('does not present fabricated analysis or bypass published report templates', () => {
   assert.doesNotMatch(newsDetail, /可提升缺陷复核与维修排序效率|统一时空基准与多源特征融合/)
-  assert.match(newsDetail, /ContentInsights :item="article"/)
-  assert.doesNotMatch(newsDetail, /projectInsight|article-insight|结构化项目启示/)
+  assert.match(newsDetail, /<ContentInsights[^>]*:item="article"/)
+  assert.doesNotMatch(newsDetail, /projectInsight|结构化项目启示/)
   assert.doesNotMatch(paperDetail, /解决多源检测条件下缺陷识别结果不一致|建立统一评价框架|可用于技术路线选型/)
-  assert.match(paperDetail, /ContentInsights :item="paper" kind="paper"/)
+  assert.match(paperDetail, /<ContentInsights[^>]*:item="paper" kind="paper"/)
   assert.match(read('../src/views/portal/pages/ResearchCreateView.vue'), /listPipelineTemplates\(\{ category: 'research', publishedOnly: true \}\)/)
   assert.doesNotMatch(researchWorkbench, /listPipelineTemplates|报告模板/)
   assert.doesNotMatch(researchWorkbench, /import \{ reportTemplates \} from '\.\.\/data'/)
@@ -125,7 +125,7 @@ test('keeps empty and unavailable portal states explicit', () => {
   assert.doesNotMatch(home, /ps-home-timeline/)
   assert.match(search, /该结果暂未提供可访问的详情路径/)
   assert.match(search, /return counts\.value\[type\] \?\? 0/)
-  assert.match(paperList, /type="yearrange"/)
+  assert.match(paperList, /<el-select class="ps-paper-year-select"/)
   assert.doesNotMatch(paperList, /<el-option label="2026"/)
 })
 

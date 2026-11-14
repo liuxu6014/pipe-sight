@@ -39,6 +39,7 @@ const router = createRouter({ history: createWebHistory(), routes: [
   { path: '/management/reports', component: () => import('../../src/views/pipeline/report/index.vue') },
   { path: '/management/templates', component: () => import('../../src/views/pipeline/template/index.vue') },
   { path: '/management/models', component: () => import('../../src/views/pipeline/model/index.vue') },
+  { path: '/management/category-prompts', component: () => import('../../src/views/pipeline/model/index.vue'), props: { section: 'categories' } },
   { path: '/pipeline/dashboard', redirect: '/management' },
   { path: '/pipeline/source', redirect: '/management/sources' },
   { path: '/pipeline/intelligence', redirect: '/management/intelligence' },
@@ -47,6 +48,7 @@ const router = createRouter({ history: createWebHistory(), routes: [
   { path: '/pipeline/report', redirect: '/management/reports' },
   { path: '/pipeline/template', redirect: '/management/templates' },
   { path: '/pipeline/model', redirect: '/management/models' },
+  { path: '/pipeline/category-prompts', redirect: '/management/category-prompts' },
   { path: '/pipeline/manuscript', redirect: '/portal/research/create' }
 ] })
 const sidebarOpen = ref(true)
@@ -55,7 +57,7 @@ const Root = { render: () => {
   const managementPage = router.currentRoute.value.path.split('/')[2] || 'dashboard'
   const managementLink = (to, label) => h(RouterLink, { to, 'aria-current': router.currentRoute.value.path === to ? 'page' : undefined }, () => label)
   return h('div', { class: management ? ['ps-management-shell', 'ui-preview-management', `management-page-${managementPage}`, { 'has-preview-sidebar': sidebarOpen.value }] : '' }, [
-  management ? h('aside', { class: 'ui-preview-sidebar', 'aria-label': '合成管理导航' }, [h('strong', '管理界面验收'), managementLink('/management', '运行概览'), managementLink('/management/sources', '数据源管理'), managementLink('/management/intelligence', '情报中心'), managementLink('/management/tasks', '采集任务'), managementLink('/management/knowledge', '资料库管理'), managementLink('/management/reports', '报告管理'), managementLink('/management/templates', '模板管理'), managementLink('/management/models', '模型与提示词')]) : null,
+  management ? h('aside', { class: 'ui-preview-sidebar', 'aria-label': '合成管理导航' }, [h('strong', '管理界面验收'), managementLink('/management', '运行概览'), managementLink('/management/sources', '数据源管理'), managementLink('/management/intelligence', '情报中心'), managementLink('/management/tasks', '采集任务'), managementLink('/management/knowledge', '资料库管理'), managementLink('/management/reports', '报告管理'), managementLink('/management/templates', '模板管理'), managementLink('/management/models', '模型管理'), managementLink('/management/category-prompts', '类别提示词')]) : null,
   management ? h('main', { class: 'ps-workspace-surface' }, [h('div', { class: 'ui-preview-shell-toolbar' }, [h('button', { type: 'button', 'aria-expanded': sidebarOpen.value, onClick: () => sidebarOpen.value = !sidebarOpen.value }, sidebarOpen.value ? '收起验收侧栏' : '展开验收侧栏')]), h(RouterView)]) : h(RouterView),
   h('nav', { class: 'ui-preview-banner', 'aria-label': '预览环境说明' }, [
     h('strong', '界面验收预览 · 合成数据 · 不连接业务接口'),

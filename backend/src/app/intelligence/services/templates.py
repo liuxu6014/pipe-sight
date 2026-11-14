@@ -77,11 +77,14 @@ class PipelineTemplateService:
         rows = [row for row in rows if not published_only or row.is_enabled]
         result = []
         for row in rows:
-            model = await ResearchDao.get_model(db, row.model_id) if row.model_id is not None else None
-            image = await ResearchDao.get_model(db, row.image_model_id) if row.image_model_id is not None else None
+            model_id, image_id = await cls.generation_model_ids(db, row.purpose, row, {'enabled': True})
+            model = await ResearchDao.get_model(db, model_id) if model_id is not None else None
+            image = await ResearchDao.get_model(db, image_id) if image_id is not None else None
             result.append(
                 {
                     **cls._dict(row),
+                    'modelId': wire_id(model_id),
+                    'imageModelId': wire_id(image_id),
                     'modelConfigured': bool(
                         model
                         and model.is_enabled
@@ -104,6 +107,33 @@ class PipelineTemplateService:
             return None
         row = await ResearchDao.get_template(db, parse_business_id(template_key))
         return row if row and row.is_enabled else None
+
+    @staticmethod
+    async def generation_model_ids(db, purpose, template, image_config=None, *, required=False) -> tuple:
+        from app.intelligence.services.translation_settings import (  # noqa: PLC0415
+            GENERATION_PURPOSES,
+            configured_model_id,
+        )
+
+        try:
+            model_id = (
+                await configured_model_id(db, GENERATION_PURPOSES[purpose][0])
+                if purpose in {'research', 'digest'}
+                else getattr(template, 'model_id', None)
+            )
+            image_id = (
+                await configured_model_id(db, GENERATION_PURPOSES['image'][0])
+                if (image_config or {}).get('enabled')
+                else None
+            )
+        except ValueError as exc:
+            raise ServiceException(message='模型用途配置无效，请联系管理员重新设置') from exc
+        if required and model_id is None and purpose in {'research', 'digest'}:
+            label = GENERATION_PURPOSES[purpose][1]
+            raise ServiceException(message=f'请先在模型管理的用途配置中选择启用且具备 text_generate 能力的{label}')
+        if required and (image_config or {}).get('enabled') and image_id is None:
+            raise ServiceException(message='请先在模型管理的用途配置中选择启用且具备 image_generate 能力的图片生成模型')
+        return model_id, image_id
 
     @staticmethod
     async def validate_models(db, model_id, image_model_id=None, image_config=None) -> Any:

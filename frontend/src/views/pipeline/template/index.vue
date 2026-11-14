@@ -7,7 +7,6 @@
         <el-option label="已启用" value="enabled" />
         <el-option label="已停用" value="disabled" />
       </el-select>
-      <el-button :icon="Refresh" :loading="loading" @click="loadTemplates">刷新</el-button>
       <el-button v-if="canSaveTemplate" type="primary" :icon="Plus" @click="createTemplate">新建模板</el-button>
     </section>
     <nav class="template-categories" aria-label="模板类别">
@@ -44,24 +43,86 @@
       <el-empty v-if="!loading && !filteredTemplates.length" description="当前筛选下暂无模板" :image-size="72" />
     </section>
     <div class="template-result-count" aria-live="polite">共 {{ filteredTemplates.length }} 个模板<span v-if="unassignedCount"> · {{ unassignedCount }} 个未绑定报告类型</span></div>
-    <el-drawer v-model="editorVisible" :title="editingTemplate?.id ? '编辑模板' : '新建模板'" size="640px"><el-form label-position="top" :model="form"><div class="template-form-grid"><el-form-item label="模板名称" required><el-input v-model="form.name" /></el-form-item><el-form-item label="报告类型" :required="form.purpose === 'research'"><el-select v-model="form.reportType" clearable placeholder="选择报告类型"><el-option v-for="category in categories.filter(item => item.value !== 'all')" :key="category.value" :label="category.name" :value="category.value" /></el-select></el-form-item><el-form-item label="模板说明" class="is-full"><el-input v-model="form.description" type="textarea" :rows="3" /></el-form-item></div>
- <el-alert class="template-contract-note" type="warning" :closable="false" title="模板按报告类型展示，同一类型可配置多个模板；保存时保留各模板的独立内容。" /><el-form-item label="正文生成提示词" required><el-input v-model="form.prompt" type="textarea" :rows="6" /></el-form-item>
- <el-alert v-if="modelError" :title="modelError" type="warning" :closable="false"><template #default><el-button plain @click="loadModels">重新加载模型</el-button></template></el-alert>
- <el-form-item label="文本生成模型"><el-select v-model="form.modelId" clearable placeholder="可稍后由管理员配置"><el-option v-for="model in textModels" :key="model.modelId" :label="model.modelName || model.modelCode" :value="model.modelId" /></el-select></el-form-item>
- <el-form-item label="启用配图"><el-switch v-model="form.imageConfig.enabled" /></el-form-item>
- <el-form-item label="图片生成模型"><el-select v-model="form.imageModelId" clearable placeholder="仅显示具备图片生成能力的模型"><el-option v-for="model in imageModels" :key="model.modelId" :label="model.modelName || model.modelCode" :value="model.modelId" /></el-select></el-form-item>
- <el-form-item v-if="form.imageConfig.enabled" label="配图数量"><el-input-number v-model="form.imageConfig.count" :min="1" :max="10" /></el-form-item>
- <el-form-item v-if="form.imageConfig.enabled" label="图片生成提示词"><el-input v-model="form.imageConfig.prompt" type="textarea" :rows="3" placeholder="填写配图内容和风格要求；本页不执行图片生成" /></el-form-item>
- <el-form-item label="启用模板"><el-switch v-model="form.isEnabled" /></el-form-item>
- <h3>章节结构</h3><div v-for="(section, index) in form.sections" :key="section.id" class="template-section-row"><Rank /><span>{{ index + 1 }}</span><el-input v-model="section.title" :aria-label="'第' + (index + 1) + '章标题'" /><el-input-number :aria-label="'第' + (index + 1) + '章字数'" v-model="section.words" :min="100" :max="8000" :step="100" /><el-switch v-model="section.required" active-text="必填" /><el-button :icon="Delete" circle class="ps-ui-action" @click="form.sections.splice(index, 1)" aria-label="删除章节" /></div><el-button :icon="Plus" v-if="canSaveTemplate" class="template-add-section" @click="form.sections.push({ id: Date.now(), title: '新增章节', words: 1000, required: false })">新增章节</el-button></el-form><template #footer><el-button @click="editorVisible = false">取消</el-button><el-button @click="previewTemplate({ ...form, status: form.isEnabled ? 'enabled' : 'disabled' })">预览草稿</el-button><el-button v-if="canSaveTemplate" type="primary" :loading="saving" @click="saveTemplate">保存模板内容</el-button></template></el-drawer>
-    <el-dialog v-model="previewVisible" :title="previewingTemplate?.name || '模板预览'" width="min(720px, calc(100vw - 32px))"><div v-if="previewingTemplate" class="template-preview-dialog"><div class="preview-meta"><el-tag :type="statusTag(previewingTemplate.status)" effect="plain">{{ statusLabel(previewingTemplate.status) }}</el-tag><span>{{ reportTypeLabel(previewingTemplate) }}</span></div><el-alert title="仅模板配置与提示词预览，不生成报告、不调用模型。" type="info" :closable="false" class="template-contract-note" /><el-form label-position="top"><el-form-item label="正文生成提示词（只读）"><el-input :model-value="previewingTemplate.prompt" type="textarea" :rows="8" readonly /></el-form-item></el-form><p class="preview-description">{{ previewingTemplate.description || '暂无模板说明' }}</p><div v-if="previewingTemplate.sections?.length" class="preview-sections"><div v-for="(section, index) in previewingTemplate.sections" :key="section.id || index" class="preview-section"><span>{{ index + 1 }}</span><div><strong>{{ section.title || '未命名章节' }}</strong><small>{{ section.required ? '必填' : '选填' }} · {{ section.words || '—' }} 字</small></div></div></div><el-empty v-else description="当前模板尚未配置章节结构" :image-size="72" /></div></el-dialog>
+    <el-dialog
+      v-model="editorVisible"
+      :title="editingTemplate?.id ? '编辑模板' : '新建模板'"
+      width="min(960px, calc(100vw - 32px))"
+      class="ps-centered-dialog template-dialog"
+      append-to-body
+      align-center
+      :close-on-click-modal="false"
+    >
+      <el-form label-position="top" :model="form" class="template-editor-form">
+        <section class="template-editor-section" aria-label="模板内容">
+          <h3>模板内容</h3>
+          <div class="template-form-grid">
+            <el-form-item label="模板名称" required>
+              <el-input v-model="form.name" />
+            </el-form-item>
+            <el-form-item label="报告类型" :required="form.purpose === 'research'">
+              <el-select v-model="form.reportType" clearable placeholder="选择报告类型">
+                <el-option v-for="category in categories.filter(item => item.value !== 'all')" :key="category.value" :label="category.name" :value="category.value" />
+              </el-select>
+            </el-form-item>
+          </div>
+          <p class="template-contract-note">模板按报告类型展示；同一类型可创建多个模板。</p>
+          <el-form-item label="模板说明">
+            <el-input v-model="form.description" type="textarea" :rows="2" />
+          </el-form-item>
+          <el-form-item label="正文生成提示词" required>
+            <el-input v-model="form.prompt" type="textarea" :rows="7" />
+          </el-form-item>
+        </section>
+
+        <section class="template-editor-section" aria-label="生成设置">
+          <h3>生成设置</h3>
+          <el-alert v-if="modelError" :title="modelError" type="warning" :closable="false" class="template-contract-note">
+            <template #default><el-button plain @click="loadModels">重新加载模型</el-button></template>
+          </el-alert>
+          <el-form-item v-if="form.purpose === 'article'" label="文本生成模型">
+            <el-select v-model="form.modelId" clearable placeholder="可稍后由管理员配置">
+              <el-option v-for="model in textModels" :key="model.modelId" :label="model.modelName || model.modelCode" :value="model.modelId" />
+            </el-select>
+          </el-form-item>
+          <p class="template-contract-note">正文与图片模型在<router-link to="/pipeline/model">模型管理 → 用途配置</router-link>中统一选择。</p>
+          <div class="template-form-grid">
+            <el-form-item label="启用模板"><el-switch v-model="form.isEnabled" aria-label="启用模板" /></el-form-item>
+            <el-form-item label="启用配图"><el-switch v-model="form.imageConfig.enabled" aria-label="启用配图" /></el-form-item>
+          </div>
+          <el-form-item v-if="form.imageConfig.enabled" label="配图数量">
+            <el-input-number v-model="form.imageConfig.count" :min="1" :max="10" />
+          </el-form-item>
+          <el-form-item v-if="form.imageConfig.enabled" label="图片生成提示词">
+            <el-input v-model="form.imageConfig.prompt" type="textarea" :rows="3" placeholder="填写配图内容和风格要求" />
+          </el-form-item>
+        </section>
+
+        <section class="template-editor-section template-editor-sections" aria-label="章节结构">
+          <h3>章节结构</h3>
+          <div v-for="(section, index) in form.sections" :key="section.id" class="template-section-row">
+            <span>{{ index + 1 }}</span>
+            <el-input v-model="section.title" :aria-label="'第' + (index + 1) + '章标题'" />
+            <el-input-number v-model="section.words" :aria-label="'第' + (index + 1) + '章字数'" :min="100" :max="8000" :step="100" />
+            <el-switch v-model="section.required" active-text="必填" :aria-label="'第' + (index + 1) + '章必填'" />
+            <el-button :icon="Delete" circle class="ps-ui-action" @click="form.sections.splice(index, 1)" :aria-label="'删除第' + (index + 1) + '章'" />
+          </div>
+          <el-button v-if="canSaveTemplate" :icon="Plus" class="template-add-section" @click="form.sections.push({ id: Date.now(), title: '新增章节', words: 1000, required: false })">新增章节</el-button>
+        </section>
+      </el-form>
+      <template #footer>
+        <el-button @click="editorVisible = false">取消</el-button>
+        <el-button @click="previewTemplate({ ...form, status: form.isEnabled ? 'enabled' : 'disabled' })">预览草稿</el-button>
+        <el-button v-if="canSaveTemplate" type="primary" :loading="saving" @click="saveTemplate">保存模板内容</el-button>
+      </template>
+    </el-dialog>
+    <el-dialog v-model="previewVisible" :title="previewingTemplate?.name || '模板预览'" width="min(720px, calc(100vw - 32px))" class="ps-centered-dialog template-dialog" append-to-body align-center><div v-if="previewingTemplate" class="template-preview-dialog"><div class="preview-meta"><el-tag :type="statusTag(previewingTemplate.status)" effect="plain">{{ statusLabel(previewingTemplate.status) }}</el-tag><span>{{ reportTypeLabel(previewingTemplate) }}</span></div><el-alert title="仅预览模板配置与提示词，不生成报告、不调用模型。" type="info" :closable="false" class="template-contract-note" /><el-form label-position="top"><el-form-item label="正文生成提示词（只读）"><el-input :model-value="previewingTemplate.prompt" type="textarea" :rows="8" readonly /></el-form-item></el-form><p class="preview-description">{{ previewingTemplate.description || '暂无模板说明' }}</p><div v-if="previewingTemplate.sections?.length" class="preview-sections"><div v-for="(section, index) in previewingTemplate.sections" :key="section.id || index" class="preview-section"><span>{{ index + 1 }}</span><div><strong>{{ section.title || '未命名章节' }}</strong><small>{{ section.required ? '必填' : '选填' }} · {{ section.words || '—' }} 字</small></div></div></div><el-empty v-else description="当前模板尚未配置章节结构" :image-size="72" /></div></el-dialog>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Delete, Document, Files, Plus, Rank, Search, Refresh, Edit, View } from '@element-plus/icons-vue'
+import { Delete, Document, Files, Plus, Search, Edit, View } from '@element-plus/icons-vue'
 import { createPipelineTemplate, listPipelineTemplates, retirePipelineTemplate, updatePipelineTemplate } from '@/api/pipeline/intelligence'
 import { listModelAll } from '@/api/ai/model'
 import { modelsFor } from '@/utils/pipeline/compactContract'
@@ -143,8 +204,11 @@ async function toggleTemplate(item) {
 onMounted(() => { loadTemplates(); loadModels() })
 </script>
 <style scoped>
+:global(.el-dialog.ps-centered-dialog.is-align-center.template-dialog > .el-dialog__header) {
+ padding-inline: 48px;
+ text-align: center;
+}
 .template-contract-note { margin-bottom: 14px; }
-.template-form-grid :deep(.el-select) { width: 100%; }
 .template-toolbar {
  display: flex; align-items: center; gap: 10px; padding: 12px 16px;
  background: var(--el-bg-color); border: 1px solid var(--el-border-color-light); border-radius: 8px;
@@ -172,19 +236,44 @@ onMounted(() => { loadTemplates(); loadModels() })
 .template-card-actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 14px; border-top: 1px solid var(--el-border-color-lighter); }
 .template-card-actions .el-button { margin: 0; }
 .template-result-count { color: var(--el-text-color-secondary); font-size: 13px; padding: 10px 16px; background: var(--el-bg-color); border: 1px solid var(--el-border-color-light); border-radius: 8px; }
-.template-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }.template-form-grid .is-full { grid-column: 1/-1; }.template-section-row { min-height: 52px; display: grid; grid-template-columns: 18px 24px minmax(0, 1fr) 120px 76px 28px; gap: 8px; align-items: center; }.template-section-row > svg { width: 14px; color: #94a3b8; }.template-section-row > button { border: 0; background: transparent; color: #94a3b8; cursor: pointer; }.template-section-row > button svg { width: 15px; }.template-add-section { width: 100%; margin-top: 10px; }
+.template-editor-form { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; gap: 20px; }
+.template-editor-section {
+ min-width: 0;
+ padding: 16px;
+ border: 1px solid var(--el-border-color-lighter);
+ border-radius: 8px;
+}
+.template-editor-section h3 { margin: 0 0 14px; color: var(--el-text-color-primary); font-size: 15px; line-height: 1.4; }
+.template-editor-section > .el-form-item:last-child,
+.template-editor-section > .template-form-grid:last-child > .el-form-item { margin-bottom: 0; }
+.template-editor-section :deep(.el-select) { width: 100%; }
+.template-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; }
+.template-editor-sections { grid-column: 1 / -1; }
+.template-section-row {
+ min-height: 48px;
+ display: grid;
+ grid-template-columns: 24px minmax(0, 1fr) 120px 68px 32px;
+ align-items: center;
+ gap: 8px 12px;
+ border-bottom: 1px solid var(--el-border-color-lighter);
+}
+.template-section-row > span:first-child { text-align: center; color: var(--el-text-color-secondary); font-variant-numeric: tabular-nums; }
+.template-section-row > button { justify-self: end; }
+.template-add-section { margin-top: 12px; }
 .template-section-row > .el-input-number { width: 100%; }
-:deep(.el-drawer) { max-width: 100vw; }
 @media (max-width: 540px) {
- .template-section-row { grid-template-columns: 18px 24px minmax(0, 1fr) 28px; padding: 8px 0; }
- .template-section-row > .el-input-number { grid-column: 3; grid-row: 2; max-width: 140px; }
- .template-section-row > .el-switch { grid-column: 3; grid-row: 3; }
+ .template-editor-section { padding: 12px; }
+ .template-editor-section:first-child .template-form-grid { grid-template-columns: minmax(0, 1fr); }
+ .template-section-row { grid-template-columns: 18px minmax(0, 1fr) auto 32px; gap: 8px; padding: 8px 0; }
+ .template-section-row > .el-input { grid-column: 2 / 4; }
+ .template-section-row > .el-input-number { grid-column: 2; grid-row: 2; max-width: 120px; }
+ .template-section-row > .el-switch { grid-column: 3 / 5; grid-row: 2; }
  .template-section-row > button { grid-column: 4; grid-row: 1; }
 }
 .preview-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; color: #64748b; font-size: 13px; }.preview-description { margin: 18px 0; color: #475569; line-height: 1.7; }.preview-sections { border-top: 1px solid #e2e8f0; }.preview-section { min-height: 58px; padding: 10px 0; border-bottom: 1px solid #edf1f6; display: flex; align-items: center; gap: 12px; }.preview-section > span { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: #edf3ff; color: #409eff; font-size: 13px; font-weight: 700; }.preview-section div { display: flex; flex-direction: column; gap: 4px; }.preview-section small { color: #64748b; font-size: 13px; }
 @media (max-width: 1200px) { .template-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 760px) {
- .template-grid, .template-form-grid { grid-template-columns: minmax(0, 1fr); }
+ .template-grid, .template-editor-form { grid-template-columns: minmax(0, 1fr); }
  .template-toolbar { flex-wrap: wrap; padding: 12px; }
  .template-toolbar .el-input { flex: 1 1 100%; min-width: 0; }
  .template-toolbar .el-select { flex: 1; min-width: 100px; }

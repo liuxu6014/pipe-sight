@@ -164,6 +164,11 @@ class PipelineCollectionService:
         # The outer execute loop keeps heartbeats alive and cancels this task on stop.
         translated = await CollectionTranslationService.translate(classification_session_factory(db), snapshot, records)
         kind = 'paper' if snapshot['type'] == 'paper' else 'news'
+        if 'processing_model' in snapshot:
+            from app.intelligence.services.content_processing import ContentProcessingService  # noqa: PLC0415
+
+            return await ContentProcessingService.prepare(classification_session_factory(db), snapshot, translated)
+        # Already queued legacy runs retain their original processing contract.
         classifications = await cls.classify_records(db, translated, kind)
         enrichments = await cls.enrich_records(db, translated, snapshot.get('model_id'), kind=kind)
         for record, enrichment in zip(translated, enrichments, strict=True):

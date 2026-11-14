@@ -15,7 +15,7 @@
             <div class="ps-news-card-top">
               <el-tag class="ps-news-source-type" type="primary" size="small">{{ item.sourceType }}</el-tag>
               <span v-if="item.source" class="ps-news-source" :title="item.source">{{ item.source }}</span>
-              <time>{{ newsDate(item.time) }}</time>
+              <time v-if="item.time">{{ newsDate(item.time) }}</time>
               <div v-if="item.extraTags.length" class="ps-news-categories"><el-button v-for="tag in item.extraTags" :key="tag" class="ps-category-chip" size="small" plain :type="activeTags.includes(tag) ? 'primary' : 'default'" :aria-pressed="activeTags.includes(tag)" @click="toggleTag(tag)">{{ tag }}</el-button></div>
             </div>
             <div class="ps-news-row-actions"><el-button type="primary" plain :loading="busy(item)" :disabled="busy(item)" @click="addToBasket(item)">{{ inBasket(item) ? '取消加入资料库' : '加入资料库' }}</el-button></div>
@@ -38,7 +38,7 @@
           </router-link>
           <div class="ps-news-card-copy">
           <router-link class="ps-news-title" :to="`/portal/news/${item.id}`">{{ item.title }}</router-link>
-          <p v-if="cleanSummary(item.summary)" class="ps-news-summary">{{ cleanSummary(item.summary) }}</p>
+          <p v-if="cleanSummary(item.summary)" class="ps-news-summary">{{ item.summaryPreview }}</p>
           <ContentEntities :entities="item.entities" compact>
             <template #prepend><ContentCategory :name="item.categoryName" /></template>
           </ContentEntities>
@@ -101,8 +101,11 @@ const { data, loading, loadError, reload } = useListRequest(() => ({
 }), listPipelineIntelligence)
 const newsItems = computed(() => (data.value?.rows || []).map(item => {
   const normalized = normalizePortalIntelligence(item)
+  const summary = cleanSummary(normalized.summary).trim()
+  const summaryCharacters = Array.from(summary)
   return {
     ...normalized,
+    summaryPreview: viewMode.value === 'card' && summaryCharacters.length > 40 ? summaryCharacters.slice(0, 40).join('') + '…' : summary,
     category: ['article', 'news', 'wechat'].includes(item.category) ? (item.tags?.[0] || '分类未提供') : (item.category || '分类未提供'),
     extraTags: normalized.tags.filter(tag => tag !== normalized.categoryName)
   }

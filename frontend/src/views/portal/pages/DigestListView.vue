@@ -274,7 +274,7 @@ async function removeSchedule(schedule) {
     deletingScheduleId.value = ''
   }
 }
-onMounted(loadSchedules)
+onMounted(() => { void portalStore.hydrate(true); void loadSchedules() })
 </script>
 
 <style scoped>

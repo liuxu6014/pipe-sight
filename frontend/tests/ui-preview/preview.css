@@ -20,7 +20,8 @@ body { padding-bottom: 56px; }
 .ui-preview-management.management-page-knowledge .ui-preview-sidebar a[href="/management/knowledge"],
 .ui-preview-management.management-page-reports .ui-preview-sidebar a[href="/management/reports"],
 .ui-preview-management.management-page-templates .ui-preview-sidebar a[href="/management/templates"],
-.ui-preview-management.management-page-models .ui-preview-sidebar a[href="/management/models"] { color: #005487; font-weight: 600; }
+.ui-preview-management.management-page-models .ui-preview-sidebar a[href="/management/models"],
+.ui-preview-management.management-page-category-prompts .ui-preview-sidebar a[href="/management/category-prompts"] { color: #005487; font-weight: 600; }
 .ui-preview-management:not(.has-preview-sidebar) .ui-preview-sidebar { display: none; }
 .ui-preview-shell-toolbar { padding: 12px 24px; border-bottom: 1px solid #d9e2e9; background: #fff; }
 .ui-preview-shell-toolbar button { min-height: 40px; border: 1px solid #d9e2e9; border-radius: 6px; padding: 8px 12px; background: #fff; color: #005487; cursor: pointer; }

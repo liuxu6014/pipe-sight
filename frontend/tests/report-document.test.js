@@ -1,3 +1,4 @@
+import { isDigestType } from '../src/views/portal/utils/routing.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -10,17 +11,18 @@ for (const heading of ['参考文献', 'References', 'references', '2. 参考资
     const output = buildReportMarkdown({ title: '报告', sections: [
       { title: '分析', content: '事实[1]。' }, { title: heading, content: '[1] 原始来源' },
     ], citations: [{ id: 1, title: '原始来源' }] })
-    assert.equal((output.match(/^## (?:参考资料|参考文献|references)$/gim) || []).length, 1)
+    assert.equal((output.match(/^\*\*(?:参考资料|参考文献|references)\*\*$/gim) || []).length, 1)
     assert.equal((output.match(/\[1\] 原始来源/g) || []).length, 1)
   })
 }
 
 // Model the heading/body boundary used by the backend Markdown reader.
 function reload(content) {
-  return content.split(/^## /m).slice(1).map((chunk, index) => {
-    const [title, ...body] = chunk.split('\n')
-    return { id: index + 1, title, content: body.join('\n').trim() }
-  })
+  const headings = [...content.matchAll(/^\*\*([^\n]+)\*\*[ \t]*$/gm)]
+  return headings.slice(1).map((match, index) => ({
+    id: index + 1, title: match[1],
+    content: content.slice(match.index + match[0].length, headings[index + 2]?.index ?? content.length).trim(),
+  }))
 }
 
 test('grouped citations stay mapped after repeated saves without evidence-note parentheses', () => {
@@ -38,7 +40,7 @@ test('save/reload is stable with six chapters, preparation notes and authored re
   const snapshot = structuredClone(sections)
   const citations = [{ id: 1, sourceId: '18', title: '原始文献', source: { name: '来源甲' } }]
   const first = buildReportMarkdown({ title: '科研报告', sections, citations })
-  assert.equal((first.match(/^## 参考资料$/gm) || []).length, 1)
+  assert.equal((first.match(/^\*\*参考资料\*\*$/gm) || []).length, 1)
   assert.equal(reload(first).length, 8)
   assert.ok(first.includes(sections[0].content.replace('[资料18]', '[1]')))
   assert.ok(first.includes('[1] 原始文献与说明。'))
@@ -69,8 +71,8 @@ test('empty reference section is filled once; absent citations do not fabricate 
   const citations = [{ id: 7, title: '标题', source: {} }]
   const content = buildReportMarkdown({ title: '报告', sections: [{ title: '参考资料', content: '' }], citations })
   assert.match(content, /\[1\] 标题/)
-  assert.equal((content.match(/^## 参考资料$/gm) || []).length, 1)
-  assert.equal(buildReportMarkdown({ title: '报告', sections: [], citations: [] }).trim(), '# 报告')
+  assert.equal((content.match(/^\*\*参考资料\*\*$/gm) || []).length, 1)
+  assert.equal(buildReportMarkdown({ title: '报告', sections: [], citations: [] }).trim(), '**报告**')
 })
 
 test('editor load/save/reload uses the serializer and never auto-loads retired publications', async () => {
@@ -82,8 +84,8 @@ test('editor load/save/reload uses the serializer and never auto-loads retired p
     sections: [{ id: 1, title: '1. 结论', content: '保留正文[资料18]。', citationIds: [1] }, { id: 2, title: '参考资料', content: '[资料18] 证据。' }],
     citations: [{ id: 1, sourceId: '18', title: '证据', source: { url: 'https://example.org' } }] }
   const context = vm.createContext({
-    ref, computed, watch, buildReportMarkdown, cleanReportCitationNotes, onMounted() {}, onBeforeUnmount() {}, onBeforeRouteLeave() {}, onBeforeRouteUpdate() {},
-    useRoute: () => ({ params: { id: '33' } }), useRouter: () => ({}), usePortalStore: () => ({ researchReports: [] }),
+    ref, computed, watch, buildReportMarkdown, cleanReportCitationNotes, isDigestType, onMounted() {}, onBeforeUnmount() {}, onBeforeRouteLeave() {}, onBeforeRouteUpdate() {},
+    useRoute: () => ({ params: { id: '33' }, path: '/portal/research/reports/33' }), useRouter: () => ({}), usePortalStore: () => ({ researchReports: [], digestReports: [] }),
     getPipelineResearchReport: async () => ({ data: structuredClone(stored) }),
     listPipelineResearchReportVersions: async () => ({ data: { rows: [] } }),
     listPipelineResearchReportExports: async () => ({ data: { rows: [] } }),

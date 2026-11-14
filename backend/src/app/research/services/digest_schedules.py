@@ -222,7 +222,10 @@ class DigestScheduleService:
         if frequency is not None:
             PipelineTemplateService.validate_digest_cadence(template, frequency)
         image_config = PipelineTemplateService.effective_image_config(template.image_config, generation_config)
-        await template_service.validate_models(db, template.model_id, template.image_model_id, image_config)
+        model_id, image_model_id = await PipelineTemplateService.generation_model_ids(
+            db, 'digest', template, image_config, required=True
+        )
+        await template_service.validate_models(db, model_id, image_model_id, image_config)
         return template
 
     @classmethod

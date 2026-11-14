@@ -371,6 +371,7 @@ def api(db, monkeypatch):
     app = FastAPI()
     app.state.redis = SimpleNamespace()
     actor = SimpleNamespace(
+        roles=[],
         user=SimpleNamespace(user_id=10, user_name='operator', admin=False, role=[SimpleNamespace(data_scope='1')]),
         permissions=[],
     )

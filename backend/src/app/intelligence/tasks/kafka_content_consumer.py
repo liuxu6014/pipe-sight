@@ -9,7 +9,7 @@
 
 - 解析并校验统一 envelope，非法消息跳过（提交 offset，不阻塞分区）；
 - 按 content_type 幂等创建/复用 data_sources 来源（wechat 按 config.bizid）；
-- 处理：来源配置了翻译模型且缺中文时翻译；启用了类别时分类；
+- 处理：按全局翻译模型补充译文；内容处理模型一次完成过滤、分类、摘要与实体抽取；
 - 只写「有效数据」——标题/URL/DOI/去重校验失败的一律不入库；
 - 手动按消息提交 offset：写入失败不提交（重试），Kafka 断连自动重连。
 
@@ -44,14 +44,12 @@ from app.business_ids import wire_id
 from app.infrastructure.models.registry import register_sqlalchemy_models
 from app.infrastructure.services.logging_support import logger
 from app.intelligence.schemas.kafka_message import KafkaContentMessage
-from app.intelligence.services.categories import CategoryService
 from app.intelligence.services.collection_persistence import CollectionPersistenceService
 from app.intelligence.services.collection_translation import (
     CollectionTranslationService,
     TranslationConfigurationError,
     TranslationFailure,
 )
-from app.intelligence.services.entities import EntityExtractionService
 from config.database import AsyncSessionLocal
 from config.env import DataBaseConfig, KafkaConfig
 from config.get_db import close_async_engine, init_create_table
@@ -106,9 +104,10 @@ def _prefer_content(data: dict) -> str | None:
     """优先取保留段落边界的正文：content_md 换行更多时用 markdown 转纯文本。"""
     content = data.get('content')
     content_md = data.get('content_md')
-    if isinstance(content_md, str) and content_md.strip():
-        if not isinstance(content, str) or content_md.count('\n') > content.count('\n'):
-            return _markdown_to_plain_text(content_md)
+    if isinstance(content_md, str) and content_md.strip() and (
+        not isinstance(content, str) or content_md.count('\n') > content.count('\n')
+    ):
+        return _markdown_to_plain_text(content_md)
     return content if isinstance(content, str) and content.strip() else None
 
 
@@ -248,56 +247,30 @@ async def _process_and_save(db, message: KafkaContentMessage, now) -> str:
     source = await _ensure_source(db, message, now)
     record = _to_record(message)
 
-    # 处理：翻译（来源配置了模型且缺中文时），失败保留爬虫原文/译文。
-    snapshot = {
-        'type': source.type,
-        'model_id': source.model_id,
-        'source': {'id': wire_id(source.id), 'name': source.name},
-    }
+    from app.intelligence.services.content_processing import ContentProcessingService  # noqa: PLC0415
+
+    snapshot = await ContentProcessingService.freeze(
+        db,
+        {
+            'type': source.type,
+            'model_id': source.model_id,
+            'source': {'id': wire_id(source.id), 'name': source.name},
+        },
+    )
+    sessions = async_sessionmaker(bind=db.bind, expire_on_commit=False, autoflush=False)
     try:
         snapshot = await CollectionTranslationService.freeze(db, snapshot)
-        sessions = async_sessionmaker(bind=db.bind, expire_on_commit=False, autoflush=False)
+        await db.commit()
         (record,) = await CollectionTranslationService.translate(sessions, snapshot, [record])
     except (TranslationConfigurationError, TranslationFailure) as exc:
         logger.warning('翻译跳过（保留原文）：%s', exc)
-
-    # 处理：分类（启用了类别时），失败按未分类入库。
-    kind = 'paper' if source.type == 'paper' else 'news'
-    if source.type == 'paper':
-        classify_content = json.dumps(
-            {
-                key: record.get(key)
-                for key in ('doi', 'authors', 'journal', 'published_date', 'abstract', 'abstract_zh')
-            },
-            ensure_ascii=False,
-        )
-    else:
-        classify_content = record.get('content_zh') or record.get('content') or ''
-    try:
-        category_id = await CategoryService.classify(db, title=record['title'], content=classify_content, kind=kind)
-    except Exception as exc:
-        logger.warning('分类失败，按未分类入库：%s', exc)
-        category_id = None
-
-    # 新闻概括核心事件，论文仅用标题与摘要；失败不覆盖已有结果。
-    entity_content = (
-        record.get('abstract_zh') or record.get('abstract') or ''
-        if kind == 'paper'
-        else record.get('content_zh') or record.get('content') or ''
-    )
-    try:
-        enrichment = await EntityExtractionService.enrich(
-            db,
-            title=record['title'],
-            content=entity_content,
-            model_id=source.model_id,
-            kind=kind,
-            summary=record.get('summary'),
-        )
-        if enrichment is not None:
-            record.update(enrichment)
-    except Exception as exc:
-        logger.warning('核心实体处理跳过：%s', exc)
+    # The same one-call processing contract applies to HTTP collectors and Kafka.
+    await db.commit()
+    records, outcomes = await ContentProcessingService.prepare(sessions, snapshot, [record])
+    category_id, failed = outcomes[0]
+    if failed:
+        raise ValueError('内容处理失败，请检查模型配置或重试')
+    record = records[0]
 
     try:
         saved = await CollectionPersistenceService.save_record(db, source, record, now, category_id=category_id)

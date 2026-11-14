@@ -194,7 +194,8 @@ body:has(.ps-portal) {
 }
 
 .ps-header-search {
-  width: clamp(158px, 13vw, 230px);
+  width: auto;
+  flex: 0 0 auto;
   height: 38px;
   padding: 0 11px;
   border-radius: 9px;
@@ -1805,14 +1806,6 @@ body:has(.ps-portal) {
   margin-bottom: 24px;
   padding: clamp(30px, 4vw, 58px);
   background: linear-gradient(145deg, #fff, #f5f8fd);
-}
-
-.ps-paper-original-title {
-  max-width: 980px;
-  color: var(--ps-muted);
-  font-family: Georgia, serif;
-  font-size: 15px;
-  line-height: 1.6;
 }
 
 .ps-author-map {

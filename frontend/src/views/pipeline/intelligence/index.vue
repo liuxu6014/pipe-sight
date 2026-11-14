@@ -5,7 +5,7 @@
         <el-form-item class="keyword-filter">
           <el-input v-model="queryParams.keyword" aria-label="搜索标题、摘要或标签" :prefix-icon="Search" placeholder="搜索标题、摘要或标签" clearable />
         </el-form-item>
-        <el-form-item label="内容类型" class="type-filter">
+        <el-form-item class="type-filter">
           <el-select v-model="queryParams.category" aria-label="内容类型" placeholder="全部类型" clearable>
             <el-option label="新闻" value="news" />
             <el-option label="公众号" value="wechat" />
@@ -14,7 +14,7 @@
         </el-form-item>
         <el-form-item class="filter-actions">
           <el-button type="primary" native-type="submit" :icon="Search" :loading="loading">搜索</el-button>
-          <el-button :icon="Refresh" @click="resetQuery">重置</el-button>
+          <el-button v-if="hasDraftFilters || hasAppliedFilters" :icon="Refresh" @click="resetQuery">重置</el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -58,7 +58,7 @@
 </template>
 <script setup>
 import { formatBusinessTime } from '@/utils/portal/businessTime'
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Calendar, Refresh, Search, View } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
@@ -68,9 +68,12 @@ defineOptions({ name: 'PipelineIntelligence' })
 const router = useRouter()
 const loading = ref(false), loadError = ref(''), rows = ref([]), total = ref(0)
 const queryParams = reactive({ pageNum: 1, pageSize: 10, keyword: '', category: '' })
+const hasDraftFilters = computed(() => Boolean(queryParams.keyword.trim() || queryParams.category))
+const hasAppliedFilters = ref(false)
 function categoryText(category) { return { news: '新闻', wechat: '公众号', paper: '论文' }[category] || category }
 function categoryType(category) { return { news: 'primary', wechat: 'success', paper: 'warning' }[category] || 'info' }
 async function getList() {
+ hasAppliedFilters.value = hasDraftFilters.value
  loading.value = true; loadError.value = ''
  try { const res = await listPipelineIntelligence(queryParams); rows.value = res.data.rows; total.value = res.data.total }
  catch (error) { rows.value = []; total.value = 0; loadError.value = error?.msg || error?.message || '情报列表加载失败，请重试'; ElMessage.warning(loadError.value) }

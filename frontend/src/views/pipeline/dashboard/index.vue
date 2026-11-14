@@ -43,7 +43,7 @@
             <div class="category-list-heading"><span>类别</span><span>文章数量</span></div>
             <div v-for="topic in dashboard.hot_topics" :key="topic.name" class="topic-row"><el-tag effect="plain">{{ topic.name }}</el-tag><span><strong>{{ topic.count }}</strong> 条</span></div>
           </div>
-          <el-empty v-else description="暂无分类统计" :image-size="64"><p class="empty-description">新闻和论文完成分类后显示统计结果。</p><el-button v-if="checkPermi(['ai:model:list'])" plain @click="$router.push('/pipeline/model')">配置类别提示词</el-button></el-empty>
+          <el-empty v-else description="暂无分类统计" :image-size="64"><p class="empty-description">新闻和论文完成分类后显示统计结果。</p><el-button v-if="checkRole(['admin'])" plain @click="$router.push('/pipeline/category-prompts')">配置类别提示词</el-button></el-empty>
         </el-card>
       </div>
     </template>
@@ -55,7 +55,7 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { ArrowRight, Collection, Connection, DataAnalysis, Document, EditPen, MagicStick, InfoFilled, Reading } from '@element-plus/icons-vue'
 import { getPipelineDashboard } from '@/api/pipeline/intelligence'
-import { checkPermi } from '@/utils/permission'
+import { checkPermi, checkRole } from '@/utils/permission'
 
 defineOptions({ name: 'PipelineDashboard' })
 
@@ -66,7 +66,7 @@ const adminEntries = [
   { title: '数据源管理', description: '维护网站、公众号和论文来源', path: '/pipeline/source', permission: 'pipeline:source:list', icon: Connection },
   { title: '采集任务', description: '调度采集、清洗和解析任务', path: '/pipeline/task', permission: 'pipeline:task:list', icon: DataAnalysis },
   { title: '模板管理', description: '维护提示词、章节和生成模型', path: '/pipeline/template', permission: 'pipeline:template:list', icon: Document },
-  { title: '模型与类别提示词', description: '配置模型能力、类别及提示词', path: '/pipeline/model', permission: 'ai:model:list', icon: MagicStick },
+  { title: '模型管理', description: '配置文本和图像模型', path: '/pipeline/model', permission: 'ai:model:list', icon: MagicStick },
   { title: '报告与导出', description: '编辑报告并跟踪导出任务', path: '/pipeline/report', permission: 'pipeline:report:list', icon: EditPen }
 ]
 const visibleAdminEntries = computed(() => adminEntries.filter(item => checkPermi([item.permission])))

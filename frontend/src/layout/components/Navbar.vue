@@ -12,7 +12,7 @@
       <template v-if="appStore.device !== 'mobile'">
         <header-search id="header-search" class="right-menu-item" />
 
-        <el-button text type="primary" @click="$router.push('/portal')">用户端</el-button>
+        <el-button v-if="!isAuditOnly(userStore.roles)" text type="primary" @click="$router.push('/portal')">用户端</el-button>
 
         <screenfull id="screenfull" class="right-menu-item hover-effect" />
 
@@ -64,6 +64,7 @@ import HeaderSearch from '@/components/HeaderSearch'
 import useAppStore from '@/store/modules/app'
 import useUserStore from '@/store/modules/user'
 import useSettingsStore from '@/store/modules/settings'
+import { isAuditOnly } from '@/utils/portal/auth'
 
 const appStore = useAppStore()
 const userStore = useUserStore()

@@ -16,6 +16,7 @@ from app.research.services.exports import ResearchReportExportService
 from app.research.services.jobs import ResearchJobService
 from app.research.services.report_content import (
     normalize_generated_report,
+    normalize_task_report,
     number_report_citations,
     sections_from_markdown,
 )
@@ -133,9 +134,7 @@ class ResearchApplicationService:
         normalized_result = job.result_content
         if job.result_content:
             try:
-                normalized_result = normalize_generated_report(job.result_content, job.materials, delivery=True)[
-                    'content'
-                ]
+                normalized_result = normalize_task_report(job.result_content, job.materials, snapshot)['content']
             except ValueError:
                 # Keep malformed raw output inspectable; never call it applied.
                 pass
@@ -238,7 +237,8 @@ class ResearchApplicationService:
                 for index, citation in enumerate(citations, 1)
                 if citation.get('id') is not None
             }
-            ids.extend(ordinals[identity] for identity in re.findall(r'\[(\d+)\]', body) if identity in ordinals)
+            if not ('数据源：' in body and '### ' in body):
+                ids.extend(ordinals[identity] for identity in re.findall(r'\[(\d+)\]', body) if identity in ordinals)
             for identity in re.findall(r'\[资料(\d+)\]', body):
                 matches = by_source.get(identity, [])
                 if len(matches) == 1:

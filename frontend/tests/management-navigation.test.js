@@ -16,14 +16,14 @@ const page = (path, title = path, extra = {}) => ({ path, component: () => {}, m
 const directory = (path, children, extra = {}) => ({ path, component: 'Layout', children, ...extra })
 const leafMenus = menus => menus.flatMap(menu => menu.children ? leafMenus(menu.children) : [menu])
 
-test('available modules follow the eleven-module requirements order regardless of backend root order', () => {
+test('available modules follow the configured module order regardless of backend root order', () => {
   const menus = buildManagementNavigation([
     directory('/monitor', [page('server'), page('job')]),
     directory('/system', [page('config'), page('user'), page('role')]),
     directory('/pipeline', [page('template'), page('report'), page('knowledge'), page('governance'), page('source'), page('dashboard')])
   ])
   assert.deepEqual(menus.map(menu => menu.meta.title), [
-    '管理首页', '用户管理', '采集管理', '资料库管理', '报告管理', '模板管理', '系统配置', '运行日志'
+    '管理首页', '用户管理', '采集管理', '报告管理', '模板管理', '系统配置', '运行日志'
   ])
   assert.equal(menus.find(menu => menu.meta.title === '报告管理').path, '/pipeline/report')
   assert.deepEqual(menus.find(menu => menu.meta.title === '用户管理').children.map(menu => menu.path), ['/system/user', '/system/role'])
@@ -63,14 +63,15 @@ test('report management keeps its group when multiple authorized entries are ava
 test('backend default empty and whitespace query strings keep every available module', () => {
   const paths = [
     '/pipeline/dashboard', '/system/user', '/pipeline/source',
-    '/pipeline/intelligence', '/pipeline/knowledge', '/pipeline/report', '/pipeline/digest',
+    '/pipeline/intelligence', '/pipeline/report', '/pipeline/digest',
     '/pipeline/template', '/pipeline/model', '/pipeline/category-prompts', '/monitor/server'
   ]
   const data = paths.map((path, index) => page(path, path, { hidden: false, query: index % 2 ? '  \n  ' : '' }))
+  data.push(page('/pipeline/knowledge', '已下线的资料库管理'))
   const snapshot = JSON.stringify(data)
   const menus = buildManagementNavigation(data.toReversed())
   assert.deepEqual(menus.map(menu => menu.meta.title), [
-    '管理首页', '用户管理', '采集管理', '情报查询', '资料库管理',
+    '管理首页', '用户管理', '采集管理', '情报查询',
     '报告管理', '简报管理', '模板管理', '模型管理', '类别提示词', '运行日志'
   ])
   assert.deepEqual(leafMenus(menus).map(menu => menu.path), paths)

@@ -31,6 +31,8 @@ from common.http.schemas import CrudResponseModel
 from config.env import AppConfig, JwtConfig
 from exceptions.exception import AuthException, LoginException, ServiceException
 
+AUDITOR_LOG_PERMISSIONS = frozenset({'monitor:operlog:list', 'monitor:operlog:query', 'monitor:logininfor:list'})
+
 
 class LoginService:
     """
@@ -217,6 +219,8 @@ class LoginService:
                 permissions = [row.permissions for row in query_user.get('user_menu_info')]
             role_ids = ','.join([str(row.id) for row in query_user.get('user_role_info')])
             roles = [row.code for row in query_user.get('user_role_info')]
+            if 'auditor' in roles and 'admin' not in roles:
+                permissions = [permission for permission in permissions if permission in AUDITOR_LOG_PERMISSIONS]
             is_default_modify_pwd = await cls.__init_password_is_modify(
                 redis, query_user.get('user_basic_info').password_updated_at
             )

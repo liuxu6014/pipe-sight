@@ -51,6 +51,9 @@ def clean_report_citations(content: str, title: str = '') -> str:
                 reference_level = level
             lines.append(line)
             continue
+        if re.match(r'^\[\d+\] ', line) and '【' in line:
+            lines.append(line)
+            continue
         if reference_level is not None:
             lines.append(line)
             continue

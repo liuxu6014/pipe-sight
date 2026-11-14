@@ -43,9 +43,16 @@ class CategoryService:
         if identity and row is None:
             raise ServiceException(message='类别不存在')
         if payload['is_enabled']:
+            from app.intelligence.services.translation_settings import (  # noqa: PLC0415
+                PROCESSING_MODEL_KEY,
+                configured_model_id,
+            )
+
+            payload = dict(payload)
+            payload['model_id'] = await configured_model_id(db, PROCESSING_MODEL_KEY)
             model = await db.get(AiModels, payload['model_id']) if payload.get('model_id') else None
-            if not model or not model.is_enabled or 'text_generate' not in model.capabilities:
-                raise ServiceException(message='启用类别前请配置具备 text_generate 能力的文本模型')
+            if not model or not model.is_enabled or 'text_generate' not in (model.capabilities or []):
+                raise ServiceException(message='请先在模型管理中配置可用的内容处理模型，再启用类别')
         if row is None:
             row = PipelineCategory()
             db.add(row)
@@ -95,7 +102,7 @@ class CategoryService:
         matches = []
         for row in rows:
             model = await db.get(AiModels, row.model_id)
-            if not model or not model.is_enabled or 'text_generate' not in model.capabilities:
+            if not model or not model.is_enabled or 'text_generate' not in (model.capabilities or []):
                 raise ServiceException(message=f'类别“{row.name}”的文本模型不可用')
             snapshot = {key: getattr(model, key) for key in ('id', 'provider', 'code', 'base_url', 'parameters')}
             answer = await call(

@@ -121,6 +121,20 @@ def env(monkeypatch):
     models_module.AiModels = AiModels
     monkeypatch.setitem(sys.modules, models_module.__name__, models_module)
 
+    class SysConfig(Base):
+        __tablename__ = 'sys_config'
+        id = Column(Integer, primary_key=True, autoincrement=True)
+        key = Column(String(100), unique=True)
+        name = Column(String(100))
+        value = Column(String(500))
+        type = Column(String(1))
+        remark = Column(String(500))
+        updated_at = Column(DateTime)
+
+    config_module = ModuleType('app.system.models.config')
+    config_module.SysConfig = SysConfig
+    monkeypatch.setitem(sys.modules, config_module.__name__, config_module)
+
     def content_model(name, table, fields):
         attrs = {
             '__tablename__': table,
@@ -164,7 +178,9 @@ def env(monkeypatch):
     content.PipelinePaper = content_model(
         'PipelinePaper',
         'papers',
-        dict.fromkeys(('title_zh', 'doi', 'authors', 'journal', 'published_date', 'abstract', 'abstract_zh'), Text)
+        dict.fromkeys(
+            ('title_zh', 'doi', 'authors', 'journal', 'published_date', 'abstract', 'abstract_zh', 'summary'), Text
+        )
         | {'entities': JSON},
     )
     monkeypatch.setitem(sys.modules, content.__name__, content)
@@ -220,6 +236,7 @@ def env(monkeypatch):
         models=model,
         content=content,
         ai_model=AiModels,
+        config=SysConfig,
         repo=repository.CollectionRepository,
         conflict=repository.CollectionConflict,
         lost=repository.LeaseLost,
@@ -1100,11 +1117,16 @@ async def configured_category(e, *, kind='all', enabled=True) -> None:
 
 @pytest.mark.parametrize('source_type', ['website', 'wechat'])
 @pytest.mark.asyncio
-async def test_real_category_service_called_outside_run_locks_and_saved(env, source_type) -> None:
+async def test_legacy_category_service_called_outside_run_locks_and_saved(env, source_type) -> None:
     e = env
     await configured_category(e, kind='news')
     s = await source(e, type=source_type)
     r = await enqueue(e, s['id'])
+    legacy = await e.repo.run(e.db, r['id'])
+    legacy.config_snapshot = {
+        key: value for key, value in legacy.config_snapshot.items() if not key.startswith('processing_')
+    }
+    await e.db.commit()
     e.state.batches = [
         e.batch([{'title': '管网新闻', 'url': 'https://example.test/article', 'content': '真实采集正文输入'}], {})
     ]
@@ -1117,11 +1139,16 @@ async def test_real_category_service_called_outside_run_locks_and_saved(env, sou
 
 
 @pytest.mark.asyncio
-async def test_paper_classification_never_receives_fulltext_and_failure_retries(env) -> None:
+async def test_legacy_paper_classification_never_receives_fulltext_and_failure_retries(env) -> None:
     e = env
     await configured_category(e, kind='paper')
     s = await source(e, type='paper')
     r = await enqueue(e, s['id'])
+    legacy = await e.repo.run(e.db, r['id'])
+    legacy.config_snapshot = {
+        key: value for key, value in legacy.config_snapshot.items() if not key.startswith('processing_')
+    }
+    await e.db.commit()
     e.state.batches = [
         e.batch(
             [{'title': '论文', 'doi': '10.1234/abstract', 'abstract': '实际摘要', 'content': 'SECRET_FULLTEXT'}], {}
@@ -1140,11 +1167,16 @@ async def test_paper_classification_never_receives_fulltext_and_failure_retries(
 
 
 @pytest.mark.asyncio
-async def test_stop_while_classifying_cancels_model_task_without_writing(env) -> None:
+async def test_legacy_stop_while_classifying_cancels_model_task_without_writing(env) -> None:
     e = env
     await configured_category(e)
     s = await source(e)
     r = await enqueue(e, s['id'])
+    legacy = await e.repo.run(e.db, r['id'])
+    legacy.config_snapshot = {
+        key: value for key, value in legacy.config_snapshot.items() if not key.startswith('processing_')
+    }
+    await e.db.commit()
     cleaned = []
 
     async def waiting_model(classification_db) -> None:

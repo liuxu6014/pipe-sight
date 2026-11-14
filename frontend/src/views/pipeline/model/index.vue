@@ -2,18 +2,21 @@
  <div class="app-container pipeline-page pipeline-model-page ws-list-page">
 
   <template v-if="showModelSection">
-   <el-tabs v-model="activeTab" class="model-type-tabs" aria-label="模型分类">
-    <el-tab-pane v-for="group in modelGroups" :key="group.value" :name="group.value" :label="group.label">
-     <template #label><span class="model-tab-label">{{ group.label }}<span v-if="!modelLoading && !modelError" class="model-tab-count">{{ modelCounts[group.value] }}</span></span></template>
-     <template v-if="activeTab === group.value">
-   <div class="model-management-toolbar">
+   <el-tabs v-model="activePanel" class="model-type-tabs" aria-label="模型管理功能">
+    <el-tab-pane name="library" label="模型库"><template #label><span class="model-tab-label">模型库<span v-if="!modelLoading && !modelError" class="model-tab-count">{{ modelCounts.all }}</span></span></template></el-tab-pane>
+    <el-tab-pane name="purposes" label="用途配置" />
+   </el-tabs>
+   <div v-show="activePanel === 'library'" class="model-management-toolbar">
     <el-input v-model="modelKeyword" :prefix-icon="Search" clearable aria-label="搜索模型" placeholder="搜索模型名称、编码或服务商" />
+    <el-select v-model="activeTab" class="model-type-filter" aria-label="模型类型">
+     <el-option v-for="group in modelGroups" :key="group.value" :value="group.value" :label="group.value === 'all' ? '全部类型' : group.label" />
+    </el-select>
     <el-dropdown v-if="canModelAdd" trigger="click" @command="openModelDialog">
      <el-button type="primary" :icon="Plus">添加模型<el-icon class="model-add-arrow"><ArrowDown /></el-icon></el-button>
      <template #dropdown><el-dropdown-menu><el-dropdown-item command="text" :icon="Cpu">文本模型</el-dropdown-item><el-dropdown-item command="image" :icon="Picture">图像模型</el-dropdown-item></el-dropdown-menu></template>
     </el-dropdown>
    </div>
-   <section class="ws-list-scroll" tabindex="0" :aria-label="activeModelGroup.label + '列表'" :aria-busy="modelLoading">
+   <section v-show="activePanel === 'library'" class="ws-list-scroll" tabindex="0" :aria-label="activeModelGroup.label + '列表'" :aria-busy="modelLoading">
      <div v-if="modelLoading" class="model-empty">正在加载模型配置…</div>
      <el-alert v-else-if="modelError" :title="modelError" type="error" :closable="false" show-icon><template #default><el-button @click="loadModels">重新加载</el-button></template></el-alert>
      <el-empty v-else-if="!visibleModels.length" :description="modelKeyword.trim() ? '没有匹配的模型' : activeTab === 'all' ? '尚未配置模型' : `尚未配置${activeModelGroup.label}`" :image-size="72" />
@@ -44,9 +47,9 @@
       </article>
      </div>
    </section>
-     </template>
-    </el-tab-pane>
-   </el-tabs>
+   <section v-show="activePanel === 'purposes'" class="ws-list-scroll model-purpose-panel" aria-label="用途配置">
+    <ModelPurposeSettings :models="models" :loading="modelLoading" :model-error="modelError" :editable="canModelEdit" :addable="canModelAdd" @reload-models="loadModels" @add-model="openModelDialog" />
+   </section>
   </template>
   <section v-if="showCategorySection" class="category-panel ws-list-scroll" aria-label="类别提示词">
     <div class="category-toolbar">
@@ -59,7 +62,7 @@
      <el-table-column prop="name" label="类别名称" width="180"><template #default="{ row }"><strong class="category-name">{{ row.name }}</strong></template></el-table-column>
      <el-table-column label="分类要求" min-width="360"><template #default="{ row }"><el-tooltip placement="top" :show-after="500" popper-class="category-prompt-tooltip"><template #content><div class="category-prompt-tooltip-content">{{ categoryPromptText(row.prompt || '') }}</div></template><p class="category-prompt-summary" tabindex="0">{{ categoryPromptText(row.prompt || '') || '尚未填写分类要求' }}</p></el-tooltip></template></el-table-column>
      <el-table-column prop="appliesTo" label="适用内容" width="110"><template #default="{ row }">{{ ({ all: '全部', news: '新闻资讯', paper: '论文' })[row.appliesTo] || row.appliesTo || '—' }}</template></el-table-column>
-     <el-table-column label="分类模型" width="180" show-overflow-tooltip><template #default="{ row }">{{ models.find(model => model.modelId === row.modelId)?.modelName || (row.modelId ? '已选择模型' : '未配置') }}</template></el-table-column>
+
      <el-table-column label="状态" width="100" align="center"><template #default="{ row }"><el-tag :type="row.isEnabled ? 'success' : 'info'" effect="light">{{ row.isEnabled ? '已启用' : '已停用' }}</el-tag></template></el-table-column>
      <el-table-column label="操作" width="250" align="center"><template #default="{ row }"><el-button v-if="canCategorySave" plain type="primary" :disabled="categoryBusy" @click="openCategory(row)">编辑</el-button><el-button v-if="canCategorySave" plain :disabled="!row.isEnabled || categoryBusy" :loading="categoryDisabling === row.id" @click="disableCategory(row)">停用</el-button><el-button v-if="canCategorySave" plain type="danger" :disabled="categoryBusy" :loading="categoryDeleting === row.id" @click="deleteCategory(row)">删除</el-button></template></el-table-column>
     </el-table>
@@ -78,7 +81,7 @@
     <section class="processing-preview" aria-labelledby="processing-preview-title">
      <header class="preview-header">
       <div><h2 id="processing-preview-title">预览范围</h2><p>查看当前启用类别如何组合成提示词。仅本地预览，不调用模型。</p></div>
-      <el-select v-model="previewKind" aria-label="预览适用来源" class="preview-source"><el-option label="全部启用类别" value="all" /><el-option label="普通新闻" value="news" /><el-option label="论文" value="paper" /><el-option label="已确认官网" value="website" /></el-select>
+      <el-select v-model="previewKind" aria-label="预览适用来源" class="preview-source"><el-option label="全部启用类别" value="all" /><el-option label="新闻资讯" value="news" /><el-option label="论文" value="paper" /></el-select>
      </header>
      <el-alert v-if="categoryLoading || categoryError" :title="categoryLoading ? '类别读取中，暂不能预览综合提示词' : '类别读取失败，请先重新加载；不使用旧数据预览'" type="warning" :closable="false" />
      <template v-else>
@@ -91,7 +94,7 @@
       <p v-else class="preview-empty">当前范围暂无启用的分类要求，请先配置并启用类别。</p>
       <el-collapse class="preview-details">
        <el-collapse-item title="完整提示词" name="prompt">
-        <p class="preview-help">只读内容包含过滤、分类、摘要及实体抽取等规则。此处展示拼接文本，不代表后端已采用该处理流程。</p>
+        <p class="preview-help">只读内容包含过滤、分类、摘要及实体抽取等规则。此处展示处理规则说明。采集时由统一内容处理模型生成并校验结果，预览不会发起调用。</p>
         <p v-for="warning in processingPreview.warnings" :key="warning" class="preview-warning">{{ warning }}</p>
         <el-input :model-value="processingPreview.systemPrompt" aria-label="完整系统提示词，只读" type="textarea" :rows="12" readonly resize="vertical" class="preview-prompt" />
        </el-collapse-item>
@@ -105,10 +108,11 @@
     </section>
    <template #footer><el-button @click="previewVisible = false">关闭</el-button></template>
   </el-dialog>
+
   <el-dialog v-if="showModelSection" v-model="modelDialogVisible" class="model-config-dialog ps-centered-dialog" :title="modelDialogTitle" width="min(660px, calc(100vw - 32px))" align-center>
    <el-form label-position="top" class="model-config-form" autocomplete="off">
     <div class="model-form-grid">
-     <el-form-item label="模型名称"><el-input v-model="modelForm.name" placeholder="例如：DeepSeek 文本生成" autocomplete="off" /></el-form-item>
+     <el-form-item label="模型名称"><el-input v-model="modelForm.name" :placeholder="hasImageGeneration && !hasTextCapability ? '例如：图片生成模型' : '例如：文本生成模型'" autocomplete="off" /></el-form-item>
      <el-form-item label="服务商"><el-select v-model="modelForm.provider" filterable placeholder="选择服务商"><el-option v-for="provider in providers" :key="provider.value" :label="provider.label" :value="provider.value" /></el-select></el-form-item>
      <el-form-item label="模型编码" class="is-full"><el-input v-model="modelForm.modelId" placeholder="填写服务商提供的模型编码" autocomplete="off" /></el-form-item>
      <el-form-item label="接口地址" class="is-full model-help-field">
@@ -148,13 +152,7 @@
       <small v-if="legacyPromptText" class="category-prompt-help">旧格式已转为文字显示；修改并保存后将使用新的文字描述。</small>
     </el-form-item>
     <div class="category-enable-row"><span>启用类别</span><el-switch v-model="categoryForm.isEnabled" aria-label="启用类别" /><span class="category-prompt-help">启用后参与内容分类</span></div>
-    <el-collapse v-model="categoryAdvanced">
-      <el-collapse-item title="高级设置 · 分类模型" name="model">
-        <el-form-item label="分类模型"><el-select v-model="categoryForm.modelId" clearable placeholder="请选择文本模型"><el-option v-for="model in textModels" :key="model.modelId" :label="model.modelName || model.modelCode" :value="model.modelId" /></el-select></el-form-item>
-        <p class="category-prompt-help">启用类别前需选择可用的文本模型；暂不启用时可先保存分类要求。</p>
-        <el-alert v-if="modelError" :title="modelError" type="warning" :closable="false"><template #default><el-button plain @click="loadModels">重新加载模型</el-button></template></el-alert>
-      </el-collapse-item>
-    </el-collapse>
+    <p class="category-prompt-help">分类、摘要与实体抽取统一使用模型管理中配置的内容处理模型。</p>
    </el-form>
    <template #footer><el-button :disabled="categorySaving" @click="categoryDialogVisible = false">取消</el-button><el-button v-if="canCategorySave" type="primary" :loading="categorySaving" @click="saveCategory">保存</el-button></template>
   </el-dialog>
@@ -166,12 +164,14 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, Picture, Cpu, Edit, ArrowDown } from '@element-plus/icons-vue'
 import { addModel, listModelAll, updateModel } from '@/api/ai/model'
 import { listPipelineCategories, createPipelineCategory, updatePipelineCategory, deletePipelineCategory } from '@/api/pipeline/categories'
+import ModelPurposeSettings from './components/ModelPurposeSettings.vue'
 import { categoryPayload, modelCapabilities, modelsFor } from '@/utils/pipeline/compactContract'
 import { CATEGORY_PRESETS, categoryPresetDraft, categoryPromptText, buildProcessingPrompt } from '@/utils/pipeline/processingPrompt'
 import { checkPermi, checkRole } from '@/utils/permission'
 const props = defineProps({ section: { type: String, default: 'models' } })
 const providers = [{ value: 'openai', label: 'OpenAI' }, { value: 'openai-compatible', label: 'OpenAI 兼容' }, { value: 'compatible', label: '其他服务商的兼容端点' }, { value: 'deepseek', label: 'DeepSeek' }]
 function capabilityLabel(value) { return ({ text_generate: '数据处理（文本）', image_input: '图片输入', image_generate: '图片生成', reasoning: '推理' })[value] || value }
+const activePanel = ref('library')
 const activeTab = ref('all')
 const modelKeyword = ref(''), modelToggling = ref(null)
 const modelGroups = [
@@ -302,7 +302,7 @@ async function saveCategory() {
  try {
   const prompt = legacyPromptText.value && categoryForm.prompt === legacyPromptText.value ? editingCategory.value.prompt : categoryForm.prompt
   const data = categoryPayload({ ...categoryForm, prompt })
-  if (data.isEnabled && !textModels.value.some(model => String(model.modelId) === String(data.modelId))) { categoryAdvanced.value = ['model']; throw new Error('请在高级设置中选择可用的文本模型，再启用类别') }
+
   if (editingCategory.value) await updatePipelineCategory(editingCategory.value.id, data)
   else await createPipelineCategory(data)
   categoryDialogVisible.value = false; ElMessage.success('类别已保存'); await loadCategories()
@@ -402,16 +402,16 @@ onMounted(() => {
 .category-config-form :deep(.el-select__wrapper.is-focused) { box-shadow: 0 0 0 1px #7da6c0 inset, 0 0 0 2px #409eff10; }
 .category-config-form :deep(.el-textarea__inner:focus) { box-shadow: 0 0 0 1px #7da6c0 inset, 0 0 0 2px #409eff10; }
 @media (max-width: 520px) { .category-basic-grid { grid-template-columns: minmax(0, 1fr); gap: 0; } .category-options-row { gap: 24px; flex-wrap: wrap; } }
-.model-type-tabs { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+.model-type-tabs { flex-shrink: 0; min-width: 0; }
 .model-type-tabs > :deep(.el-tabs__header) { flex-shrink: 0; margin: 0 0 16px; }
 .model-type-tabs > :deep(.el-tabs__header .el-tabs__item) { height: 44px; }
-.model-type-tabs > :deep(.el-tabs__content) { flex: 1; min-height: 0; }
-.model-type-tabs :deep(.el-tab-pane) { display: flex; flex-direction: column; height: 100%; min-height: 0; gap: 12px; }
+.model-type-tabs > :deep(.el-tabs__content) { display: none; }
 .model-tab-label { display: inline-flex; align-items: center; gap: 8px; }
 .model-tab-count { min-width: 20px; padding-inline: 5px; border-radius: 4px; background: var(--el-fill-color); color: var(--el-text-color-regular); font-size: 12px; font-weight: 400; line-height: 20px; text-align: center; font-variant-numeric: tabular-nums; }
 .model-type-tabs :deep(.is-active) .model-tab-count { color: var(--el-color-primary); background: var(--el-color-primary-light-9); }
 .model-management-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 16px; border: 1px solid var(--el-border-color-light); border-radius: 8px; background: var(--el-bg-color); }
 .model-management-toolbar > .el-input { flex: 1 1 220px; min-width: 0; }
+.model-management-toolbar > .model-type-filter { flex: 0 0 150px; }
 .model-management-toolbar > .el-dropdown { flex-shrink: 0; margin-inline-start: auto; }
 .model-add-arrow { margin-left: 8px; }
 .pipeline-model-page .category-panel { padding: 16px; border: 1px solid var(--el-border-color-light); border-radius: 8px; background: var(--el-bg-color); }

@@ -4,8 +4,8 @@ import { getRouters } from '@/api/menu'
 import Layout from '@/layout/index'
 import ParentView from '@/components/ParentView'
 import InnerLink from '@/layout/components/InnerLink'
-import { isManagementIdentity } from '@/utils/portal/auth'
-import { buildManagementNavigation, cloneNavigationRoutes } from '@/utils/management-navigation'
+import { canAccessApplicationPath, isAuditOnly, isManagementIdentity } from '@/utils/portal/auth'
+import { buildManagementNavigation, cloneNavigationRoutes, resolveNavigationPath } from '@/utils/management-navigation'
 
 // 匹配views里面所有的.vue文件
 const modules = import.meta.glob('./../../views/**/*.vue')
@@ -54,11 +54,13 @@ const usePermissionStore = defineStore(
       async generateRoutes(user = {}) {
         // 返回 API 调用本身的 Promise，使失败能传递到登录页和路由守卫。
         const res = await getRouters()
-        const sdata = JSON.parse(JSON.stringify(res.data))
-        const rdata = JSON.parse(JSON.stringify(res.data))
+        const auditOnly = isAuditOnly(user.roles)
+        const routes = auditOnly ? filterAuditorMenus(res.data, user) : res.data
+        const sdata = JSON.parse(JSON.stringify(routes))
+        const rdata = JSON.parse(JSON.stringify(routes))
         const sidebarRoutes = filterAsyncRouter(sdata)
         const rewriteRoutes = filterAsyncRouter(rdata, false, true)
-        const asyncRoutes = filterDynamicRoutes(dynamicRoutes)
+        const asyncRoutes = auditOnly ? [] : filterDynamicRoutes(dynamicRoutes)
         asyncRoutes.forEach(route => { router.addRoute(route) })
         this.setRoutes(rewriteRoutes)
         // 明确标记的真实动态入口也须先通过原有权限过滤；静态隐藏路由不提升。
@@ -74,10 +76,20 @@ const usePermissionStore = defineStore(
     }
   })
 
+function filterAuditorMenus(routes, user, base = '') {
+  return routes.flatMap(route => {
+    const path = resolveNavigationPath(base, route.path)
+    if (!route.children?.length) return canAccessApplicationPath(user, path) ? [route] : []
+    const children = filterAuditorMenus(route.children, user, path)
+    return children.length ? [{ ...route, children }] : []
+  })
+}
+
 // 遍历后台传来的路由字符串，转换为组件对象
 function filterAsyncRouter(asyncRouterMap, lastRouter = false, type = false) {
   return asyncRouterMap.filter(route => {
-    if (['pipeline/governance/index', 'pipeline/filter/index', 'ai/chat/index'].includes(route.component) || ['/pipeline/governance', '/pipeline/filter', '/ai/chat'].includes(route.path)) return false
+    if (['pipeline/governance/index', 'pipeline/filter/index', 'pipeline/knowledge/index', 'ai/chat/index'].includes(route.component)
+      || ['/pipeline/governance', '/pipeline/filter', '/pipeline/knowledge', '/ai/chat'].includes(route.path)) return false
     if (type && route.children) {
       route.children = filterChildren(route.children)
     }

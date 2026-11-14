@@ -1,61 +1,84 @@
 <template>
   <div class="ps-page ps-profile-page">
+    <PortalPageHeader title="账户设置" />
     <el-skeleton v-if="loading" :rows="6" animated />
     <div v-else-if="loadError" class="ps-inline-state is-warning" role="alert"><span>{{ loadError }}</span><el-button @click="loadProfile">重新加载</el-button></div>
-    <section v-else class="ps-profile-panel" aria-label="个人账户设置">
-      <el-tabs v-model="activeTab" class="ps-profile-tabs">
-        <el-tab-pane label="个人资料" name="basic" :disabled="passwordSaving" />
-        <el-tab-pane label="账户安全" name="security" :disabled="saving || avatarSaving" />
-      </el-tabs>
-      <el-form v-if="activeTab === 'basic'" class="ps-profile-form" label-position="top" :disabled="saving" @submit.prevent="saveProfile">
-        <PortalAvatarEditor @saving="avatarSaving = $event" />
+    <div v-else class="ps-profile-panel">
+      <PortalAvatarEditor :disabled="saving || passwordSaving" @saving="avatarSaving = $event">
+        <div class="ps-profile-account">
+          <h2>{{ snapshot.nickName || accountName }}</h2>
+          <dl>
+            <dt>登录账号</dt>
+            <dd>{{ accountName }}</dd>
+          </dl>
+        </div>
+      </PortalAvatarEditor>
+
+      <el-form class="ps-profile-form" label-position="left" aria-labelledby="profile-basic-heading" :disabled="accountSaving" @submit.prevent="saveProfile">
+        <h2 id="profile-basic-heading">基本资料</h2>
         <div class="ps-profile-fields">
-          <el-form-item label="登录账号"><el-input :model-value="accountName" readonly aria-label="登录账号，只读" :prefix-icon="User" /><small class="ps-profile-field-hint">登录账号不可修改</small></el-form-item>
           <el-form-item label="昵称" required><el-input v-model="form.nickName" aria-label="昵称" maxlength="30" autocomplete="nickname" show-word-limit /></el-form-item>
           <el-form-item label="手机号码"><el-input v-model="form.phonenumber" aria-label="手机号码" maxlength="11" inputmode="tel" autocomplete="tel" :prefix-icon="Phone" placeholder="填写手机号码" /></el-form-item>
           <el-form-item label="邮箱"><el-input v-model="form.email" aria-label="邮箱" maxlength="50" autocomplete="email" :prefix-icon="Message" placeholder="填写常用邮箱" /></el-form-item>
+          <el-form-item label="性别"><el-radio-group v-model="form.sex" class="ps-profile-gender" aria-label="性别"><el-radio value="0">男</el-radio><el-radio value="1">女</el-radio><el-radio value="2">不设置</el-radio></el-radio-group></el-form-item>
         </div>
-        <el-form-item label="性别"><el-radio-group v-model="form.sex" aria-label="性别"><el-radio value="0">男</el-radio><el-radio value="1">女</el-radio><el-radio value="2">不设置</el-radio></el-radio-group></el-form-item>
         <p v-if="saveError" class="ps-profile-error" role="alert">{{ saveError }}</p>
         <div class="ps-profile-actions">
+          <el-button :disabled="accountSaving || !isDirty" @click="resetProfile">撤销修改</el-button>
+          <el-button type="primary" native-type="submit" :disabled="accountSaving || !isDirty" :loading="saving">保存资料</el-button>
           <span v-if="isDirty" class="ps-profile-save-state" role="status">有未保存的修改</span>
-          <div><el-button :disabled="saving || avatarSaving || !isDirty" @click="resetProfile">撤销修改</el-button><el-button type="primary" native-type="submit" :disabled="avatarSaving || !isDirty" :loading="saving">保存资料</el-button></div>
         </div>
       </el-form>
-      <el-form v-else class="ps-profile-form ps-profile-security-form" label-position="top" :disabled="passwordSaving" @submit.prevent="savePassword">
-        <el-form-item label="原密码" required><el-input v-model="password.oldPassword" aria-label="原密码" type="password" autocomplete="current-password" placeholder="请输入当前登录密码" show-password /></el-form-item>
-        <el-form-item label="新密码" required><el-input v-model="password.newPassword" aria-label="新密码" type="password" autocomplete="new-password" maxlength="20" placeholder="设置 6–20 个字符的新密码" show-password /></el-form-item>
-        <el-form-item label="确认新密码" required><el-input v-model="password.confirmPassword" aria-label="确认新密码" type="password" autocomplete="new-password" maxlength="20" placeholder="再次输入新密码" show-password /></el-form-item>
-        <p v-if="passwordError" class="ps-profile-error" role="alert">{{ passwordError }}</p>
-        <div class="ps-profile-actions"><div><el-button :disabled="passwordSaving" @click="resetPassword">清空输入</el-button><el-button type="primary" native-type="submit" :loading="passwordSaving">修改密码</el-button></div></div>
-      </el-form>
-    </section>
+
+      <section class="ps-profile-security" aria-labelledby="profile-security-heading">
+        <h2 id="profile-security-heading">账户安全</h2>
+        <el-collapse>
+          <el-collapse-item name="password" title="修改密码">
+            <el-form class="ps-profile-form ps-profile-password-form" label-position="left" aria-label="修改密码" :disabled="accountSaving" @submit.prevent="savePassword">
+              <div class="ps-profile-fields">
+                <el-form-item label="原密码" required><el-input v-model="password.oldPassword" aria-label="原密码" type="password" autocomplete="current-password" placeholder="请输入当前登录密码" show-password /></el-form-item>
+                <el-form-item label="新密码" required><el-input v-model="password.newPassword" aria-label="新密码" type="password" autocomplete="new-password" maxlength="20" placeholder="设置 6–20 个字符的新密码" show-password /></el-form-item>
+                <el-form-item label="确认新密码" required><el-input v-model="password.confirmPassword" aria-label="确认新密码" type="password" autocomplete="new-password" maxlength="20" placeholder="再次输入新密码" show-password /></el-form-item>
+              </div>
+              <p v-if="passwordError" class="ps-profile-error" role="alert">{{ passwordError }}</p>
+              <div class="ps-profile-actions">
+                <el-button @click="resetPassword">清空输入</el-button>
+                <el-button type="primary" native-type="submit" :loading="passwordSaving">修改密码</el-button>
+              </div>
+            </el-form>
+          </el-collapse-item>
+        </el-collapse>
+      </section>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { User, Phone, Message } from '@element-plus/icons-vue'
+import { Phone, Message } from '@element-plus/icons-vue'
 import PortalAvatarEditor from '../components/PortalAvatarEditor.vue'
+import PortalPageHeader from '../components/PortalPageHeader.vue'
 import useUserStore from '@/store/modules/user'
 import { getUserProfile, updateUserProfile, updateUserPwd } from '@/api/system/user'
 import { profileFields, validateProfile, validatePasswordChange } from '@/utils/portal/profile'
 
 const userStore = useUserStore()
-const activeTab = ref('basic')
 const avatarSaving = ref(false)
 const loading = ref(true), loadError = ref(''), saveError = ref(''), passwordError = ref('')
 const saving = ref(false), passwordSaving = ref(false), accountName = ref('')
+const accountSaving = computed(() => saving.value || avatarSaving.value || passwordSaving.value)
 const form = reactive(profileFields())
 const password = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
 const snapshot = ref(profileFields())
 const isDirty = computed(() => JSON.stringify(profileFields(form)) !== JSON.stringify(snapshot.value))
 let active = true, generation = 0
 const isCurrent = id => active && String(userStore.id) === id
-function resetPassword() { Object.assign(password, { oldPassword: '', newPassword: '', confirmPassword: '' }) }
+function resetPassword() {
+  Object.assign(password, { oldPassword: '', newPassword: '', confirmPassword: '' })
+  passwordError.value = ''
+}
 function resetProfile() { Object.assign(form, snapshot.value); saveError.value = '' }
-watch(activeTab, () => { resetPassword(); passwordError.value = '' })
 async function loadProfile() {
   const id = String(userStore.id), request = ++generation
   loading.value = true; loadError.value = ''
@@ -69,7 +92,7 @@ async function loadProfile() {
   finally { if (isCurrent(id) && request === generation) loading.value = false }
 }
 async function saveProfile() {
-  if (saving.value || avatarSaving.value || loading.value || loadError.value) return
+  if (accountSaving.value || loading.value || loadError.value) return
   saveError.value = validateProfile(form)
   if (saveError.value) return
   const id = String(userStore.id), fields = profileFields(form)
@@ -83,7 +106,7 @@ async function saveProfile() {
   finally { if (isCurrent(id)) saving.value = false }
 }
 async function savePassword() {
-  if (passwordSaving.value) return
+  if (accountSaving.value || loading.value || loadError.value) return
   passwordError.value = validatePasswordChange(password)
   if (passwordError.value) return
   const id = String(userStore.id)
@@ -99,30 +122,49 @@ onBeforeUnmount(() => { active = false; generation += 1; resetPassword() })
 </script>
 
 <style scoped>
-.ps-profile-page { max-width: 900px; margin-inline: auto; }
-.ps-profile-panel { padding: 0 24px 20px; border: 1px solid var(--ps-line); border-radius: 12px; background: #fff; min-width: 0; }
-.ps-profile-tabs :deep(.el-tabs__header) { margin-bottom: 18px; }
-.ps-profile-tabs :deep(.el-tabs__item) { height: 48px; font-size: 15px; }
-.ps-profile-tabs :deep(.el-tabs__nav-wrap::after) { height: 1px; background: var(--ps-line); }
-.ps-profile-tabs :deep(.el-tabs__content) { display: none; }
-.ps-profile-form :deep(.ps-avatar-setting) { gap: 16px; padding-bottom: 16px; margin-bottom: 16px; }
-.ps-profile-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 20px; }
-.ps-profile-form :deep(.el-form-item) { margin-bottom: 14px; }
-.ps-profile-form :deep(.el-form-item__label) { margin-bottom: 6px; color: var(--ps-ink-2); font-size: 14px; }
-.ps-profile-form :deep(.el-input__wrapper) { min-height: 44px; border-radius: 6px; }
-.ps-profile-form :deep(.el-input__inner[readonly]) { color: var(--ps-muted); }
-.ps-profile-form :deep(.el-radio) { min-height: 44px; }
-.ps-profile-field-hint { margin-top: 4px; color: var(--ps-muted); font-size: 12px; }
-.ps-profile-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--ps-line-soft); }
-.ps-profile-actions > div { display: flex; gap: 10px; margin-left: auto; }
-.ps-profile-actions :deep(.el-button) { margin-left: 0; min-width: 96px; }
+.ps-profile-page > :deep(.ps-page-header) { min-height: 0; margin: 0; }
+.ps-profile-panel {
+  --ps-profile-inset: clamp(16px, 2.5cqi, 32px);
+  --ps-profile-label-width: clamp(120px, 15cqi, 180px);
+  --ps-profile-input-width: 420px;
+  overflow: hidden;
+  border: 1px solid var(--ps-line);
+  border-radius: 12px;
+  background: var(--ps-paper);
+}
+.ps-profile-account { min-width: 0; overflow-wrap: anywhere; }
+.ps-profile-account dl { display: flex; flex-wrap: wrap; gap: 0 8px; margin: 0; color: var(--ps-muted); font-size: 13px; }
+.ps-profile-account dd { margin: 0; color: var(--ps-ink-2); }
+.ps-profile-panel > .ps-profile-form, .ps-profile-security { padding: 20px var(--ps-profile-inset); }
+.ps-profile-panel h2 { margin: 0 0 12px; color: var(--ps-ink); font-size: 17px; line-height: 1.4; }
+.ps-profile-account h2 { margin-bottom: 4px; font-size: 19px; }
+.ps-profile-fields :deep(.el-form-item) {
+  display: grid;
+  grid-template-columns: var(--ps-profile-label-width) minmax(0, var(--ps-profile-input-width));
+  align-items: center;
+  margin: 0;
+  padding-block: 10px;
+  border-bottom: 1px solid var(--ps-line-soft);
+}
+.ps-profile-form :deep(.el-form-item__label) { color: var(--ps-ink-2); font-size: 14px; }
+.ps-profile-form :deep(.el-input__wrapper) { min-height: 40px; border-radius: 6px; }
+.ps-profile-gender { gap: 0 16px; }
+.ps-profile-gender :deep(.el-radio) { min-height: 44px; margin-right: 0; }
+.ps-profile-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 16px 0 0 var(--ps-profile-label-width); }
+.ps-profile-actions :deep(.el-button) { margin: 0; }
 .ps-profile-save-state { color: #956020; font-size: 12px; }
-.ps-profile-error { color: #a43333; font-size: 13px; line-height: 1.6; }
-.ps-profile-security-form { max-width: 520px; }
-@media (max-width: 600px) {
-  .ps-profile-panel { padding: 0 16px 16px; }
-  .ps-profile-tabs :deep(.el-tabs__header) { margin-bottom: 16px; }
-  .ps-profile-fields { grid-template-columns: minmax(0, 1fr); }
+.ps-profile-error { margin-inline-start: var(--ps-profile-label-width); color: #a43333; font-size: 13px; line-height: 1.6; }
+.ps-profile-security { border-top: 1px solid var(--ps-line); }
+.ps-profile-security :deep(.el-collapse) { --el-collapse-border-color: var(--ps-line-soft); }
+.ps-profile-security :deep(.el-collapse-item__header) { padding-inline: 12px; }
+.ps-profile-security :deep(.el-collapse-item__header:hover) { background: var(--el-fill-color-lighter); }
+.ps-profile-security :deep(.el-collapse-item__content) { padding-bottom: 16px; }
+.ps-profile-password-form { padding-top: 4px; }
+@container workspace (max-width: 540px) {
+  .ps-profile-panel { --ps-profile-label-width: 0px; }
+  .ps-profile-fields :deep(.el-form-item) { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .ps-profile-form :deep(.el-form-item__label) { height: auto; padding: 0; line-height: 1.5; }
+  .ps-profile-form :deep(.el-input__wrapper) { min-height: 44px; }
   .ps-profile-form :deep(.el-input__inner) { font-size: 16px; }
 }
 </style>

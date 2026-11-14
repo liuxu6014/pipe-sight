@@ -1,19 +1,19 @@
 <template>
-  <div class="ps-page ps-list-page ps-search-list-page">
-    <PortalPageHeader title="全局搜索">
+  <div class="ps-page ps-list-page ps-search-list-page" :class="{ 'ps-search-in-dialog': inDialog }">
+    <PortalPageHeader v-if="!inDialog" title="全局搜索">
       <template v-if="hasActiveFilters" #actions><el-button @click="clearFilters">清除筛选</el-button></template>
     </PortalPageHeader>
 
-    <div class="ps-search-mode ps-segmented-row"><el-segmented v-model="searchMode" :options="[{ label: '关键词搜索', value: 'keyword' }, { label: '语义搜索（待接入）', value: 'semantic' }]" aria-label="检索方式"  /></div>
-    <form class="ps-search-hero" @submit.prevent="applyKeyword">
+    <div v-if="!inDialog" class="ps-search-mode ps-segmented-row"><el-segmented v-model="searchMode" :options="[{ label: '关键词搜索', value: 'keyword' }, { label: '语义搜索（待接入）', value: 'semantic' }]" aria-label="检索方式"  /></div>
+    <form class="ps-search-hero" role="search" aria-label="全局搜索" @submit.prevent="applyKeyword">
       <Search />
-      <input v-model.trim="draftKeyword" maxlength="200" aria-label="全站搜索关键词" :placeholder="searchMode === 'semantic' ? '用自然语言描述你想研究的问题' : '输入题名、作者、摘要或资料名称'" />
-      <el-button native-type="submit" type="primary">{{ searchMode === 'semantic' ? '语义搜索' : '搜索' }}</el-button>
+      <input ref="searchInput" v-model.trim="draftKeyword" maxlength="200" aria-label="全站搜索关键词" :placeholder="inDialog ? '搜索资讯、论文、资料和报告' : searchMode === 'semantic' ? '用自然语言描述你想研究的问题' : '输入题名、作者、摘要或资料名称'" />
+      <el-button v-if="!inDialog" native-type="submit" type="primary">{{ searchMode === 'semantic' ? '语义搜索' : '搜索' }}</el-button>
     </form>
 
-    <SavedSearchBar v-if="searchMode === 'keyword'" kind="search" :query="query" @apply="applySavedSearch" />
+    <SavedSearchBar v-if="!inDialog && searchMode === 'keyword'" kind="search" :query="query" @apply="applySavedSearch" />
     <section v-if="searchMode === 'semantic'" class="ps-semantic-pending ps-panel" role="status"><Search /><h2>语义搜索待接入</h2><p>你输入的问题已保留。接入向量模型并建立资料索引后，系统将按内容含义匹配研究线索，而不仅依赖字面关键词。</p><p>当前未执行语义检索，不展示模拟结果。你可以先切换到关键词搜索。</p><el-button type="primary" @click="useKeywordSearch">用当前输入进行关键词搜索</el-button></section>
-    <div v-else class="ps-search-summary" role="status" aria-live="polite">{{ loading ? '正在搜索…' : loadError ? '搜索失败，请重新加载' : `找到 ${total} 条与“${queryKeyword || '全部内容'}”相关的结果 · 当前页 ${filteredResults.length} 条` }}<p>当前条件：{{ filterSummary }}</p><small v-if="draftKeyword !== queryKeyword">输入内容尚未搜索，请点击“搜索”或按回车。</small></div>
+    <div v-else-if="!inDialog" class="ps-search-summary" role="status" aria-live="polite">{{ loading ? '正在搜索…' : loadError ? '搜索失败，请重新加载' : `找到 ${total} 条与“${queryKeyword || '全部内容'}”相关的结果 · 当前页 ${filteredResults.length} 条` }}<p>当前条件：{{ filterSummary }}</p><small v-if="draftKeyword !== queryKeyword">输入内容尚未搜索，请点击“搜索”或按回车。</small></div>
     <el-alert
       v-if="searchMode !== 'semantic' && pageLimitExceeded"
       title="结果较多，最多展示前 100 页，请增加关键词或筛选条件。"
@@ -22,8 +22,8 @@
       show-icon
     />
 
-    <div v-if="searchMode !== 'semantic'" class="ps-search-layout">
-      <aside class="ps-filter-panel">
+    <div v-if="searchMode !== 'semantic' && (!inDialog || queryKeyword)" class="ps-search-layout">
+      <aside v-if="!inDialog" class="ps-filter-panel">
         <h3><Filter />筛选条件</h3>
         <label><span>时间范围 <el-tooltip content="资讯和论文按来源发表时间，内部资料和报告按更新时间过滤。" placement="top"><el-icon class="ps-filter-help" aria-label="时间筛选说明"><InfoFilled /></el-icon></el-tooltip></span><el-select v-model="dateRange"><el-option label="全部时间" value="all" /><el-option label="近一周" value="week" /><el-option label="近一年" value="year" /></el-select></label>
         <label>内容来源<el-select v-model="source"><el-option label="全部来源" value="all" /><el-option label="公开来源" value="public" /><el-option label="内部资料" value="internal" /></el-select></label>
@@ -49,14 +49,14 @@
         <PortalEmptyState v-else-if="loadError && !loading" title="搜索失败" :description="loadError" action-label="重新加载" @action="reload" />
         <PortalEmptyState v-else-if="!loading" title="没有找到匹配结果" description="请减少筛选条件或尝试同义关键词。" :action-label="hasActiveFilters ? '清除筛选' : ''" @action="clearFilters" />
         </div>
-        <div v-if="total > 0 && !loading && !loadError" class="ps-pagination" aria-label="搜索结果分页">
+        <div v-if="total > (inDialog ? pageSize : 0) && !loading && !loadError" class="ps-pagination" aria-label="搜索结果分页">
           <el-pagination
             v-model:current-page="currentPage"
             v-model:page-size="pageSize"
             :page-sizes="[10, 20, 50]"
             :total="Math.min(total, pageSize * maxPageNum)"
             :pager-count="5"
-            layout="total, sizes, ->, prev, pager, next, jumper"
+            :layout="inDialog ? 'prev, pager, next' : 'total, sizes, ->, prev, pager, next, jumper'"
             background
           />
         </div>
@@ -69,7 +69,7 @@
 <script setup>
 import SavedSearchBar from '../components/SavedSearchBar.vue'
 import { applySavedSearchQuery } from '@/utils/portal/savedSearches'
-import { computed, ref, toRefs, watch } from 'vue'
+import { computed, reactive, ref, toRefs, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Filter, InfoFilled, Search } from '@element-plus/icons-vue'
@@ -80,18 +80,23 @@ import { getPipelineContentFilters, deletePipelineWorkspaceItem, savePipelineWor
 import { useListQuery, useListRequest, useListWorkspace, validPage } from '@/utils/portal/listQuery'
 import { openPortalContent } from '@/utils/portal/openContent'
 
+const props = defineProps({ inDialog: Boolean })
+const emit = defineEmits(['result-opened'])
+const searchInput = ref(null)
+
 const router = useRouter()
 const portalStore = usePortalStore()
-const facets = useListRequest(() => ({}), getPipelineContentFilters)
-const directionOptions = computed(() => [...new Set([...(facets.data.value?.categories || []), ...directions.value])])
+const facets = props.inDialog ? null : useListRequest(() => ({}), getPipelineContentFilters)
+const directionOptions = computed(() => [...new Set([...(facets?.data.value?.categories || []), ...directions.value])])
 const maxPageNum = 100
-const query = useListQuery({ q: '', mode: 'keyword', type: 'all', date: 'all', source: 'all', directions: [], page: 1, size: 10 }, { maxPage: maxPageNum })
+const defaults = { q: '', mode: 'keyword', type: 'all', date: 'all', source: 'all', directions: [], page: 1, size: 10 }
+const query = props.inDialog ? reactive(defaults) : useListQuery(defaults, { maxPage: maxPageNum })
 function applySavedSearch(filters) { if (!applySavedSearchQuery(query, filters, 'search')) reload() }
 const { q: queryKeyword, type: activeType, date: dateRange, source, directions, page: currentPage, size: pageSize } = toRefs(query)
 const searchMode = computed({ get: () => query.mode === 'semantic' ? 'semantic' : 'keyword', set: value => { query.mode = value === 'semantic' ? 'semantic' : 'keyword' } })
 const hasActiveFilters = computed(() => searchMode.value === 'keyword'
   && Boolean(queryKeyword.value || activeType.value !== 'all' || dateRange.value !== 'all' || source.value !== 'all' || directions.value.length))
-const draftKeyword = ref(queryKeyword.value)
+const draftKeyword = props.inDialog ? queryKeyword : ref(queryKeyword.value)
 const { inBasket, busy, toggleBasket } = useListWorkspace(portalStore, { save: savePipelineWorkspaceItem, remove: deletePipelineWorkspaceItem })
 let pageCursors = {}
 let cursorContext = ''
@@ -100,8 +105,10 @@ const total = computed(() => Number(data.value?.total || 0))
 const counts = computed(() => data.value?.counts || {})
 const pageLimitExceeded = computed(() => total.value > pageSize.value * maxPageNum)
 
-watch(queryKeyword, value => { draftKeyword.value = value })
+if (props.inDialog) watch([queryKeyword, activeType, pageSize], () => { currentPage.value = 1 })
+else watch(queryKeyword, value => { draftKeyword.value = value })
 function applyKeyword() {
+  if (props.inDialog) return
   if (queryKeyword.value === draftKeyword.value) reload()
   else queryKeyword.value = draftKeyword.value
 }
@@ -117,12 +124,20 @@ const { data, loading, loadError, reload } = useListRequest(() => ({
       pageSize: pageSize.value
 }), params => {
   // This UI-only semantic state must never secretly call keyword search.
-  if (params.mode === 'semantic') return Promise.resolve({ data: null })
+  if (params.mode === 'semantic' || (props.inDialog && !params.keyword)) return Promise.resolve({ data: null })
   const { mode, ...requestParams } = params
   const context = JSON.stringify({ ...params, pageNum: undefined })
   if (context !== cursorContext) { cursorContext = context; pageCursors = {} }
   return searchPipelineIntelligence({ ...requestParams, cursor: pageCursors[params.pageNum - 1] || undefined })
 })
+const dialogStatus = computed(() => {
+  if (!queryKeyword.value) return ''
+  if (loading.value) return '正在搜索…'
+  if (loadError.value) return '搜索失败，请重新加载'
+  return `找到 ${total.value} 条结果`
+})
+defineExpose({ focusSearch: () => searchInput.value?.focus(), dialogStatus })
+
 const filteredResults = computed(() => (data.value?.rows || []).map(item => ({
       id: item.id,
       type: item.type,
@@ -149,7 +164,11 @@ const filterSummary = computed(() => [tabs.find(tab => tab.value === activeType.
 function countByType(type) { return counts.value[type] ?? 0 }
 function openResult(result) {
   if (!result?.path) return ElMessage.warning('该结果暂未提供可访问的详情路径')
-  openPortalContent(router, result.path).catch(() => ElMessage.warning('该结果暂时无法打开，请刷新后重试'))
+  openPortalContent(router, result.path)
+    .then(() => {
+      if (props.inDialog && router.resolve(result.path).path === router.currentRoute.value.path) emit('result-opened')
+    })
+    .catch(() => ElMessage.warning('该结果暂时无法打开，请刷新后重试'))
 }
 async function add(result) {
   if (result.type === 'document' && !inBasket(result)) return openResult(result)
@@ -170,5 +189,32 @@ function clearFilters() {
 .ps-search-layout { grid-template-columns: 218px minmax(0, 1fr); }
 .ps-filter-help { width: 14px; height: 14px; vertical-align: middle; color: var(--ps-muted); }
 .ps-filter-help :deep(svg) { width: 14px; height: 14px; }
+.ps-search-in-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-height: min(65dvh, calc(100dvh - 94px));
+  padding: 0;
+  color: var(--ps-ink);
+}
+.ps-search-in-dialog .ps-search-hero { flex: 0 0 48px; margin: 0; box-shadow: none; }
+.ps-search-in-dialog .ps-search-layout,
+.ps-search-in-dialog .ps-results-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  align-items: stretch;
+}
+.ps-search-in-dialog .ps-tabs-line { flex: none; overflow-x: auto; }
+.ps-search-in-dialog .ps-list-scroll { min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.ps-search-in-dialog .ps-result-list { padding: 0 14px; }
+.ps-search-in-dialog .ps-result-card { padding: 12px 0; }
+.ps-search-in-dialog .ps-result-card:last-child { border-bottom: 0; }
+.ps-search-in-dialog .ps-pagination { flex: none; justify-content: center; }
+@media (max-width: 560px) {
+  .ps-search-in-dialog .ps-search-hero { padding-left: 10px; }
+  .ps-search-in-dialog .ps-result-card { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+}
 @media (max-width: 960px) { .ps-search-layout { grid-template-columns: minmax(0, 1fr); } }
 </style>

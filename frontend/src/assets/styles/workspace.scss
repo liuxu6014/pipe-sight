@@ -52,6 +52,22 @@
   padding-block: var(--ws-page-space) 12px;
 }
 
+.ps-portal .ps-portal-main:has(> .ps-profile-page) {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+.ps-portal .ps-workspace-surface > .ps-profile-page {
+  width: 100%;
+  margin: 0;
+  padding: 12px clamp(12px, 1.5vw, 24px);
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 // 资料篮独占当前视口：主区保留页头占位，列表消化剩余高度。
 .ps-portal .ps-portal-main:has(> .ps-basket-page) {
   height: 100vh;

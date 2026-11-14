@@ -45,7 +45,6 @@ export function stopResultMessage(run = {}) {
 
 export function categoryPayload(form) {
   if (!form.name?.trim() || !form.prompt?.trim()) throw new Error('请填写类别名称和分类提示词')
-  if (form.isEnabled && !form.modelId) throw new Error('启用类别前请选择文本生成模型；未配置时可保存为停用')
   return { name: form.name.trim(), prompt: form.prompt.trim(), modelId: form.modelId || null,
     appliesTo: form.appliesTo || 'all', sortOrder: form.sortOrder ?? 0, isEnabled: Boolean(form.isEnabled) }
 }

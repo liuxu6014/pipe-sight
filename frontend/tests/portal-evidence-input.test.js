@@ -752,7 +752,7 @@ test('precise dates reject year-only, month-only, invalid dates and handle Shang
   assert.equal(evidence.digestCandidate(article('paper', { category: 'paper' }), scope), false)
 })
 
-test('digest independent plan dialog does not couple plan configuration to manual generation', async () => {
+test('manual digest generation switches cadence without schedule configuration', async () => {
   const ctx = await mount('DigestCreateView')
   try {
     for (const [frequency, type] of [
@@ -763,8 +763,6 @@ test('digest independent plan dialog does not couple plan configuration to manua
       assert.equal(ctx.page.form.type, type)
       assert.equal(ctx.page.currentTypeConfig.value.reportType, frequency)
     }
-    ctx.page.planDialog.value = true
-    assert.equal(ctx.page.form.type, '月报')
     assert.equal(Object.hasOwn(ctx.page.form, 'schedule'), false)
     assert.equal(ctx.mutations, 0)
   } finally { ctx.close() }

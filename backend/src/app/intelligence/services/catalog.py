@@ -58,7 +58,7 @@ class IntelligenceCatalogService:
             'publish_time': date,
             'publication_year': int(date[:4]) if date else None,
             'tags': [category.name] if category else [],
-            'summary': abstract,
+            'summary': getattr(item, 'summary', None) or abstract,
             'source_url': item.url or '',
             'sourceUrl': item.url or '',
             'doi': item.doi or '',

@@ -43,6 +43,15 @@ function finishHydration(requests, name) {
     : { rows: [], total: 0 } }))
 }
 
+test('digest coverage uses the saved reporting period instead of the later generation date', () => {
+  const { store } = portalStore()
+  store.liveReports = [{ id: '139', type: 'monthly', title: '四月月报', status: 'completed',
+    metadata: { period: ['2025-04-01', '2025-04-30'] }, updatedAt: '2026-11-08 17:04:45' }]
+  assert.equal(store.digestReports[0].period, '2025-04-01 至 2025-04-30')
+  store.liveReports[0].metadata.period = []
+  assert.equal(store.digestReports[0].period, '未设置覆盖周期')
+})
+
 test('portal hydration fetches unified reports once and shares report failures with digest state', async () => {
   const { store, requests } = portalStore()
   const pending = store.hydrate()

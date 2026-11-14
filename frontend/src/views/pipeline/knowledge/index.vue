@@ -19,7 +19,7 @@
           <div class="knowledge-status-head">
             <strong>资料状态</strong>
             <div class="knowledge-status-actions">
-              <el-button type="primary" :icon="UploadFilled" @click="openUpload">上传资料</el-button>
+              <el-button type="primary" size="large" :icon="UploadFilled" @click="openUpload">上传资料</el-button>
             </div>
           </div>
         </template>
@@ -361,6 +361,8 @@ onMounted(loadDocuments)
 
 .knowledge-status-actions .el-button {
   margin: 0;
+  min-width: 132px;
+  min-height: 44px;
 }
 
 .knowledge-alert {

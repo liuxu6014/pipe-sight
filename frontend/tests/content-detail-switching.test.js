@@ -20,20 +20,19 @@ function harness() {
     window: { location: { origin: 'http://127.0.0.1' } }, URL, ElMessage: { error() {}, success() {} }
   })
   const scope = vue.effectScope()
-  scope.run(() => vm.runInContext(descriptor.scriptSetup.content.replace(/^import .*\n/gm, '') + '\nglobalThis.subject = { loadArticle, article, activeTab, language, visibleBody, summaryText, content, detailLoading }', context))
+  scope.run(() => vm.runInContext(descriptor.scriptSetup.content.replace(/^import .*\n/gm, '') + '\nglobalThis.subject = { loadArticle, article, language, visibleBody, summaryText, content, detailLoading }', context))
   return { ...context.subject, requests, route, stop: () => scope.stop() }
 }
 
-test('news defaults to summary and keeps original text separate from stored translation', async () => {
+test('news exposes summary and full text together and keeps the stored translation separate', async () => {
   const h = harness()
   try {
     const loading = h.loadArticle()
     h.requests[0]({ data: { id: '18', category: 'news', summary: '真实摘要', content_original: 'Original text', content_zh: '已保存的中文' } })
     await loading
-    assert.equal(h.activeTab.value, 'summary')
     assert.equal(h.summaryText.value, '真实摘要')
     assert.deepEqual(Array.from(h.visibleBody.value), ['Original text'])
-    h.activeTab.value = 'fulltext'; h.language.value = 'zh'
+    h.language.value = 'zh'
     assert.deepEqual(Array.from(h.visibleBody.value), ['已保存的中文'])
     assert.equal(h.requests.length, 1, 'reading and switching must not request translation')
   } finally { h.stop() }
@@ -50,7 +49,6 @@ test('late old news response cannot replace the current article or its language 
     h.requests[0]({ data: { id: '18', category: 'news', content: '旧正文' } })
     await old
     assert.equal(h.article.value.id, '19')
-    assert.equal(h.activeTab.value, 'summary')
     assert.equal(h.language.value, 'original')
     assert.equal(h.detailLoading.value, false)
   } finally { h.stop() }

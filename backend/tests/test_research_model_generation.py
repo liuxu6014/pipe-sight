@@ -40,6 +40,24 @@ def test_chapter_prompt_rejects_invalid_text_before_model_call(env, chapter_prom
 
 
 @pytest.mark.asyncio
+async def test_digest_prompt_uses_event_limits_instead_of_template_outline(env, monkeypatch) -> None:
+    gateway_call = AsyncMock(return_value='digest output')
+    monkeypatch.setattr(env.gateway.ModelGateway, 'call', gateway_call)
+    snapshot = {
+        'document_format': 'digest-reference-v1',
+        'template': {'prompt': '按真实证据撰写', 'sections': [{'title': '旧大纲', 'words': 2000}]},
+        'title': '管网科技情报月报',
+        'model': {'id': 1},
+        'request': {'options': {'summaryLength': 'normal'}},
+    }
+    await env.gateway.ResearchModelGenerationService.generate_content(None, snapshot, [{'id': 18}], task_id=10)
+    arguments = gateway_call.await_args.kwargs
+    assert '旧大纲' not in arguments['prompt'] and '"outline"' not in arguments['prompt']
+    assert '全篇最多 1 条事件' in arguments['system_prompt']
+    assert '目标 150 字以内，硬上限 200 字' in arguments['system_prompt']
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('raw', ['## 分析\n\n无法对应的结论[99]。', '## 分析\n\n没有引用的事实正文。'])
 async def test_invalid_manuscript_fails_without_overwriting_report(env, db, monkeypatch, raw) -> None:
     seed(env, db)
@@ -459,3 +477,36 @@ async def test_request_id_race_recomputes_fingerprint_with_winners_frozen_materi
     assert references == [['101'], ['101']]
     assert len(db.s.scalars(select(env.models.PipelineResearchJob)).all()) == 1
     assert len(db.s.scalars(select(env.models.PipelineReport)).all()) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('valid', [True, False])
+async def test_reference_digest_queue_execution_and_serializer_keep_per_event_sources(env, db, monkeypatch, valid) -> None:
+    import json
+
+    template, _ = seed(env, db)
+    template.name, template.purpose = '周报', 'digest'
+    monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
+    await db.commit()
+    result = await queue(env, db, payload(report_type='weekly', period=['2026-10-19', '2026-10-25']))
+    job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
+    assert job.config_snapshot['document_format'] == 'digest-reference-v1'
+    execution, _ = execution_context(env, db, monkeypatch)
+    raw = json.dumps({'format': 'digest-reference-v1', 'groups': [{'category': '油气管网', 'items': [{
+        'title': '检测技术进展', 'summary': '资料记载的事实。', 'insight': '适用条件仍需核实。',
+        'sourceIds': ['file:101' if valid else 'article:101'],
+    }]}]}, ensure_ascii=False)
+    monkeypatch.setattr(execution.ResearchModelGenerationService, 'generate_content', AsyncMock(return_value=raw))
+    await execution.ResearchExecutionService.process(job_id=result['jobId'], user_id=7)
+    db.s.expire_all()
+    job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
+    report = await env.repo.ResearchDao.get_report(db, result['reportId'], 7)
+    assert job.result_content == raw
+    if valid:
+        assert job.status == 'completed'
+        assert '### 1. 检测技术进展' in report.content and '数据源：' in report.content
+        display = env.app.ResearchApplicationService.job_dict(job, report=report)
+        assert display['resultContent'] == report.content and not display['applyConflict']
+    else:
+        assert job.status == 'failed' and '简报格式检查未通过' in job.error
+        assert report.content == ''

@@ -50,6 +50,19 @@ test('keeps the legacy portal login path public only as a compatibility redirect
   assert.equal(isPortalProtectedPath('/portal-login'), false)
 })
 
+test('auditors land in operation logs and cannot deep-link to business or system administration', () => {
+  const user = { roles: ['auditor', 'common'], permissions: ['system:user:edit'] }
+  assert.equal(getDefaultLoginPath(user), '/system/log/operlog')
+  assert.equal(portalAuth.canAccessApplicationPath(user, '/system/log/logininfor'), true)
+  assert.equal(portalAuth.canAccessApplicationPath(user, '/user/profile/resetPwd'), true)
+  for (const path of ['/portal', '/pipeline/model', '/system/user', '/monitor/job']) {
+    assert.equal(portalAuth.canAccessApplicationPath(user, path), false)
+    assert.equal(portalAuth.resolvePostLoginPath(user, path), '/system/log/operlog')
+  }
+  assert.equal(portalAuth.resolvePostLoginPath(user, '/system/log/logininfor?page=2'), '/system/log/logininfor?page=2')
+  assert.equal(portalAuth.canAccessApplicationPath({ roles: ['admin', 'auditor'] }, '/pipeline/model'), true)
+})
+
 test('redirects anonymous user portal requests to the unified login with the original target', () => {
   assert.equal(getLoginRedirect('/portal'), '/login?redirect=%2Fportal')
   assert.equal(getLoginRedirect('/portal/news/news-001'), '/login?redirect=%2Fportal%2Fnews%2Fnews-001')

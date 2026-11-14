@@ -4,7 +4,6 @@ const MODULES = [
   { key: 'users', title: '用户管理', icon: 'user' },
   { key: 'collection', title: '采集管理', icon: 'link', direct: true },
   { key: 'data', title: '情报查询', icon: 'documentation', direct: true },
-  { key: 'knowledge', title: '资料库管理', icon: 'documentation', direct: true },
   { key: 'reports', title: '报告管理', icon: 'documentation', direct: true },
   { key: 'digests', title: '简报管理', icon: 'documentation', direct: true },
   { key: 'templates', title: '模板管理', icon: 'documentation', direct: true },
@@ -23,7 +22,6 @@ const ENTRIES = {
   '/system/dept': ['users', '部门管理'],
   '/pipeline/source': ['collection', '数据源管理'],
   '/pipeline/intelligence': ['data', '情报查询'],
-  '/pipeline/knowledge': ['knowledge', '资料库管理'],
   '/pipeline/report': ['reports', '科研报告'],
   '/pipeline/manuscript': ['reports', '论文生成'],
   '/pipeline/digest': ['digests', '简报管理'],
@@ -38,8 +36,8 @@ const ENTRIES = {
 
 // 仅整理可见导航；这些上游模板入口仍保留在原路由注册树中。
 const TEMPLATE_MENU_PATHS = new Set(['/tool/swagger', '/monitor/druid'])
-// Reject stale backend snapshots; the retired components and routes no longer exist.
-const RETIRED_PIPELINE_PATHS = new Set(['/pipeline/filter', '/pipeline/governance', '/ai/chat'])
+// Reject retired entries from stale backend menu snapshots.
+const RETIRED_PIPELINE_PATHS = new Set(['/pipeline/filter', '/pipeline/governance', '/pipeline/knowledge', '/ai/chat'])
 const SETTINGS_ENTRY_ORDER = ['/system/config', '/system/dict', '/system/menu']
 // 旧任务页保留在注册树中，主导航统一进入来源列表。
 const COLLECTION_TASK_PATH = '/pipeline/task'

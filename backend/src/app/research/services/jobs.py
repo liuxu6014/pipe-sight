@@ -11,6 +11,7 @@ from app.intelligence.services.templates import PipelineTemplateService
 from app.research.models.research_models import PipelineReport, PipelineResearchJob, utcnow
 from app.research.repositories.research_repository import ResearchDao
 from app.research.services.evidence import ResearchEvidenceService
+from app.research.services.project_demand_document import PROJECT_DEMAND_FORMAT, PROJECT_DEMAND_TEMPLATE_NAMES
 from exceptions.exception import ServiceException
 
 
@@ -108,10 +109,13 @@ class ResearchJobService:
         if purpose == 'digest':
             PipelineTemplateService.validate_digest_cadence(template, kind)
         image_config = PipelineTemplateService.effective_image_config(template.image_config, data)
-        model = await template_service.validate_models(db, template.model_id, template.image_model_id, image_config)
+        model_id, image_model_id = await PipelineTemplateService.generation_model_ids(
+            db, purpose, template, image_config, required=True
+        )
+        model = await template_service.validate_models(db, model_id, image_model_id, image_config)
         image_model = None
         if image_config.get('enabled'):
-            image_model = await ResearchDao.get_model(db, template.image_model_id)
+            image_model = await ResearchDao.get_model(db, image_model_id)
             if not 1 <= int(image_config.get('count', 1)) <= 10:  # noqa: PLR2004
                 raise ServiceException(message='配图数量须在 1 至 10 之间')
         materials = await ResearchEvidenceService.resolve(db, user_id, selections, payload)
@@ -166,7 +170,7 @@ class ResearchJobService:
                 'digestCadence': PipelineTemplateService.digest_cadence(template),
                 'sections': deepcopy(template.sections),
                 'image_config': image_config,
-                'image_model_id': wire_id(template.image_model_id),
+                'image_model_id': wire_id(image_model_id),
             },
             'model': {
                 'id': wire_id(model.id),
@@ -176,6 +180,13 @@ class ResearchJobService:
                 'parameters': params,
             },
         }
+        if kind in {'weekly', 'monthly'}:
+            snapshot['document_format'] = 'digest-reference-v1'
+        elif (
+            getattr(template, 'report_type', None) == 'project-demand'
+            and template.name in PROJECT_DEMAND_TEMPLATE_NAMES
+        ):
+            snapshot['document_format'] = PROJECT_DEMAND_FORMAT
         # 请求只含 ID/筛选；绝不从前端接受正文副本或凭证。
         snapshot['request'].pop('materials', None)
         snapshot['request']['selected_item_ids'] = [{'type': item['type'], 'id': item['id']} for item in materials]

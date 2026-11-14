@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import * as Vue from 'vue'
 import * as navigation from '../src/utils/management-navigation.js'
-import { isManagementIdentity } from '../src/utils/portal/auth.js'
+import * as portalAuth from '../src/utils/portal/auth.js'
 
 // 执行实际 store action，以 API stub 检查异步失败和重试；不依赖页面源码字符串断言。
 function permissionStore(getRouters, { constantRoutes = [], dynamicRoutes = [], views = [], allowedRoles = [], allowedPermissions = [] } = {}) {
@@ -25,7 +25,7 @@ function permissionStore(getRouters, { constantRoutes = [], dynamicRoutes = [], 
       hasPermiOr: values => values.some(value => allowedPermissions.includes(value)),
       hasRoleOr: values => values.some(value => allowedRoles.includes(value))
     },
-    isManagementIdentity, ...navigation,
+    ...portalAuth, ...navigation,
     defineStore: (_name, options) => Vue.reactive(Object.assign(options.state(), options.actions))
   })
   vm.runInContext(source, context)
@@ -105,7 +105,7 @@ test('real backend query-empty shape survives generation and Settings reload alo
   t.after(drawer.stop)
   await Vue.nextTick()
   assert.deepEqual(Array.from(store.sidebarRouters, menu => menu.meta.title), [
-    '管理首页', '用户管理', '采集管理', '情报查询', '资料库管理', '报告管理', '简报管理', '模板管理', '模型管理', '类别提示词', '运行日志'
+    '管理首页', '用户管理', '采集管理', '情报查询', '报告管理', '简报管理', '模板管理', '模型管理', '类别提示词', '运行日志'
   ])
   assert.equal(store.routes[2].children[0].query, '')
   assert.equal(store.routes[2].children.at(-1).hidden, true)
@@ -118,7 +118,7 @@ test('the real filter management entry remains absent without review-list permis
   })
   await store.generateRoutes({ roles: ['admin'] })
   assert.equal(addedRoutes.some(route => route.path === '/pipeline/filter'), false)
-  assert.deepEqual(Array.from(store.navigationRoutes, menu => menu.meta.title), ['资料库管理', '简报管理', '类别提示词'])
+  assert.deepEqual(Array.from(store.navigationRoutes, menu => menu.meta.title), ['简报管理', '类别提示词'])
   assert.deepEqual(addedRoutes.find(route => route.path === '/pipeline/category-prompts').children[0].props.section, 'categories')
 })
 
@@ -245,7 +245,6 @@ test('only authorized dynamic management entries join navigation; other routes a
   const { store, addedRoutes } = permissionStore(async () => ({ data: [] }), {
     allowedRoles: ['admin'],
     dynamicRoutes: [
-      entry('/pipeline/knowledge', '资料库'),
       entry('/pipeline/digest', '周期简报'),
       entry('/pipeline/report', '科研成果'),
       entry('/plain-dynamic', '普通动态页面', { meta: {} }),
@@ -258,17 +257,51 @@ test('only authorized dynamic management entries join navigation; other routes a
   })
   const registered = await store.generateRoutes({ roles: ['admin'] })
   assert.equal(registered.length, 0)
-  assert.deepEqual(Array.from(store.navigationRoutes, menu => menu.meta.title), ['资料库管理', '报告管理', '简报管理'])
-  assert.equal(store.navigationRoutes[1].path, '/pipeline/report')
-  assert.equal(store.navigationRoutes[1].meta.title, '报告管理')
+  assert.deepEqual(Array.from(store.navigationRoutes, menu => menu.meta.title), ['报告管理', '简报管理'])
+  assert.equal(store.navigationRoutes[0].path, '/pipeline/report')
+  assert.equal(store.navigationRoutes[0].meta.title, '报告管理')
+  assert.equal(store.navigationRoutes[0].children, undefined)
+  assert.equal(store.navigationRoutes[1].path, '/pipeline/digest')
   assert.equal(store.navigationRoutes[1].children, undefined)
-  assert.equal(store.navigationRoutes[2].path, '/pipeline/digest')
-  assert.equal(store.navigationRoutes[2].children, undefined)
   assert.deepEqual(addedRoutes.map(route => route.path), [
-    '/pipeline/knowledge', '/pipeline/digest', '/pipeline/report', '/plain-dynamic', '/hidden-detail', '/missing-page'
+    '/pipeline/digest', '/pipeline/report', '/plain-dynamic', '/hidden-detail', '/missing-page'
   ])
   assert.equal(store.defaultRoutes.length, 1)
   assert.equal(store.defaultRoutes[0].path, '/static-only')
+})
+
+test('stale management knowledge routes are neither registered nor exposed in navigation', async () => {
+  const { store } = permissionStore(async () => ({ data: [
+    { path: '/pipeline', component: 'Layout', children: [
+      { path: 'knowledge', component: 'pipeline/knowledge/index', meta: { title: '资料库管理' } },
+      { path: 'dashboard', component: 'pipeline/dashboard/index', meta: { title: '管理首页' } }
+    ] }
+  ] }), { views: ['pipeline/knowledge/index', 'pipeline/dashboard/index'] })
+  const routes = await store.generateRoutes({ roles: ['admin'] })
+  assert.deepEqual(Array.from(routes[0].children, route => route.path), ['dashboard'])
+  assert.deepEqual(Array.from(store.navigationRoutes, route => route.path), ['/pipeline/dashboard'])
+  assert.equal(projectDynamicRoutes().some(route => route.path === '/pipeline/knowledge'), false)
+})
+
+test('auditor only receives the two audit routes even if the backend menu includes other grants', async () => {
+  const { store, addedRoutes } = permissionStore(async () => ({ data: [
+    { path: '/system', component: 'Layout', children: [
+      { path: 'user', component: 'system/user/index', meta: { title: '账号管理' } },
+      { path: 'log', component: 'ParentView', children: [
+        { path: 'operlog', component: 'monitor/operlog/index', meta: { title: '操作日志' } },
+        { path: 'logininfor', component: 'monitor/logininfor/index', meta: { title: '登录日志' } }
+      ] }
+    ] }
+  ] }), {
+    views: ['system/user/index', 'monitor/operlog/index', 'monitor/logininfor/index'],
+    dynamicRoutes: projectDynamicRoutes(),
+    allowedPermissions: ['system:user:edit']
+  })
+  const routes = await store.generateRoutes({ roles: ['auditor'] })
+  assert.deepEqual(Array.from(routes[0].children, route => route.path), ['log/operlog', 'log/logininfor'])
+  assert.equal(store.navigationRoutes[0].meta.title, '运行日志')
+  assert.deepEqual(Array.from(store.navigationRoutes[0].children, menu => menu.path), ['/system/log/operlog', '/system/log/logininfor'])
+  assert.deepEqual(addedRoutes, [])
 })
 
 test('a managementEntry flag cannot bypass the existing dynamic role check', async () => {

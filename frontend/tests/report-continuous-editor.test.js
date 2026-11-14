@@ -3,16 +3,18 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import { computed, ref, watch, effectScope } from 'vue'
+import { reportCitationParts } from '../src/utils/portal/reportDocument.js'
+import { citationSentenceBounds } from '../src/utils/portal/citationHighlight.js'
 
 function setup(globals = {}) {
   const text = readFileSync(new URL('../src/views/portal/pages/ReportEditorView.vue', import.meta.url), 'utf8')
   const source = text.split('<script setup>')[1].split('</script>')[0].replace(/^import .*\n/gm, '')
   const scope = effectScope()
-  const context = vm.createContext({ ref, computed, watch, onMounted() {}, onBeforeUnmount() {},
+  const context = vm.createContext({ ref, computed, watch, reportCitationParts, citationSentenceBounds, onMounted() {}, onBeforeUnmount() {},
     onBeforeRouteLeave() {}, onBeforeRouteUpdate() {}, useRoute: () => ({ params: { id: '33' }, path: '/portal/research/reports/33', query: {} }),
     useRouter: () => ({}), usePortalStore: () => ({ researchReports: [], digestReports: [] }), setTimeout() {}, clearTimeout() {}, ...globals,
   })
-  scope.run(() => vm.runInContext(`${source}\nglobalThis.editor = { sections, currentSectionId, updateSectionContent, updateSectionTitle, setSectionElement, setSectionBody, applyFormat, scrollToSection, syncVisibleSection, documentScrollRef, outlinePanelRef, keepActiveOutlineVisible }`, context))
+  scope.run(() => vm.runInContext(`${source}\nglobalThis.editor = { sections, currentSectionId, updateSectionContent, updateSectionTitle, setSectionElement, setSectionBody, applyFormat, scrollToSection, syncVisibleSection, documentScrollRef, outlinePanelRef, keepActiveOutlineVisible, citations, citationCards, locateCitation }`, context))
   return { text, editor: context.editor, close: () => scope.stop() }
 }
 
@@ -50,6 +52,41 @@ test('outline navigation scrolls the existing document; scrolling updates the ac
     Object.assign(editor.documentScrollRef.value, { scrollTop: 900, clientHeight: 100, scrollHeight: 1000 })
     editor.currentSectionId.value = 1
     editor.syncVisibleSection()
+    assert.equal(editor.currentSectionId.value, 2)
+  } finally { view.close() }
+})
+
+test('each use of a source can be located, including two uses in one paragraph', async () => {
+  const visited = []
+  const view = setup({
+    nextTick: async () => {},
+    window: {},
+    citationSentenceRange: (_paragraph, marker) => {
+      visited.push(marker.position)
+      return null
+    }
+  })
+  try {
+    const { editor } = view
+    editor.sections.value = [
+      { id: 1, title: '研究目标', content: '第一处[1]。第二处[1]。' },
+      { id: 2, title: '研究内容', content: '第三处[1]。' },
+      { id: 3, title: '参考资料', content: '[1] 来源' }
+    ]
+    editor.citations.value = [{ id: 1, title: '来源' }]
+    const [{ source, positions }] = editor.citationCards.value
+    assert.deepEqual(Array.from(positions, item => item.sectionTitle), ['研究目标', '研究目标', '研究内容'])
+    assert.deepEqual(Array.from(positions, item => item.sentence), ['第一处[1]。', '第二处[1]。', '第三处[1]。'])
+
+    const paragraph = { classList: { add() {} }, getBoundingClientRect: () => ({ top: 200 }) }
+    editor.documentScrollRef.value = { scrollTop: 0, querySelectorAll: () => [], getBoundingClientRect: () => ({ top: 0 }) }
+    for (const sectionId of [1, 2]) {
+      editor.setSectionBody(sectionId, {
+        querySelector: selector => ({ position: `${sectionId}:${selector}`, textContent: '[1]', closest: () => paragraph })
+      })
+    }
+    for (const position of positions) await editor.locateCitation(source, position)
+    assert.deepEqual(visited, ['1:[data-citation-position="0-1"]', '1:[data-citation-position="0-3"]', '2:[data-citation-position="0-1"]'])
     assert.equal(editor.currentSectionId.value, 2)
   } finally { view.close() }
 })

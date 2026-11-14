@@ -10,7 +10,40 @@ from common.http.context import RequestContext
 from common.http.security import oauth2_scheme
 from config.env import AppConfig
 from config.get_db import get_db
-from exceptions.exception import AuthException
+from exceptions.exception import AuthException, PermissionException
+
+AUDITOR_READ_PATHS = frozenset(
+    {
+        '/getInfo',
+        '/getRouters',
+        '/monitor/operlog/list',
+        '/monitor/logininfor/list',
+        '/system/dict/data/type/sys_oper_type',
+        '/system/dict/data/type/sys_common_status',
+        '/system/user/profile',
+    }
+)
+AUDITOR_ACCOUNT_ACTIONS = frozenset(
+    {
+        ('POST', '/logout'),
+        ('PUT', '/system/user/profile'),
+        ('PUT', '/system/user/profile/updatePwd'),
+        ('POST', '/system/user/profile/avatar'),
+    }
+)
+
+
+def _request_path(request: Request) -> str:
+    root = AppConfig.app_root_path.rstrip('/')
+    return request.url.path.removeprefix(root) if root and request.url.path.startswith(root + '/') else request.url.path
+
+
+def _enforce_auditor_scope(current_user: CurrentUserModel, method: str, path: str) -> None:
+    if 'auditor' not in current_user.roles or 'admin' in current_user.roles:
+        return
+    if (method == 'GET' and path in AUDITOR_READ_PATHS) or (method, path) in AUDITOR_ACCOUNT_ACTIONS:
+        return
+    raise PermissionException(data='', message='审计员仅可查阅运行日志')
 
 
 # 定义排除路由的字典结构
@@ -85,15 +118,8 @@ class PreAuth:
         :return: 当前用户信息
         """
         # 获取当前请求路径和方法
-        path = request.url.path
+        path = _request_path(request)
         method = request.method.upper()
-
-        # 从配置中获取APP_ROOT_PATH
-        app_root_path = AppConfig.app_root_path
-
-        # 去掉APP_ROOT_PATH前缀
-        if app_root_path and path.startswith(app_root_path):
-            path = path[len(app_root_path) :]
 
         # 设置上下文变量
         RequestContext.set_current_exclude_patterns(self.exclude_patterns)
@@ -118,6 +144,7 @@ class PreAuth:
         if not token:
             raise AuthException(data='', message='用户未登录，请先完成登录')
         current_user = await LoginService.get_current_user(request.app.state.redis, token, db)
+        _enforce_auditor_scope(current_user, method, path)
         RequestContext.set_current_user(current_user)
         return current_user
 
@@ -147,6 +174,7 @@ def CurrentUserDependency() -> params.Depends:  # noqa: N802
         db: AsyncSession = Depends(get_db),
     ) -> CurrentUserModel:
         current_user = await LoginService.get_current_user(request.app.state.redis, token, db)
+        _enforce_auditor_scope(current_user, request.method.upper(), _request_path(request))
         RequestContext.set_current_user(current_user)
         return current_user
 

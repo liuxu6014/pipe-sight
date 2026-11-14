@@ -5,6 +5,7 @@ import importlib
 import json
 from copy import deepcopy
 from datetime import timedelta
+from types import SimpleNamespace
 
 import pytest
 import test_collection_rollout as support
@@ -35,8 +36,9 @@ async def configured_source(e, *, kind='website', **overrides):
     for key, value in overrides.items():
         setattr(model, key, value)
     e.db.add(model)
+    e.db.add(e.config(key='pipeline.translation.modelId', value='1'))
     await e.db.commit()
-    return await source(e, model_id=1, type=kind), model
+    return await source(e, model_id=None, type=kind), model
 
 
 def record(kind='website'):
@@ -57,6 +59,66 @@ def record(kind='website'):
             else {'content': 'An English article about pipeline inspection.'}
         ),
     }
+
+
+def translation_calls(e):
+    return [
+        call
+        for call in e.state.category_requests
+        if call[1].get('request_id', '').startswith('collection-translation:')
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'field,translated', [('title', '管道检测技术研究'), ('abstract', '管道检测研究。\n\n这是第二段。')]
+)
+async def test_manual_paper_translation_is_saved_and_survives_recrawl(env, translation, field, translated) -> None:
+    e = env
+    source_data, _ = await configured_source(e, kind='paper')
+    paper_source = SimpleNamespace(id=int(source_data['id']), type='paper')
+    original = record('paper')
+    await e.persistence.CollectionPersistenceService.save_record(e.db, paper_source, original, NOW)
+    await e.db.commit()
+    paper = e.db.sync.scalars(select(e.content.PipelinePaper)).one()
+    target = f'{field}_zh'
+    e.state.category_reply = json.dumps({target: translated})
+    translate = getattr(translation, f'translate_paper_{field}')
+
+    assert await translate(e.db, paper.id) == translated
+    assert await translate(e.db, paper.id) == translated
+    ((_, call),) = e.state.category_requests
+    assert json.loads(call['prompt']) == {'text': original[field]}
+    assert call['request_id'].startswith(f'paper-{field}-translation:')
+
+    await e.persistence.CollectionPersistenceService.save_record(e.db, paper_source, original, NOW)
+    await e.db.commit()
+    assert getattr(paper, target) == translated
+    assert paper.title == original['title']
+    assert paper.abstract == original['abstract']
+    assert getattr(paper, 'abstract_zh' if field == 'title' else 'title_zh') is None
+
+    await e.persistence.CollectionPersistenceService.save_record(
+        e.db, paper_source, {**original, field: 'Corrected original text'}, NOW
+    )
+    await e.db.commit()
+    assert getattr(paper, target) is None
+
+
+@pytest.mark.asyncio
+async def test_manual_paper_title_translation_requires_a_configured_model(env, translation) -> None:
+    from exceptions.exception import ServiceException
+
+    e = env
+    paper_source = SimpleNamespace(id=int((await source(e, type='paper'))['id']), type='paper')
+    await e.persistence.CollectionPersistenceService.save_record(e.db, paper_source, record('paper'), NOW)
+    await e.db.commit()
+    paper = e.db.sync.scalars(select(e.content.PipelinePaper)).one()
+
+    with pytest.raises(ServiceException) as error:
+        await translation.translate_paper_title(e.db, paper.id)
+    assert '选择翻译模型' in error.value.message
+    assert paper.title_zh is None and not e.state.category_requests
 
 
 @pytest.mark.asyncio
@@ -128,7 +190,7 @@ async def test_existing_translations_and_chinese_originals_are_not_replaced(env,
     e.state.batches = [e.batch([item], {})]
     r = await enqueue(e, s['id'])
     assert (await execute(e, r['id']))['status'] == 'success'
-    assert not e.state.category_requests
+    assert not translation_calls(e)
     assert e.db.sync.scalars(select(e.content.PipelineArticle)).one().content_zh == existing
 
 
@@ -342,20 +404,31 @@ async def test_category_classification_consumes_translation_and_still_sets_singl
         )
     )
     await e.db.commit()
+    e.db.add(e.config(key='pipeline.processing.modelId', value='1'))
+    await e.db.commit()
     prompts = []
 
     async def gateway(db, snapshot, **kwargs) -> str:
-        prompts.append(kwargs['prompt'])
+        prompts.append(kwargs['system_prompt'])
         if kwargs['system_prompt'].startswith('你是忠实的'):
             return '{"content_zh":"中文译文供分类使用。"}'
         assert '中文译文供分类使用。' in kwargs['prompt']
-        return '{"match":true}'
+        return json.dumps(
+            {
+                'filter': {'decision': 'keep'},
+                'category_id': '801',
+                'category_name': '分类',
+                'summary': '译文供分类使用。',
+                'entities': [],
+            },
+            ensure_ascii=False,
+        )
 
     monkeypatch.setattr(importlib.import_module('app.research.services.model_generation').ModelGateway, 'call', gateway)
     e.state.batches = [e.batch([record()], {})]
     r = await enqueue(e, s['id'])
     assert (await execute(e, r['id']))['status'] == 'success'
-    assert len(prompts) == 2
+    assert sum(prompt.startswith('你是忠实的') for prompt in prompts) == 1
     assert e.db.sync.scalars(select(e.content.PipelineArticle)).one().category_id == 801
 
 
@@ -363,6 +436,7 @@ async def test_category_classification_consumes_translation_and_still_sets_singl
 async def test_legacy_run_without_model_snapshot_is_not_silently_backfilled(env, translation) -> None:
     e = env
     s, _ = await configured_source(e)
+    await source(e, source_id=s['id'], model_id=1)
     r = await e.repo.enqueue(
         e.db,
         int(s['id']),
@@ -388,9 +462,12 @@ async def test_recrawl_reuses_existing_translation_for_unchanged_original(env, t
     assert (await execute(e, first['id']))['status'] == 'success'
     if not keep_model:
         await source(e, source_id=s['id'], model_id=None)
+        setting = e.db.sync.scalars(select(e.config)).one()
+        setting.value = ''
+        await e.db.commit()
     second = await enqueue(e, s['id'], 'recrawl')
     assert (await execute(e, second['id']))['status'] == 'success'
-    assert len(e.state.category_requests) == 1
+    assert len(translation_calls(e)) == 1
     assert e.db.sync.scalars(select(e.content.PipelineArticle)).one().content_zh == '已有可信译文，不应覆盖。'
 
 
@@ -443,3 +520,82 @@ async def test_unacknowledged_translation_cancellation_leaves_stopping_and_fence
         release.set()
         await asyncio.wait_for(finished.wait(), timeout=1)
         await asyncio.sleep(0.02)
+
+
+@pytest.mark.asyncio
+async def test_global_translation_settings_persist_validate_and_do_not_rewrite_source_models(env, translation) -> None:
+    settings = importlib.import_module('app.intelligence.services.translation_settings')
+    e = env
+    assert await settings.translation_settings(e.db) == {'modelId': None}
+    e.db.add(
+        e.ai_model(
+            id=90071992547409931,
+            provider='compatible',
+            code='global-text',
+            base_url='https://example.test/model',
+            capabilities=['text_generate'],
+            parameters={},
+            is_enabled=True,
+        )
+    )
+    await e.db.commit()
+    selected = await settings.save_translation_settings(e.db, '90071992547409931')
+    assert selected == {'modelId': '90071992547409931'}
+    s = await source(e, model_id=None)
+    frozen = await e.sources.frozen_snapshot(e.db, await e.repo.source(e.db, s['id']))
+    assert frozen['model_id'] is None
+    assert frozen['translation_model_id'] == '90071992547409931'
+    assert frozen['translation_model']['id'] == '90071992547409931'
+    await settings.save_translation_settings(e.db, None)
+    assert await settings.translation_settings(e.db) == {'modelId': None}
+    assert len(e.db.sync.scalars(select(e.config)).all()) == 1
+    assert (await e.repo.source(e.db, s['id'])).model_id is None
+    await e.db.commit()
+    e.state.category_reply = '{"content_zh":"统一模型提供的中文译文。"}'
+
+    def sessions():
+        return AsyncMemorySession(e.engine)
+
+    translated = await translation.CollectionTranslationService.translate(sessions, frozen, [record()])
+    assert translated[0]['content_zh'] == '统一模型提供的中文译文。'
+    assert e.state.category_requests[0][0]['id'] == '90071992547409931'
+
+
+@pytest.mark.asyncio
+async def test_global_translation_disabled_ignores_legacy_source_binding_and_no_fallback_on_invalid_model(
+    env, translation
+) -> None:
+    settings = importlib.import_module('app.intelligence.services.translation_settings')
+    e = env
+    s, model = await configured_source(e)
+    await source(e, source_id=s['id'], model_id=1)
+    await settings.save_translation_settings(e.db, None)
+    frozen = await e.sources.frozen_snapshot(e.db, await e.repo.source(e.db, s['id']))
+    assert frozen['model_id'] == 1
+    assert frozen['translation_model_id'] is None and 'translation_model' not in frozen
+    await e.db.commit()
+    assert (
+        await translation.CollectionTranslationService.translate(
+            lambda: AsyncMemorySession(e.engine), frozen, [record()]
+        )
+    )[0].get('content_zh') is None
+    assert not e.state.category_requests
+    for capabilities, enabled in [(['image_generate'], True), (['text_generate'], False)]:
+        model.capabilities, model.is_enabled = capabilities, enabled
+        await e.db.commit()
+        with pytest.raises(translation.TranslationConfigurationError):
+            await settings.save_translation_settings(e.db, 1)
+        assert await settings.translation_settings(e.db) == {'modelId': None}
+    with pytest.raises(translation.TranslationConfigurationError):
+        await settings.save_translation_settings(e.db, 99)
+
+
+def test_global_translation_dto_requires_explicit_positive_id_or_null(env) -> None:
+    from pydantic import ValidationError
+
+    dto = importlib.import_module('app.intelligence.schemas.ai_model').TranslationModelSelection
+    assert dto(modelId='90071992547409931').model_id == 90071992547409931
+    assert dto(modelId=None).model_id is None
+    for value in [{}, {'modelId': False}, {'modelId': 0}, {'modelId': 'bad'}, {'modelId': 1, 'apiKey': 'not-allowed'}]:
+        with pytest.raises(ValidationError):
+            dto(**value)
