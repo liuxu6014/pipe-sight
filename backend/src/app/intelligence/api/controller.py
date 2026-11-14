@@ -208,28 +208,56 @@ async def delete_category(identity: BusinessId, query_db: DB) -> Response:
 
 
 @controller.get('/templates/published')
-async def published_templates(query_db: DB, category: str | None = None) -> Response:
+async def published_templates(
+    query_db: DB,
+    current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
+    category: str | None = None,
+) -> Response:
     return ResponseUtil.success(
-        data=await PipelineTemplateService.list_templates(query_db, category=category, published_only=True)
-    )
-
-
-@controller.get('/templates', dependencies=ADMIN)
-async def templates(query_db: DB, category: str | None = None) -> Response:
-    return ResponseUtil.success(data=await PipelineTemplateService.list_templates(query_db, category=category))
-
-
-@controller.post('/templates', dependencies=ADMIN)
-async def create_template(payload: PipelineTemplateSaveModel, query_db: DB) -> Response:
-    return ResponseUtil.success(
-        data=await PipelineTemplateService.save_draft(
-            query_db, template_key=None, payload=payload.model_dump(), operator_id=None, operator_name=''
+        data=await PipelineTemplateService.list_templates(
+            query_db, category=category, published_only=True, user_id=current_user.user.user_id
         )
     )
 
 
-@controller.put('/templates/{identity}', dependencies=ADMIN)
-async def update_template(identity: BusinessId, payload: PipelineTemplateSaveModel, query_db: DB) -> Response:
+@controller.get('/templates')
+async def templates(
+    query_db: DB,
+    current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
+    category: str | None = None,
+) -> Response:
+    return ResponseUtil.success(
+        data=await PipelineTemplateService.list_templates(
+            query_db, category=category, user_id=current_user.user.user_id
+        )
+    )
+
+
+@controller.post('/templates')
+async def create_template(
+    payload: PipelineTemplateSaveModel,
+    query_db: DB,
+    current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
+) -> Response:
+    return ResponseUtil.success(
+        data=await PipelineTemplateService.save_draft(
+            query_db,
+            template_key=None,
+            payload=payload.model_dump(),
+            operator_id=None,
+            operator_name='',
+            user_id=current_user.user.user_id,
+        )
+    )
+
+
+@controller.put('/templates/{identity}')
+async def update_template(
+    identity: BusinessId,
+    payload: PipelineTemplateSaveModel,
+    query_db: DB,
+    current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
+) -> Response:
     return ResponseUtil.success(
         data=await PipelineTemplateService.save_draft(
             query_db,
@@ -237,10 +265,17 @@ async def update_template(identity: BusinessId, payload: PipelineTemplateSaveMod
             payload=payload.model_dump(exclude_unset=True),
             operator_id=None,
             operator_name='',
+            user_id=current_user.user.user_id,
         )
     )
 
 
-@controller.delete('/templates/{identity}', dependencies=ADMIN)
-async def disable_template(identity: BusinessId, query_db: DB) -> Response:
-    return ResponseUtil.success(data=await PipelineTemplateService.retire(query_db, identity))
+@controller.delete('/templates/{identity}')
+async def disable_template(
+    identity: BusinessId,
+    query_db: DB,
+    current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
+) -> Response:
+    return ResponseUtil.success(
+        data=await PipelineTemplateService.retire(query_db, identity, user_id=current_user.user.user_id)
+    )

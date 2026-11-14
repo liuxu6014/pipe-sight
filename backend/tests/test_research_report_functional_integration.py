@@ -133,6 +133,7 @@ async def seed_flow(env: Any, case: Any) -> Any:
     db.add(model)
     await db.flush()
     old_template = env.configuration.PipelineTemplateVersion(
+        user_id=owner,
         name='历史模板',
         purpose='research',
         prompt='历史约束',
@@ -142,6 +143,7 @@ async def seed_flow(env: Any, case: Any) -> Any:
         is_enabled=False,
     )
     new_template = env.configuration.PipelineTemplateVersion(
+        user_id=owner,
         name='冻结模板',
         purpose='research',
         prompt='只用证据',

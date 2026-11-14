@@ -215,8 +215,9 @@ class DigestScheduleService:
         generation_config: dict[str, Any],
         template_service: Any,
         frequency: str | None = None,
+        user_id: int | None = None,
     ) -> Any:
-        template = await template_service.get_published(db, template_id)
+        template = await template_service.get_published(db, template_id, user_id)
         if not template or template.purpose != 'digest':
             raise ServiceException(message='请选择已启用的简报模板')
         if frequency is not None:
@@ -236,10 +237,11 @@ class DigestScheduleService:
         generation: dict[str, Any],
         enabled: bool,
         template_service: Any,
+        user_id: int,
     ) -> Any:
         if enabled:
-            return await cls._validate_enabled_template(db, template_id, generation, template_service)
-        template = await ResearchDao.get_template(db, template_id)
+            return await cls._validate_enabled_template(db, template_id, generation, template_service, user_id=user_id)
+        template = await ResearchDao.get_template(db, template_id, user_id)
         if not template or template.purpose != 'digest':
             raise ServiceException(message='请选择有效的简报模板')
         return template
@@ -446,7 +448,7 @@ class DigestScheduleService:
         if not isinstance(enabled, bool):
             raise ServiceException(message='计划启停值必须为布尔值')
         template_id = parse_business_id(data['template_id'])
-        template = await cls._template_for_schedule(db, template_id, generation, enabled, template_service)
+        template = await cls._template_for_schedule(db, template_id, generation, enabled, template_service, user_id)
         frequency = data.get('frequency') or data.get('report_type')
         if frequency not in {'daily', 'weekly', 'monthly'}:
             raise ServiceException(message='计划频率不合法')
@@ -560,7 +562,7 @@ class DigestScheduleService:
         if enabled:
             generation = cls._generation_config(row.generation_config if row.generation_config is not None else {})
             await cls._validate_enabled_template(
-                db, row.template_id, generation, PipelineTemplateService, frequency=row.frequency
+                db, row.template_id, generation, PipelineTemplateService, frequency=row.frequency, user_id=user_id
             )
         row.is_enabled = enabled
         row.next_run_at = cls.next_run(row, research_models.utcnow()) if enabled else None
@@ -574,7 +576,7 @@ class DigestScheduleService:
             raise ServiceException(message='计划不存在、无权访问或已停用')
         generation = cls._generation_config(row.generation_config if row.generation_config is not None else {})
         await cls._validate_enabled_template(
-            db, row.template_id, generation, PipelineTemplateService, frequency=row.frequency
+            db, row.template_id, generation, PipelineTemplateService, frequency=row.frequency, user_id=user_id
         )
         row.next_run_at = research_models.utcnow()
         await db.commit()
@@ -628,7 +630,8 @@ class DigestScheduleService:
                             status = 'skipped'
                         else:
                             await cls._validate_enabled_template(
-                                db, row.template_id, generation, template_service, frequency=row.frequency
+                                db, row.template_id, generation, template_service, frequency=row.frequency,
+                                user_id=row.user_id,
                             )
                             period = cls._period_for_run(local, row.frequency)
                             start = datetime.fromisoformat(period[0]).replace(tzinfo=ZoneInfo(row.timezone))

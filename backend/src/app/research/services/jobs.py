@@ -93,7 +93,7 @@ class ResearchJobService:
         if existing:
             fingerprint = generation_request_fingerprint(clean_request, existing.materials)
             return await cls._reused(db, existing, user_id, fingerprint, job_serializer)
-        template = await template_service.get_published(db, data.get('template_id'))
+        template = await template_service.get_published(db, data.get('template_id'), user_id)
         if not template:
             raise ServiceException(message='请选择已启用的模板')
         purpose = 'digest' if kind in {'daily', 'weekly', 'monthly'} else kind

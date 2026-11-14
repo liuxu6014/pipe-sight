@@ -60,7 +60,7 @@
       <div v-else-if="activeStep === TEMPLATE_STEP" class="ps-step-content" tabindex="0" aria-label="报告模板设置滚动区">
         <p class="ps-step-explanation">为<strong>{{ reportTypes.find(type => type.value === form.reportType)?.label }}</strong>选择写作模板；下一步再调整大纲与逐章提示词。</p>
         <div v-if="templatesLoading" class="ps-inspector-empty">正在加载已发布模板…</div>
-        <PortalEmptyState v-else-if="templatesError || !availableReportTemplates.length" title="暂无可用报告模板" :description="templatesError || '当前报告类型暂无已绑定模板，请联系管理员在模板管理中设置报告类型并启用。'" action-label="重新加载" @action="loadTemplates" />
+        <PortalEmptyState v-else-if="templatesError || !availableReportTemplates.length" title="暂无可用报告模板" :description="templatesError || '当前报告类型暂无已绑定模板，请在模板管理中为该报告类型创建并启用模板。'" action-label="重新加载" @action="loadTemplates" />
         <div v-else class="ps-template-choice"><el-button :auto-insert-space="false" class="ps-ui-control" v-for="template in availableReportTemplates" :key="template.id" native-type="button" :class="{ 'is-selected': form.template === template.id }" @click="form.template = template.id"><i :style="{ background: template.color }"></i><Check v-if="form.template === template.id" /><strong>{{ templateDisplayName(template) }}</strong><p>{{ template.description }}</p></el-button></div>
         <section v-if="selectedTemplate" class="ps-template-structure" aria-label="模板结构预览">
           <el-collapse>

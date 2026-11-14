@@ -43,6 +43,7 @@ class PipelineTemplateVersion(Base):
         ),
     )
     id = business_pk()
+    user_id = Column(BigInteger, ForeignKey('sys_user.id', ondelete='RESTRICT'), nullable=False)
     name = Column(String(255), nullable=False)
     purpose = Column(String(16), nullable=False)
     report_type = Column(String(32), nullable=True)

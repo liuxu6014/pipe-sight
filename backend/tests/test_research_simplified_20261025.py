@@ -239,6 +239,7 @@ def seed(env, db, *, model=True, image=False):
     db.s.flush()
     template = env.configuration.PipelineTemplateVersion(
         id=201,
+        user_id=7,
         name='模板',
         purpose='research',
         prompt='只使用资料',
@@ -590,6 +591,7 @@ async def test_template_without_model_can_be_saved(env, db) -> None:
         template_key=None,
         operator_id=7,
         operator_name='管理员',
+        user_id=7,
         payload={'purpose': 'research', 'name': '待配置', 'prompt': '真实提示词', 'sections': [], 'model_id': None},
     )
     assert row['modelId'] is None

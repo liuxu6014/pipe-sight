@@ -11,7 +11,7 @@
           <el-form-item label="执行时间 · 北京时间"><el-time-picker v-model="form.time" aria-label="执行时间" format="HH:mm" value-format="HH:mm" :clearable="false" /></el-form-item>
           <el-form-item v-if="form.frequency === 'weekly'" label="每周生成日"><el-select v-model="form.weekday" aria-label="每周生成日"><el-option v-for="(day, index) in weekdays" :key="index" :label="day" :value="index" /></el-select></el-form-item>
           <el-form-item v-if="form.frequency === 'monthly'" label="每月生成日"><el-select v-model="form.monthDay" aria-label="每月生成日"><el-option v-for="day in 31" :key="day" :label="`${day}日`" :value="day" /></el-select><small>当月不足所选日期时，月末执行。</small></el-form-item>
-          <el-form-item label="报告模板" :class="{ 'is-wide': form.frequency === 'daily' }"><el-select v-model="form.templateId" aria-label="计划报告模板" placeholder="选择对应周期的模板"><el-option v-for="template in matchingTemplates" :key="template.id" :label="template.name" :value="String(template.id)" /></el-select><small v-if="!loading && !matchingTemplates.length">当前周期暂无已发布模板，请联系管理员配置。</small></el-form-item>
+          <el-form-item label="报告模板" :class="{ 'is-wide': form.frequency === 'daily' }"><el-select v-model="form.templateId" aria-label="计划报告模板" placeholder="选择对应周期的模板"><el-option v-for="template in matchingTemplates" :key="template.id" :label="template.name" :value="String(template.id)" /></el-select><small v-if="!loading && !matchingTemplates.length">当前周期暂无已发布模板，请在模板管理中创建并启用。</small></el-form-item>
         </div>
         <h3>资料筛选</h3>
         <div class="ps-schedule-fields">

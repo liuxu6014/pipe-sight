@@ -103,6 +103,7 @@ async def test_apply_result_syncs_immutable_template_and_real_material_citations
     db.add(
         env.configuration.PipelineTemplateVersion(
             id=202,
+            user_id=7,
             name='新模板',
             purpose='research',
             prompt='原始提示词',

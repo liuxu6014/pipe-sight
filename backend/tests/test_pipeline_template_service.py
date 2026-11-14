@@ -22,6 +22,7 @@ async def test_save_template_can_remain_unconfigured(env, db) -> None:
         payload={'purpose': 'research', 'name': '测试模板', 'prompt': '只使用实际资料', 'sections': []},
         operator_id=7,
         operator_name='管理员',
+        user_id=7,
     )
     assert result['id'].isdecimal() and result['modelId'] is None
     row = await env.repo.ResearchDao.get_template(db, result['id'])
@@ -46,7 +47,7 @@ async def test_get_available_uses_research_repository(env, monkeypatch) -> None:
     monkeypatch.setattr(env.repo.ResearchDao, 'get_template', get)
     database = object()
     assert await env.template.PipelineTemplateService.get_published(database, '201') is row
-    get.assert_awaited_once_with(database, 201)
+    get.assert_awaited_once_with(database, 201, None)
 
 
 @pytest.mark.asyncio
@@ -55,7 +56,7 @@ async def test_template_rejects_invalid_required_fields(env, db, field, value) -
     data = {'purpose': 'research', 'name': '模板', 'prompt': '提示词', field: value}
     with pytest.raises(env.exc):
         await env.template.PipelineTemplateService.save_draft(
-            db, template_key=None, payload=data, operator_id=7, operator_name='管理员'
+            db, template_key=None, payload=data, operator_id=7, operator_name='管理员', user_id=7
         )
 
 
@@ -118,7 +119,7 @@ async def test_template_model_references_are_int_before_persist_and_exact_string
     monkeypatch.setattr(env.repo.ResearchDao, 'get_model', get_model)
     monkeypatch.setattr(env.repo.ResearchDao, 'get_template', AsyncMock(return_value=stored))
     result = await env.template.PipelineTemplateService.save_draft(
-        database, template_key=template_key, payload=payload, operator_id=7, operator_name='管理员'
+        database, template_key=template_key, payload=payload, operator_id=7, operator_name='管理员', user_id=7
     )
     assert payload == original
     database.commit.assert_awaited_once()
@@ -158,6 +159,7 @@ async def test_report_type_binding_is_saved_and_not_inferred_from_name(env, db) 
         },
         operator_id=7,
         operator_name='管理员',
+        user_id=7,
     )
     assert saved['reportType'] == 'technology-route'
     result = await env.template.PipelineTemplateService.save_draft(
@@ -166,6 +168,7 @@ async def test_report_type_binding_is_saved_and_not_inferred_from_name(env, db) 
         payload={'purpose': 'research', 'name': '科研需求报告', 'prompt': '修改规则'},
         operator_id=7,
         operator_name='管理员',
+        user_id=7,
     )
     assert result['reportType'] == 'technology-route'
     listed = await env.template.PipelineTemplateService.list_templates(db, category='research')

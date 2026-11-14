@@ -71,9 +71,9 @@ class PipelineTemplateService:
         return None
 
     @classmethod
-    async def list_templates(cls, db, category=None, published_only=False) -> dict:
+    async def list_templates(cls, db, category=None, published_only=False, user_id=None) -> dict:
         purpose = {'project': 'research'}.get(category, category)
-        rows = await ResearchDao.list_templates(db, purpose)
+        rows = await ResearchDao.list_templates(db, purpose, user_id)
         rows = [row for row in rows if not published_only or row.is_enabled]
         result = []
         for row in rows:
@@ -102,10 +102,10 @@ class PipelineTemplateService:
         return {'rows': result, 'total': len(rows)}
 
     @staticmethod
-    async def get_published(db, template_key) -> PipelineTemplateVersion | None:
+    async def get_published(db, template_key, user_id=None) -> PipelineTemplateVersion | None:
         if template_key is None:
             return None
-        row = await ResearchDao.get_template(db, parse_business_id(template_key))
+        row = await ResearchDao.get_template(db, parse_business_id(template_key), user_id)
         return row if row and row.is_enabled else None
 
     @staticmethod
@@ -151,7 +151,7 @@ class PipelineTemplateService:
         return model
 
     @classmethod
-    async def save_draft(cls, db, *, template_key, payload, operator_id, operator_name) -> dict:
+    async def save_draft(cls, db, *, template_key, payload, operator_id, operator_name, user_id) -> dict:
         purpose = payload.get('purpose') or {'project': 'research'}.get(
             payload.get('category'), payload.get('category')
         )
@@ -179,11 +179,11 @@ class PipelineTemplateService:
         ):
             raise ServiceException(message='请选择有效的科研报告类型')
         template_key = parse_business_id(template_key) if template_key is not None else None
-        row = await ResearchDao.get_template(db, template_key) if template_key is not None else None
+        row = await ResearchDao.get_template(db, template_key, user_id) if template_key is not None else None
         if template_key is not None and row is None:
-            raise ServiceException(message='模板不存在')
+            raise ServiceException(message='模板不存在或无权操作')
         if row is None:
-            row = PipelineTemplateVersion(is_enabled=True)
+            row = PipelineTemplateVersion(is_enabled=True, user_id=user_id)
             db.add(row)
         for field in ('name', 'description', 'model_id', 'image_model_id'):
             setattr(row, field, payload.get(field))
@@ -199,19 +199,19 @@ class PipelineTemplateService:
         return cls._dict(row)
 
     @classmethod
-    async def publish(cls, db, template_key, **_) -> dict:
-        row = await ResearchDao.get_template(db, parse_business_id(template_key))
+    async def publish(cls, db, template_key, user_id=None, **_) -> dict:
+        row = await ResearchDao.get_template(db, parse_business_id(template_key), user_id)
         if not row:
-            raise ServiceException(message='模板不存在')
+            raise ServiceException(message='模板不存在或无权操作')
         row.is_enabled = True
         await db.commit()
         return cls._dict(row)
 
     @classmethod
-    async def retire(cls, db, template_key) -> dict:
-        row = await ResearchDao.get_template(db, parse_business_id(template_key))
+    async def retire(cls, db, template_key, user_id=None) -> dict:
+        row = await ResearchDao.get_template(db, parse_business_id(template_key), user_id)
         if not row:
-            raise ServiceException(message='模板不存在')
+            raise ServiceException(message='模板不存在或无权操作')
         row.is_enabled = False
         await db.commit()
         return cls._dict(row)

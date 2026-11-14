@@ -83,7 +83,7 @@
         </div>
       <p v-if="templatesLoading" class="ps-digest-template-notice" role="status">正在加载已发布简报模板…</p>
       <div v-else-if="templatesError" class="ps-inline-state is-warning" role="alert"><span>{{ templatesError }}</span><el-button plain @click="loadTemplates">重新加载模板</el-button></div>
-      <p v-else-if="!availableTemplates.length" class="ps-digest-template-notice" role="status">当前报告类型暂无启用模板，请联系管理员配置。</p>
+      <p v-else-if="!availableTemplates.length" class="ps-digest-template-notice" role="status">当前报告类型暂无启用模板，请在模板管理中创建并启用。</p>
       <el-alert v-if="form.template && !decimalId(form.template)" :title="ID_UPGRADE_NOTICE" type="warning" :closable="false" show-icon />
       <el-alert v-if="templateOptions.find(item => item.value === form.template) && templateGenerationError(templateOptions.find(item => item.value === form.template))" :title="templateGenerationError(templateOptions.find(item => item.value === form.template))" type="warning" :closable="false" show-icon />
       <footer class="ps-form-footer ps-digest-submit">

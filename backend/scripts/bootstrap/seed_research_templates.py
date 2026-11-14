@@ -48,8 +48,10 @@ def load_presets(path: Path = CATALOG_PATH) -> list[dict]:
     return rows
 
 
-def install_presets(connection, table, presets: list[dict], *, apply: bool = False) -> dict:
+def install_presets(connection, table, presets: list[dict], *, apply: bool = False, user_id: int | None = None) -> dict:
     """One transaction, append only, stable matching by explicit type and name."""
+    if apply and user_id is None:
+        raise ValueError('--apply requires --user-id to assign the templates to an owner')
     if apply and connection.dialect.name == 'postgresql':
         connection.execute(sa.text("SELECT pg_advisory_xact_lock(hashtext('pipesight-research-presets-v1'))"))
     existing = {}
@@ -69,7 +71,9 @@ def install_presets(connection, table, presets: list[dict], *, apply: bool = Fal
     created = []
     if apply:
         for preset in pending:
-            ident = connection.scalar(sa.insert(table).values(**preset).returning(table.c.id))
+            ident = connection.scalar(
+                sa.insert(table).values(**preset, user_id=user_id).returning(table.c.id)
+            )
             created.append({'id': str(ident), 'name': preset['name'], 'reportType': preset['report_type']})
     return {
         'applied': apply,
@@ -79,7 +83,7 @@ def install_presets(connection, table, presets: list[dict], *, apply: bool = Fal
     }
 
 
-def main(apply: bool = False) -> None:
+def main(apply: bool = False, user_id: int | None = None) -> None:
     from app.infrastructure.models.registry import register_sqlalchemy_models
     from app.intelligence.models.configuration import PipelineTemplateVersion
     from config.database import create_sync_db_engine
@@ -89,7 +93,9 @@ def main(apply: bool = False) -> None:
     engine = create_sync_db_engine(echo=False)
     try:
         with engine.begin() as connection:
-            result = install_presets(connection, PipelineTemplateVersion.__table__, presets, apply=apply)
+            result = install_presets(
+                connection, PipelineTemplateVersion.__table__, presets, apply=apply, user_id=user_id
+            )
         print(json.dumps(result, ensure_ascii=False, indent=2))
     finally:
         engine.dispose()
@@ -98,5 +104,6 @@ def main(apply: bool = False) -> None:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--apply', action='store_true', help='Append templates after taking a database backup')
+    parser.add_argument('--user-id', type=int, help='Owner account id to assign the seeded templates to')
     args = parser.parse_args()
-    main(args.apply)
+    main(args.apply, args.user_id)

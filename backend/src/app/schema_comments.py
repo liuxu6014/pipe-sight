@@ -123,6 +123,7 @@ COLUMN_COMMENTS = {
     'templates': {
         'report_type': '科研报告类型：research-demand、technology-route、project-demand；旧模板未绑定时为空，不从名称推断',
         'id': '生成模板数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系',
+        'user_id': '模板所有者ID，关联sys_user.id；每个用户仅可见和管理自己的模板',
         'name': '用户选择模板时显示的名称；必填且禁止空白文本',
         'purpose': '模板用途：article生成文章、research科研报告、digest周期简报',
         'description': '模板用途及适用范围说明；可空，不冒充正文生成结果',

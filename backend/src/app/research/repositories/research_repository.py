@@ -182,14 +182,21 @@ class ResearchDao:
         return await db.scalar(select(Version).where(Version.report_id == report_id, Version.version == version))
 
     @staticmethod
-    async def get_template(db, template_id) -> Template | None:
-        return await db.get(Template, parse_business_id(template_id)) if template_id is not None else None
+    async def get_template(db, template_id, user_id=None) -> Template | None:
+        if template_id is None:
+            return None
+        ident = parse_business_id(template_id)
+        if user_id is None:
+            return await db.get(Template, ident)
+        return (await db.scalars(select(Template).where(Template.id == ident, Template.user_id == user_id))).first()
 
     @staticmethod
-    async def list_templates(db, purpose=None) -> list[Template]:
+    async def list_templates(db, purpose=None, user_id=None) -> list[Template]:
         query = select(Template).order_by(Template.updated_at.desc())
         if purpose:
             query = query.where(Template.purpose == purpose)
+        if user_id is not None:
+            query = query.where(Template.user_id == user_id)
         return list(await db.scalars(query))
 
     @staticmethod

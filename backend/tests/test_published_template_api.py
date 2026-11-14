@@ -1,3 +1,5 @@
+"""Template endpoints are scoped to the current user, not an admin role."""
+
 from http import HTTPStatus
 from unittest.mock import AsyncMock
 
@@ -7,45 +9,59 @@ from fastapi import FastAPI, HTTPException, Request
 
 from app.intelligence.api.controller import controller
 from app.intelligence.services.templates import PipelineTemplateService
+from app.system.schemas.user import CurrentUserModel, UserInfoModel
+from app.system.services.authentication import LoginService
 from common.aspect.db_seesion import DBSessionDependency
-from common.aspect.interface_auth import CheckRoleInterfaceAuth, CheckUserInterfaceAuth
+from common.aspect.interface_auth import CheckRoleInterfaceAuth
 from common.aspect.pre_auth import PreAuth
+
+
+def current_user(user_id: int = 7) -> CurrentUserModel:
+    return CurrentUserModel(permissions=[], roles=[], user=UserInfoModel(userId=user_id))
 
 
 def portal_app() -> FastAPI:
     app = FastAPI()
     app.include_router(controller)
+    app.state.redis = object()
 
     async def signed_in(request: Request) -> None:
         if not request.headers.get('x-test-user'):
             raise HTTPException(status_code=401)
-
-    async def no_management_permission() -> None:
-        raise HTTPException(status_code=403)
 
     app.dependency_overrides[DBSessionDependency().dependency] = object
     for route in controller.routes:
         for dependency in route.dependant.dependencies:
             if isinstance(dependency.call, PreAuth):
                 app.dependency_overrides[dependency.call] = signed_in
-            elif isinstance(dependency.call, (CheckUserInterfaceAuth, CheckRoleInterfaceAuth)):
-                app.dependency_overrides[dependency.call] = no_management_permission
     return app
 
 
 @pytest.mark.asyncio
-async def test_portal_can_read_only_published_templates_without_management_permission(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_published_templates_are_scoped_to_current_user(monkeypatch: pytest.MonkeyPatch) -> None:
     listing = AsyncMock(return_value={'rows': [], 'total': 0})
     monkeypatch.setattr(PipelineTemplateService, 'list_templates', listing)
+    monkeypatch.setattr(LoginService, 'get_current_user', AsyncMock(return_value=current_user(7)))
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=portal_app()), base_url='http://test') as client:
         response = await client.get(
             '/pipeline/templates/published?category=research&publishedOnly=false',
-            headers={'x-test-user': 'ordinary-user'},
+            headers={'x-test-user': 'ordinary-user', 'Authorization': 'Bearer test-token'},
         )
     assert response.status_code == HTTPStatus.OK
-    assert listing.await_args.kwargs == {'category': 'research', 'published_only': True}
+    assert listing.await_args.kwargs == {'category': 'research', 'published_only': True, 'user_id': 7}
+
+
+@pytest.mark.asyncio
+async def test_template_management_scopes_to_current_user(monkeypatch: pytest.MonkeyPatch) -> None:
+    listing = AsyncMock(return_value={'rows': [], 'total': 0})
+    monkeypatch.setattr(PipelineTemplateService, 'list_templates', listing)
+    monkeypatch.setattr(LoginService, 'get_current_user', AsyncMock(return_value=current_user(8)))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=portal_app()), base_url='http://test') as client:
+        response = await client.get(
+            '/pipeline/templates', headers={'x-test-user': 'ordinary-user', 'Authorization': 'Bearer test-token'}
+        )
+    assert response.status_code == HTTPStatus.OK
+    assert listing.await_args.kwargs == {'category': None, 'user_id': 8}
 
 
 @pytest.mark.asyncio
@@ -55,35 +71,12 @@ async def test_published_templates_still_require_login() -> None:
     assert response.status_code == HTTPStatus.UNAUTHORIZED
 
 
-@pytest.mark.asyncio
-async def test_portal_user_cannot_read_template_drafts_or_manage_templates(monkeypatch) -> None:
-    listing = AsyncMock(side_effect=AssertionError('ordinary user reached management service'))
-    monkeypatch.setattr(PipelineTemplateService, 'list_templates', listing)
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=portal_app()), base_url='http://test') as client:
-        for method, path in [
-            ('GET', '/pipeline/templates'),
-            ('POST', '/pipeline/templates'),
-        ]:
-            response = await client.request(method, path, headers={'x-test-user': 'ordinary-user'})
-            assert response.status_code == HTTPStatus.FORBIDDEN
-    listing.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_removed_template_publish_route_returns_404_for_authenticated_user() -> None:
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=portal_app()), base_url='http://test') as client:
-        response = await client.post(
-            '/pipeline/templates/research-test/publish', headers={'x-test-user': 'ordinary-user'}
-        )
-    assert response.status_code == HTTPStatus.NOT_FOUND
-
-
-def test_template_management_uses_admin_role_guard_while_public_picker_does_not() -> None:
+def test_template_management_is_user_scoped_not_admin_gated() -> None:
     manage = next(
         route for route in controller.routes if route.path == '/pipeline/templates' and 'GET' in route.methods
     )
     picker = next(route for route in controller.routes if route.path == '/pipeline/templates/published')
-    assert any(
+    assert not any(
         isinstance(dep.call, CheckRoleInterfaceAuth) and dep.call.role_key == 'admin'
         for dep in manage.dependant.dependencies
     )
