@@ -24,7 +24,7 @@ def test_short_names_and_foreign_keys_are_complete() -> None:
     baseline = {table['name']: table for table in contract['tables']}
     expected = (set(baseline) | set(OPTIONAL_TABLE_NAMES)) - set(FRAMEWORK_TABLE_NAMES)
     assert set(Base.metadata.tables) == expected
-    assert len(baseline) == 27 and len(expected) == 27
+    assert len(baseline) == 28 and len(expected) == 28
     for table in Base.metadata.tables.values():
         if table.name not in FOUNDATION_TABLE_RENAMES.values():
             assert re.fullmatch(r'[a-z][a-z0-9]*(?:_[a-z0-9]+)?', table.name), table.name

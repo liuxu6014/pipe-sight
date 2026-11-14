@@ -16,7 +16,7 @@ from config.database import Base
 
 register_sqlalchemy_models()
 BUSINESS_TABLES = {*BUSINESS_ID_TABLES, 'ai_models', 'basket_items', 'report_versions'}
-BUSINESS_COLUMN_COUNT = 205
+BUSINESS_COLUMN_COUNT = 207
 MISSING_DEFAULT_COUNT = 33
 MISSING_DEFAULTS = {
     'ai_models': ('parameters', 'created_at', 'updated_at'),
@@ -83,7 +83,7 @@ def no_external_connections(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(socket, 'create_connection', blocked)
 
 
-def test_exact_193_column_types_nullability_and_names_are_preserved() -> None:
+def test_current_business_column_types_nullability_and_names_are_preserved() -> None:
     contract = load_contract()
     tables = {row['name']: row for row in [*contract['tables'], *contract['optional_table_definitions']]}
     count = 0

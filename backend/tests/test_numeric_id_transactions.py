@@ -25,6 +25,16 @@ if TYPE_CHECKING:
 PRIVATE_FILE_MODE = 0o600
 
 
+def test_numeric_migration_keeps_its_historical_inventory_and_comments() -> None:
+    from app import schema_comments_v3
+
+    assert migration.TABLE_COMMENTS is schema_comments_v3.TABLE_COMMENTS
+    assert migration.COLUMN_COMMENTS is schema_comments_v3.COLUMN_COMMENTS
+    assert len(migration.TABLE_COMMENTS) == migration.EXPECTED_TABLE_COUNT == 29
+    assert 'sys_dept' not in migration.TABLE_COMMENTS
+    assert 'dept_id' not in migration.COLUMN_COMMENTS['sys_user']
+
+
 class OfflineSavepoint:
     def __init__(self, bind: OfflinePG) -> None:
         self.bind = bind

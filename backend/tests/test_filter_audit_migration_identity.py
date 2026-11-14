@@ -2,6 +2,7 @@
 
 import importlib.util
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -13,6 +14,8 @@ def test_filter_audit_uses_full_stable_news_key(monkeypatch: pytest.MonkeyPatch)
     spec.loader.exec_module(module)
     statements = []
     monkeypatch.setattr(module.op, 'execute', lambda statement: statements.append(str(statement)))
+    monkeypatch.setattr(module.op, 'get_bind', object)
+    monkeypatch.setattr(module, 'inspect', lambda bind: SimpleNamespace(get_table_names=lambda **kwargs: ['articles']))
     module.upgrade()
     assert len(statements) == 1
     assert 'ctid' not in statements[0]

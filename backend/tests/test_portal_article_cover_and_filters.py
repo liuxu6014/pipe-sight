@@ -28,6 +28,7 @@ def article() -> PipelineArticle:
         published_at=datetime(2026, 10, 14),
         content='原文',
         content_zh='译文',
+        summary='处理生成的独立摘要',
         url='https://example.test/article',
         is_pushed=False,
     )
@@ -41,7 +42,7 @@ def test_article_uses_canonical_fields_without_cover_or_fulltext_metadata(detail
     assert row['category'] == row['source_type'] == 'news'
     assert row['category_id'] == '501' and row['tags'] == ['检测技术']
     assert row['publish_time'] == '2026-10-14 00:00:00'
-    assert row['summary'] == '译文'
+    assert row['summary'] == '处理生成的独立摘要'
     assert not {'cover_image', 'body_blocks', 'full_text', 'metadata_json', 'review_status'} & row.keys()
     if detail:
         assert row['content'] == '译文' and row['content_original'] == '原文'

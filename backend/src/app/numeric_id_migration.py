@@ -15,8 +15,10 @@ from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
 
+# Numeric IDs ran before department and later content fields were introduced.
+# Freeze this revision; runtime comments must not change its backup inventory.
 from app.business_ids import BUSINESS_ID_TABLES, MAX_BIGINT, generation_request_fingerprint
-from app.schema_comments import COLUMN_COMMENTS, TABLE_COMMENTS
+from app.schema_comments_v3 import COLUMN_COMMENTS, TABLE_COMMENTS
 
 if TYPE_CHECKING:
     from collections.abc import Iterable

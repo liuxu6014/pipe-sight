@@ -36,8 +36,8 @@ def test_structured_output_is_real_headings_paragraphs_and_trusted_references(fe
         }
     ]
     result = normalize_generated_report(raw, materials)
-    assert result['content'].startswith('## 编制说明\n\n仅依据所选资料。')
-    assert '## 生产需求及技术问题\n\n已有证据[1]。\n\n拟开展的研究，待验证。' in result['content']
+    assert result['content'].startswith('**编制说明**\n\n仅依据所选资料。')
+    assert '**生产需求及技术问题**\n\n已有证据[1]。\n\n拟开展的研究，待验证。' in result['content']
     assert '\\n' not in result['content'] and '"sections"' not in result['content']
     assert [s['title'] for s in result['sections']] == ['编制说明', '生产需求及技术问题', '经费需求', '参考资料']
     assert '[1]' in result['content'] and '[资料18]' not in result['content'] and '2025-04-10' in result['content']
@@ -46,12 +46,13 @@ def test_structured_output_is_real_headings_paragraphs_and_trusted_references(fe
     assert result['sections'] == sections_from_markdown(result['content'])
 
 
-def test_plain_markdown_is_not_rewritten_or_wrapped_in_json() -> None:
+def test_plain_markdown_preserves_narrative_and_normalizes_headings() -> None:
     text = '## 研究背景\n\n真实正文。\n\n## 经费需求\n\n待补充。'
     result = normalize_generated_report(text)
-    assert result['content'] == text
+    assert result['sections'] == sections_from_markdown(text)
+    assert result['content'] == '**研究背景**\n\n真实正文。\n\n**经费需求**\n\n待补充。'
     assert [s['title'] for s in result['sections']] == ['研究背景', '经费需求']
-    assert normalize_generated_report(text, [])['content'] == text
+    assert normalize_generated_report(text, []) == result
 
 
 def test_markdown_preface_and_numbered_headings_survive_without_number_growth() -> None:
@@ -86,14 +87,14 @@ def test_invalid_structured_result_fails_explicitly_instead_of_persisting_json(p
 
 def test_structured_single_content_wrapper_is_unwrapped() -> None:
     result = normalize_generated_report(json.dumps({'content': '## 研究内容\n\n正文。'}))
-    assert result['content'] == '## 研究内容\n\n正文。'
+    assert result['content'] == '**研究内容**\n\n正文。'
 
 
 def test_normalized_article_is_idempotent_and_has_one_reference_section() -> None:
     materials = [{'id': '26', 'type': 'paper', 'title': '真实论文', 'source': {'published_date': '2024-03'}}]
     first = normalize_generated_report(structured(), materials)
     second = normalize_generated_report(first['content'], materials)
-    assert first == second and second['content'].count('## 参考资料') == 1
+    assert first == second and second['content'].count('**参考资料**') == 1
 
 
 @pytest.mark.parametrize('structured_output', [False, True])

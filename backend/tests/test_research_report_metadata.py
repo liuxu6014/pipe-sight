@@ -74,7 +74,7 @@ async def test_manual_update_saves_supplied_dto_metadata_and_preserves_model_ass
     assert saved.sections == dto.sections
     assert saved.citations == dto.citations and saved.quality_issues == dto.quality_issues
     assert saved.model_snapshot == original['model_snapshot']
-    assert report.template_id == OLD_TEMPLATE and saved.content == '## 新章节\n\n新正文'
+    assert report.template_id == OLD_TEMPLATE and saved.content == '**新章节**\n\n新正文'
     assert (await env.repo.ResearchDao.get_report_version(db, 301, 1)).citations == original['citations']
 
 
@@ -141,7 +141,7 @@ async def test_apply_result_syncs_immutable_template_and_real_material_citations
         report_serializer=env.app.ResearchApplicationService.report_dict,
     )
     assert report.template_id == NEW_TEMPLATE
-    assert report.content == '## 正文\n\n任务结果\n\n## 参考资料\n\n[1] 冻结标题；用户资料'
+    assert report.content == '**正文**\n\n任务结果\n\n**参考资料**\n\n[1] 冻结标题；用户资料'
     version = await env.repo.ResearchDao.get_report_version(db, report.id, 2)
     assert version.model_snapshot == snapshot and job.config_snapshot == snapshot
     assert version.citations[0]['sourceId'] == '101'

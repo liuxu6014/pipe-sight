@@ -446,6 +446,9 @@ async def test_manual_collection_queues_using_collection_repository_not_main_dao
     monkeypatch.setattr(module.CollectionRepository, 'source', get)
     monkeypatch.setattr(module.CollectionRepository, 'active', active)
     monkeypatch.setattr(module.CollectionRepository, 'enqueue', enqueue)
+    frozen = module.snapshot(source)
+    freeze = AsyncMock(return_value=frozen)
+    monkeypatch.setattr(module, 'frozen_snapshot', freeze)
     database = NS(rollback=AsyncMock())
     validate = []
     result = await module.IntelligenceSourceService.queue_collection_run(
@@ -456,3 +459,5 @@ async def test_manual_collection_queues_using_collection_repository_not_main_dao
     active.assert_awaited_once_with(database, source.id)
     enqueue.assert_awaited_once()
     assert validate[0]['adapter'] == 'registered'
+    freeze.assert_awaited_once_with(database, source)
+    assert enqueue.await_args.kwargs['snapshot'] is frozen

@@ -1,4 +1,4 @@
-"""Canonical 29-table/340-column comments across metadata, SQL and migration DDL."""
+"""Canonical current table/column comments across metadata, SQL and migration DDL."""
 
 # Literal counts and limits are independent assertions of the approved schema.
 
@@ -67,12 +67,12 @@ def _expected(names: set[str]) -> dict:
     return result
 
 
-def test_comment_data_matches_frozen_317_fields_plus_23_optional_fields() -> None:
+def test_comment_data_matches_current_contract_plus_optional_fields() -> None:
     baseline = {t['name']: {c['name'] for c in t['columns']} for t in load_contract()['tables']}
-    assert len(baseline) == 28 and sum(map(len, baseline.values())) == 344
+    assert len(baseline) == 28 and sum(map(len, baseline.values())) == 346
     assert set(baseline) | set(OPTIONAL_TABLE_NAMES) == PUBLIC_TABLES
     assert sum(len(COLUMN_COMMENTS[n]) for n in OPTIONAL_TABLE_NAMES) == 23
-    assert sum(map(len, COLUMN_COMMENTS.values())) == 367
+    assert sum(map(len, COLUMN_COMMENTS.values())) == 369
     for name, fields in baseline.items():
         assert set(COLUMN_COMMENTS[name]) == fields
     source = Path(__file__).parents[1] / 'src/app/schema_comments.py'
@@ -80,10 +80,10 @@ def test_comment_data_matches_frozen_317_fields_plus_23_optional_fields() -> Non
     assert all(isinstance(n, (ast.Expr, ast.Assign, ast.AnnAssign)) for n in tree.body)
 
 
-def test_all_29_tables_and_340_columns_have_specific_chinese_comments() -> None:
+def test_all_current_tables_and_columns_have_specific_chinese_comments() -> None:
     assert len(PUBLIC_TABLES) == 30
     assert set(Base.metadata.tables) == MODEL_TABLES and len(MODEL_TABLES) == 28
-    assert sum(len(t.c) for t in Base.metadata.tables.values()) == 363
+    assert sum(len(t.c) for t in Base.metadata.tables.values()) == 365
     placeholders = {'字段说明', '表说明', '待补充', 'TODO', 'TBD', '主键', '创建时间', '更新时间'}
     for name, table_comment in TABLE_COMMENTS.items():
         for label, comment in [(name, table_comment), *COLUMN_COMMENTS[name].items()]:
@@ -130,7 +130,7 @@ def test_generated_sql_exactly_matches_data_and_registered_orm_comments() -> Non
         expected.update({('COLUMN', name, c): text for c, text in view['columns'].items()})
     assert actual == expected
     assert len([key for key in actual if key[0] == 'TABLE']) == 30
-    assert len([key for key in actual if key[0] == 'COLUMN' and key[1] in PUBLIC_TABLES]) == 367
+    assert len([key for key in actual if key[0] == 'COLUMN' and key[1] in PUBLIC_TABLES]) == 369
     for table in Base.metadata.tables.values():
         assert actual['TABLE', table.name, None] == table.comment
         for col in table.c:
@@ -233,7 +233,8 @@ def test_v3_comment_snapshot_is_frozen_independently_of_v4_semantic_policy() -> 
         'last_run_at', 'last_status', 'last_error', 'success_count', 'failure_count', 'skipped_count', 'last_failed_due_at'
     }
     expected['news_articles'] |= {'entities', 'summary', 'ai_insight'}
-    expected['papers'] |= {'entities', 'ai_insight'}
+    expected['papers'] |= {'entities', 'ai_insight', 'summary'}
+    expected['templates'] |= {'report_type'}
     expected['sys_user'] |= {'dept_id'}
     expected['sys_dept'] = set(COLUMN_COMMENTS['sys_dept'])
     assert expected == {name: set(cols) for name, cols in COLUMN_COMMENTS.items()}

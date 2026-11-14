@@ -27,7 +27,7 @@ test('portal searches share one subtle outer focus without suppressing form or b
   assert.match(workspace, /box-shadow: 0 0 0 2px #409eff12;/)
   assert.match(css, /\.ps-search-input \.el-input__wrapper.is-focus/)
   assert.match(css, /:is\(button, a, summary\):focus-visible/)
-  assert.match(css, /:is\(input, textarea\):not\(:where\(\.el-input__inner, \.el-textarea__inner, \.el-select__input, \.el-input-tag__input\)\):focus-visible/)
+  assert.match(css, /:is\(input, textarea\):not\(:where\(\.el-input__inner, \.el-textarea__inner, \.el-select__input, \.el-input-tag__input, \.el-range-input\)\):focus-visible/)
   assert.match(workspace, /\.el-input-tag\.is-focused\s*\{\s*box-shadow: 0 0 0 1px color-mix\(in srgb, var\(--ps-blue\), #fff 38%\) inset, 0 0 0 2px #409eff12;/)
   for (const page of ['ResearchWorkbenchView', 'MyReportsView', 'MyWorkspaceView']) {
     const source = read(`../src/views/portal/pages/${page}.vue`)
@@ -49,7 +49,7 @@ test('content adaptation is shared by both shells and never attached to login', 
   const css = compileString(workspace).css
   assert.match(css, /container-name: workspace/)
   assert.match(css, /@container workspace \(max-width: 900px\)/)
-  assert.match(css, /--ws-content-max: 1600px/)
+  assert.match(css, /\.ps-management-shell \.ps-workspace-surface > :is\(\.pipeline-page, \.app-container\) \{[^}]*width: 100%;[^}]*max-width: none;/)
   assert.match(css, /\.ps-workspace-surface :is\(\.ps-page, \.pipeline-page\) \.ws-card-grid/)
   assert.match(css, /repeat\(auto-fit, minmax\(min\(100%, var\(--ws-card-min, 280px\)\), 1fr\)\)/)
   assert.doesNotMatch(workspace, /(?:^|\n)\s*(?:body|:root|\.pipeline-user-login)\s*\{/)

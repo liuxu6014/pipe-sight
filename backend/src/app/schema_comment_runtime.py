@@ -1,4 +1,4 @@
-"""Current compact-v12 comment SQL and catalog verification; no ORM imports."""
+"""Current schema comment SQL and catalog verification; no ORM imports."""
 
 import sqlalchemy as sa
 
@@ -9,7 +9,7 @@ from app.schema_comments import (
     TABLE_COMMENTS,
     VIEW_COMMENTS,
 )
-from app.schema_contract import SchemaPrerequisiteError
+from app.schema_contract import SchemaPrerequisiteError, load_contract
 from app.schema_migration import _inventory, _q, assert_rehearsal, normalise_optional_tables
 
 
@@ -21,11 +21,15 @@ def _comment_sql(kind: str, table: str, column: str | None, comment: str) -> str
 
 def render_comment_sql() -> str:
     """Deterministic canonical SQL; optional/framework/catalog objects guarded."""
+    contract = load_contract()
+    baseline_columns = sum(len(table['columns']) for table in contract['tables'])
+    optional_columns = sum(len(COLUMN_COMMENTS[name]) for name in OPTIONAL_TABLE_NAMES)
     lines = [
-        '-- compact-v12中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；自动计划累计执行结果。',
+        f"-- compact-{contract['runtime_version']}中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；自动计划累计执行结果。",
         '-- 27个业务created_at/updated_at为北京时间timestamp(0)无时区；其他运行时间字段保持原类型。',
         '-- 普通不透明令牌保留；系统幂等键内嵌ID、显式JSON引用及语义指纹按实体映射核验。',
-        '-- 28张基线表344字段，2张保留功能表23字段；共30张物理表367字段。',
+        f'-- {len(contract["tables"])}张基线表{baseline_columns}字段，{len(OPTIONAL_TABLE_NAMES)}张保留功能表'
+        f'{optional_columns}字段；共{len(TABLE_COMMENTS)}张物理表{baseline_columns + optional_columns}字段。',
         '-- 仅COMMENT及存在性保护块；调用方管理事务，不修改字段、约束或业务数据。',
         '',
     ]

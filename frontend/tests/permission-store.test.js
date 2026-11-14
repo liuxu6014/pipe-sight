@@ -169,20 +169,20 @@ test('switching mixed, top and side layouts restores independent navigation with
   for (let round = 0; round < 3; round++) {
     settings.navType = 2
     await Vue.nextTick()
-    assert.equal(topnav.get('activeMenu.value'), '/_management/collection')
-    assert.deepEqual(Array.from(store.sidebarRouters, menu => menu.path), ['/pipeline/source', '/pipeline/task'])
+    assert.equal(topnav.get('activeMenu.value'), '/pipeline/source')
+    assert.deepEqual(Array.from(store.sidebarRouters, menu => menu.path), Array.from(store.navigationRoutes, menu => menu.path))
     for (const mode of [3, 1]) {
       settings.navType = mode
       await Vue.nextTick()
-      assert.deepEqual(Array.from(store.sidebarRouters, menu => menu.meta.title), ['管理首页', '用户管理', '采集管理', '系统配置'])
+      assert.deepEqual(Array.from(store.sidebarRouters, menu => menu.meta.title), ['管理首页', '用户管理', '采集管理', '模型管理'])
       assert.equal(drawer.appStore.sidebar.hide, mode === 3)
     }
   }
-  store.sidebarRouters[2].children[0].path = '/accidental-local-edit'
-  store.sidebarRouters[2].children[0].meta.title = 'local only'
+  store.sidebarRouters[2].path = '/accidental-local-edit'
+  store.sidebarRouters[2].meta.title = 'local only'
   store.topbarRouters[0].meta.title = 'topbar local only'
   store.restoreSidebarRouters()
-  assert.equal(store.sidebarRouters[2].children[0].path, '/pipeline/source')
+  assert.equal(store.sidebarRouters[2].path, '/pipeline/source')
   assert.equal(JSON.stringify(store.navigationRoutes), prototype)
   assert.equal(JSON.stringify({ routes: store.routes, defaults: store.defaultRoutes }), registered)
 })
@@ -199,20 +199,23 @@ test('TopNav repeatedly selects real group children and navigates direct entries
   for (let round = 0; round < 4; round++) {
     topnav.get("handleSelect('/_management/users')")
     assert.equal(store.sidebarRouters[0].path, '/system/role')
-    topnav.get("handleSelect('/_management/collection')")
-    assert.deepEqual(Array.from(store.sidebarRouters, menu => menu.path), ['/pipeline/source', '/pipeline/task'])
-    assert.equal(store.sidebarRouters[0].query, '{"status":"failed"}')
-    assert.equal(topnav.get('activeMenu.value'), '/_management/collection')
+    topnav.get("handleSelect('/pipeline/source')")
+    assert.deepEqual(Array.from(store.sidebarRouters, menu => menu.path), ['/system/role'])
+    assert.deepEqual({ ...topnav.pushed.at(-1).query }, { status: 'failed' })
+    assert.equal(topnav.pushed.at(-1).path, '/pipeline/source')
+    assert.equal(topnav.appStore.sidebar.hide, true)
+    assert.equal(topnav.get('activeMenu.value'), '/pipeline/source')
   }
   topnav.get("handleSelect('/pipeline/dashboard')")
-  assert.equal(topnav.pushed[0].path, '/pipeline/dashboard')
+  assert.equal(topnav.pushed.at(-1).path, '/pipeline/dashboard')
   assert.equal(topnav.appStore.sidebar.hide, true)
   topnav.get("handleSelect('/not-an-authorized-menu')")
-  assert.equal(topnav.pushed.length, 1)
+  assert.equal(topnav.pushed.length, 5)
   route.path = '/pipeline/model'
   await Vue.nextTick()
-  assert.equal(topnav.get('activeMenu.value'), '/_management/settings')
-  assert.equal(store.sidebarRouters[0].path, '/pipeline/model')
+  assert.equal(topnav.get('activeMenu.value'), '/pipeline/model')
+  assert.equal(topnav.appStore.sidebar.hide, true)
+  assert.equal(store.navigationRoutes.at(-1).path, '/pipeline/model')
   assert.equal(JSON.stringify(store.navigationRoutes), prototype)
 })
 

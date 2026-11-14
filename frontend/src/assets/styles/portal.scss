@@ -1224,7 +1224,7 @@ body:has(.ps-portal) {
 
 .ps-entity-chip em {
   font-style: normal;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--ps-blue);
   padding: 1px 5px;
   border-radius: 4px;
@@ -2512,7 +2512,7 @@ body:has(.ps-portal) {
 .ps-outline-copy { min-width: 0; display: flex; flex-direction: column; }
 .ps-outline-item strong { font-size: 13px; font-weight: 500; white-space: normal; overflow-wrap: anywhere; }
 .ps-outline-item.is-active strong { font-weight: 600; }
-.ps-outline-item small { margin-top: 3px; color: var(--ps-muted); font-size: 12px; }
+.ps-outline-item small { margin-top: 3px; color: var(--ps-muted); font-size: 13px; }
 .ps-outline-status { width: 7px; height: 7px; margin-top: 6px; border-radius: 50%; background: #a6b0be; }
 .ps-outline-status.is-complete { background: var(--ps-green); }
 .ps-outline-status.is-warning { background: var(--ps-orange); }

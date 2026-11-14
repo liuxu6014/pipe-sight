@@ -168,7 +168,7 @@ test('implements the full research creation and editing workflow', () => {
   const task = read('../src/views/portal/pages/ResearchTaskView.vue')
   const editor = read('../src/views/portal/pages/ReportEditorView.vue')
   const diagram = read('../src/views/portal/pages/DiagramEditorView.vue')
-  assert.match(create, /名称与参数/)
+  assert.deepEqual([...create.matchAll(/<el-step title="([^"]+)"/g)].map(match => match[1]), ['基本信息', '选择资料', '选择模板', '确认大纲与写作要求'])
   assert.match(create, /选择模板/)
   assert.match(create, /选择资料/)
   assert.match(create, /<el-input-tag v-model="form.keywords"/)
@@ -529,16 +529,15 @@ test('every portal paginated list offers only ten, twenty and fifty items', () =
   }
 })
 
-test('paper cards keep the action beside the title and only show a footer for real tags', () => {
+test('paper cards group category-first entities and optional keywords beside library actions', () => {
   const source = read('../src/views/portal/pages/PaperListView.vue')
-  assert.match(source, /class="ps-paper-heading"[\s\S]*?@click="add\(paper\)"/)
-  assert.match(source, /v-if="paper.keywords.length" class="ps-paper-footer"/)
-  assert.match(source, /\.ps-paper-footer\s*\{[^}]*display:\s*flex[^}]*align-items:\s*center[^}]*flex-wrap:\s*wrap/)
-  assert.match(source, /<el-button type="primary" plain[^>]*@click="add\(paper\)"/)
-  assert.doesNotMatch(source, /复制引用|copyCitation/)
-  assert.match(source, /\.ps-paper-library \.ps-paper-actions\s*\{[^}]*margin:\s*0 0 0 auto[^}]*border:\s*0/)
-  assert.doesNotMatch(source, /column-reverse/)
+  assert.match(source, /class="ps-paper-card-footer"[\s\S]*?class="ps-paper-topic-tags"[\s\S]*?class="ps-paper-row-actions"/)
+  assert.match(source, /<template #prepend><ContentCategory :name="contentCategory\(paper\)"/)
+  assert.match(source, /v-if="paper.keywords.length" class="ps-paper-keywords"/)
+  assert.match(source, /<el-button type="primary" plain[^>]*:disabled="busy\(paper\)"[^>]*@click="add\(paper\)"/)
+  assert.doesNotMatch(source, /复制引用|copyCitation|column-reverse/)
   assert.match(source, /class="ps-paper-summary">\{\{ paper.abstract/)
+  assert.match(source, /\.ps-paper-card-footer \{[^}]*display: flex;[^}]*flex-wrap: wrap/)
 })
 
 test('uses one configured category filter without duplicate resource classification controls', () => {
@@ -552,21 +551,16 @@ test('uses one configured category filter without duplicate resource classificat
   assert.match(portalStyles, /\.ps-toolbar\s*\{[^}]*display:\s*flex[^}]*gap:\s*10px/)
 })
 
-test('uses the available width for paper metadata without breaking narrow layouts', () => {
+test('paper metadata distinguishes publication from optional collection and citation details', () => {
   const papers = read('../src/views/portal/pages/PaperListView.vue')
-  assert.match(papers, /\{\{\s*paper\.abstract\s*\}\}/)
-  assert.match(papers, /采集时间/)
-  assert.match(papers, /class="ps-paper-main"/)
-  assert.match(papers, /class="ps-paper-meta" aria-label="论文概览"/)
-  assert.match(papers, /ps-paper-journal-name/)
-  assert.match(papers, /被引次数/)
+  assert.match(papers, /class="ps-paper-card-top" aria-label="论文概览"/)
+  assert.match(papers, /paper.publishedDate \|\| paper.year/)
+  assert.match(papers, /v-if="collectionTime\(paper\)">采集于/)
+  assert.match(papers, /v-if="paper.citationCount !== '未提供'">被引/)
   assert.doesNotMatch(papers, /<aside|文献概览/)
-  assert.doesNotMatch(papers, />查看详情</)
   assert.match(papers, /<router-link class="ps-paper-title" :to="`\/portal\/papers\/\$\{paper\.id\}`"/)
   assert.match(papers, /target="_blank" rel="noopener noreferrer"/)
   assert.match(papers, /paper\.title\.trim\(\) !== paper\.titleZh\?\.trim\(\)/)
-  assert.match(papers, /\.ps-paper-library \.ps-paper-card \{ display: block/)
-  assert.match(papers, /\.ps-paper-main \.ps-paper-meta \{ display: flex; flex-wrap: wrap/)
   assert.match(papers, /@media \(max-width: 600px\)/)
 })
 
@@ -642,7 +636,7 @@ test('does not treat model configuration load failures as empty routes', () => {
 
 test('shows data-filter readiness before collection can rely on model processing', () => {
  const page = read('../src/views/pipeline/model/index.vue')
- assert.match(page, /categoryPayload\(categoryForm\)/)
+ assert.match(page, /categoryPayload\(\{ \.\.\.categoryForm, prompt \}\)/)
  assert.match(page, /modelId: null, appliesTo: 'all', sortOrder: 0, isEnabled: false/)
  assert.match(page, /modelsFor\(models.value, 'text_generate'\)/)
 })
@@ -653,7 +647,8 @@ test('keeps model and Prompt controls aligned with backend permissions', () => {
  assert.match(page, /v-if="canModelAdd"/)
  assert.match(page, /v-if="canCategorySave"/)
  assert.match(page, /@click="disableCategory\(row\)"/)
- assert.doesNotMatch(page, /deletePipelineCategory|@click="removeCategory/)
+ assert.match(page, /<el-button v-if="canCategorySave"[^>]*@click="deleteCategory\(row\)"/)
+ assert.match(page, /async function deleteCategory\(item\) \{\s*if \(!canCategorySave.value \|\| categoryBusy.value\) return/)
  assert.ok(page.includes("checkRole(['admin'])"))
  assert.doesNotMatch(page, /场景路由|Prompt 版本|调用审计/)
 })
@@ -662,7 +657,8 @@ test('source management only offers persistent frequency and enablement plus WeC
  const page = read('../src/views/pipeline/source/index.vue')
  for (const name of ['createPipelineSource','updatePipelineSource','disablePipelineSource','existingSourcePayload','newWechatSourcePayload']) assert.ok(page.includes(name))
  assert.doesNotMatch(page, /runPipelineTask|立即采集|翻译模型/)
- assert.match(page, /当前仅支持新增公众号/)
+ assert.match(page, /@click="openCreateDialog">新增公众号/)
+ assert.match(page, /sourceForm, newWechatSourcePayload|newWechatSourcePayload\(sourceForm/)
  assert.doesNotMatch(page, /handoffMode|processorSourceCode|InsightHub/)
 })
 

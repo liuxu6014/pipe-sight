@@ -268,7 +268,7 @@ async def test_apply_then_edit_then_restore_retains_actual_persisted_metadata(en
     report = await env.repo.ResearchDao.get_report(case.db, rows.report.id, case.owner)
     applied = await env.repo.ResearchDao.get_report_version(case.db, report.id, 2)
     assert '任务生成正文' in report.content and report.template_id == rows.new_template.id
-    assert report.content.count('## 参考资料') == 1
+    assert report.content.count('**参考资料**') == 1
     assert applied.model_snapshot == rows.snapshot
     assert applied.citations[0]['sourceId'] == str(rows.file.id)
     assert applied.citations[0]['source'] == {'filename': rows.file.filename}

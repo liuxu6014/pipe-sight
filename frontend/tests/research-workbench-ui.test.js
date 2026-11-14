@@ -21,7 +21,7 @@ test('research reports use a full-width Element Plus table with actions and an i
 test('portal spacing is compact without changing management, reading typography or paper canvas sizing', () => {
   const styles = readFileSync(new URL('../src/assets/styles/workspace.scss', import.meta.url), 'utf8')
   assert.match(styles, /\.ps-portal \.ps-workspace-surface > \.ps-page \{[^}]*padding-block: var\(--ws-page-space\) 12px;/)
-  assert.match(styles, /\.ps-management-shell \.ps-workspace-surface[^}]*padding: var\(--ws-page-space\) var\(--ws-gutter\) 40px;/)
+  assert.match(styles, /\.ps-management-shell \.ps-workspace-surface[^}]*padding: 12px 16px;/)
   assert.match(styles, /\.ps-page-header \{ min-height: 44px; margin-bottom: 12px;/)
   assert.match(styles, /\.ps-report-main > \.ps-empty-state \{[^}]*min-height: 180px;/)
   assert.match(styles, /\.ps-digest-list \{ margin-top: 12px; min-height: 0;/)

@@ -268,16 +268,16 @@ test('report filters retain all templates per exact canonical key and never gues
   assert.equal(h.reportTypeOf(rows.at(-3)), ''); assert.deepEqual(h.writes, [])
 })
 
-test('template content save retains existing purpose contract and reports unpersisted type selection', async () => {
+test('template save persists the selected report type independently of its research purpose', async () => {
   const h = page('template', 'form, saveTemplate, createTemplate, activeCategory')
   h.activeCategory.value = 'technology-route'; h.createTemplate()
   assert.equal(h.form.reportType, 'technology-route')
   Object.assign(h.form, { name: ' 路线模板 ', prompt: ' 依据原文撰写 ', modelId: null })
   await h.saveTemplate()
   const saved = h.writes[0][1]
-  assert.equal(saved.purpose, 'research'); assert.equal(saved.name, '路线模板'); assert.equal('reportType' in saved, false)
+  assert.equal(saved.purpose, 'research'); assert.equal(saved.name, '路线模板'); assert.equal(saved.reportType, 'technology-route')
   assert.equal(saved.modelId, null)
-  assert.match(h.messages.find(item => item.level === 'success').text, /报告类型未保存/)
+  assert.match(h.messages.find(item => item.level === 'success').text, /模板内容及报告类型已保存/)
 })
 
 test('template soft retirement tolerates invalid models; enabling validates full configuration', async () => {

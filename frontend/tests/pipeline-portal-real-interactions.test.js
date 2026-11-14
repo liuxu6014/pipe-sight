@@ -27,10 +27,11 @@ test('paper pages omit citation controls and removed detail tabs', () => {
 })
 
 test('opens paper and news sources only when a valid URL is available', () => {
-  assert.match(paperList, /<a v-if="doiUrl\(paper\)"[^>]*:href="doiUrl\(paper\)"[^>]*target="_blank" rel="noopener noreferrer"/)
+  assert.match(paperList, /<el-link v-if="doiUrl\(paper\)"[^>]*:href="doiUrl\(paper\)"[^>]*target="_blank" rel="noopener noreferrer"/)
   assert.doesNotMatch(paperList, /查看来源|sourceActionLabel|openPaperSource/)
   assert.match(paperDetail, /<a v-if="doiUrl"[^>]*:href="doiUrl"[^>]*target="_blank" rel="noopener noreferrer"/)
   assert.doesNotMatch(paperDetail, /查看来源|openPaperSource/)
+  assert.match(paperDetail, /v-if="!doiUrl && sourceUrl" :href="sourceUrl"/)
   assert.match(newsDetail, /v-if="articleUrl"/)
   assert.match(newsDetail, /rel="noopener noreferrer"/)
   assert.match(newsDetail, /<h1><a v-if="articleUrl"/)

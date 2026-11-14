@@ -26,6 +26,6 @@ test('manuscript page has a direct router entry', () => {
   assert.match(routerSource, /PipelineManuscript/)
 })
 
-test('pipeline dashboard links to manuscript generation', () => {
-  assert.match(dashboardSource, /\$router\.push\('\/pipeline\/manuscript'\)/)
+test('pipeline dashboard links to the unified report workspace', () => {
+  assert.match(dashboardSource, /path: '\/pipeline\/report', permission: 'pipeline:report:list'/)
 })

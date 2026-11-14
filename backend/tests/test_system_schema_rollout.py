@@ -28,6 +28,7 @@ from app.infrastructure.schemas.log import LogininforModel, OperLogModel
 from app.infrastructure.services.persistence_mapping import PersistenceMapping
 from app.infrastructure.services.serialization import CamelCaseUtil, SqlalchemyUtil
 from app.system.models.config import SysConfig
+from app.system.models.dept import SysDept
 from app.system.models.dictionary import SysDictData, SysDictType
 from app.system.models.menu import SysMenu
 from app.system.models.role import SysRole, SysRoleMenu
@@ -105,7 +106,7 @@ def memory_db():
     with engine.connect() as conn:
         conn.exec_driver_sql('PRAGMA foreign_keys=ON')
     metadata = SysUser.metadata
-    metadata.create_all(engine, tables=[m.__table__ for m in MODELS])
+    metadata.create_all(engine, tables=[m.__table__ for m in [SysDept, *MODELS]])
     with Session(engine) as session:
         yield AsyncMemorySession(session)
     engine.dispose()
@@ -130,6 +131,7 @@ def test_relationship_keys_and_foreign_targets():
     assert list(SysRoleMenu.__table__.primary_key.columns.keys()) == ['role_id', 'menu_id']
     assert {f.target_fullname for m in MODELS for f in m.__table__.foreign_keys} == {
         'sys_user.id',
+        'sys_dept.dept_id',
         'sys_role.id',
         'sys_menu.id',
         'sys_dict_type.code',

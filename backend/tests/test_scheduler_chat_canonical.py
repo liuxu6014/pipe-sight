@@ -204,7 +204,7 @@ from config.database import Base
 app = create_app()
 assert not any(route.path.startswith('/ai/chat') for route in app.routes)
 assert not set({CHAT_FRAMEWORK_TABLES!r}) & set(Base.metadata.tables)
-assert len(Base.metadata.tables) == 27
+assert len(Base.metadata.tables) == 28
 import sys
 assert not any(name == 'agno' or name.startswith('agno.') for name in sys.modules)
 assert not any(name in sys.modules for name in {RETIRED_CHAT_MODULES!r})

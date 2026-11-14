@@ -866,6 +866,7 @@ COUNT(*) 配合必要索引和真实筛选，当前不为“一万篇”先建�
 | `updated_by` | `update_by` | character varying(64) | 否 | 否 | ''::character varying | 更新者 | — |
 | `updated_at` | `update_time` | timestamp(0) without time zone | 否 | 否 | — | 更新时间 | — |
 | `remark` | `remark` | character varying(500) | 否 | 否 | NULL::character varying | 备注 | — |
+| `dept_id` | `dept_id` | bigint | 否 | 否 | NULL | 用户所属部门，可空；20261103_restore_departments 新增 | 外键 → `sys_dept.dept_id`，RESTRICT |
 
 ### sys_role（现有表：sys_role）
 
