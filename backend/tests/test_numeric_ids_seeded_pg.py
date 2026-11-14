@@ -15,7 +15,7 @@ import pytest
 )
 def test_nonempty_numeric_ids_real_asyncpg_alembic_and_rollback() -> None:
     root = Path(__file__).resolve().parents[2]
-    script = root / '.runtime/numeric-ids-CrDrud/seeded_rehearsal.py'
+    script = root / 'backend/tests/support/seeded_numeric_rehearsal.py'
     result = subprocess.run(
         [sys.executable, str(script)], cwd=root / 'backend', capture_output=True, text=True, timeout=180, check=False
     )

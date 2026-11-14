@@ -22,6 +22,7 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from pg_rehearsal import connection_info
 from sqlalchemy import select, text
 from sqlalchemy.engine import URL
 from sqlalchemy.exc import DBAPIError, IntegrityError
@@ -31,7 +32,6 @@ from sqlalchemy.orm import DeclarativeBase
 ROOT = Path(__file__).resolve().parents[2]
 PROJECT = ROOT.parent
 APP = ROOT / 'src' / 'app'
-CONNECTION = PROJECT / '.runtime/schema-rollout-ythNjXpI/rehearsal-connection.json'
 CONTAINER = 'pipesight-schema-rehearsal-ythnjxpi'
 TABLES = ('data_sources', 'collection_runs', 'news_articles', 'papers', 'categories', 'ai_models')
 pytestmark = [
@@ -44,12 +44,8 @@ pytestmark = [
 
 
 def rehearsal_connection() -> dict:
-    info = json.loads(CONNECTION.read_text())
-    if (info.get('host'), int(info.get('port', 0)), info.get('dbname')) != (
-        '127.0.0.1',
-        19432,
-        'pipesight_rehearsal',
-    ):
+    info = connection_info()
+    if (info.get('host'), int(info.get('port', 0))) != ('127.0.0.1', 19432):
         raise AssertionError('Refusing any destination except the exact localhost rehearsal')
     labels = subprocess.run(
         ['docker', 'inspect', '--format', '{{json .Config.Labels}}', CONTAINER],
@@ -170,14 +166,14 @@ async def pg(domain, monkeypatch):
         port=info['port'],
         database=info['dbname'],
     )
-    assert url.host == '127.0.0.1' and url.port == 19432 and url.database == 'pipesight_rehearsal'
+    assert url.host == '127.0.0.1' and url.port == 19432 and url.database == info['dbname']
     engine = create_async_engine(url, echo=False, hide_parameters=True, connect_args={'timeout': 5})
     try:
         async with engine.connect() as connection:
             identity = (
                 await connection.execute(text("SELECT current_database(), current_setting('server_version_num')::int"))
             ).one()
-            assert identity[0] == 'pipesight_rehearsal' and 180000 <= identity[1] < 190000
+            assert identity[0] == info['dbname'] and 180000 <= identity[1] < 190000
             for table, expected in [
                 ('data_sources', domain.model.PipelineSource),
                 ('collection_runs', domain.model.PipelineCrawlRun),

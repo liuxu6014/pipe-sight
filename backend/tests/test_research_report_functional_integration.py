@@ -11,19 +11,18 @@ the enclosing connection transaction always rolls back. No real provider calls.
 import importlib
 import json
 import os
-import re
 import socket
 import subprocess
 from copy import deepcopy
 from datetime import datetime, timezone
 from io import BytesIO
-from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from zipfile import ZipFile
 
 import httpx
 import pytest
+from pg_rehearsal import connection_info
 from sqlalchemy import create_engine, event, select, text
 from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session
@@ -49,10 +48,8 @@ def report_case(request: pytest.FixtureRequest, env: Any, monkeypatch: pytest.Mo
         revision = os.environ.get('PIPESIGHT_FIELD_REPAIR_REVISION')
         if not revision:
             pytest.fail('Set PIPESIGHT_FIELD_REPAIR_REVISION to the applied frozen target revision')
-        database = os.environ.get('PIPESIGHT_REPORT_METADATA_DATABASE', LOCAL_DATABASE)
-        assert database == LOCAL_DATABASE or re.fullmatch(r'pipesight_report_metadata_[a-f0-9]{12}', database)
-        root = Path(__file__).resolve().parents[2]
-        info = json.loads((root / '.runtime/schema-rollout-ythNjXpI/rehearsal-connection.json').read_text())
+        info = connection_info()
+        database = info['dbname']
         assert (info['host'], info['port']) == ('127.0.0.1', LOCAL_PORT)
         container = 'pipesight-schema-rehearsal-ythnjxpi'
         inspected = subprocess.run(

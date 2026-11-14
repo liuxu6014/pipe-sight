@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 import sqlalchemy as sa
+from pg_rehearsal import connection_info, snapshot_root
 from sqlalchemy.dialects import postgresql
 
 from app import schema_migration as migration
@@ -472,9 +473,13 @@ def test_exact_optional_sets_have_exact_target_counts(source, selection, total, 
 )
 @pytest.mark.parametrize('optional_tables', [migration.OPTIONAL_TABLE_NAMES, ()])
 def test_real_pg18_rehearsal_rolls_back_all_ddl_and_preserves_data(tmp_path, optional_tables, monkeypatch):
-    root = Path(__file__).resolve().parents[2] / '.runtime/schema-rollout-ythNjXpI'
-    info = json.loads((root / 'rehearsal-connection.json').read_text())
-    assert info['host'] == '127.0.0.1' and int(info['port']) == 19432 and info['dbname'] == 'pipesight_rehearsal'
+    root = snapshot_root()
+    info = connection_info('legacy')
+    assert (
+        info['host'] == '127.0.0.1'
+        and int(info['port']) == 19432
+        and info['dbname'].startswith('pipesight_compact_pgtest_')
+    )
     # Never print docker inspect's Env, which includes a container credential.
     inspect = subprocess.run(
         ['docker', 'inspect', '--format', '{{json .Config.Labels}}', 'pipesight-schema-rehearsal-ythnjxpi'],
@@ -502,7 +507,7 @@ def test_real_pg18_rehearsal_rolls_back_all_ddl_and_preserves_data(tmp_path, opt
             outer = bind.begin()
             try:
                 original = migration.preflight(
-                    bind, historical_timezone='Asia/Shanghai', optional_tables=optional_tables
+                    bind, historical_timezone='Asia/Shanghai', optional_tables=optional_tables, allow_live=True
                 )
                 for sql, reason in [
                     ('GRANT SELECT ON public.ai_models TO PUBLIC', 'Third-party'),
@@ -512,12 +517,16 @@ def test_real_pg18_rehearsal_rolls_back_all_ddl_and_preserves_data(tmp_path, opt
                         bind.exec_driver_sql(sql)
                         with pytest.raises(SchemaPrerequisiteError, match=reason):
                             migration.preflight(
-                                bind, historical_timezone='Asia/Shanghai', optional_tables=optional_tables
+                                bind,
+                                historical_timezone='Asia/Shanghai',
+                                optional_tables=optional_tables,
+                                allow_live=True,
                             )
                         privilege_probe.rollback()
                 archive = tmp_path / 'retirement.json'
                 digest = migration.archive_plan(original, archive)
                 kwargs = {
+                    'allow_live': True,
                     'archive_path': archive,
                     'archive_sha256': digest,
                     'historical_timezone': 'Asia/Shanghai',
@@ -540,7 +549,7 @@ def test_real_pg18_rehearsal_rolls_back_all_ddl_and_preserves_data(tmp_path, opt
                     with pytest.raises(SchemaPrerequisiteError, match='Injected failure'):
                         migration.migrate(bind, **kwargs)
                 restored = migration.preflight(
-                    bind, historical_timezone='Asia/Shanghai', optional_tables=optional_tables
+                    bind, historical_timezone='Asia/Shanghai', optional_tables=optional_tables, allow_live=True
                 )
                 assert restored.source_fingerprints == original.source_fingerprints
                 report = migration.migrate(bind, **kwargs)
@@ -580,7 +589,9 @@ def test_real_pg18_rehearsal_rolls_back_all_ddl_and_preserves_data(tmp_path, opt
                         bind.execute(sa.text(sql))
             finally:
                 outer.rollback()
-            restored = migration.preflight(bind, historical_timezone='Asia/Shanghai', optional_tables=optional_tables)
+            restored = migration.preflight(
+                bind, historical_timezone='Asia/Shanghai', optional_tables=optional_tables, allow_live=True
+            )
             assert restored.source_fingerprints == original.source_fingerprints
     finally:
         engine.dispose()

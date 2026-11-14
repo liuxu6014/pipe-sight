@@ -2,13 +2,12 @@
 
 # Explicit regression data and fixture args follow the PG rehearsal suite.
 
-import json
 import os
 from datetime import datetime, timezone
-from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from pg_rehearsal import connection_info
 from sqlalchemy import URL, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
@@ -45,8 +44,7 @@ async def test_real_pg_xmin_same_second_and_audit_search_cursors_rollback_all_ro
     from app.schema_comments import TABLE_COMMENTS
 
     register_sqlalchemy_models()
-    root = Path(__file__).resolve().parents[2]  # noqa: ASYNC240
-    info = json.loads((root / '.runtime/schema-rollout-ythNjXpI/rehearsal-connection.json').read_text())
+    info = connection_info()
     assert (info['host'], int(info['port'])) == ('127.0.0.1', 19432)
     engine = create_async_engine(
         URL.create(
@@ -55,7 +53,7 @@ async def test_real_pg_xmin_same_second_and_audit_search_cursors_rollback_all_ro
             password=info['password'],
             host='127.0.0.1',
             port=19432,
-            database='pipesight_beijing_initial',
+            database=info['dbname'],
         ),
         echo=False,
         hide_parameters=True,
@@ -67,10 +65,10 @@ async def test_real_pg_xmin_same_second_and_audit_search_cursors_rollback_all_ro
     stamp = datetime(2026, 10, 25, 12, 0, 0, 999999, tzinfo=timezone.utc)
     monkeypatch.setattr(material_repository, 'utcnow', lambda: stamp)
     names = set(TABLE_COMMENTS)
-    assert len(names) == 29
+    assert len(names) == 30
     try:
         async with engine.connect() as connection:
-            assert await connection.scalar(text('SELECT current_database()')) == 'pipesight_beijing_initial'
+            assert await connection.scalar(text('SELECT current_database()')) == info['dbname']
             assert int(await connection.scalar(text('SHOW server_version_num'))) // 10000 == 18
             await connection.execute(text("SET TIME ZONE 'UTC'"))
             await connection.commit()

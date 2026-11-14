@@ -12,11 +12,11 @@ import os
 import subprocess
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
-from pathlib import Path
 from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from pg_rehearsal import connection_info
 from sqlalchemy import URL, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
@@ -26,7 +26,6 @@ from app.intelligence.services.application import IntelligenceApplicationService
 
 EXPECTED_TOTAL = 2
 EXPECTED_PG_MAJOR = 18
-REHEARSAL_ROOT = Path(__file__).resolve().parents[2] / '.runtime/schema-rollout-ythNjXpI'
 CONTAINER = 'pipesight-schema-rehearsal-ythnjxpi'
 
 
@@ -34,12 +33,8 @@ CONTAINER = 'pipesight-schema-rehearsal-ythnjxpi'
 async def rehearsal(request: pytest.FixtureRequest) -> AsyncIterator[tuple[AsyncSession, str, int, int]]:
     if os.environ.get('PIPESIGHT_PAGINATION_PG_REHEARSE') != '1':
         pytest.skip('Explicit PG19432 pagination regression opt-in required')
-    info = json.loads((REHEARSAL_ROOT / 'rehearsal-connection.json').read_text())
-    assert (info['host'], int(info['port']), info['dbname']) == (
-        '127.0.0.1',
-        19432,
-        'pipesight_rehearsal',
-    )
+    info = connection_info()
+    assert (info['host'], int(info['port'])) == ('127.0.0.1', 19432)
     # Inspect only labels/ports, never container Env or credentials.
     labels = await asyncio.to_thread(
         subprocess.run,
@@ -64,7 +59,7 @@ async def rehearsal(request: pytest.FixtureRequest) -> AsyncIterator[tuple[Async
             password=info['password'],
             host='127.0.0.1',
             port=19432,
-            database='pipesight_rehearsal',
+            database=info['dbname'],
         ),
         echo=False,
         hide_parameters=True,
@@ -75,7 +70,7 @@ async def rehearsal(request: pytest.FixtureRequest) -> AsyncIterator[tuple[Async
         async with engine.connect() as connection:
             transaction = await connection.begin()
             try:
-                assert await connection.scalar(text('SELECT current_database()')) == 'pipesight_rehearsal'
+                assert await connection.scalar(text('SELECT current_database()')) == info['dbname']
                 version = int(await connection.scalar(text('SHOW server_version_num')))
                 assert version // 10000 == EXPECTED_PG_MAJOR
                 await connection.execute(text("SET LOCAL statement_timeout='10s'"))

@@ -16,6 +16,7 @@ from unittest.mock import Mock
 
 import pytest
 import sqlalchemy as sa
+from pg_rehearsal import connection_info
 from sqlalchemy import JSON, Column, MetaData, String, Table
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import SetColumnComment, SetTableComment
@@ -230,7 +231,13 @@ def test_v3_comment_snapshot_is_frozen_independently_of_v4_semantic_policy() -> 
     assert schema_comments_v3.VIEW_COMMENTS == VIEW_COMMENTS
     expected = {name: set(cols) for name, cols in schema_comments_v3.COLUMN_COMMENTS.items()}
     expected['digest_schedules'] |= {
-        'last_run_at', 'last_status', 'last_error', 'success_count', 'failure_count', 'skipped_count', 'last_failed_due_at'
+        'last_run_at',
+        'last_status',
+        'last_error',
+        'success_count',
+        'failure_count',
+        'skipped_count',
+        'last_failed_due_at',
     }
     expected['news_articles'] |= {'entities', 'summary', 'ai_insight'}
     expected['papers'] |= {'entities', 'ai_insight', 'summary'}
@@ -336,14 +343,10 @@ def test_status_password_units_dates_and_json_snapshot_semantics() -> None:
     os.environ.get('PIPESIGHT_COMPACT_COMMENT_REHEARSE') != '1', reason='Explicit canonical local rehearsal only'
 )
 def test_comment_only_pg18_updates_preserve_every_business_row() -> None:
-    database = os.environ.get('PIPESIGHT_V3_COMMENT_DATABASE')
-    if not database:
-        pytest.skip('Runtime v5 comments require an explicit independent numeric-ID rehearsal database')
-    assert re.fullmatch(r'pipesight_numeric_[a-z0-9_]+', database)
-    root = Path(__file__).resolve().parents[2] / '.runtime/schema-rollout-ythNjXpI'
-    connection = json.loads((root / 'rehearsal-connection.json').read_bytes())
+    connection = connection_info()
+    database = connection['dbname']
     assert connection['host'] == '127.0.0.1' and connection['port'] == 19432
-    assert connection['dbname'] == 'pipesight_rehearsal'
+    assert database.startswith('pipesight_beijing_pgtest_')
     container = 'pipesight-schema-rehearsal-ythnjxpi'
     labels = subprocess.run(
         ['docker', 'inspect', '--format', '{{json .Config.Labels}}', container], check=True, capture_output=True
@@ -380,9 +383,9 @@ def test_comment_only_pg18_updates_preserve_every_business_row() -> None:
                 }
 
             before = rows()
-            assert apply_schema_comments(bind, allow_live=True) == {'tables': 30, 'columns': 367, 'views': 2}
+            assert apply_schema_comments(bind, allow_live=True) == {'tables': 30, 'columns': 369, 'views': 2}
             assert rows() == before
-            assert apply_schema_comments(bind, allow_live=True) == {'tables': 30, 'columns': 367, 'views': 2}
+            assert apply_schema_comments(bind, allow_live=True) == {'tables': 30, 'columns': 369, 'views': 2}
             assert rows() == before
     finally:
         engine.dispose()

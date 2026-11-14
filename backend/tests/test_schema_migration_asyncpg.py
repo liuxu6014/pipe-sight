@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
+from pg_rehearsal import rehearsal_manifest
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app import schema_migration as migration
@@ -28,7 +29,8 @@ from app.schema_comments_v2 import TABLE_COMMENTS as V2_TABLE_COMMENTS
 
 ROOT = Path(__file__).resolve().parents[2]
 BACKEND = ROOT / 'backend'
-RUNTIME = ROOT / '.runtime/schema-rollout-ythNjXpI'
+RUNTIME = Path(os.environ.get('PIPESIGHT_PG_SNAPSHOT_ROOT', ROOT / '.runtime/schema-rollout-ythNjXpI'))
+EVIDENCE = Path(os.environ.get('PIPESIGHT_PG_EVIDENCE', RUNTIME))
 CONTAINER = 'pipesight-schema-rehearsal-ythnjxpi'
 
 
@@ -37,7 +39,7 @@ def _docker(*arguments: str, input_bytes: bytes | None = None) -> subprocess.Com
 
 
 def _local_connection() -> dict:
-    connection = json.loads((RUNTIME / 'rehearsal-connection.json').read_bytes())
+    connection = rehearsal_manifest()['connection']
     assert connection['host'] == '127.0.0.1' and connection['port'] == 19432
     assert connection['dbname'] == 'pipesight_rehearsal'
     labels = json.loads(_docker('inspect', '--format', '{{json .Config.Labels}}', CONTAINER).stdout)
@@ -228,7 +230,7 @@ def test_original_dump_migrates_through_real_alembic_asyncpg_cli() -> None:
         '--single-transaction',
         input_bytes=dump,
     )
-    archive = RUNTIME / (database + '-retirement.json')
+    archive = EVIDENCE / (database + '-retirement.json')
     plan, digest = asyncio.run(_prepare(connection, database, snapshot, archive))
     environment = {
         **os.environ,
@@ -279,7 +281,7 @@ def test_original_dump_migrates_through_real_alembic_asyncpg_cli() -> None:
     report = asyncio.run(_verify(connection, database, plan))
     # Freeze a real intermediate v1 dump before invoking the historical v2
     # revision. Runtime v3 imports must not leak numeric IDs/comments backwards.
-    backup = RUNTIME / (database + '-v2-backup')
+    backup = EVIDENCE / (database + '-v2-backup')
     backup.mkdir(mode=0o700)
     intermediate_dump = _docker('exec', CONTAINER, 'pg_dump', '-U', connection['user'], '-d', database, '-Fc').stdout
     manifest = asyncio.run(_v2_manifest(connection, database))
@@ -328,7 +330,7 @@ def test_original_dump_migrates_through_real_alembic_asyncpg_cli() -> None:
     )
     # Generated evidence is retained with the independent DB for inspection;
     # neither existing rehearsal nor source credentials are included.
-    evidence = RUNTIME / (database + '-verification.json')
+    evidence = EVIDENCE / (database + '-verification.json')
     fd = os.open(evidence, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, 'w', encoding='utf-8') as stream:
         json.dump(report, stream, ensure_ascii=False, indent=2)
