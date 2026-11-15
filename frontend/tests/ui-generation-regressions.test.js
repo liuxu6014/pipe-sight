@@ -1,6 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import * as vue from 'vue'
+import { renderToString } from 'vue/server-renderer'
+import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
+import { getCitationPath } from '../src/utils/portal/citationRouting.js'
 import { buildPersonalReports, hasReportOutput } from '../src/utils/portal/personalReports.js'
 import { cleanReportCitationNotes } from '../src/utils/portal/reportDocument.js'
 
@@ -24,31 +28,25 @@ test('digest section source counts use resolved citation associations, not stale
   assert.match(page('DigestEditorView'), /sectionSources\(section\)\.length/)
 })
 
-test('G01: only explicit matching cadence or all is eligible; legacy names are conservative', () => {
-  const match = action('DigestCreateView', 'templateMatchesType')
-  for (const digestCadence of ['daily', 'weekly', 'monthly', 'all', null, 'unknown']) {
-    assert.equal(match({ digestCadence, name: '模板' }, '日报'), ['daily', 'all'].includes(digestCadence))
+test('G01: fixed-format digest payload accepts weekly and monthly without any template or outline', () => {
+  const form = { type: '周报', directions: ['油气管网'], keywords: ['检测'], sources: ['新闻网站'],
+    itemCount: 10, summaryLength: 'normal', hotAnalysis: true, duplicateMerge: true }
+  const build = action('DigestCreateView', 'buildDigestPayload', { form,
+    DIGEST_SELECTION_LIMIT: 50, selectedCandidateIds: { value: ['101'] }, selectedCandidates: { value: [{ ready: true }] },
+    refreshing: { value: false }, previewError: { value: '' }, sourceTaskLoading: { value: false }, sourceTaskError: { value: '' },
+    currentTypeConfig: { get value() { return { reportType: form.type === '周报' ? 'weekly' : 'monthly' } } },
+    buildReportPeriod: () => ({ period: ['2026-10-01', '2026-10-31'], label: '测试周期' }),
+    periodFieldLabel: { value: '报告周期' }, requireBusinessId: id => id
+  })
+  for (const [type, reportType] of [['周报', 'weekly'], ['月报', 'monthly']]) {
+    form.type = type
+    const payload = build()
+    assert.equal(payload.reportType, reportType)
+    assert.deepEqual(payload.selectedItemIds, ['101'])
+    for (const field of ['templateId', 'templateVersion', 'outline', 'templatePrompt']) assert.equal(Object.hasOwn(payload, field), false)
   }
-  assert.equal(match({ name: '管网科技情报月报' }, '日报'), false)
-  assert.equal(match({ name: '管网科技情报日报' }, '日报'), true)
-  assert.equal(match({ name: '日报周报混合模板' }, '日报'), false)
-  assert.equal(match({ digestCadence: null, name: '管网科技情报日报' }, '日报'), false)
-  assert.equal(match({ reportType: 'digest', purpose: 'digest', name: '未知' }, '日报'), false)
-})
-
-test('G01: loading, switching and query selection reject mismatched templates; payload rechecks', () => {
-  const form = { type: '日报', template: '2' }
-  const templateOptions = { value: [{ value: '1', digestCadence: 'daily' }, { value: '2', digestCadence: 'monthly' }] }
-  const templateMatchesType = action('DigestCreateView', 'templateMatchesType')
-  action('DigestCreateView', 'selectTemplateForType', { form, templateOptions, templateMatchesType })()
-  assert.equal(form.template, '1')
-  form.template = 'old-template-uuid'
-  action('DigestCreateView', 'selectTemplateForType', { form, templateOptions, templateMatchesType })()
-  assert.equal(form.template, 'old-template-uuid')
-  const source = page('DigestCreateView')
-  assert.match(source, /availableTemplates = computed\([^\n]*templateMatchesType/)
-  assert.match(source, /watch\(\(\) => route.query.template,[^\n]*selectTemplateForType/)
-  assert.match(source, /function buildDigestPayload\(\)[\s\S]*?templateMatchesType\(selectedTemplate, form.type\)/)
+  form.type = '日报'
+  assert.throws(build, /仅支持新建周报或月报/)
 })
 
 test('G05: report UI no longer offers historical version or restore operations', () => {
@@ -147,3 +145,64 @@ test('G11: no pass claim is inferred from empty issues or citation-check configu
   assert.doesNotMatch(page('DigestEditorView'), /未发现阻断导出的问题|已完成基础检查|基础质量检查已通过/)
   assert.doesNotMatch(page('ResearchTaskView'), /<dt>引用检查<\/dt>/)
 })
+
+
+async function renderTaskMaterials(type) {
+  const { descriptor } = parse(page('ResearchTaskView'))
+  const script = compileScript(descriptor, { id: 'task-materials' })
+  const compiled = compileTemplate({ source: descriptor.template.content, id: 'task-materials',
+    compilerOptions: { mode: 'function', bindingMetadata: script.bindings } })
+  assert.deepEqual(compiled.errors, [])
+  const dependencies = { ...vue,
+    useRoute: () => ({ name: 'PortalResearchTask', params: { id: '41' } }), useRouter: () => ({ push() {} }),
+    useUserStore: () => ({ nickName: '验收用户' }), getCitationPath, formatBusinessTime: value => value || '',
+    PortalEmptyState: {}, Check: {}, Loading: {}, WarningFilled: {}, ElMessage: {}, ElMessageBox: {},
+    getPipelineResearchJob: async () => { throw Error('rendering must not issue a task request') },
+    cancelPipelineResearchJob: async () => { throw Error('must not cancel') },
+    retryPipelineResearchJob: async () => { throw Error('must not retry') }
+  }
+  const code = script.content.replace(/^import[\s\S]*?from ['"][^'"]+['"];?\n?/gm, '').replace('export default', 'return')
+  const entries = Object.entries(dependencies).filter(([key]) => key !== 'default' && key !== 'module.exports')
+  const component = new Function(...entries.map(([key]) => key), code)(...entries.map(([, value]) => value))
+  const original = component.setup
+  component.setup = (props, context) => {
+    const state = original(props, context)
+    state.loaded.value = true
+    state.showMaterials.value = true
+    state.task.value = { title: '历史任务', status: 'completed', progress: 100, type, fixedDigestFormat: ['weekly', 'monthly'].includes(type),
+      selectedItems: [
+        { id: '18', type: 'article', title: '历史新闻', source: '新闻来源' },
+        { id: '26', type: 'paper', title: '历史论文', source: '期刊' },
+        { id: '54', type: 'file', title: '历史上传附件.docx', source: { filename: '历史上传附件.docx' } }
+      ] }
+    return state
+  }
+  component.render = new Function('Vue', compiled.code)(vue)
+  const app = vue.createSSRApp(component)
+  const slot = { setup: (_, context) => () => vue.h('div', context.slots.default?.()) }
+  for (const name of ['el-button', 'el-tag', 'el-progress', 'el-alert', 'el-dialog', 'router-link']) app.component(name, slot)
+  return renderToString(app)
+}
+
+for (const type of ['weekly', 'monthly', 'research-demand']) {
+  test(`task input summary respects ${type} scope while retaining historical uploaded evidence`, async () => {
+    const html = await renderTaskMaterials(type)
+    const summary = html.match(/<div class="ps-input-summary[^>]*>([\s\S]*?)<\/div>/)?.[1]
+    assert.ok(summary)
+    assert.match(summary, /新闻资讯.*1/)
+    assert.match(summary, /论文.*1/)
+    if (type === 'research-demand') {
+      assert.match(summary, /上传资料.*1/)
+    } else {
+      assert.doesNotMatch(summary, /上传资料/)
+      assert.match(html, /输出格式/)
+      assert.match(html, /系统固定格式/)
+    }
+    // Summary simplification must not remove source snapshots from the dialog.
+    assert.match(html, /输入资料清单/)
+    assert.match(html, /历史上传附件\.docx/)
+    assert.match(html, /上传资料 · 历史上传附件\.docx/)
+    assert.match(html, /历史新闻/)
+    assert.match(html, /历史论文/)
+  })
+}

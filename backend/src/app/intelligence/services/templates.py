@@ -76,6 +76,47 @@ class PipelineTemplateService:
         return {'created': len(created)}
 
     @staticmethod
+    async def get_fixed_digest(db, frequency: str, user_id: int) -> PipelineTemplateVersion:
+        """Internal format reference for existing report/schedule foreign keys.
+
+        Historical user templates remain untouched. The caller owns the transaction,
+        so failed admission rolls back creation of this internal reference too.
+        """
+        from app.intelligence.services.template_presets import fixed_digest_template  # noqa: PLC0415
+
+        if frequency not in {'weekly', 'monthly'}:
+            raise ServiceException(message='仅支持周报和月报固定格式')
+        if user_id is None:
+            raise ServiceException(message='简报所有者不能为空')
+        if db.get_bind().dialect.name == 'postgresql':
+            await db.execute(
+                text('SELECT pg_advisory_xact_lock(hashtext(:key))'),
+                {'key': f'fixed-digest:{user_id}:{frequency}'},
+            )
+        spec = fixed_digest_template(frequency)
+        row = await db.scalar(
+            select(PipelineTemplateVersion).where(
+                PipelineTemplateVersion.user_id == user_id,
+                PipelineTemplateVersion.preset_key == spec['preset_key'],
+            )
+        )
+        if row is None:
+            row = PipelineTemplateVersion(**deepcopy(spec), user_id=user_id)
+            db.add(row)
+            await db.flush()
+        else:
+            for field, value in spec.items():
+                if getattr(row, field) != value:
+                    setattr(row, field, deepcopy(value))
+            row.deleted_at = None
+        return row
+
+    @staticmethod
+    def _require_editable(row) -> None:
+        if row.purpose == 'digest':
+            raise ServiceException(message='情报简报使用系统固定格式，无需编辑个人模板')
+
+    @staticmethod
     def digest_cadence(row) -> str | None:
         """Explicit cadence is authoritative; legacy rows are converted by migration."""
         if row.purpose != 'digest':
@@ -177,12 +218,11 @@ class PipelineTemplateService:
             )
         else:
             rows = await ResearchDao.list_templates(db, purpose, user_id)
-        # Daily briefs are historical-only. Keep saved rows for old reports,
-        # but omit them from management and new-generation template choices.
+        # Preserve historical references, but never expose brief rows as personal templates.
         rows = [
             row
             for row in rows
-            if cls.digest_cadence(row) != 'daily'
+            if row.purpose != 'digest'
             and (include_deleted or row.deleted_at is None)
             and (not published_only or (row.is_enabled and row.deleted_at is None))
         ]
@@ -270,7 +310,9 @@ class PipelineTemplateService:
         purpose = payload.get('purpose') or {'project': 'research'}.get(
             payload.get('category'), payload.get('category')
         )
-        if purpose not in {'article', 'research', 'digest'}:
+        if purpose == 'digest':
+            raise ServiceException(message='情报简报使用系统固定格式，无需创建个人模板')
+        if purpose not in {'article', 'research'}:
             raise ServiceException(message='模板用途不合法')
         prompt = str(payload.get('prompt') or '').strip()
         name = str(payload.get('name') or '').strip()
@@ -297,22 +339,12 @@ class PipelineTemplateService:
         row = await ResearchDao.get_template(db, template_key, user_id) if template_key is not None else None
         if template_key is not None and row is None:
             raise ServiceException(message='模板不存在或无权操作')
+        if row is not None:
+            cls._require_editable(row)
         if row is not None and row.deleted_at is not None:
             raise ServiceException(message='模板已删除，请先恢复后再编辑')
-        cadence = payload.get('digest_cadence')
-        if purpose == 'digest':
-            if payload.get('digest_cadence') is None:
-                cadence = (
-                    cls.digest_cadence(row)
-                    if row is not None
-                    else cls.digest_cadence(type('Legacy', (), {'purpose': purpose, 'name': name})()) or 'all'
-                )
-            if cadence not in {'weekly', 'monthly', 'all', 'daily'}:
-                raise ServiceException(message='请选择简报适用周期')
-            if cadence == 'daily' and (row is None or cls.digest_cadence(row) != 'daily'):
-                raise ServiceException(message='日报仅保留历史读取，不支持创建')
-        elif cadence is not None:
-            raise ServiceException(message='只有简报模板可以设置适用周期')
+        if payload.get('digest_cadence') is not None:
+            raise ServiceException(message='简报适用周期由系统固定格式提供')
         if row is not None and not bool(payload.get('is_enabled', True)):
             await cls._check_active_schedules(db, row)
         if row is None:
@@ -323,7 +355,7 @@ class PipelineTemplateService:
         # Older clients may omit the binding; preserve it on content-only updates.
         if purpose != 'research' or 'report_type' in payload or row.id is None:
             row.report_type = selected_type
-        row.digest_cadence = cadence if purpose == 'digest' else None
+        row.digest_cadence = None
         row.purpose, row.prompt = purpose, prompt
         row.sections = deepcopy(payload.get('sections') or [])
         row.image_config = deepcopy(payload.get('image_config') or {})
@@ -356,6 +388,7 @@ class PipelineTemplateService:
         row = await ResearchDao.get_template(db, parse_business_id(template_key), user_id)
         if not row or row.deleted_at is not None:
             raise ServiceException(message='模板不存在或无权操作')
+        cls._require_editable(row)
         row.is_enabled = True
         await db.commit()
         return cls._dict(row)
@@ -365,6 +398,7 @@ class PipelineTemplateService:
         row = await ResearchDao.get_template(db, parse_business_id(template_key), user_id)
         if not row:
             raise ServiceException(message='模板不存在或无权操作')
+        cls._require_editable(row)
         await cls._check_active_schedules(db, row)
         row.is_enabled = False
         await db.commit()
@@ -375,6 +409,7 @@ class PipelineTemplateService:
         row = await ResearchDao.get_template(db, parse_business_id(template_key), user_id)
         if row is None:
             raise ServiceException(message='模板不存在或无权操作')
+        cls._require_editable(row)
         await cls._check_active_schedules(db, row)
         row.deleted_at = row.deleted_at or audit_now()
         row.is_enabled = False
@@ -386,6 +421,7 @@ class PipelineTemplateService:
         row = await ResearchDao.get_template(db, parse_business_id(template_key), user_id)
         if row is None:
             raise ServiceException(message='模板不存在或无权操作')
+        cls._require_editable(row)
         row.deleted_at = None
         await db.commit()
         return cls._dict(row)

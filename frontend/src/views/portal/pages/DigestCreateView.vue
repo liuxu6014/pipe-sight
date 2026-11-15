@@ -74,31 +74,23 @@
         </section>
     <section class="ps-form-card ps-digest-settings">
         <div v-show="settingsExpanded" id="digest-generation-settings" class="ps-digest-config-body" role="region" aria-label="生成设置">
-          <PersonalTemplateDialog @changed="loadTemplates" />
           <div class="ps-form-grid ps-digest-output-grid">
-            <label>报告模板<el-select v-model="form.template" aria-label="报告模板"><el-option v-for="item in availableTemplates" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
             <label>每栏资讯数量<el-input-number v-model="form.itemCount" :min="3" :max="30" /></label>
             <label>单条摘要长度<el-select v-model="form.summaryLength"><el-option label="精简（80-120字）" value="short" /><el-option label="标准（150-200字）" value="normal" /><el-option label="深度（250-300字）" value="long" /></el-select></label>
           </div>
           <div class="ps-option-row"><el-checkbox v-model="form.hotAnalysis">包含热点分析</el-checkbox><el-checkbox v-model="form.duplicateMerge">合并重复事件</el-checkbox></div>
         </div>
-      <p v-if="templatesLoading" class="ps-digest-template-notice" role="status">正在加载已发布简报模板…</p>
-      <div v-else-if="templatesError" class="ps-inline-state is-warning" role="alert"><span>{{ templatesError }}</span><el-button plain @click="loadTemplates">重新加载模板</el-button></div>
-      <p v-else-if="!availableTemplates.length" class="ps-digest-template-notice" role="status">当前报告类型暂无启用模板，请在模板管理中创建并启用。</p>
-      <el-alert v-if="form.template && !decimalId(form.template)" :title="ID_UPGRADE_NOTICE" type="warning" :closable="false" show-icon />
-      <el-alert v-if="templateOptions.find(item => item.value === form.template) && templateGenerationError(templateOptions.find(item => item.value === form.template))" :title="templateGenerationError(templateOptions.find(item => item.value === form.template))" type="warning" :closable="false" show-icon />
+      <p class="ps-digest-template-notice">周报、月报统一按分类、事件摘要、行业洞察和来源的固定格式生成。</p>
       <footer class="ps-form-footer ps-digest-submit">
         <el-button class="ps-ui-action ps-digest-settings-toggle" :aria-expanded="settingsExpanded" aria-controls="digest-generation-settings" @click="settingsExpanded = !settingsExpanded"><span aria-hidden="true">›</span>生成设置</el-button>
-        <div class="ps-digest-submit-actions"><el-button @click="router.push('/portal/digests')">取消</el-button><el-button type="primary" :loading="submitting" :disabled="templatesLoading || !availableTemplates.length || refreshing || Boolean(previewError) || !selectedCandidateIds.length || sourceTaskLoading || Boolean(sourceTaskError)" @click="createDigest">开始生成</el-button></div>
+        <div class="ps-digest-submit-actions"><el-button @click="router.push('/portal/digests')">取消</el-button><el-button type="primary" :loading="submitting" :disabled="refreshing || Boolean(previewError) || !selectedCandidateIds.length || sourceTaskLoading || Boolean(sourceTaskError)" @click="createDigest">开始生成</el-button></div>
       </footer>
     </section>
   </div>
 </template>
 
 <script setup>
-import { displayId, decimalId, requireBusinessId, ID_UPGRADE_NOTICE } from '@/utils/portal/businessId'
-import { templateGenerationError } from '@/utils/pipeline/compactContract'
-import PersonalTemplateDialog from '../components/PersonalTemplateDialog.vue'
+import { displayId, requireBusinessId } from '@/utils/portal/businessId'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { cleanResultMeta } from '@/utils/portal/discovery'
 import { calendarDate, parseCalendarDate } from '@/utils/portal/businessTime'
@@ -106,7 +98,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Back } from '@element-plus/icons-vue'
 import usePortalStore from '@/store/modules/portal'
-import { createPipelineResearchJob, getPipelineContentFilters, getPipelineIntelligenceDetail, getPipelineResearchJob, listPipelineTemplates, searchPipelineDigestCandidates } from '@/api/pipeline/intelligence'
+import { createPipelineResearchJob, getPipelineContentFilters, getPipelineIntelligenceDetail, getPipelineResearchJob, searchPipelineDigestCandidates } from '@/api/pipeline/intelligence'
 import { DIGEST_SELECTION_LIMIT, digestCandidate, fetchDigestPage, mapEvidence, preciseDate, verifyEvidence } from '@/utils/portal/evidenceInput'
 
 const route = useRoute()
@@ -151,12 +143,9 @@ const submitting = ref(false)
 const requestId = ref('')
 let requestFingerprint = ''
 const reportTypeConfigs = {
-  周报: { reportType: 'weekly', periodLabel: '报告周期', leadTitle: '本周要闻', hotTitle: '周度趋势研判', itemCount: 10 },
-  月报: { reportType: 'monthly', periodLabel: '报告月份', leadTitle: '月度要闻', hotTitle: '月度趋势研判', itemCount: 15 }
+  周报: { reportType: 'weekly', periodLabel: '报告周期', itemCount: 10 },
+  月报: { reportType: 'monthly', periodLabel: '报告月份', itemCount: 15 }
 }
-const templateOptions = ref([])
-const templatesLoading = ref(false)
-const templatesError = ref('')
 const categoryOptions = ref([])
 const categoryError = ref('')
 async function loadCategories() {
@@ -170,7 +159,7 @@ async function loadCategories() {
   }
 }
 const initialType = ({ weekly: '周报', monthly: '月报', 周报: '周报', 月报: '月报' })[String(route.query.type || '')] || '周报'
-const form = reactive({ type: initialType, period: [], month: new Date(), directions: [], sources: ['新闻网站', '微信公众号'], keywords: [], template: String(route.query.template || ''), itemCount: reportTypeConfigs[initialType].itemCount, summaryLength: 'normal', hotAnalysis: true, duplicateMerge: true })
+const form = reactive({ type: initialType, period: [], month: new Date(), directions: [], sources: ['新闻网站', '微信公众号'], keywords: [], itemCount: reportTypeConfigs[initialType].itemCount, summaryLength: 'normal', hotAnalysis: true, duplicateMerge: true })
 const keywordDraft = ref('')
 function updateKeywords(values) {
   form.keywords = [...new Set((values || []).map(value => value.trim()).filter(Boolean))]
@@ -186,7 +175,6 @@ function removeKeyword(value) {
 }
 const currentTypeConfig = computed(() => reportTypeConfigs[form.type])
 const periodFieldLabel = computed(() => currentTypeConfig.value.periodLabel)
-const availableTemplates = computed(() => templateOptions.value.filter(item => templateMatchesType(item, form.type)))
 const previewScope = computed(() => ({ period: buildReportPeriod().period, directions: [...form.directions], keywords: [...form.keywords], sources: [...form.sources] }))
 const scopeKey = computed(() => JSON.stringify(previewScope.value))
 const candidateItems = computed(() => previewPages.value[previewPageKey.value]?.rows || [])
@@ -202,39 +190,9 @@ function ensureRequestId(payload) {
   }
   return requestId.value
 }
-const writingSections = computed(() => {
-  const selected = templateOptions.value.find(item => item.value === form.template)
-  return (selected?.sections || []).filter(section => section.title
-    && !['参考资料', '参考文献', '来源清单', '资料来源', 'references'].includes(section.title.trim().toLowerCase())
-    && (form.hotAnalysis || !(section.required === false && /热点|研判|趋势/.test(section.title))))
-})
-const columnSuggestions = computed(() => writingSections.value.length
-  ? writingSections.value.map(section => section.title)
-  : [currentTypeConfig.value.leadTitle])
 watch(() => form.type, type => {
-  if (!reportTypeConfigs[type]) return
-  selectTemplateForType()
-  form.itemCount = reportTypeConfigs[type].itemCount
+  if (reportTypeConfigs[type]) form.itemCount = reportTypeConfigs[type].itemCount
 })
-watch(() => route.query.template, value => { if (value !== undefined) { form.template = String(value); selectTemplateForType() } })
-function templateMatchesType(template, type) {
-  if (!template) return false
-  let cadence = template.digestCadence
-  // Only older DTOs without the field may use an unambiguous legacy name.
-  if (cadence === undefined) {
-    const names = ['日报', '周报', '月报'].filter(label => String(template.name || '').includes(label))
-    cadence = names.length === 1 ? ({ 日报: 'daily', 周报: 'weekly', 月报: 'monthly' })[names[0]] : null
-  }
-  const selected = ({ 日报: 'daily', 周报: 'weekly', 月报: 'monthly' })[type]
-  return Boolean(selected) && (cadence === 'all' || cadence === selected)
-}
-function selectTemplateForType() {
-  // Retain stale/query IDs for the existing upgrade/error UI; never silently
-  // substitute a template for an identifier the server did not return.
-  if (form.template && !templateOptions.value.some(item => item.value === form.template)) return
-  const options = templateOptions.value.filter(item => templateMatchesType(item, form.type))
-  if (!options.some(item => item.value === form.template)) form.template = options[0]?.value || ''
-}
 async function refreshPreview() {
   const generation = ++previewGeneration
   const session = portalStore.workspaceEpoch
@@ -310,9 +268,6 @@ async function loadSourceTask() {
     if (typeMap[reportType]) form.type = typeMap[reportType]
     await Promise.resolve()
     const options = config.options || {}
-    form.template = config.templateId || config.template_id || form.template
-    form.template = String(form.template)
-    selectTemplateForType()
     form.directions = String(config.direction || '').split('、').filter(Boolean)
     form.keywords = Array.isArray(config.keywords) ? [...config.keywords] : []
     form.sources = Array.isArray(options.sources) ? options.sources.filter(source => ['新闻网站', '微信公众号'].includes(source)) : ['新闻网站', '微信公众号']
@@ -355,14 +310,9 @@ function buildReportPeriod() {
 }
 async function createDigest() {
   if (submitting.value) return
-  if (form.template && !decimalId(form.template)) return ElMessage.warning(ID_UPGRADE_NOTICE)
   if (selectedCandidateIds.value.length > DIGEST_SELECTION_LIMIT) return ElMessage.warning(`每份简报最多选择 ${DIGEST_SELECTION_LIMIT} 篇资料，请减少勾选`)
   if (refreshing.value || previewError.value || sourceTaskLoading.value || sourceTaskError.value) return ElMessage.warning('请先完成候选核验并处理加载失败')
   if (!selectedCandidateIds.value.length) return ElMessage.warning('请明确选择用于生成的候选资料')
-  const selectedTemplate = templateOptions.value.find(item => item.value === form.template)
-  if (!templateMatchesType(selectedTemplate, form.type)) return ElMessage.warning('请选择适用于当前简报周期的启用模板')
-  const modelError = templateGenerationError(selectedTemplate)
-  if (modelError) return ElMessage.warning(modelError)
   submitting.value = true
   try {
     const key = scopeKey.value
@@ -373,7 +323,6 @@ async function createDigest() {
     const failed = checked.filter(item => !item.ready || !digestCandidate(item.detail, previewScope.value))
     if (failed.length) { previewError.value = `已选资料核验失败或已不匹配：${failed.map(item => `${item.id}（${item.reason || '日期或来源不匹配'}）`).join('；')}`; return }
     const payload = buildDigestPayload()
-    const reportType = currentTypeConfig.value.reportType
     const requestId = ensureRequestId(payload)
     const res = await createPipelineResearchJob({ ...payload, requestId })
     await portalStore.hydrate(true)
@@ -387,51 +336,26 @@ async function createDigest() {
 }
 function buildDigestPayload() {
   if (!['周报', '月报'].includes(form.type)) throw new Error('仅支持新建周报或月报')
-  if (form.template && !decimalId(form.template)) throw new Error(ID_UPGRADE_NOTICE)
   if (selectedCandidateIds.value.length > DIGEST_SELECTION_LIMIT) throw new Error(`每份简报最多选择 ${DIGEST_SELECTION_LIMIT} 篇资料，请减少勾选`)
   if (refreshing.value || previewError.value || sourceTaskLoading.value || sourceTaskError.value) throw new Error('候选核验尚未完成或加载失败')
   if (!selectedCandidateIds.value.length || selectedCandidates.value.some(item => !item.ready)) throw new Error('存在未核验的已选资料')
   const reportType = currentTypeConfig.value.reportType
   const { period, label } = buildReportPeriod()
   if (!period.length || period.length !== 2 || period[0] > period.at(-1)) throw new Error(`请选择完整且有效的${periodFieldLabel.value}`)
-  const selectedTemplate = templateOptions.value.find(item => item.value === form.template)
-  if (!templateMatchesType(selectedTemplate, form.type)) throw new Error('请选择适用于当前简报周期的启用模板')
-  const modelError = templateGenerationError(selectedTemplate)
-  if (modelError) throw new Error(modelError)
   return {
       title: `管网科技情报${form.type} ${label}`.trim(),
       reportType,
-      templateId: requireBusinessId(form.template),
-      templateVersion: selectedTemplate?.version || '版本待补充',
       direction: form.directions.join('、'),
       period,
       keywords: form.keywords,
       requirements: `报告周期：${label}；来源范围：${form.sources.join('、')}；每栏 ${form.itemCount} 条；摘要长度：${form.summaryLength}`,
       citationCheck: true,
-      outline: columnSuggestions.value.map((title, index) => ({ id: index + 1, title,
-        words: writingSections.value[index]?.words || (form.summaryLength === 'long' ? 1800 : 1200),
-        ...(writingSections.value[index]?.description ? { description: writingSections.value[index].description } : {}) })),
       selectedItemIds: selectedCandidateIds.value.map(requireBusinessId),
       options: { cadence: reportType, summaryLength: form.summaryLength, itemCount: form.itemCount, directions: [...form.directions], sources: [...form.sources], hotAnalysis: form.hotAnalysis, duplicateMerge: form.duplicateMerge }
   }
 }
-async function loadTemplates() {
-  templatesLoading.value = true
-  templatesError.value = ''
-  try {
-    const res = await listPipelineTemplates({ category: 'digest', publishedOnly: true })
-    templateOptions.value = (res.data?.rows || []).map(item => ({ ...item, label: item.name, value: displayId(item.id || item.templateKey), version: item.version || '' }))
-    selectTemplateForType()
-  } catch (error) {
-    templateOptions.value = []
-    templatesError.value = error?.msg || '模板服务暂时不可用，请稍后重试。'
-  } finally {
-    templatesLoading.value = false
-  }
-}
-
 onMounted(async () => {
-  await Promise.all([loadTemplates(), loadCategories()])
+  await loadCategories()
   await loadSourceTask()
   if (stopped) return
   await nextTick()
@@ -451,7 +375,7 @@ onMounted(async () => {
 .ps-digest-create-page .ps-digest-filter-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .ps-digest-filter-grid > label { grid-column: span 2; min-width: 0; gap: 6px; }
 .ps-digest-filter-grid > .ps-digest-direction-field, .ps-digest-filter-grid > .ps-digest-keyword-field { grid-column: span 3; }
-.ps-digest-create-page .ps-digest-output-grid { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr); }
+.ps-digest-create-page .ps-digest-output-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .ps-digest-create-page .ps-form-grid :deep(.el-date-editor), .ps-digest-create-page .ps-form-grid :deep(.el-input-number) { width: 100%; }
 .ps-digest-filter-grid :deep(.el-range-input:focus-visible) { outline: none; }
 .ps-digest-filter-grid :deep(.el-range-editor:has(.el-range-input:focus-visible)) {

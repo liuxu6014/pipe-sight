@@ -301,7 +301,9 @@ async def test_truncated_provider_output_is_not_accepted_as_a_deliverable(env, d
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('template_prompt', [None, '本次以技术验证为主线，采用用户调整后的章节重点', ''])
-async def test_gateway_uses_frozen_template_prompt_and_returns_provider_content(env, db, monkeypatch, template_prompt) -> None:
+async def test_gateway_uses_frozen_template_prompt_and_returns_provider_content(
+    env, db, monkeypatch, template_prompt
+) -> None:
     template, _ = seed(env, db)
     template.report_type = 'research-demand'
     await db.commit()
@@ -314,7 +316,14 @@ async def test_gateway_uses_frozen_template_prompt_and_returns_provider_content(
             project_description='现场腐蚀检测存在适用条件限制，需要开展方法对比研究',
             requirements='本次按企业规范撰写，只引用所选资料',
             template_prompt=template_prompt,
-            outline=[{'title': '本次章节', 'words': 1600, 'description': '只讨论可验证问题', 'prompt': '先比较现场检测盲区，再列出需要试验验证的方案'}],
+            outline=[
+                {
+                    'title': '本次章节',
+                    'words': 1600,
+                    'description': '只讨论可验证问题',
+                    'prompt': '先比较现场检测盲区，再列出需要试验验证的方案',
+                }
+            ],
         ),
     )
     job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
@@ -482,15 +491,32 @@ async def test_request_id_race_recomputes_fingerprint_with_winners_frozen_materi
 @pytest.mark.asyncio
 @pytest.mark.parametrize('valid', [True, False])
 @pytest.mark.parametrize('cadence', ['weekly', 'monthly'])
-async def test_reference_digest_queue_execution_and_serializer_keep_per_event_sources(env, db, monkeypatch, valid, cadence) -> None:
+async def test_reference_digest_queue_execution_and_serializer_keep_per_event_sources(
+    env, db, monkeypatch, valid, cadence
+) -> None:
     import json
 
     template, _ = seed(env, db)
     template.name, template.purpose = ('月报' if cadence == 'monthly' else '周报'), 'digest'
     template.digest_cadence = cadence
-    monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
+    digest_article = NS(
+        id=102,
+        title='采集资讯',
+        content='公开资讯正文',
+        content_zh=None,
+        url='https://example.org/news',
+        source_id=1,
+        published_at=None,
+    )
+    monkeypatch.setattr(
+        env.repo.ResearchDao,
+        'load_content',
+        AsyncMock(side_effect=lambda db, kind, ident: digest_article if kind == 'article' and ident == 102 else None),
+    )
     await db.commit()
-    result = await queue(env, db, payload(report_type=cadence, period=['2026-10-19', '2026-10-25']))
+    result = await queue(
+        env, db, payload(selected_item_ids=['102'], report_type=cadence, period=['2026-10-19', '2026-10-25'])
+    )
     job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
     assert job.config_snapshot['document_format'] == 'digest-reference-v1'
     # Live templates retain old research-like chapter plans, which are not the
@@ -502,10 +528,25 @@ async def test_reference_digest_queue_execution_and_serializer_keep_per_event_so
     job.config_snapshot = snapshot
     await db.commit()
     execution, _ = execution_context(env, db, monkeypatch)
-    raw = json.dumps({'format': 'digest-reference-v1', 'groups': [{'category': '油气管网', 'items': [{
-        'title': '检测技术进展', 'summary': '资料记载的事实。', 'insight': '适用条件仍需核实。',
-        'sourceIds': ['file:101' if valid else 'article:101'],
-    }]}]}, ensure_ascii=False)
+    raw = json.dumps(
+        {
+            'format': 'digest-reference-v1',
+            'groups': [
+                {
+                    'category': '油气管网',
+                    'items': [
+                        {
+                            'title': '检测技术进展',
+                            'summary': '资料记载的事实。',
+                            'insight': '适用条件仍需核实。',
+                            'sourceIds': ['article:102' if valid else 'file:102'],
+                        }
+                    ],
+                }
+            ],
+        },
+        ensure_ascii=False,
+    )
     monkeypatch.setattr(execution.ResearchModelGenerationService, 'generate_content', AsyncMock(return_value=raw))
     await execution.ResearchExecutionService.process(job_id=result['jobId'], user_id=7)
     db.s.expire_all()
@@ -520,7 +561,9 @@ async def test_reference_digest_queue_execution_and_serializer_keep_per_event_so
         saved_content = report.content
         assert job.config_snapshot['result_application']['report_version'] == report.version
         normalizer = importlib.import_module('app.research.services.digest_document')
-        monkeypatch.setattr(normalizer, 'normalize_digest_document', lambda *args, **kwargs: {'content': '新版来源排版'})
+        monkeypatch.setattr(
+            normalizer, 'normalize_digest_document', lambda *args, **kwargs: {'content': '新版来源排版'}
+        )
         # Reading a task after a renderer upgrade uses its applied immutable
         # version, and never attributes a formatting difference to the user.
         display = await env.app.ResearchApplicationService.get_job(db, 7, job.id)
@@ -543,3 +586,94 @@ async def test_reference_digest_queue_execution_and_serializer_keep_per_event_so
     else:
         assert job.status == 'failed' and '简报格式检查未通过' in job.error
         assert report.content == ''
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('cadence', ['weekly', 'monthly'])
+async def test_fixed_digest_needs_no_personal_template_and_freezes_system_prompt(env, db, monkeypatch, cadence):
+    template, _ = seed(env, db)
+    # The only personal template is a research template. It is irrelevant to briefs.
+    digest_article = NS(
+        id=102,
+        title='采集资讯',
+        content='公开资讯正文',
+        content_zh=None,
+        url='https://example.org/news',
+        source_id=1,
+        published_at=None,
+    )
+    monkeypatch.setattr(
+        env.repo.ResearchDao,
+        'load_content',
+        AsyncMock(side_effect=lambda db, kind, ident: digest_article if kind == 'article' and ident == 102 else None),
+    )
+    data = payload(
+        selected_item_ids=['102'],
+        report_type=cadence,
+        period=['2026-10-19', '2026-10-25'],
+        template_prompt='改为不规范格式',
+        outline=[{'title': '自定义论文大纲'}],
+    )
+    data.pop('template_id')
+    result = await queue(env, db, data)
+    job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
+    snapshot = job.config_snapshot
+    assert snapshot['fixed_digest_format'] is True
+    assert env.app.ResearchApplicationService.job_dict(job)['fixedDigestFormat'] is True
+    assert snapshot['document_format'] == 'digest-reference-v1'
+    assert snapshot['template']['id'] != str(template.id)
+    assert snapshot['template']['sections'] == []
+    assert 'template_prompt' not in snapshot['request'] and 'outline' not in snapshot['request']
+    fixed = await env.repo.ResearchDao.get_template(db, snapshot['template']['id'], 7)
+    assert fixed.preset_key == f'digest-fixed-v1-{cadence}'
+    gateway_call = AsyncMock(return_value='fixed output')
+    monkeypatch.setattr(env.gateway.ModelGateway, 'call', gateway_call)
+    await env.gateway.ResearchModelGenerationService.generate_content(db, snapshot, job.materials, task_id=job.id)
+    assert '改为不规范格式' not in gateway_call.await_args.kwargs['system_prompt']
+    assert 'digest-reference-v1' in gateway_call.await_args.kwargs['system_prompt']
+    replay = await queue(env, db, data)
+    assert replay['reused'] and replay['jobId'] == result['jobId']
+
+
+@pytest.mark.asyncio
+async def test_fixed_digest_rejects_other_users_legacy_template_id(env, db):
+    template, _ = seed(env, db)
+    template.user_id, template.purpose = 8, 'digest'
+    await db.commit()
+    with raises(env, '无权访问'):
+        await queue(env, db, payload(report_type='weekly'))
+    assert not db.s.scalars(select(env.models.PipelineResearchJob)).all()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('cadence', ['weekly', 'monthly'])
+@pytest.mark.parametrize('typed', [True, False])
+async def test_digest_rejects_uploaded_material_before_queuing_or_model_call(env, db, monkeypatch, cadence, typed):
+    seed(env, db)
+    monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
+    call = AsyncMock()
+    monkeypatch.setattr(env.gateway.ModelGateway, 'call', call)
+    data = payload(report_type=cadence)
+    data.pop('template_id')
+    if typed:
+        data.pop('selected_item_ids')
+        data['materials'] = [{'type': 'file', 'id': '101'}]
+    with raises(env, '不支持上传资料'):
+        await queue(env, db, data)
+    call.assert_not_awaited()
+    assert not db.s.scalars(select(env.models.PipelineResearchJob)).all()
+    assert not db.s.scalars(select(env.models.PipelineReport)).all()
+
+
+@pytest.mark.asyncio
+async def test_digest_retry_cannot_reintroduce_historical_uploaded_material(env, db, monkeypatch):
+    seed(env, db)
+    monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
+    result = await queue(env, db)
+    job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
+    job.status = 'failed'
+    job.config_snapshot = {**job.config_snapshot, 'type': 'weekly'}
+    await db.commit()
+    with raises(env, '不支持上传资料'):
+        await env.app.ResearchApplicationService.queue_retry(db, user_id=7, job_id=job.id)
+    assert len(db.s.scalars(select(env.models.PipelineResearchJob)).all()) == 1

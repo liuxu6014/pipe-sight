@@ -57,14 +57,14 @@ async def test_two_principals_cannot_list_modify_or_use_each_others_templates(en
         for path in ('/pipeline/templates', '/pipeline/templates/published?category=research'):
             rows = (await client.get(path)).json()['data']['rows']
             assert template_id not in {row['id'] for row in rows}
-            assert len(rows) == (11 if path == '/pipeline/templates' else 9)
+            assert len(rows) == 9
         own_defaults = await env.repo.ResearchDao.list_templates(report_case.db, user_id=b)
-        assert len(own_defaults) == 11 and all(row.user_id == b and row.preset_key for row in own_defaults)
+        assert len(own_defaults) == 9 and all(row.user_id == b and row.preset_key for row in own_defaults)
         default_id = str(own_defaults[0].id)
         assert (await client.post(f'/pipeline/templates/{default_id}/archive')).status_code == 200
         rows = (await client.get('/pipeline/templates')).json()['data']['rows']
-        assert len(rows) == 11 and next(row for row in rows if row['id'] == default_id)['isDeleted']
-        assert len(await env.repo.ResearchDao.list_templates(report_case.db, user_id=b)) == 11
+        assert len(rows) == 9 and next(row for row in rows if row['id'] == default_id)['isDeleted']
+        assert len(await env.repo.ResearchDao.list_templates(report_case.db, user_id=b)) == 9
         assert (await client.post(f'/pipeline/templates/{default_id}/restore')).status_code == 200
         for method in ('PUT', 'DELETE'):
             with pytest.raises(env.exc):

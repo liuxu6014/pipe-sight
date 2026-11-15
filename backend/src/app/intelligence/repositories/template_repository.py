@@ -20,11 +20,7 @@ class TemplateListDao:
         page=1,
         page_size=10,
     ) -> tuple:
-        filters = [or_(Template.digest_cadence.is_(None), Template.digest_cadence != 'daily')]
-        # Legacy null rows exist only before the one-time cadence migration.
-        filters.append(
-            or_(Template.digest_cadence.is_not(None), Template.purpose != 'digest', ~Template.name.contains('日报'))
-        )
+        filters = [Template.purpose != 'digest']
         if user_id is not None:
             filters.append(Template.user_id == user_id)
         if purpose:

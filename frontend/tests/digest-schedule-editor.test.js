@@ -27,7 +27,8 @@ test('editing retains generation preferences, filters and name without alias col
   assert.equal(payload.name, '原计划')
   assert.equal(payload.scheduleMonthDay, 31)
   assert.equal(payload.selectionConfig.limit, 12)
-  assert.deepEqual(payload.generationConfig.outline, row.generationConfig.outline)
+  assert.equal(payload.generationConfig.outline, undefined)
+  assert.equal(payload.templateId, undefined)
   assert.equal(payload.generationConfig.requirements, '保留要求')
   assert.deepEqual(payload.selectionConfig.source_types, ['wechat'])
   assert.equal(payload.selectionConfig.options, undefined)
@@ -35,11 +36,21 @@ test('editing retains generation preferences, filters and name without alias col
   assert.match(scheduleSummary(form), /31.*15:15/)
 })
 
-test('bad time, missing source and wrong cadence are rejected before save', () => {
+test('bad time, missing source and retired daily cadence are rejected before save', () => {
   const form = { ...newScheduleForm(), name: '计划', templateId: '31' }
   const template = { id: '31', digestCadence: 'weekly' }
   for (const delta of [{ time: '24:01' }, { sources: [] }, { name: ' ' }, { keywords: Array(21).fill('词') }]) {
     assert.throws(() => schedulePayload({ ...form, ...delta }, template))
   }
-  assert.throws(() => schedulePayload(form, { ...template, digestCadence: 'monthly' }), /模板.*周期/)
+  assert.throws(() => schedulePayload({ ...form, frequency: 'daily' }), /仅支持周报或月报/)
+  assert.doesNotThrow(() => schedulePayload(form))
+})
+
+ test('fixed-format plans remove legacy template identifiers and overrides while preserving preferences', () => {
+  const form = readScheduleForm({ name: '旧计划', reportType: 'weekly', templateId: '31', scheduleTime: '08:00',
+    generationConfig: { outline: [{ title: '不应沿用' }], template_prompt: '旧提示词', templateId: '31', requirements: '聚焦检测进展', options: { hotAnalysis: false } } })
+  const payload = schedulePayload(form)
+  for (const key of ['outline', 'template_prompt', 'templateId']) assert.equal(payload.generationConfig[key], undefined)
+  assert.equal(payload.generationConfig.requirements, '聚焦检测进展')
+  assert.equal(payload.generationConfig.options.hotAnalysis, false)
 })

@@ -11,7 +11,7 @@
           <el-form-item label="执行时间 · 北京时间"><el-time-picker v-model="form.time" aria-label="执行时间" format="HH:mm" value-format="HH:mm" :clearable="false" /></el-form-item>
           <el-form-item v-if="form.frequency === 'weekly'" label="每周生成日"><el-select v-model="form.weekday" aria-label="每周生成日"><el-option v-for="(day, index) in weekdays" :key="index" :label="day" :value="index" /></el-select></el-form-item>
           <el-form-item v-if="form.frequency === 'monthly'" label="每月生成日"><el-select v-model="form.monthDay" aria-label="每月生成日"><el-option v-for="day in 31" :key="day" :label="`${day}日`" :value="day" /></el-select><small>当月不足所选日期时，月末执行。</small></el-form-item>
-          <el-form-item label="报告模板" :class="{ 'is-wide': form.frequency === 'daily' }"><PersonalTemplateDialog @changed="loadChoices" /><el-select v-model="form.templateId" aria-label="计划报告模板" placeholder="选择对应周期的模板"><el-option v-for="template in matchingTemplates" :key="template.id" :label="template.name" :value="String(template.id)" /></el-select><small v-if="!loading && !matchingTemplates.length">当前周期暂无已发布模板，请在模板管理中创建并启用。</small></el-form-item>
+          <p class="ps-schedule-format is-wide">周报、月报统一使用系统默认格式，无需选择模板。</p>
         </div>
         <h3>资料筛选</h3>
         <div class="ps-schedule-fields">
@@ -36,38 +36,32 @@
 </template>
 
 <script setup>
-import PersonalTemplateDialog from './PersonalTemplateDialog.vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import usePortalStore from '@/store/modules/portal'
-import { createPipelineDigestSchedule, savePipelineDigestScheduleConfig, listPipelineTemplates, getPipelineContentFilters } from '@/api/pipeline/intelligence'
+import { createPipelineDigestSchedule, savePipelineDigestScheduleConfig, getPipelineContentFilters } from '@/api/pipeline/intelligence'
 import { newScheduleForm, readScheduleForm, schedulePayload, scheduleSummary } from '@/utils/portal/digestScheduleEditor'
 
 const props = defineProps({ modelValue: Boolean, record: { type: Object, default: null } })
 const emit = defineEmits(['update:modelValue', 'saved'])
 const store = usePortalStore()
-const form = ref(newScheduleForm()), templates = ref([]), categories = ref([])
+const form = ref(newScheduleForm()), categories = ref([])
 const loading = ref(false), saving = ref(false), error = ref(''), loadError = ref('')
 const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 const legacyDaily = computed(() => ['daily', '日报'].includes(props.record?.reportType))
-const matchingTemplates = computed(() => templates.value.filter(item => ['all', form.value.frequency].includes(item.digestCadence)))
 const missingCategories = computed(() => form.value.categories.filter(name => !categories.value.includes(name)))
 const periodDescription = computed(() => ({ daily: '汇总前一天文章', weekly: '汇总执行日前 7 天文章', monthly: '汇总上一个自然月文章' })[form.value.frequency])
 let epoch = 0, disposed = false
 function close(value) { if (!saving.value) emit('update:modelValue', value) }
-watch(() => form.value.frequency, () => {
-  if (loading.value) return
-  if (!matchingTemplates.value.some(item => String(item.id) === form.value.templateId)) form.value.templateId = ''
-})
 async function loadChoices() {
   const current = ++epoch
   const account = store.workspaceEpoch
   loading.value = true; error.value = ''; loadError.value = ''
   try {
-    const [catalog, filters] = await Promise.all([listPipelineTemplates({ category: 'digest', publishedOnly: true }), getPipelineContentFilters()])
+    const filters = await getPipelineContentFilters()
     if (disposed || current !== epoch || account !== store.workspaceEpoch) return
-    if (!Array.isArray(catalog.data?.rows) || !Array.isArray(filters.data?.articleCategories)) throw new Error('模板或类别数据无效，请关闭后重试')
-    templates.value = catalog.data.rows; categories.value = filters.data.articleCategories
+    if (!Array.isArray(filters.data?.articleCategories)) throw new Error('类别数据无效，请关闭后重试')
+    categories.value = filters.data.articleCategories
   } catch (err) { if (current === epoch) { loadError.value = err?.msg || err.message || '配置加载失败，请关闭后重试'; error.value = loadError.value } }
   finally { if (current === epoch) loading.value = false }
 }
@@ -83,7 +77,7 @@ async function save() {
   let payload
   try {
     if (missingCategories.value.length) throw new Error('已有类别已不可用，请调整后保存，系统不会静默删除筛选条件')
-    payload = schedulePayload(form.value, templates.value.find(item => String(item.id) === form.value.templateId))
+    payload = schedulePayload(form.value)
   } catch (err) { error.value = err.message; return }
   const account = store.workspaceEpoch, current = epoch
   saving.value = true
@@ -100,7 +94,7 @@ onBeforeUnmount(() => { disposed = true; epoch++ })
 
 <style scoped>
 .ps-schedule-form { max-height: min(68dvh, 680px); overflow-y: auto; padding: 0 4px 0 0; }
-.ps-schedule-intro, .ps-schedule-summary, .ps-schedule-fields small { color: var(--ps-muted); font-size: 13px; line-height: 1.6; }
+.ps-schedule-intro, .ps-schedule-summary, .ps-schedule-format, .ps-schedule-fields small { color: var(--ps-muted); font-size: 13px; line-height: 1.6; }
 .ps-schedule-intro { margin: 0 0 16px; }
 .ps-schedule-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 18px; }
 .ps-schedule-fields .is-wide { grid-column: 1 / -1; }

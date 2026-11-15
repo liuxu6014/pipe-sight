@@ -416,7 +416,7 @@ test('category list filters never narrow the combined prompt or mutate saved cat
 
 test('personal templates load defaults through the normal own list and allow user creation', async () => {
   const events = []
-  const p = page('template', ['canSaveTemplate', 'loadTemplates', 'templates', 'form', 'saveTemplate', 'activeCategory', 'createTemplate'], {
+  const p = page('template', ['canSaveTemplate', 'loadTemplates', 'templates', 'form', 'saveTemplate', 'activeCategory', 'createTemplate', 'categories'], {
     defineProps: () => ({ personal: true }), checkPermi: () => false,
     defineEmits: () => event => events.push(event),
     listPipelineTemplates: async () => ({ data: { rows: [{ id: '500', purpose: 'research', reportType: 'research-demand', name: '个人模板' }] } })
@@ -429,11 +429,12 @@ test('personal templates load defaults through the normal own list and allow use
   const request = p.writes.find(([action]) => action === 'template-create')[1]
   assert.equal(Object.hasOwn(request, 'userId'), false)
   assert.deepEqual(events, ['changed'])
-  p.activeCategory.value = 'digest'
+  assert.deepEqual(p.categories.map(item => item.value), ['all', 'research-demand', 'technology-route', 'project-demand'])
+  p.activeCategory.value = 'technology-route'
   p.createTemplate()
-  assert.equal(p.form.purpose, 'digest')
-  assert.equal(p.form.reportType, '')
-  assert.equal(p.form.name, '通用简报模板')
+  assert.equal(p.form.purpose, 'research')
+  assert.equal(p.form.reportType, 'technology-route')
+  assert.equal(p.form.name, '')
 })
 
 test('personal template deletion hides normal rows and deleted copies can be restored', async () => {
@@ -477,32 +478,38 @@ test('template paging delegates filter and category totals to server and ignores
     listPipelineTemplates: params => { requests.push(params); return new Promise(resolve => pending.push(resolve)) }
   })
   const first = h.loadTemplates()
-  h.currentPage.value = 2; h.pageSize.value = 20; h.activeCategory.value = 'digest'; h.keyword.value = '腐蚀'
+  h.currentPage.value = 2; h.pageSize.value = 20; h.activeCategory.value = 'technology-route'; h.keyword.value = '腐蚀'
   const second = h.loadTemplates()
-  pending[1]({ data: { rows: [{ id: '902', name: '月报模板', purpose: 'digest', digestCadence: 'monthly' }], total: 31, counts: { all: 44, digest: 31 } } })
+  pending[1]({ data: { rows: [{ id: '902', name: '技术路线模板', purpose: 'research', reportType: 'technology-route' }], total: 31, counts: { all: 44, 'technology-route': 31 } } })
   await second
   pending[0]({ data: { rows: [{ id: '901', name: '过期结果' }], total: 1, counts: {} } })
   await first
-  assert.equal(h.templates.value[0].id, '902'); assert.equal(h.total.value, 31); assert.equal(h.countCategory('digest'), 31)
+  assert.equal(h.templates.value[0].id, '902'); assert.equal(h.total.value, 31); assert.equal(h.countCategory('technology-route'), 31)
   assert.equal(h.loading.value, false)
-  assert.deepEqual(requests[1], { page: 2, pageSize: 20, keyword: '腐蚀', reportType: 'digest', category: undefined, status: 'all' })
+  assert.deepEqual(requests[1], { page: 2, pageSize: 20, keyword: '腐蚀', reportType: 'technology-route', category: 'research', status: 'all' })
 })
 
-test('digest template saves explicit cadence independently of its display name', async () => {
-  const h = page('template', 'form, saveTemplate, createTemplate, activeCategory', { defineProps: () => ({ personal: true }) })
-  h.activeCategory.value = 'digest'; h.createTemplate()
-  Object.assign(h.form, { name: '腐蚀技术周报', prompt: '仅引用提供的证据', digestCadence: 'monthly' })
-  await h.saveTemplate()
-  const saved = h.writes.find(([kind]) => kind === 'template-create')[1]
-  assert.equal(saved.digestCadence, 'monthly'); assert.equal(saved.name, '腐蚀技术周报')
+test('personal template list requests research only and excludes legacy brief rows', async () => {
+  const calls = []
+  const h = page('template', 'loadTemplates, templates, categories', {
+    defineProps: () => ({ personal: true }),
+    listPipelineTemplates: async params => { calls.push(params); return { data: { rows: [
+      { id: '701', name: '科研模板', purpose: 'research', reportType: 'research-demand' },
+      { id: '702', name: '旧周报模板', purpose: 'digest', digestCadence: 'weekly' }
+    ], total: 1, counts: { all: 1, 'research-demand': 1 } } } }
+  })
+  await h.loadTemplates()
+  assert.equal(calls[0].category, 'research')
+  assert.deepEqual(h.templates.value.map(row => row.id), ['701'])
+  assert.equal(h.categories.some(item => item.value === 'digest'), false)
 })
 
 test('template edit fetches owner-scoped prompt detail rather than editing an incomplete list summary', async () => {
   const reads = []
   const h = page('template', 'editTemplate, form, editorVisible', {
-    getPipelineTemplate: async id => { reads.push(id); return { data: { id, name: '本人模板', purpose: 'digest', digestCadence: 'weekly', prompt: '从详情加载的完整提示词', sections: [{ title: '要闻', description: '保留原句引用' }] } } }
+    getPipelineTemplate: async id => { reads.push(id); return { data: { id, name: '本人模板', purpose: 'research', reportType: 'technology-route', prompt: '从详情加载的完整提示词', sections: [{ title: '要闻', description: '保留原句引用' }] } } }
   })
   await h.editTemplate({ id: '888', name: '本人模板' })
-  assert.deepEqual(reads, ['888']); assert.equal(h.form.prompt, '从详情加载的完整提示词'); assert.equal(h.form.digestCadence, 'weekly')
+  assert.deepEqual(reads, ['888']); assert.equal(h.form.prompt, '从详情加载的完整提示词'); assert.equal(h.form.reportType, 'technology-route')
   assert.equal(h.editorVisible.value, true); assert.deepEqual(h.writes, [])
 })

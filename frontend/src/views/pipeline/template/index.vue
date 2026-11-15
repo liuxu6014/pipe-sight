@@ -66,13 +66,10 @@
             </el-form-item>
             <el-form-item v-if="form.purpose === 'research'" label="报告类型" required>
               <el-select v-model="form.reportType" clearable placeholder="选择报告类型">
-                <el-option v-for="category in categories.filter(item => !['all', 'digest'].includes(item.value))" :key="category.value" :label="category.name" :value="category.value" />
+                <el-option v-for="category in categories.filter(item => item.value !== 'all')" :key="category.value" :label="category.name" :value="category.value" />
               </el-select>
             </el-form-item>
           </div>
-          <el-form-item v-if="form.purpose === 'digest'" label="适用周期" required>
-            <el-select v-model="form.digestCadence" aria-label="简报模板适用周期"><el-option label="周报与月报通用" value="all" /><el-option label="周报" value="weekly" /><el-option label="月报" value="monthly" /></el-select>
-          </el-form-item>
           <p class="template-contract-note">模板按报告类型展示；同一类型可创建多个模板。</p>
           <el-form-item label="模板说明">
             <el-input v-model="form.description" type="textarea" :rows="2" />
@@ -147,14 +144,13 @@ const saving = ref(false), loading = ref(false), templateError = ref('')
 const canSaveTemplate = computed(() => personal || checkPermi(['pipeline:template:save']))
 // These are the portal report keys, not new values for the API's purpose enum.
 const categories = [{ name: '全部模板', value: 'all', icon: Files }, { name: '科研需求报告', value: 'research-demand', icon: Document }, { name: '技术路线报告', value: 'technology-route', icon: Document }, { name: '科技项目需求表', value: 'project-demand', icon: Document }]
-if (personal) categories.push({ name: '情报简报', value: 'digest', icon: Document })
-function reportTypeOf(item) { if (item?.purpose === 'digest') return 'digest'; return ['research-demand', 'technology-route', 'project-demand'].find(key => key === item?.reportType || key === item?.purpose) || '' }
-function reportTypeLabel(item) { if (item?.purpose === 'digest') return '情报简报'; return ({ 'research-demand': '科研需求报告', 'technology-route': '技术路线报告', 'project-demand': '科技项目需求表' })[reportTypeOf(item)] || '报告类型待绑定' }
+function reportTypeOf(item) { return ['research-demand', 'technology-route', 'project-demand'].find(key => key === item?.reportType || key === item?.purpose) || '' }
+function reportTypeLabel(item) { return ({ 'research-demand': '科研需求报告', 'technology-route': '技术路线报告', 'project-demand': '科技项目需求表' })[reportTypeOf(item)] || '报告类型待绑定' }
 const templates = ref([]), models = ref([]), modelError = ref('')
 const unassignedCount = computed(() => categoryCounts.value.unassigned || 0)
 const textModels = computed(() => modelsFor(models.value, 'text_generate'))
 const imageModels = computed(() => modelsFor(models.value, 'image_generate'))
-const form = reactive({ name: '', purpose: 'research', reportType: '', digestCadence: 'all', prompt: '', description: '', modelId: null, imageModelId: null, sections: [], imageConfig: { enabled: false }, isEnabled: true })
+const form = reactive({ name: '', purpose: 'research', reportType: '', prompt: '', description: '', modelId: null, imageModelId: null, sections: [], imageConfig: { enabled: false }, isEnabled: true })
 const filteredTemplates = computed(() => templates.value)
 function countCategory(value) { return categoryCounts.value[value] || 0 }
 function modelLabel(id) {
@@ -165,25 +161,25 @@ function modelLabel(id) {
 function statusTag(value) { return value === 'enabled' ? 'success' : 'info' }
 function statusLabel(value) { return ({ enabled: '已启用', disabled: '已停用', deleted: '已删除' })[value] || '已停用' }
 function resetForm(item = null) {
- Object.assign(form, { name: item?.name || '', purpose: item?.purpose || 'research', digestCadence: item?.digestCadence || 'all', reportType: reportTypeOf(item) || (['all', 'digest'].includes(activeCategory.value) ? '' : activeCategory.value), prompt: item?.prompt || '', description: item?.description || '', modelId: item?.modelId ?? null, imageModelId: item?.imageModelId ?? null, sections: (item?.sections || []).map(section => ({ ...section })), imageConfig: item ? JSON.parse(JSON.stringify(item.imageConfig || {})) : {}, isEnabled: item?.isEnabled ?? true })
+ Object.assign(form, { name: item?.name || '', purpose: item?.purpose || 'research', reportType: reportTypeOf(item) || (activeCategory.value === 'all' ? '' : activeCategory.value), prompt: item?.prompt || '', description: item?.description || '', modelId: item?.modelId ?? null, imageModelId: item?.imageModelId ?? null, sections: (item?.sections || []).map(section => ({ ...section })), imageConfig: item ? JSON.parse(JSON.stringify(item.imageConfig || {})) : {}, isEnabled: item?.isEnabled ?? true })
  form.imageConfig.enabled ??= false
  form.imageConfig.count ??= 1
  form.imageConfig.prompt ??= ''
 }
-function createTemplate() { if (!canSaveTemplate.value) return; editingTemplate.value = null; resetForm(); if (personal && activeCategory.value === 'digest') { form.purpose = 'digest'; form.name = '通用简报模板' }; editorVisible.value = true }
+function createTemplate() { if (!canSaveTemplate.value) return; editingTemplate.value = null; resetForm(); editorVisible.value = true }
 async function editTemplate(item) { if (!canSaveTemplate.value) return; try { const { data } = await getPipelineTemplate(item.id); editingTemplate.value = data; resetForm(data); editorVisible.value = true } catch (error) { ElMessage.error(error?.msg || error?.message || '模板详情加载失败') } }
 async function previewTemplate(item) { try { const detail = item.id ? (await getPipelineTemplate(item.id)).data : item; previewingTemplate.value = JSON.parse(JSON.stringify(detail)); previewVisible.value = true } catch (error) { ElMessage.error(error?.msg || error?.message || '模板详情加载失败') } }
 async function loadTemplates() {
  const request = ++listRequest
  loading.value = true; templateError.value = ''
  try {
-  const res = await listPipelineTemplates({ page: currentPage.value, pageSize: pageSize.value, keyword: keyword.value.trim(), reportType: activeCategory.value === 'all' ? undefined : activeCategory.value, category: personal ? undefined : 'research', status: status.value })
+  const res = await listPipelineTemplates({ page: currentPage.value, pageSize: pageSize.value, keyword: keyword.value.trim(), reportType: activeCategory.value === 'all' ? undefined : activeCategory.value, category: 'research', status: status.value })
   if (request !== listRequest) return
   total.value = res.data?.total || 0; categoryCounts.value = res.data?.counts || {}
   const lastPage = Math.max(1, Math.ceil(total.value / pageSize.value))
   if (currentPage.value > lastPage) { currentPage.value = lastPage; return loadTemplates() }
   const rows = res.data?.rows || []
-  const reportRows = rows.filter(item => personal || item.purpose === 'research' || (reportTypeOf(item) && reportTypeOf(item) !== 'digest'))
+  const reportRows = rows.filter(item => item.purpose === 'research')
   templates.value = reportRows.map(item => ({ ...item, status: item.isDeleted ? 'deleted' : item.isEnabled ? 'enabled' : 'disabled' }))
  }
  catch (error) { if (request === listRequest) templateError.value = error?.msg || error?.message || '模板加载失败，请重试' }
@@ -196,7 +192,7 @@ async function loadModels() {
  catch (error) { models.value = []; modelError.value = error?.msg || error?.message || '模型列表加载失败；可稍后配置模型' }
 }
 function templatePayload(item = form) {
- return { name: item.name.trim(), purpose: item.purpose, digestCadence: item.purpose === 'digest' ? item.digestCadence || 'all' : null, reportType: item.purpose === 'research' ? item.reportType || null : null, prompt: item.prompt.trim(), description: item.description, modelId: item.modelId || null, imageModelId: item.imageModelId || null, sections: item.sections, imageConfig: item.imageConfig, isEnabled: item.isEnabled }
+ return { name: item.name.trim(), purpose: item.purpose, reportType: item.purpose === 'research' ? item.reportType || null : null, prompt: item.prompt.trim(), description: item.description, modelId: item.modelId || null, imageModelId: item.imageModelId || null, sections: item.sections, imageConfig: item.imageConfig, isEnabled: item.isEnabled }
 }
 async function saveTemplate() {
  if (!canSaveTemplate.value || saving.value) return

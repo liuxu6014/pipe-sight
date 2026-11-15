@@ -175,6 +175,7 @@ class ResearchApplicationService:
             'reportId': wire_id(job.report_id),
             'title': snapshot.get('title', ''),
             'templateName': display_template_name((snapshot.get('template') or {}).get('name')),
+            'fixedDigestFormat': bool(snapshot.get('fixed_digest_format')),
             'type': snapshot.get('type', ''),
             'status': job.status,
             'statusLabel': labels.get(job.status, job.status),

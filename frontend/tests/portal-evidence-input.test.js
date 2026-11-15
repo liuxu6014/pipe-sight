@@ -137,21 +137,23 @@ test('digest starts unfiltered and uses administrator category labels', async ()
   } finally { ctx.close() }
 })
 
-test('digest writing outline follows the selected template instead of invented category columns', async () => {
+test('digest generates from verified candidates without loading a personal template catalog', async () => {
+  let catalogCalls = 0, payload
   const ctx = await mount('DigestCreateView', { api: {
-    listPipelineTemplates: async () => ({ data: { rows: [{ id: '100', name: '周报', digestCadence: 'weekly', modelId: 1, modelConfigured: true,
-      sections: [{ title: '行业进展', words: 500, required: true }, { title: '业务影响', words: 400, required: true },
-        { title: '热点研判', words: 300, required: false }, { title: '来源清单', words: 100, required: true }] }] } })
+    listPipelineTemplates: async () => { catalogCalls++; throw Error('template catalog is not a digest dependency') },
+    searchPipelineDigestCandidates: async () => ({ data: { rows: [article('504')], total: 1 } }),
+    createPipelineResearchJob: async data => { payload = data; return { data: { jobId: '900' } } }
   } })
   try {
-    ctx.page.form.directions = ['后台类别']
-    ctx.page.form.hotAnalysis = false
-    await settle()
-    assert.deepEqual(ctx.page.columnSuggestions.value, ['行业进展', '业务影响'])
-    ctx.page.form.hotAnalysis = true
-    await settle()
-    assert.deepEqual(ctx.page.columnSuggestions.value, ['行业进展', '业务影响', '热点研判'])
-    assert.equal(ctx.mutations, 0)
+    ctx.page.selectCurrentPage()
+    await ctx.page.createDigest()
+    assert.equal(catalogCalls, 0)
+    assert.equal(payload.reportType, 'weekly')
+    assert.deepEqual(payload.selectedItemIds, ['504'])
+    for (const field of ['templateId', 'templateVersion', 'outline', 'templatePrompt', 'template_prompt']) {
+      assert.equal(Object.hasOwn(payload, field), false)
+    }
+    assert.ok(ctx.messages.some(item => item.level === 'success' && item.text.includes('任务已进入后台生成队列')))
   } finally { ctx.close() }
 })
 
@@ -168,22 +170,22 @@ test('NULL model templates stay selectable and research submission makes no gene
   } finally { ctx.close() }
 })
 
-test('one canonical digest template is selectable for weekly monthly and missing models prevent enqueue and schedule', async () => {
+test('digest displays backend model configuration errors and preserves selected evidence for retry', async () => {
+  let attempts = 0
   const ctx = await mount('DigestCreateView', { api: {
-    listPipelineTemplates: async () => ({ data: { rows: [{ id: '503', name: '简报模板', purpose: 'digest', reportType: 'digest', digestCadence: 'all', modelId: null, modelConfigured: false }] } })
+    searchPipelineDigestCandidates: async () => ({ data: { rows: [article('504')], total: 1 } }),
+    createPipelineResearchJob: async () => { attempts++; throw { msg: '请先配置简报生成模型' } }
   } })
   try {
-    for (const type of ['周报', '月报']) {
-      ctx.page.form.type = type; await settle()
-      assert.equal(ctx.page.availableTemplates.value[0].value, '503')
-      assert.equal(ctx.page.form.template, '503')
-    }
-    ctx.page.form.type = '周报'; await settle()
-    ctx.page.form.schedule = true
-    ctx.page.selectedCandidateIds.value = ['504']
+    ctx.page.selectCurrentPage()
+    ctx.page.form.summaryLength = 'short'
     await ctx.page.createDigest()
-    assert.equal(ctx.mutations, 0)
-    assert.ok(ctx.messages.some(item => item.text.includes('未配置可用的文本生成模型')))
+    assert.equal(attempts, 1)
+    assert.deepEqual(ctx.page.selectedCandidateIds.value, ['504'])
+    assert.equal(ctx.page.form.summaryLength, 'short')
+    assert.equal(ctx.page.submitting.value, false)
+    assert.ok(ctx.messages.some(item => item.level === 'error' && item.text === '请先配置简报生成模型'))
+    assert.deepEqual(ctx.page.buildDigestPayload().selectedItemIds, ['504'])
   } finally { ctx.close() }
 })
 
@@ -996,22 +998,35 @@ test('stale template IDs warn without replacing authored text or outline on temp
   } finally { ctx.close() }
 })
 
-test('digest stale template remains visible after reloading and cannot submit', async () => {
-  const ctx = await mount('DigestCreateView')
+test('digest ignores legacy template query and source-task template overrides while retaining evidence controls', async () => {
+  let catalogCalls = 0
+  const ctx = await mount('DigestCreateView', { query: { template: 'old-template-uuid', sourceTask: '77' }, api: {
+    listPipelineTemplates: async () => { catalogCalls++; throw Error('must not load templates') },
+    getPipelineResearchJob: async () => ({ data: { type: 'weekly', config: {
+      templateId: '9007199254740993', template_prompt: '旧模板中的提示词', outline: [{ title: '旧章节' }],
+      period: ['2026-10-13', '2026-10-19'], keywords: [], options: { summaryLength: 'short' }
+    } } }),
+    searchPipelineDigestCandidates: async () => ({ data: { rows: [article('504')], total: 1 } })
+  } })
   try {
-    ctx.page.form.template = 'template-02'
-    ctx.page.form.keywords = ['用户关键词']
-    await ctx.page.loadTemplates()
-    assert.equal(ctx.page.form.template, 'template-02')
-    assert.deepEqual([...ctx.page.form.keywords], ['用户关键词'])
-    await ctx.page.createDigest()
+    ctx.page.selectCurrentPage()
+    const payload = ctx.page.buildDigestPayload()
+    assert.deepEqual(payload.selectedItemIds, ['504'])
+    assert.equal(payload.options.summaryLength, 'short')
+    assert.equal(Object.hasOwn(ctx.page.form, 'template'), false)
+    for (const field of ['templateId', 'templateVersion', 'outline', 'templatePrompt', 'template_prompt']) {
+      assert.equal(Object.hasOwn(payload, field), false)
+    }
+    await ctx.router.replace({ path: '/create', query: { template: 'another-old-template-uuid', sourceTask: '77' } })
+    await settle()
+    assert.deepEqual(ctx.page.buildDigestPayload().selectedItemIds, ['504'])
+    assert.equal(catalogCalls, 0)
     assert.equal(ctx.mutations, 0)
-    assert.ok(ctx.messages.some(item => item.text.includes('编号已升级')))
   } finally { ctx.close() }
 })
 
-test('both generation forms select the real large decimal template ID without hardcoded fallbacks', async () => {
-  for (const name of names) {
+test('research generation selects the real large decimal template ID without hardcoded fallbacks', async () => {
+  for (const name of ['ResearchCreateView']) {
     const id = '9007199254740993'
     const ctx = await mount(name, { api: {
       listPipelineTemplates: async () => ({ data: { rows: [{ id, name: '真实模板编号', purpose: name === 'DigestCreateView' ? 'digest' : 'research', reportType: name === 'DigestCreateView' ? 'digest' : 'research-demand', digestCadence: name === 'DigestCreateView' ? 'weekly' : null, modelId: null, modelConfigured: false, sections: [] }] } })
@@ -1032,8 +1047,8 @@ test('both generation forms select the real large decimal template ID without ha
   }
 })
 
-test('legacy template queries never select a replacement in either form and retain user input on same-page navigation', async () => {
-  for (const name of names) {
+test('research legacy template queries never select a replacement and retain user input on same-page navigation', async () => {
+  for (const name of ['ResearchCreateView']) {
     const ctx = await mount(name, { query: { template: 'old-template-uuid' } })
     try {
       assert.equal(ctx.page.form.template, 'old-template-uuid')

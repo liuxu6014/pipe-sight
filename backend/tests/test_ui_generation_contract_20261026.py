@@ -243,16 +243,24 @@ async def test_schedule_rebuilds_current_period_without_mutating_saved_preferenc
 
 
 @pytest.mark.asyncio
-async def test_schedule_rejects_mismatched_cadence_and_honors_image_off(env):
+async def test_schedule_resolves_fixed_cadence_and_honors_image_off(env):
     row = template()
     row.image_config = {'enabled': True}
-    service = NS(get_published=AsyncMock(return_value=row), validate_models=AsyncMock())
+    fixed = template()
+    fixed.digest_cadence = 'monthly'
+    service = NS(
+        get_published=AsyncMock(return_value=row),
+        get_fixed_digest=AsyncMock(return_value=fixed),
+        validate_models=AsyncMock(),
+    )
     validate = env.schedules.DigestScheduleService._validate_enabled_template
     await validate(None, 201, {'diagram': False}, service, frequency='daily')
     assert service.validate_models.await_args.args[3]['enabled'] is False
-    with pytest.raises(env.exc) as caught:
-        await validate(None, 201, {}, service, frequency='monthly')
-    assert '周期' in caught.value.message
+    result = await validate(None, 201, {'diagram': False}, service, frequency='monthly', user_id=7)
+    assert result is fixed
+    service.get_fixed_digest.assert_awaited_once_with(None, 'monthly', 7)
+    assert service.get_published.await_count == 1
+    assert service.validate_models.await_args.args[3]['enabled'] is False
 
 
 @pytest.mark.asyncio

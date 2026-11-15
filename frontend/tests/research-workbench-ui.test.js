@@ -96,7 +96,13 @@ test('digest keeps settings toggle and submit buttons in the same footer beneath
   const actions = footer.children.find(node => hasClass(node, 'ps-digest-submit-actions'))
   assert.equal(actions.children.filter(node => node.tag === 'el-button').length, 2)
   assert.match(source, /const settingsExpanded = ref\(false\)/)
-  assert.ok(settings.children.some(node => node.props?.some(prop => prop.name === 'else-if' && prop.exp?.content === 'templatesError')))
+  const configuration = settings.children.find(node => hasClass(node, 'ps-digest-config-body'))
+  assert.ok(configuration.props.some(prop => prop.name === 'show' && prop.exp?.content === 'settingsExpanded'))
+  const formatNotice = settings.children.find(node => hasClass(node, 'ps-digest-template-notice'))
+  assert.ok(formatNotice.children.some(node => node.content?.includes('固定格式生成')))
+  assert.doesNotMatch(source, /templatesError|templatesLoading|availableTemplates/)
+  assert.match(source, /:disabled="refreshing \|\| Boolean\(previewError\) \|\| !selectedCandidateIds.length/)
+
 })
 
 test('research material tools and tabs stay outside the scrolling rows', () => {

@@ -13,22 +13,16 @@ env, db, no_external_network = memory_env, memory_db, offline_network
 
 
 @pytest.mark.asyncio
-async def test_custom_digest_cadence_survives_rename_and_does_not_trust_name(env, db):
+async def test_digest_format_has_fixed_cadence_and_rejects_personal_override(env, db):
     service = env.template.PipelineTemplateService
-    data = {'purpose': 'digest', 'name': '腐蚀技术周报', 'prompt': '基于所选材料撰写', 'digest_cadence': 'monthly'}
-    saved = await service.save_draft(db, template_key=None, payload=data, operator_id=7, operator_name='', user_id=7)
-    assert saved['digestCadence'] == 'monthly'
-    row = await env.repo.ResearchDao.get_template(db, saved['id'], 7)
+    row = await service.get_fixed_digest(db, 'monthly', 7)
     service.validate_digest_cadence(row, 'monthly')
     with pytest.raises(env.exc):
         service.validate_digest_cadence(row, 'weekly')
-    data['name'] = '不含任何周期的用户名称'
-    await service.save_draft(db, template_key=row.id, payload=data, operator_id=7, operator_name='', user_id=7)
-    assert service.digest_cadence(row) == 'monthly'
-    data['digest_cadence'] = 'all'
-    await service.save_draft(db, template_key=row.id, payload=data, operator_id=7, operator_name='', user_id=7)
-    for frequency in ('weekly', 'monthly'):
-        service.validate_digest_cadence(row, frequency)
+    row.name, row.prompt, row.sections = '旧客户端修改', '不可信的提示词', [{'title': '不应使用的章节'}]
+    restored = await service.get_fixed_digest(db, 'monthly', 7)
+    assert restored.id == row.id and restored.name == '管网科技情报月报'
+    assert restored.prompt != '不可信的提示词' and restored.sections == []
 
 
 @pytest.mark.asyncio
@@ -49,6 +43,8 @@ async def test_template_pages_are_owner_scoped_stable_filtered_and_omit_prompts(
                     updated_at=datetime(2026, 11, 15),
                 )
             )
+    await service.get_fixed_digest(db, 'weekly', 7)
+    await service.get_fixed_digest(db, 'monthly', 7)
     await db.commit()
     first = await service.list_templates(db, user_id=7, page=1, page_size=10)
     second = await service.list_templates(db, user_id=7, page=2, page_size=10)
@@ -64,7 +60,7 @@ async def test_template_pages_are_owner_scoped_stable_filtered_and_omit_prompts(
 
 
 @pytest.mark.asyncio
-async def test_active_schedule_blocks_template_retirement_and_archive_until_stopped(env, db):
+async def test_digest_formats_remain_read_only_even_after_schedules_are_stopped(env, db):
     template, _ = await setup_template(env, db)
     row = env.models.PipelineDigestSchedule(
         user_id=7,
@@ -81,15 +77,13 @@ async def test_active_schedule_blocks_template_retirement_and_archive_until_stop
     db.add(row)
     await db.commit()
     service = env.template.PipelineTemplateService
-    for action in ('retire', 'archive'):
-        with pytest.raises(env.exc) as caught:
-            await getattr(service, action)(db, template.id, user_id=7)
-        assert '管网周报任务' in caught.value.message
-        assert template.is_enabled and template.deleted_at is None
-    row.is_enabled = False
-    await db.commit()
-    await service.archive(db, template.id, user_id=7)
-    assert template.deleted_at is not None and not template.is_enabled
+    for enabled in (True, False):
+        row.is_enabled = enabled
+        await db.commit()
+        for action in ('retire', 'archive'):
+            with pytest.raises(env.exc):
+                await getattr(service, action)(db, template.id, user_id=7)
+            assert template.is_enabled and template.deleted_at is None
 
 
 @pytest.mark.asyncio

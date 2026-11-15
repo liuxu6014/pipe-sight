@@ -34,6 +34,11 @@ class ResearchJobService:
             raise ServiceException(message='当前只支持简体中文')
 
     @staticmethod
+    def _validate_digest_materials(kind, materials) -> None:
+        if kind in {'weekly', 'monthly'} and any(item.get('type') == 'file' for item in materials):
+            raise ServiceException(message='周报、月报不支持上传资料，请选择采集内容')
+
+    @staticmethod
     def queued_stage_rows(stage_labels) -> list[dict]:
         return [{'key': key, 'label': label, 'status': 'waiting', 'progress': 0} for key, label in stage_labels]
 
@@ -93,12 +98,22 @@ class ResearchJobService:
         if existing:
             fingerprint = generation_request_fingerprint(clean_request, existing.materials)
             return await cls._reused(db, existing, user_id, fingerprint, job_serializer)
-        template = await template_service.get_published(db, data.get('template_id'), user_id)
-        if not template:
-            raise ServiceException(message='请选择已启用的模板')
         purpose = 'digest' if kind in {'daily', 'weekly', 'monthly'} else kind
-        if template.purpose != purpose:
-            raise ServiceException(message='模板用途与成果类型不匹配')
+        fixed_digest = kind in {'weekly', 'monthly'}
+        if fixed_digest:
+            # A legacy template ID is only an ownership assertion. Its mutable
+            # prompt/outline must never change the system brief format.
+            if data.get('template_id') is not None:
+                legacy = await ResearchDao.get_template(db, parse_business_id(data['template_id']), user_id)
+                if not legacy or legacy.purpose != 'digest':
+                    raise ServiceException(message='简报模板不存在或无权访问')
+            template = await PipelineTemplateService.get_fixed_digest(db, kind, user_id)
+        else:
+            template = await template_service.get_published(db, data.get('template_id'), user_id)
+            if not template:
+                raise ServiceException(message='请选择已启用的模板')
+            if template.purpose != purpose:
+                raise ServiceException(message='模板用途与成果类型不匹配')
         requested_type = data.get('report_type')
         if (
             purpose == 'research'
@@ -106,7 +121,7 @@ class ResearchJobService:
             and getattr(template, 'report_type', None) != requested_type
         ):
             raise ServiceException(message='模板尚未绑定当前报告类型，请选择该类型下的模板')
-        if purpose == 'digest':
+        if purpose == 'digest' and not fixed_digest:
             PipelineTemplateService.validate_digest_cadence(template, kind)
         image_config = PipelineTemplateService.effective_image_config(template.image_config, data)
         model_id, image_model_id = await PipelineTemplateService.generation_model_ids(
@@ -119,6 +134,7 @@ class ResearchJobService:
             if not 1 <= int(image_config.get('count', 1)) <= 10:  # noqa: PLR2004
                 raise ServiceException(message='配图数量须在 1 至 10 之间')
         materials = await ResearchEvidenceService.resolve(db, user_id, selections, payload)
+        cls._validate_digest_materials(kind, materials)
         fingerprint = generation_request_fingerprint(clean_request, materials)
         params = deepcopy(model.parameters or {})
         budget = int(params.get('context_chars', 100000))
@@ -180,8 +196,11 @@ class ResearchJobService:
                 'parameters': params,
             },
         }
-        if kind in {'weekly', 'monthly'}:
+        if fixed_digest:
             snapshot['document_format'] = 'digest-reference-v1'
+            snapshot['fixed_digest_format'] = True
+            for field in ('outline', 'template_prompt', 'templatePrompt', 'template_version'):
+                snapshot['request'].pop(field, None)
         elif (
             getattr(template, 'report_type', None) == 'project-demand'
             and template.name in PROJECT_DEMAND_TEMPLATE_NAMES
@@ -235,6 +254,7 @@ class ResearchJobService:
             raise ServiceException(message='只能重试失败或取消的任务')
         # 按原任务冻结的模型选择复核，不改用当前模板或生成无效的新尝试。
         snapshot = job.config_snapshot or {}
+        cls._validate_digest_materials(snapshot.get('type'), job.materials or [])
         await PipelineTemplateService.validate_models(
             db,
             (snapshot.get('model') or {}).get('id'),

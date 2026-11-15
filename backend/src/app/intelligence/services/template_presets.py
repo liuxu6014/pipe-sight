@@ -10,32 +10,26 @@ def builtin_templates() -> list[dict]:
     # This versioned catalog's order is stable; identity survives user renaming.
     for index, row in enumerate(rows, 1):
         row['preset_key'] = f'research-v1-{index}'
-    for label in ('周报', '月报'):
-        rows.append(
-            {
-                'name': f'管网科技情报{label}',
-                'preset_key': 'digest-v1-weekly' if label == '周报' else 'digest-v1-monthly',
-                'purpose': 'digest',
-                'digest_cadence': 'weekly' if label == '周报' else 'monthly',
-                'report_type': None,
-                'description': f'依据所选周期的公开资讯编制科技情报{label}，区分本期进展和历史背景。',
-                'prompt': f'撰写管网科技情报{label}。只使用所选资料及已确认的覆盖周期。'
-                '按栏目组织完整自然段，说明事件、技术进展与业务影响，保留句末引用。'
-                '历史资料只作背景，不冒充本期新进展；缺少证据不推测趋势，不编造事实和数据。',
-                'sections': [
-                    {
-                        'id': index,
-                        'title': title,
-                        'words': 600,
-                        'required': True,
-                        'description': '仅依据已选资料归纳事实、适用场景和局限，保留准确引用。',
-                    }
-                    for index, title in enumerate(('本期要闻', '技术进展', '应用与研判'), 1)
-                ],
-                'model_id': None,
-                'image_model_id': None,
-                'image_config': {'enabled': False},
-                'is_enabled': True,
-            }
-        )
     return rows
+
+
+def fixed_digest_template(frequency: str) -> dict:
+    """System-owned brief contract; never installed as an editable personal template."""
+    label = {'weekly': '周报', 'monthly': '月报'}[frequency]
+    return {
+        'name': f'管网科技情报{label}',
+        'preset_key': f'digest-fixed-v1-{frequency}',
+        'purpose': 'digest',
+        'digest_cadence': frequency,
+        'report_type': None,
+        'description': '使用统一简报格式，按类别组织事件及其摘要、行业洞察和来源。',
+        'prompt': f'撰写管网科技情报{label}。只使用所选资料及已确认的覆盖周期。'
+        '使用统一简报格式：标题、覆盖周期、按类别分组的编号事件；每个事件包含标题、摘要、发布日期、行业洞察和来源链接。'
+        '按事件归纳事实、技术进展与业务影响，保留准确引用；不套用科研报告章节。'
+        '历史资料只作背景，不冒充本期新进展；缺少证据不推测趋势，不编造事实和数据。',
+        'sections': [],
+        'model_id': None,
+        'image_model_id': None,
+        'image_config': {'enabled': False},
+        'is_enabled': True,
+    }

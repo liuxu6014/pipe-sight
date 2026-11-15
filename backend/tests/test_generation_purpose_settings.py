@@ -2,6 +2,7 @@
 
 import importlib
 from copy import deepcopy
+from types import SimpleNamespace as NS
 from unittest.mock import AsyncMock
 
 import pytest
@@ -113,8 +114,21 @@ async def test_all_digest_cadences_use_the_brief_binding(env, db, monkeypatch, k
     extra_model(env, db, 3, 'text_generate')
     await db.commit()
     await settings().save_generation_settings(db, 'digest', 3)
-    monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
-    result = await queue(env, db, payload(report_type=kind, request_id=kind))
+    article = NS(
+        id=102,
+        title='采集资讯',
+        content='公开正文',
+        content_zh=None,
+        url='https://example.org/news',
+        source_id=1,
+        published_at=None,
+    )
+    monkeypatch.setattr(
+        env.repo.ResearchDao,
+        'load_content',
+        AsyncMock(side_effect=lambda db, kind, ident: article if kind == 'article' and ident == 102 else None),
+    )
+    result = await queue(env, db, payload(report_type=kind, request_id=kind, selected_item_ids=['102']))
     job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
     assert job.config_snapshot['model']['id'] == '3'
     assert await settings().generation_settings(db, 'research') == {'modelId': '1'}

@@ -122,7 +122,7 @@ class PipelineDigestScheduleCreateModel(BaseModel):
     request_id: str | None = Field(default=None, min_length=1, max_length=128, description='客户端幂等请求标识')
     name: str = Field(min_length=1, max_length=255, description='计划名称')
     report_type: Literal['daily', 'weekly', 'monthly'] = Field(description='日报、周报或月报')
-    template_id: BusinessId = Field(description='已启用模板ID')
+    template_id: BusinessId | None = Field(default=None, description='兼容旧客户端模板ID；周报和月报统一使用系统固定格式')
     template_version: str | None = Field(default=None, max_length=32, description='模板版本快照')
     schedule_time: str = Field(
         default='08:00',
@@ -143,7 +143,7 @@ class PipelineDigestScheduleCreateModel(BaseModel):
     enabled: bool = Field(default=True, description='是否启用')
     timezone: str = Field(default='Asia/Shanghai', min_length=1, max_length=64, description='IANA执行时区')
     selection_config: dict = Field(default_factory=dict, description='周期筛选和去重参数，不保存本次勾选快照')
-    generation_config: dict = Field(default_factory=dict, description='生成参数，模板中配置文本及图片模型')
+    generation_config: dict = Field(default_factory=dict, description='生成偏好；简报格式固定，模型由管理员统一配置')
 
 
 class PipelineDigestScheduleToggleModel(BaseModel):

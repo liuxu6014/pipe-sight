@@ -277,3 +277,76 @@ async def test_partial_selection_config_keeps_page_keyword_category_and_source_f
     assert row.selection_config['category_names'] == ['后台类别']
     assert row.selection_config['source_types'] == ['wechat']
     assert row.selection_config['limit'] == 5
+
+
+@pytest.mark.asyncio
+async def test_fixed_weekly_schedule_needs_no_personal_template_and_discards_outline(env, db) -> None:
+    old, _ = seed(env, db)
+    old.purpose = 'digest'
+    old.is_enabled = False
+    await db.commit()
+    result = await env.schedules.DigestScheduleService.create(
+        db,
+        user_id=7,
+        owner_name='用户',
+        payload={
+            'name': '固定周报',
+            'report_type': 'weekly',
+            'generation_config': {'outline': [{'title': '用户旧大纲'}], 'requirements': '关注检测技术'},
+        },
+        template_service=env.template.PipelineTemplateService,
+    )
+    row = await env.repo.ResearchDao.lock_digest_schedule_for_update(db, result['id'], 7)
+    fixed = await env.repo.ResearchDao.get_template(db, row.template_id, 7)
+    assert fixed.preset_key == 'digest-fixed-v1-weekly' and fixed.id != old.id
+    assert fixed.sections == []
+    assert 'outline' not in row.generation_config
+    assert row.generation_config['requirements'] == '关注检测技术'
+    await env.schedules.DigestScheduleService.set_enabled(db, 7, row.id, False)
+    old.deleted_at = datetime.now(timezone.utc)
+    row.template_id = old.id
+    await db.commit()
+    await env.schedules.DigestScheduleService.set_enabled(db, 7, row.id, True)
+    assert row.template_id == fixed.id and row.is_enabled
+
+
+@pytest.mark.asyncio
+async def test_fixed_schedule_rejects_foreign_legacy_template_id(env, db) -> None:
+    old, _ = seed(env, db)
+    old.purpose, old.user_id = 'digest', 8
+    await db.commit()
+    with raises(env, '无权访问'):
+        await env.schedules.DigestScheduleService.create(
+            db,
+            user_id=7,
+            owner_name='用户',
+            payload={'name': '固定月报', 'report_type': 'monthly', 'template_id': str(old.id), 'enabled': False},
+            template_service=env.template.PipelineTemplateService,
+        )
+
+
+@pytest.mark.asyncio
+async def test_fixed_dispatch_rebinds_old_plan_and_never_queues_mutable_outline(env, db, monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from test_digest_schedule_generation_guard import dispatch_fixture
+
+    old, _ = seed(env, db)
+    old.purpose, old.name, old.is_enabled = 'digest', '原先自定义的周报', False
+    old.deleted_at = datetime.now(timezone.utc)
+    await db.commit()
+    result, row, enqueue, _, _ = await dispatch_fixture(
+        env,
+        db,
+        monkeypatch,
+        {'outline': [{'title': '已作废的自定章节'}], 'requirements': '保留关注点'},
+        frequency='weekly',
+        candidates=[SimpleNamespace(id=101, title='本周资料', content='资料正文', content_zh=None)],
+    )
+    assert result['queued'] == 1 and result['failed'] == 0
+    fixed = await env.repo.ResearchDao.get_template(db, row.template_id, 7)
+    assert fixed.preset_key == 'digest-fixed-v1-weekly'
+    request = enqueue.await_args.kwargs['payload']
+    assert request['template_id'] == str(fixed.id)
+    assert 'outline' not in request and 'outline' not in row.generation_config
+    assert '保留关注点' in request['requirements']

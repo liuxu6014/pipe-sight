@@ -26,13 +26,14 @@
       </div>
       <aside class="ps-task-side">
         <section class="ps-panel"><h3>任务信息</h3><dl>
-          <div><dt>使用模板</dt><dd>{{ templateName }}</dd></div>
+          <div v-if="task.fixedDigestFormat"><dt>输出格式</dt><dd>系统固定格式</dd></div>
+          <div v-else><dt>使用模板</dt><dd>{{ templateName }}</dd></div>
           <div><dt>输入资料</dt><dd>{{ task.selectedItems?.length || 0 }} 条</dd></div>
-          <div><dt>目标字数</dt><dd>{{ targetWords.toLocaleString() }} 字</dd></div>
+          <div v-if="!isDigest"><dt>目标字数</dt><dd>{{ targetWords.toLocaleString() }} 字</dd></div>
           <div><dt>生成方式</dt><dd>{{ generationModeLabel }}</dd></div>
           <div><dt>执行尝试</dt><dd>{{ task.attemptCount ? `第 ${task.attemptCount} 次` : '未记录' }}</dd></div>
         </dl></section>
-        <section class="ps-panel"><div class="ps-section-head"><h3>输入资料</h3></div><div class="ps-input-summary"><span>新闻资讯 <b>{{ materialCounts.news }}</b></span><span>论文 <b>{{ materialCounts.paper }}</b></span><span>上传资料 <b>{{ materialCounts.internal }}</b></span></div><p v-if="materialCounts.other" class="ps-material-note">另有 {{ materialCounts.other }} 条资料未记录类型</p><el-button plain type="primary" class="ps-task-material-button" @click="showMaterials = true">查看资料清单</el-button></section>
+        <section class="ps-panel"><div class="ps-section-head"><h3>输入资料</h3></div><div class="ps-input-summary" :class="{ 'is-digest': isDigest }"><span>新闻资讯 <b>{{ materialCounts.news }}</b></span><span>论文 <b>{{ materialCounts.paper }}</b></span><span v-if="!isDigest">上传资料 <b>{{ materialCounts.internal }}</b></span></div><p v-if="materialCounts.other" class="ps-material-note">另有 {{ materialCounts.other }} 条资料未记录类型</p><el-button plain type="primary" class="ps-task-material-button" @click="showMaterials = true">查看资料清单</el-button></section>
       </aside>
     </div>
     </div>
@@ -247,6 +248,7 @@ onUnmounted(() => { active = false; requestEpoch++; stopRouteWatch(); stopRefres
 .ps-task-side dt { flex-shrink: 0; }
 .ps-task-side dd { overflow-wrap: anywhere; line-height: 1.6; }
 .ps-input-summary { gap: 8px; }
+.ps-input-summary.is-digest { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .ps-input-summary span { gap: 5px; }
 .ps-input-summary b { font-size: 24px; font-weight: 600; }
 .ps-task-material-button { margin-top: 14px; width: 100%; }
