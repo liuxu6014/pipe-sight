@@ -383,9 +383,9 @@ def test_comment_only_pg18_updates_preserve_every_business_row() -> None:
                 }
 
             before = rows()
-            assert apply_schema_comments(bind, allow_live=True) == {'tables': 30, 'columns': 369, 'views': 2}
+            assert apply_schema_comments(bind, allow_live=True) == {'tables': 30, 'columns': 370, 'views': 2}
             assert rows() == before
-            assert apply_schema_comments(bind, allow_live=True) == {'tables': 30, 'columns': 369, 'views': 2}
+            assert apply_schema_comments(bind, allow_live=True) == {'tables': 30, 'columns': 370, 'views': 2}
             assert rows() == before
     finally:
         engine.dispose()

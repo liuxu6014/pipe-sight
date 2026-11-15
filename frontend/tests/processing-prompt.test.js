@@ -15,7 +15,7 @@ const category = (id, extra = {}) => ({ id, name: `类别${id}`, prompt: `原文
 function page(name, names, mocks = {}) {
   const messages = [], writes = []
   const dependencies = {
-    computed, reactive, ref, onMounted() {}, defineProps: () => ({ section: 'models' }), ...prompts, ...contract,
+    computed, reactive, ref, onMounted() {}, defineProps: () => ({ section: 'models' }), defineEmits: () => () => {}, ...prompts, ...contract,
     Files: {}, Document: {}, Plus: {},
     checkPermi: () => true, checkRole: () => true,
     ElMessage: Object.fromEntries(['success', 'warning', 'error', 'info'].map(level => [level, text => messages.push({ level, text })])),
@@ -411,4 +411,28 @@ test('category list filters never narrow the combined prompt or mutate saved cat
   view.previewVisible.value = false
   assert.deepEqual(copy(view.categories.value), rows)
   assert.deepEqual(view.writes, [])
+})
+
+test('personal templates can be created without admin permissions and built-ins reload only the own list', async () => {
+  const events = [], installs = []
+  const p = page('template', ['canSaveTemplate', 'addBuiltins', 'templates', 'form', 'saveTemplate', 'activeCategory', 'createTemplate'], {
+    defineProps: () => ({ personal: true }), checkPermi: () => false,
+    defineEmits: () => event => events.push(event),
+    installPipelineTemplatePresets: async () => { installs.push('own-presets'); return { data: { created: 12 } } },
+    listPipelineTemplates: async () => ({ data: { rows: [{ id: '500', purpose: 'research', reportType: 'research-demand', name: '个人模板' }] } })
+  })
+  assert.equal(p.canSaveTemplate.value, true)
+  await p.addBuiltins()
+  assert.deepEqual(installs, ['own-presets'])
+  assert.deepEqual(p.templates.value.map(row => row.id), ['500'])
+  Object.assign(p.form, { name: '本人新增', prompt: '原文依据', purpose: 'research', reportType: 'research-demand', userId: 'other-user' })
+  await p.saveTemplate()
+  const request = p.writes.find(([action]) => action === 'template-create')[1]
+  assert.equal(Object.hasOwn(request, 'userId'), false)
+  assert.deepEqual(events, ['changed', 'changed'])
+  p.activeCategory.value = 'digest'
+  p.createTemplate()
+  assert.equal(p.form.purpose, 'digest')
+  assert.equal(p.form.reportType, '')
+  assert.equal(p.form.name, '通用简报模板')
 })

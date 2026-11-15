@@ -3,6 +3,8 @@
 from copy import deepcopy
 from typing import Any
 
+from sqlalchemy import text
+
 from app.business_ids import parse_business_id, wire_id
 from app.business_time import format_business_time
 from app.intelligence.models.configuration import PipelineTemplateVersion
@@ -13,6 +15,27 @@ from exceptions.exception import ServiceException
 
 
 class PipelineTemplateService:
+    @classmethod
+    async def install_builtins(cls, db, *, user_id: int) -> dict:
+        from app.intelligence.services.template_presets import builtin_templates  # noqa: PLC0415
+
+        # Prevent duplicate installation in simultaneous tabs, without blocking other users.
+        if db.get_bind().dialect.name == 'postgresql':
+            await db.execute(
+                text('SELECT pg_advisory_xact_lock(hashtext(:key))'), {'key': f'template-presets:{user_id}'}
+            )
+        rows = await ResearchDao.list_templates(db, user_id=user_id)
+        existing = {(row.purpose, row.report_type, row.name) for row in rows}
+        created = []
+        for preset in builtin_templates():
+            if (preset['purpose'], preset['report_type'], preset['name']) in existing:
+                continue
+            row = PipelineTemplateVersion(**deepcopy(preset), user_id=user_id)
+            db.add(row)
+            created.append(row)
+        await db.commit()
+        return {'created': len(created)}
+
     @staticmethod
     def digest_cadence(row) -> str | None:
         """旧表没有周期列：仅识别受控全名，不从用途或任意子串推断通用。"""

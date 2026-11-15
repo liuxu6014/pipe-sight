@@ -43,7 +43,7 @@ def test_installation_is_append_only_repeatable_and_keeps_admin_edits(env, db) -
     preview = presets.install_presets(conn, table, rows)
     assert len(preview['pending']) == 9 and not preview['created']
     assert len(conn.execute(select(table)).all()) == 1
-    result = presets.install_presets(conn, table, rows, apply=True)
+    result = presets.install_presets(conn, table, rows, apply=True, user_id=7)
     assert len(result['created']) == 9
     db.s.commit()
     assert original.prompt == '只使用资料' and original.model_id is None
@@ -53,12 +53,22 @@ def test_installation_is_append_only_repeatable_and_keeps_admin_edits(env, db) -
     custom.is_enabled = False
     db.s.commit()
     before = deepcopy(custom.sections)
-    again = presets.install_presets(db.s.connection(), table, rows, apply=True)
+    again = presets.install_presets(db.s.connection(), table, rows, apply=True, user_id=7)
     db.s.commit()
     db.s.expire_all()
     assert again['created'] == [] and len(again['preserved']) == 9
     assert custom.prompt == '管理员自行修改的提示词' and custom.sections == before and not custom.is_enabled
     assert len(db.s.execute(select(table)).all()) == 10
+
+
+def test_installation_deduplicates_within_the_target_user_only(env, db) -> None:
+    table = env.configuration.PipelineTemplateVersion.__table__
+    rows = presets.load_presets()
+    first = presets.install_presets(db.s.connection(), table, rows, apply=True, user_id=7)
+    second = presets.install_presets(db.s.connection(), table, rows, apply=True, user_id=8)
+    db.s.commit()
+    assert len(first['created']) == len(second['created']) == 9
+    assert {r.user_id for r in db.s.execute(select(table)).all()} == {7, 8}
 
 
 @pytest.mark.asyncio
@@ -67,7 +77,7 @@ async def test_each_new_template_queues_its_own_prompt_type_and_outline(env, db,
     seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     created = presets.install_presets(
-        db.s.connection(), env.configuration.PipelineTemplateVersion.__table__, presets.load_presets(), apply=True
+        db.s.connection(), env.configuration.PipelineTemplateVersion.__table__, presets.load_presets(), apply=True, user_id=7
     )['created']
     db.s.commit()
     template_id = next(row['id'] for row in created if row['name'] == preset['name'])

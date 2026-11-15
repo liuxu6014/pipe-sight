@@ -77,6 +77,9 @@ test('actual request boundary blocks legacy path and payload IDs before network,
   assert.equal(calls.length, 1)
   assert.equal(form.requirements, '用户尚未提交的正文')
   assert.equal(form.templateId, 'template-01')
+  await request({ url: '/pipeline/templates/presets', method: 'post' })
+  assert.equal(calls.at(-1).url, '/pipeline/templates/presets')
+  await assert.rejects(request({ url: '/pipeline/research/reports/presets', method: 'get' }), /编号已升级/)
 })
 
 test('entity wrappers preserve decimal paths and reject unsafe numbers before interpolation', async () => {

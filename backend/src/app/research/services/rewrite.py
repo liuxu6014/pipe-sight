@@ -46,7 +46,7 @@ class ReportRewriteService:
             raise ServiceException(message='所选正文已变化，请重新选择后改写')
         if payload.mode not in MODES:
             raise ServiceException(message='不支持的改写方式')
-        template = await ResearchDao.get_template(db, report.template_id)
+        template = await ResearchDao.get_template(db, report.template_id, user_id)
         from app.intelligence.services.templates import PipelineTemplateService  # noqa: PLC0415
 
         purpose = 'digest' if report.type in {'daily', 'weekly', 'monthly'} else report.type

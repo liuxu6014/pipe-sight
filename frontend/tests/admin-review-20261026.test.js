@@ -9,7 +9,7 @@ const source = page => readFileSync(new URL(`../src/views/pipeline/${page}.vue`,
 function setup(page, names, mocks = {}) {
   const script = source(page).match(/<script setup>([\s\S]*?)<\/script>/)[1]
     .replace(/^import[\s\S]*?from ['"][^'"]+['"]\s*$/gm, '')
-  const dependencies = { isDigestType, computed, reactive, ref, watch, onMounted() {}, defineOptions() {},
+  const dependencies = { isDigestType, computed, reactive, ref, watch, onMounted() {}, defineOptions() {}, defineProps: () => ({}), defineEmits: () => () => {},
     ElMessage: { warning() {}, error() {}, success() {}, info() {} },
     checkPermi: () => true, modelsFor: () => [],
     Calendar: {}, Collection: {}, Delete: {}, Document: {}, Files: {}, Plus: {}, Rank: {}, Search: {},

@@ -11,7 +11,7 @@
           <el-form-item label="执行时间 · 北京时间"><el-time-picker v-model="form.time" aria-label="执行时间" format="HH:mm" value-format="HH:mm" :clearable="false" /></el-form-item>
           <el-form-item v-if="form.frequency === 'weekly'" label="每周生成日"><el-select v-model="form.weekday" aria-label="每周生成日"><el-option v-for="(day, index) in weekdays" :key="index" :label="day" :value="index" /></el-select></el-form-item>
           <el-form-item v-if="form.frequency === 'monthly'" label="每月生成日"><el-select v-model="form.monthDay" aria-label="每月生成日"><el-option v-for="day in 31" :key="day" :label="`${day}日`" :value="day" /></el-select><small>当月不足所选日期时，月末执行。</small></el-form-item>
-          <el-form-item label="报告模板" :class="{ 'is-wide': form.frequency === 'daily' }"><el-select v-model="form.templateId" aria-label="计划报告模板" placeholder="选择对应周期的模板"><el-option v-for="template in matchingTemplates" :key="template.id" :label="template.name" :value="String(template.id)" /></el-select><small v-if="!loading && !matchingTemplates.length">当前周期暂无已发布模板，请在模板管理中创建并启用。</small></el-form-item>
+          <el-form-item label="报告模板" :class="{ 'is-wide': form.frequency === 'daily' }"><PersonalTemplateDialog @changed="loadChoices" /><el-select v-model="form.templateId" aria-label="计划报告模板" placeholder="选择对应周期的模板"><el-option v-for="template in matchingTemplates" :key="template.id" :label="template.name" :value="String(template.id)" /></el-select><small v-if="!loading && !matchingTemplates.length">当前周期暂无已发布模板，请在模板管理中创建并启用。</small></el-form-item>
         </div>
         <h3>资料筛选</h3>
         <div class="ps-schedule-fields">
@@ -36,6 +36,7 @@
 </template>
 
 <script setup>
+import PersonalTemplateDialog from './PersonalTemplateDialog.vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import usePortalStore from '@/store/modules/portal'
@@ -58,12 +59,10 @@ watch(() => form.value.frequency, () => {
   if (loading.value) return
   if (!matchingTemplates.value.some(item => String(item.id) === form.value.templateId)) form.value.templateId = ''
 })
-watch(() => props.modelValue, async open => {
+async function loadChoices() {
   const current = ++epoch
-  if (!open) return
   const account = store.workspaceEpoch
   loading.value = true; error.value = ''; loadError.value = ''
-  form.value = props.record ? readScheduleForm(props.record) : newScheduleForm()
   try {
     const [catalog, filters] = await Promise.all([listPipelineTemplates({ category: 'digest', publishedOnly: true }), getPipelineContentFilters()])
     if (disposed || current !== epoch || account !== store.workspaceEpoch) return
@@ -71,6 +70,11 @@ watch(() => props.modelValue, async open => {
     templates.value = catalog.data.rows; categories.value = filters.data.articleCategories
   } catch (err) { if (current === epoch) { loadError.value = err?.msg || err.message || '配置加载失败，请关闭后重试'; error.value = loadError.value } }
   finally { if (current === epoch) loading.value = false }
+}
+watch(() => props.modelValue, async open => {
+  if (!open) { epoch++; return }
+  form.value = props.record ? readScheduleForm(props.record) : newScheduleForm()
+  await loadChoices()
 })
 watch(() => store.workspaceEpoch, () => { epoch++; emit('update:modelValue', false) })
 async function save() {

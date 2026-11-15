@@ -87,6 +87,7 @@ export const constantRoutes = [
       { path: 'knowledge', name: 'PortalKnowledge', redirect: to => ({ path: '/portal/basket', query: to.query, hash: to.hash }) },
       { path: 'knowledge/:id', name: 'PortalKnowledgeDetail', component: () => import('@/views/portal/pages/KnowledgeDetailView.vue'), meta: { title: '资料详情' } },
       { path: 'me', redirect: '/portal/me/reports' },
+      { path: 'templates', name: 'PortalTemplates', component: () => import('@/views/portal/pages/PersonalTemplatesView.vue'), meta: { title: '我的模板' } },
       { path: 'profile', name: 'PortalProfile', component: () => import('@/views/portal/pages/ProfileView.vue'), meta: { title: '个人资料设置' } },
       { path: 'basket', name: 'PortalBasket', component: () => import('@/views/portal/pages/KnowledgeView.vue'), meta: { title: '资料库' } },
       { path: 'me/basket', name: 'PortalMyBasket', redirect: '/portal/basket' },

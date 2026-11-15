@@ -74,8 +74,9 @@
         </section>
     <section class="ps-form-card ps-digest-settings">
         <div v-show="settingsExpanded" id="digest-generation-settings" class="ps-digest-config-body" role="region" aria-label="生成设置">
+          <PersonalTemplateDialog @changed="loadTemplates" />
           <div class="ps-form-grid ps-digest-output-grid">
-            <label>报告模板<el-select v-model="form.template"><el-option v-for="item in availableTemplates" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
+            <label>报告模板<el-select v-model="form.template" aria-label="报告模板"><el-option v-for="item in availableTemplates" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
             <label>每栏资讯数量<el-input-number v-model="form.itemCount" :min="3" :max="30" /></label>
             <label>单条摘要长度<el-select v-model="form.summaryLength"><el-option label="精简（80-120字）" value="short" /><el-option label="标准（150-200字）" value="normal" /><el-option label="深度（250-300字）" value="long" /></el-select></label>
           </div>
@@ -97,6 +98,7 @@
 <script setup>
 import { displayId, decimalId, requireBusinessId, ID_UPGRADE_NOTICE } from '@/utils/portal/businessId'
 import { templateGenerationError } from '@/utils/pipeline/compactContract'
+import PersonalTemplateDialog from '../components/PersonalTemplateDialog.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { calendarDate, parseCalendarDate } from '@/utils/portal/businessTime'
 import { useRoute, useRouter } from 'vue-router'

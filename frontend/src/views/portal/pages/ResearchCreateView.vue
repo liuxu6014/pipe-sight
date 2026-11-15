@@ -58,6 +58,7 @@
         </div>
       </div>
       <div v-else-if="activeStep === TEMPLATE_STEP" class="ps-step-content" tabindex="0" aria-label="报告模板设置滚动区">
+        <PersonalTemplateDialog @changed="loadTemplates" />
         <p class="ps-step-explanation">为<strong>{{ reportTypes.find(type => type.value === form.reportType)?.label }}</strong>选择写作模板；下一步再调整大纲与逐章提示词。</p>
         <div v-if="templatesLoading" class="ps-inspector-empty">正在加载已发布模板…</div>
         <PortalEmptyState v-else-if="templatesError || !availableReportTemplates.length" title="暂无可用报告模板" :description="templatesError || '当前报告类型暂无已绑定模板，请在模板管理中为该报告类型创建并启用模板。'" action-label="重新加载" @action="loadTemplates" />
@@ -162,6 +163,7 @@ import { ElMessage } from 'element-plus'
 import { ArrowDown, ArrowUp, Back, Check, Delete, Plus, Search, UploadFilled } from '@element-plus/icons-vue'
 import PortalEmptyState from '../components/PortalEmptyState.vue'
 import ResearchChapterPrompt from '../components/ResearchChapterPrompt.vue'
+import PersonalTemplateDialog from '../components/PersonalTemplateDialog.vue'
 import usePortalStore from '@/store/modules/portal'
 import { createPipelineResearchJob, getPipelineResearchJob, getPipelineIntelligenceDetail, getPipelineKnowledgeDocument, listPipelineTemplates, uploadPipelineKnowledgeDocument, searchPipelineResearchMaterials, reparsePipelineKnowledgeDocument } from '@/api/pipeline/intelligence'
 import { mapEvidence, materialParseLabel, selectionReferences, useEvidenceSelection } from '@/utils/portal/evidenceInput'

@@ -14,7 +14,7 @@ function page(path, dependencies, exports) {
   const scope = vue.effectScope(), timers = new Map(), messages = []
   let sequence = 0, leave = () => {}
   const context = vm.createContext({
-    ...vue, ...contract, ...sourceAdapters, defineOptions() {}, onMounted() {}, onBeforeUnmount(fn) { leave = fn },
+    ...vue, ...contract, ...sourceAdapters, defineOptions() {}, defineProps: () => ({}), defineEmits: () => () => {}, onMounted() {}, onBeforeUnmount(fn) { leave = fn },
     checkPermi: () => true, checkRole: () => true,
     setTimeout(fn) { timers.set(++sequence, fn); return sequence }, clearTimeout(id) { timers.delete(id) },
     ElMessage: Object.fromEntries(['success', 'info', 'warning', 'error'].map(level => [level, text => messages.push({ level, text })])),

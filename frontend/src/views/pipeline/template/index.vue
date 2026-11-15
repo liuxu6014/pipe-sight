@@ -7,6 +7,7 @@
         <el-option label="已启用" value="enabled" />
         <el-option label="已停用" value="disabled" />
       </el-select>
+      <el-button v-if="personal" :loading="installing" @click="addBuiltins">添加内置模板</el-button>
       <el-button v-if="canSaveTemplate" type="primary" :icon="Plus" @click="createTemplate">新建模板</el-button>
     </section>
     <nav class="template-categories" aria-label="模板类别">
@@ -59,9 +60,9 @@
             <el-form-item label="模板名称" required>
               <el-input v-model="form.name" />
             </el-form-item>
-            <el-form-item label="报告类型" :required="form.purpose === 'research'">
+            <el-form-item v-if="form.purpose === 'research'" label="报告类型" required>
               <el-select v-model="form.reportType" clearable placeholder="选择报告类型">
-                <el-option v-for="category in categories.filter(item => item.value !== 'all')" :key="category.value" :label="category.name" :value="category.value" />
+                <el-option v-for="category in categories.filter(item => !['all', 'digest'].includes(item.value))" :key="category.value" :label="category.name" :value="category.value" />
               </el-select>
             </el-form-item>
           </div>
@@ -84,7 +85,8 @@
               <el-option v-for="model in textModels" :key="model.modelId" :label="model.modelName || model.modelCode" :value="model.modelId" />
             </el-select>
           </el-form-item>
-          <p class="template-contract-note">正文与图片模型在<router-link to="/pipeline/model">模型管理 → 用途配置</router-link>中统一选择。</p>
+          <p v-if="personal" class="template-contract-note">正文与图片模型由管理员统一配置。</p>
+          <p v-else class="template-contract-note">正文与图片模型在<router-link to="/pipeline/model">模型管理 → 用途配置</router-link>中统一选择。</p>
           <div class="template-form-grid">
             <el-form-item label="启用模板"><el-switch v-model="form.isEnabled" aria-label="启用模板" /></el-form-item>
             <el-form-item label="启用配图"><el-switch v-model="form.imageConfig.enabled" aria-label="启用配图" /></el-form-item>
@@ -105,6 +107,7 @@
             <el-input-number v-model="section.words" :aria-label="'第' + (index + 1) + '章字数'" :min="100" :max="8000" :step="100" />
             <el-switch v-model="section.required" active-text="必填" :aria-label="'第' + (index + 1) + '章必填'" />
             <el-button :icon="Delete" circle class="ps-ui-action" @click="form.sections.splice(index, 1)" :aria-label="'删除第' + (index + 1) + '章'" />
+            <el-input v-model="section.description" type="textarea" :rows="2" class="template-section-prompt" :aria-label="'第' + (index + 1) + '章写作提示词'" placeholder="说明本章的写作重点、证据要求和论证边界" />
           </div>
           <el-button v-if="canSaveTemplate" :icon="Plus" class="template-add-section" @click="form.sections.push({ id: Date.now(), title: '新增章节', words: 1000, required: false })">新增章节</el-button>
         </section>
@@ -123,18 +126,22 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Delete, Document, Files, Plus, Search, Edit, View } from '@element-plus/icons-vue'
-import { createPipelineTemplate, listPipelineTemplates, retirePipelineTemplate, updatePipelineTemplate } from '@/api/pipeline/intelligence'
+import { createPipelineTemplate, installPipelineTemplatePresets, listPipelineTemplates, retirePipelineTemplate, updatePipelineTemplate } from '@/api/pipeline/intelligence'
 import { listModelAll } from '@/api/ai/model'
 import { modelsFor } from '@/utils/pipeline/compactContract'
 import { checkPermi } from '@/utils/permission'
+const { personal = false } = defineProps({ personal: Boolean })
+const emit = defineEmits(['changed'])
+const installing = ref(false)
 const activeCategory = ref('all'), keyword = ref(''), status = ref('all')
 const editorVisible = ref(false), previewVisible = ref(false), previewingTemplate = ref(null), editingTemplate = ref(null)
 const saving = ref(false), loading = ref(false), templateError = ref('')
-const canSaveTemplate = computed(() => checkPermi(['pipeline:template:save']))
+const canSaveTemplate = computed(() => personal || checkPermi(['pipeline:template:save']))
 // These are the portal report keys, not new values for the API's purpose enum.
 const categories = [{ name: '全部模板', value: 'all', icon: Files }, { name: '科研需求报告', value: 'research-demand', icon: Document }, { name: '技术路线报告', value: 'technology-route', icon: Document }, { name: '科技项目需求表', value: 'project-demand', icon: Document }]
-function reportTypeOf(item) { return ['research-demand', 'technology-route', 'project-demand'].find(key => key === item?.reportType || key === item?.purpose) || '' }
-function reportTypeLabel(item) { return ({ 'research-demand': '科研需求报告', 'technology-route': '技术路线报告', 'project-demand': '科技项目需求表' })[reportTypeOf(item)] || '报告类型待绑定' }
+if (personal) categories.push({ name: '情报简报', value: 'digest', icon: Document })
+function reportTypeOf(item) { if (item?.purpose === 'digest') return 'digest'; return ['research-demand', 'technology-route', 'project-demand'].find(key => key === item?.reportType || key === item?.purpose) || '' }
+function reportTypeLabel(item) { if (item?.purpose === 'digest') return '情报简报'; return ({ 'research-demand': '科研需求报告', 'technology-route': '技术路线报告', 'project-demand': '科技项目需求表' })[reportTypeOf(item)] || '报告类型待绑定' }
 const templates = ref([]), models = ref([]), modelError = ref('')
 const unassignedCount = computed(() => templates.value.filter(item => !reportTypeOf(item)).length)
 const textModels = computed(() => modelsFor(models.value, 'text_generate'))
@@ -150,12 +157,12 @@ function modelLabel(id) {
 function statusTag(value) { return value === 'enabled' ? 'success' : 'info' }
 function statusLabel(value) { return value === 'enabled' ? '已启用' : '已停用' }
 function resetForm(item = null) {
- Object.assign(form, { name: item?.name || '', purpose: item?.purpose || 'research', reportType: reportTypeOf(item) || (activeCategory.value === 'all' ? '' : activeCategory.value), prompt: item?.prompt || '', description: item?.description || '', modelId: item?.modelId ?? null, imageModelId: item?.imageModelId ?? null, sections: (item?.sections || []).map(section => ({ ...section })), imageConfig: item ? JSON.parse(JSON.stringify(item.imageConfig || {})) : {}, isEnabled: item?.isEnabled ?? true })
+ Object.assign(form, { name: item?.name || '', purpose: item?.purpose || 'research', reportType: reportTypeOf(item) || (['all', 'digest'].includes(activeCategory.value) ? '' : activeCategory.value), prompt: item?.prompt || '', description: item?.description || '', modelId: item?.modelId ?? null, imageModelId: item?.imageModelId ?? null, sections: (item?.sections || []).map(section => ({ ...section })), imageConfig: item ? JSON.parse(JSON.stringify(item.imageConfig || {})) : {}, isEnabled: item?.isEnabled ?? true })
  form.imageConfig.enabled ??= false
  form.imageConfig.count ??= 1
  form.imageConfig.prompt ??= ''
 }
-function createTemplate() { if (!canSaveTemplate.value) return; editingTemplate.value = null; resetForm(); editorVisible.value = true }
+function createTemplate() { if (!canSaveTemplate.value) return; editingTemplate.value = null; resetForm(); if (personal && activeCategory.value === 'digest') { form.purpose = 'digest'; form.name = '通用简报模板' }; editorVisible.value = true }
 function editTemplate(item) { if (!canSaveTemplate.value) return; editingTemplate.value = item; resetForm(item); editorVisible.value = true }
 function previewTemplate(item) { previewingTemplate.value = JSON.parse(JSON.stringify(item)); previewVisible.value = true }
 async function loadTemplates() {
@@ -163,7 +170,7 @@ async function loadTemplates() {
  try {
   const res = await listPipelineTemplates()
   const rows = res.data?.rows || []
-  const reportRows = rows.filter(item => item.purpose === 'research' || reportTypeOf(item))
+  const reportRows = rows.filter(item => personal || item.purpose === 'research' || (reportTypeOf(item) && reportTypeOf(item) !== 'digest'))
   templates.value = reportRows.map(item => ({ ...item, status: item.isEnabled ? 'enabled' : 'disabled' }))
  }
  catch (error) { templateError.value = error?.msg || error?.message || '模板加载失败，请重试' }
@@ -186,7 +193,7 @@ async function saveTemplate() {
  try {
   if (editingTemplate.value) await updatePipelineTemplate(editingTemplate.value.id, templatePayload())
   else await createPipelineTemplate(templatePayload())
-  editorVisible.value = false; ElMessage.success('模板内容及报告类型已保存'); await loadTemplates()
+  editorVisible.value = false; ElMessage.success('模板内容及报告类型已保存'); await loadTemplates(); emit('changed')
  } catch (error) { ElMessage.error(error?.msg || error?.message || '模板保存失败') }
  finally { saving.value = false }
 }
@@ -196,10 +203,16 @@ async function toggleTemplate(item) {
  try {
   if (item.isEnabled) await retirePipelineTemplate(item.id)
   else await updatePipelineTemplate(item.id, templatePayload({ ...item, isEnabled: true }))
-  ElMessage.success(item.isEnabled ? '模板已停用' : '模板已启用'); await loadTemplates()
+  ElMessage.success(item.isEnabled ? '模板已停用' : '模板已启用'); await loadTemplates(); emit('changed')
  }
  catch (error) { ElMessage.error(error?.msg || error?.message || '模板状态保存失败') }
  finally { saving.value = false }
+}
+async function addBuiltins() {
+ installing.value = true
+ try { const res = await installPipelineTemplatePresets(); await loadTemplates(); emit('changed'); ElMessage.success(res.data?.created ? `已添加 ${res.data.created} 个个人模板` : '内置模板已添加，保留现有修改') }
+ catch (error) { ElMessage.error(error?.msg || error?.message || '添加内置模板失败') }
+ finally { installing.value = false }
 }
 onMounted(() => { loadTemplates(); loadModels() })
 </script>
@@ -234,6 +247,7 @@ onMounted(() => { loadTemplates(); loadModels() })
 .template-metadata dt { color: var(--el-text-color-secondary); }
 .template-metadata dd { margin: 0; color: var(--el-text-color-regular); overflow-wrap: anywhere; }
 .template-card-actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 14px; border-top: 1px solid var(--el-border-color-lighter); }
+.template-section-prompt { grid-column: 2 / -1; }
 .template-card-actions .el-button { margin: 0; }
 .template-result-count { color: var(--el-text-color-secondary); font-size: 13px; padding: 10px 16px; background: var(--el-bg-color); border: 1px solid var(--el-border-color-light); border-radius: 8px; }
 .template-editor-form { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; gap: 20px; }

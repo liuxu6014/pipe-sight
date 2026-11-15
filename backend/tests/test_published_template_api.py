@@ -81,3 +81,43 @@ def test_template_management_is_user_scoped_not_admin_gated() -> None:
         for dep in manage.dependant.dependencies
     )
     assert not any(isinstance(dep.call, CheckRoleInterfaceAuth) for dep in picker.dependant.dependencies)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'method,path,action',
+    [
+        ('POST', '/pipeline/templates', 'save_draft'),
+        ('PUT', '/pipeline/templates/9007199254740993', 'save_draft'),
+        ('DELETE', '/pipeline/templates/9007199254740993', 'retire'),
+        ('POST', '/pipeline/templates/presets', 'install_builtins'),
+    ],
+)
+async def test_every_template_write_uses_authenticated_owner_and_requires_login(
+    monkeypatch, method, path, action
+) -> None:
+    write = AsyncMock(return_value={'created': 0} if action == 'install_builtins' else {'id': '9007199254740993'})
+    monkeypatch.setattr(PipelineTemplateService, action, write)
+    monkeypatch.setattr(LoginService, 'get_current_user', AsyncMock(return_value=current_user(8)))
+    body = {
+        'purpose': 'research',
+        'reportType': 'research-demand',
+        'name': '个人模板',
+        'prompt': '原文依据',
+        'userId': 7,
+    }
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=portal_app()), base_url='http://test') as client:
+        anonymous = await client.request(method, path, json=body)
+        assert anonymous.status_code == HTTPStatus.UNAUTHORIZED
+        write.assert_not_awaited()
+        response = await client.request(
+            method,
+            path,
+            json=body,
+            headers={
+                'x-test-user': 'ordinary-user-8',
+                'Authorization': 'Bearer test-token',
+            },
+        )
+    assert response.status_code == HTTPStatus.OK
+    assert write.await_args.kwargs['user_id'] == 8

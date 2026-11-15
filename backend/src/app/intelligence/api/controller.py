@@ -251,6 +251,16 @@ async def create_template(
     )
 
 
+@controller.post('/templates/presets')
+async def install_template_presets(
+    query_db: DB,
+    current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
+) -> Response:
+    return ResponseUtil.success(
+        data=await PipelineTemplateService.install_builtins(query_db, user_id=current_user.user.user_id)
+    )
+
+
 @controller.put('/templates/{identity}')
 async def update_template(
     identity: BusinessId,

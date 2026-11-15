@@ -55,9 +55,10 @@ def install_presets(connection, table, presets: list[dict], *, apply: bool = Fal
     if apply and connection.dialect.name == 'postgresql':
         connection.execute(sa.text("SELECT pg_advisory_xact_lock(hashtext('pipesight-research-presets-v1'))"))
     existing = {}
-    for row in connection.execute(
-        sa.select(table.c.id, table.c.name, table.c.report_type).where(table.c.purpose == 'research')
-    ):
+    query = sa.select(table.c.id, table.c.name, table.c.report_type).where(table.c.purpose == 'research')
+    if user_id is not None:
+        query = query.where(table.c.user_id == user_id)
+    for row in connection.execute(query):
         existing.setdefault((row.report_type, row.name), []).append(row.id)
     pending, skipped = [], []
     for preset in presets:

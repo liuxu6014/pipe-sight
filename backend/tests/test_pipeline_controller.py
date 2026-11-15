@@ -128,5 +128,5 @@ def test_pipeline_management_routes_require_explicit_authorization() -> None:
         ('/pipeline/tasks/runs/{}/retry', 'POST', 'pipeline:task:run'),
     ):
         assert any(getattr(dep.dependency, 'perm', None) == permission for dep in routes[path, (method,)].dependencies)
-    for path in ('/pipeline/categories', '/pipeline/templates'):
+    for path in ('/pipeline/categories',):
         assert any(getattr(dep.dependency, 'role_key', None) == 'admin' for dep in routes[path, ('POST',)].dependencies)

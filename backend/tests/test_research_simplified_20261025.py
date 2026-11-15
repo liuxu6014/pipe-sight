@@ -836,5 +836,17 @@ async def test_paper_snapshot_only_contains_abstract(env, db, monkeypatch) -> No
 async def test_private_material_cannot_be_selected_by_other_user(env, db, monkeypatch) -> None:
     seed(env, db)
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
+    own_template = env.configuration.PipelineTemplateVersion(
+        user_id=8,
+        name='用户8模板',
+        purpose='research',
+        prompt='只使用所选资料',
+        model_id=1,
+        sections=[],
+        image_config={},
+        is_enabled=True,
+    )
+    db.add(own_template)
+    await db.commit()
     with raises(env, '无权'):
-        await queue(env, db, payload(request_id='another-user'), user_id=8)
+        await queue(env, db, payload(request_id='another-user', template_id=str(own_template.id)), user_id=8)

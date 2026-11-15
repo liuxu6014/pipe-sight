@@ -28,7 +28,7 @@ async function mount(name, { query = {}, api = {}, basket = [], timers = {} } = 
   const forbidden = () => { mutations++; throw new Error('This test must never generate, upload or schedule') }
   const dependencies = {
     ...vue, useRoute, useRouter, ...businessIds, ...businessTimes, ...evidence, templateGenerationError, resolveBasketSelection, allocateReportWords,
-    usePortalStore: () => store, PortalPageHeader: {}, PortalEmptyState: {}, DigestScheduleDialog: {}, ResearchChapterPrompt: {},
+    usePortalStore: () => store, PortalPageHeader: {}, PortalEmptyState: {}, DigestScheduleDialog: {}, ResearchChapterPrompt: {}, PersonalTemplateDialog: {},
     ElMessage: Object.fromEntries(['success', 'warning', 'error'].map(level => [level, text => messages.push({ level, text })])),
     ...Object.fromEntries(['ArrowLeft', 'Check', 'Close', 'Delete', 'Plus', 'Rank', 'Search', 'UploadFilled', 'Refresh', 'Warning'].map(icon => [icon, {}])),
     getPipelineIntelligenceDetail: async id => ({ data: article(id) }),

@@ -220,10 +220,15 @@ def prepare(args) -> Path:
 
 
 def run(path) -> int:
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
     manifest = json.loads(path.read_text())
     info = manifest['connection']
     validate(info)
     env = environment(info, manifest['current_database'])
+    config = Config(str(BACKEND / 'alembic.ini'))
+    config.set_main_option('script_location', str(BACKEND / 'alembic'))
     env.update(
         dict.fromkeys(
             (
@@ -241,7 +246,7 @@ def run(path) -> int:
     )
     env.update(
         PIPESIGHT_PG_REHEARSAL_MANIFEST=str(path),
-        PIPESIGHT_FIELD_REPAIR_REVISION='20261110_auditor_role',
+        PIPESIGHT_FIELD_REPAIR_REVISION=ScriptDirectory.from_config(config).get_current_head(),
         PIPESIGHT_NUMERIC_SEED_BACKUP=manifest['numeric_seed_backup'],
         PIPESIGHT_PG_EVIDENCE=manifest['evidence_root'],
         PIPESIGHT_PG_SNAPSHOT_ROOT=manifest['snapshot_root'],

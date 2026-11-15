@@ -107,6 +107,10 @@ export function listPipelineTemplates(params) {
   })
 }
 
+export function installPipelineTemplatePresets() {
+  return request({ url: '/pipeline/templates/presets', method: 'post' })
+}
+
 export function createPipelineTemplate(data) {
   return request({
     url: '/pipeline/templates',
