@@ -7,7 +7,6 @@
         <el-button v-if="keyword || statusFilter" @click="keyword = ''; statusFilter = ''">清除筛选</el-button>
         <span class="report-management-scope" aria-live="polite">共 {{ filteredRows.length }} 份</span>
         <div v-if="reportKind !== 'digest'" class="heading-actions">
-          <el-button plain :icon="DocumentAdd" @click="openCreate('科研需求报告')">进入用户端编制</el-button>
           <el-button type="primary" :icon="Refresh" :loading="loading" @click="loadReports">刷新列表</el-button>
         </div>
       </div>
@@ -36,7 +35,7 @@
               </div>
             </div>
             <div class="report-list-actions">
-              <el-button plain type="primary" :icon="Edit" @click="openReport(row)">查看 / 核对</el-button>
+              <el-button plain type="primary" :icon="View" @click="openReport(row)">查看详情</el-button>
               <el-button v-hasPermi="['pipeline:report:export']" plain type="primary" :icon="Download" :loading="downloadingReportId === row.id" @click="handleExportReport(row)">导出</el-button>
             </div>
           </li>
@@ -52,22 +51,25 @@
         class="report-list-pagination"
       />
     </el-card>
+    <ReportDetailDialog v-model="detailVisible" :report-id="selectedReportId" />
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { DocumentAdd, Download, Edit, Refresh } from '@element-plus/icons-vue'
+import { Download, Refresh, View } from '@element-plus/icons-vue'
 import { exportPipelineReport, listPipelineAdminReports } from '@/api/pipeline/intelligence'
 import { getReportStatusMeta } from '@/utils/pipeline/reportPresentation'
-import { getPortalReportPath, isDigestType } from '@/views/portal/utils/routing'
+import { isDigestType } from '@/views/portal/utils/routing'
+import ReportDetailDialog from './components/ReportDetailDialog.vue'
 
 defineOptions({ name: 'PipelineReport' })
 
-const router = useRouter()
 const route = useRoute()
+const detailVisible = ref(false)
+const selectedReportId = ref('')
 const reportKind = computed(() => route.path === '/pipeline/digest' ? 'digest' : 'research')
 const keyword = ref('')
 const statusFilter = ref('')
@@ -158,13 +160,9 @@ async function handleExportReport(row) {
 }
 
 function openReport(row) {
-  if (!row?.id) return ElMessage.warning('当前报告缺少有效编号，暂时无法打开编辑器')
-  router.push(getPortalReportPath({ id: row.id, reportType: row.reportType || row.type }))
-}
-function openCreate(title) {
-  if (title.includes('月报')) return router.push({ path: '/portal/digests/create', query: { type: '月报' } })
-  if (title.includes('周报')) return router.push({ path: '/portal/digests/create', query: { type: '周报' } })
-  router.push('/portal/research/create')
+  if (!row?.id) return ElMessage.warning('当前成果缺少有效编号，暂时无法查看')
+  selectedReportId.value = String(row.id)
+  detailVisible.value = true
 }
 
 onMounted(loadReports)

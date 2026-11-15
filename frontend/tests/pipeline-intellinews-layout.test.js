@@ -597,14 +597,12 @@ test('keeps pipeline backend pages inside the management layout', () => {
   }
 })
 
-test('keeps report management actions connected to real portal flows', () => {
+test('keeps report management within the management interface', () => {
   const reportPage = read('../src/views/pipeline/report/index.vue')
   const digestCreate = read('../src/views/portal/pages/DigestCreateView.vue')
   assert.match(reportPage, /function openReport\(row\)/)
-  assert.match(reportPage, /router\.push\(getPortalReportPath\(/)
-  assert.match(reportPage, /function openCreate\(title\)/)
-  assert.match(reportPage, /path: '\/portal\/digests\/create', query: \{ type: '周报' \}/)
-  assert.match(reportPage, /router\.push\('\/portal\/research\/create'\)/)
+  assert.match(reportPage, /<ReportDetailDialog v-model="detailVisible" :report-id="selectedReportId"/)
+  assert.doesNotMatch(reportPage, /getPortalReportPath|openCreate|进入用户端编制|router\.push/)
   assert.doesNotMatch(reportPage, /showComingSoon|将在下一阶段接入/)
   assert.match(digestCreate, /const initialType = \(\{ weekly: '周报', monthly: '月报', 周报: '周报', 月报: '月报' \}\)\[String\(route\.query\.type \|\| ''\)\]/)
   assert.match(digestCreate, /type: initialType/)
