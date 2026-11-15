@@ -16,7 +16,7 @@ from config.database import Base
 
 register_sqlalchemy_models()
 BUSINESS_TABLES = {*BUSINESS_ID_TABLES, 'ai_models', 'basket_items', 'report_versions'}
-BUSINESS_COLUMN_COUNT = 208
+BUSINESS_COLUMN_COUNT = 210
 MISSING_DEFAULT_COUNT = 33
 MISSING_DEFAULTS = {
     'ai_models': ('parameters', 'created_at', 'updated_at'),
@@ -70,7 +70,7 @@ CATALOG_INDEX_NAMES = {
     'report_assets': {'idx_report_assets_report_id'},
     'report_versions': {'uk_report_versions_report_id_version'},
     'reports': {'idx_reports_user_id'},
-    'templates': set(),
+    'templates': {'uq_templates_user_preset'},
 }
 
 

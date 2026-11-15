@@ -33,7 +33,7 @@ async def test_two_principals_cannot_list_modify_or_use_each_others_templates(en
     app = portal_app()
     app.dependency_overrides[DBSessionDependency().dependency] = lambda: report_case.db
     # Keep API dependency composition real while using the fixture's ORM registry.
-    for name in ('save_draft', 'retire', 'list_templates'):
+    for name in ('save_draft', 'retire', 'list_templates', 'install_builtins', 'archive', 'restore'):
         monkeypatch.setattr(PipelineTemplateService, name, getattr(env.template.PipelineTemplateService, name))
     actor = AsyncMock(return_value=current_user(a))
     monkeypatch.setattr(LoginService, 'get_current_user', actor)
@@ -57,11 +57,23 @@ async def test_two_principals_cannot_list_modify_or_use_each_others_templates(en
         for path in ('/pipeline/templates', '/pipeline/templates/published?category=research'):
             rows = (await client.get(path)).json()['data']['rows']
             assert template_id not in {row['id'] for row in rows}
+            assert len(rows) == (11 if path == '/pipeline/templates' else 9)
+        own_defaults = await env.repo.ResearchDao.list_templates(report_case.db, user_id=b)
+        assert len(own_defaults) == 11 and all(row.user_id == b and row.preset_key for row in own_defaults)
+        default_id = str(own_defaults[0].id)
+        assert (await client.post(f'/pipeline/templates/{default_id}/archive')).status_code == 200
+        rows = (await client.get('/pipeline/templates')).json()['data']['rows']
+        assert len(rows) == 11 and next(row for row in rows if row['id'] == default_id)['isDeleted']
+        assert len(await env.repo.ResearchDao.list_templates(report_case.db, user_id=b)) == 11
+        assert (await client.post(f'/pipeline/templates/{default_id}/restore')).status_code == 200
         for method in ('PUT', 'DELETE'):
             with pytest.raises(env.exc):
                 await client.request(method, f'/pipeline/templates/{template_id}', json={**body, 'name': '越权修改'})
         assert await env.template.PipelineTemplateService.get_published(report_case.db, template_id, b) is None
         actor.return_value = current_user(a)
+        for action in ('archive', 'restore'):
+            with pytest.raises(env.exc):
+                await client.post(f'/pipeline/templates/{default_id}/{action}')
         assert (
             await client.put(f'/pipeline/templates/{template_id}', json={**body, 'prompt': '本人修改已保存'})
         ).status_code == 200

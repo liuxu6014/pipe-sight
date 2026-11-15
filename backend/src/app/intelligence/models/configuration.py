@@ -13,6 +13,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -31,6 +32,7 @@ class PipelineTemplateVersion(Base):
 
     __tablename__ = 'templates'
     __table_args__ = (
+        UniqueConstraint('user_id', 'preset_key', name='uq_templates_user_preset'),
         CheckConstraint("purpose IN ('article','research','digest')", name='ck_templates_purpose'),
         CheckConstraint(
             "report_type IS NULL OR (purpose = 'research' AND report_type IN ('research-demand','technology-route','project-demand'))",
@@ -44,6 +46,8 @@ class PipelineTemplateVersion(Base):
     )
     id = business_pk()
     user_id = Column(BigInteger, ForeignKey('sys_user.id', ondelete='RESTRICT'), nullable=False)
+    preset_key = Column(String(64), nullable=True)
+    deleted_at = Column(BeijingAuditTime(), nullable=True)
     name = Column(String(255), nullable=False)
     purpose = Column(String(16), nullable=False)
     report_type = Column(String(32), nullable=True)

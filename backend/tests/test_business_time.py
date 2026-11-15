@@ -156,9 +156,11 @@ def test_business_model_audit_columns_only_and_mixed_guard_compiles_both_dialect
                 assert not table.name.startswith('sys_')
                 assert column.name in {'created_at', 'updated_at'} or (
                     table.name == 'digest_schedules' and column.name == 'last_run_at'
+                ) or (
+                    table.name == 'templates' and column.name == 'deleted_at'
                 )
                 count += 1
-    assert count == AUDIT_FIELD_COUNT + 1  # 最近派发检查同样使用北京时间秒精度。
+    assert count == AUDIT_FIELD_COUNT + 2  # 最近派发检查和模板软删除同样使用北京时间秒精度。
     collection = Base.metadata.tables['collection_runs']
     assert not isinstance(collection.c.available_at.type, BeijingAuditTime)
     assert collection.c.available_at.type.timezone

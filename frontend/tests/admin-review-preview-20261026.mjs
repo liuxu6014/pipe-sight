@@ -18,6 +18,7 @@ export const listManuscriptJobs = async q => { const rows=allJobs.filter(x=>(!q.
 export const getManuscriptJob = async id => ({data:allJobs.find(x=>x.job_id===id)});
 export const createPipelineTemplate = async () => {throw Error('preview: writes disabled')};
 export const updatePipelineTemplate = createPipelineTemplate, retirePipelineTemplate = createPipelineTemplate,
+deletePipelineTemplate = createPipelineTemplate, restorePipelineTemplate = createPipelineTemplate,
 deletePipelineKnowledgeDocument = createPipelineTemplate, downloadPipelineKnowledgeDocument = createPipelineTemplate,
 reparsePipelineKnowledgeDocument = createPipelineTemplate, uploadPipelineKnowledgeDocument = createPipelineTemplate,
 exportPipelineReport = createPipelineTemplate, exportManuscript = createPipelineTemplate,

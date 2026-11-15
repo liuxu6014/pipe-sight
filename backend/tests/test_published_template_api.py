@@ -41,6 +41,8 @@ def portal_app() -> FastAPI:
 async def test_published_templates_are_scoped_to_current_user(monkeypatch: pytest.MonkeyPatch) -> None:
     listing = AsyncMock(return_value={'rows': [], 'total': 0})
     monkeypatch.setattr(PipelineTemplateService, 'list_templates', listing)
+    initialize = AsyncMock()
+    monkeypatch.setattr(PipelineTemplateService, 'install_builtins', initialize)
     monkeypatch.setattr(LoginService, 'get_current_user', AsyncMock(return_value=current_user(7)))
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=portal_app()), base_url='http://test') as client:
         response = await client.get(
@@ -49,19 +51,23 @@ async def test_published_templates_are_scoped_to_current_user(monkeypatch: pytes
         )
     assert response.status_code == HTTPStatus.OK
     assert listing.await_args.kwargs == {'category': 'research', 'published_only': True, 'user_id': 7}
+    assert initialize.await_args.kwargs == {'user_id': 7}
 
 
 @pytest.mark.asyncio
 async def test_template_management_scopes_to_current_user(monkeypatch: pytest.MonkeyPatch) -> None:
     listing = AsyncMock(return_value={'rows': [], 'total': 0})
     monkeypatch.setattr(PipelineTemplateService, 'list_templates', listing)
+    initialize = AsyncMock()
+    monkeypatch.setattr(PipelineTemplateService, 'install_builtins', initialize)
     monkeypatch.setattr(LoginService, 'get_current_user', AsyncMock(return_value=current_user(8)))
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=portal_app()), base_url='http://test') as client:
         response = await client.get(
             '/pipeline/templates', headers={'x-test-user': 'ordinary-user', 'Authorization': 'Bearer test-token'}
         )
     assert response.status_code == HTTPStatus.OK
-    assert listing.await_args.kwargs == {'category': None, 'user_id': 8}
+    assert listing.await_args.kwargs == {'category': None, 'user_id': 8, 'include_deleted': True}
+    assert initialize.await_args.kwargs == {'user_id': 8}
 
 
 @pytest.mark.asyncio
@@ -91,6 +97,8 @@ def test_template_management_is_user_scoped_not_admin_gated() -> None:
         ('PUT', '/pipeline/templates/9007199254740993', 'save_draft'),
         ('DELETE', '/pipeline/templates/9007199254740993', 'retire'),
         ('POST', '/pipeline/templates/presets', 'install_builtins'),
+        ('POST', '/pipeline/templates/9007199254740993/archive', 'archive'),
+        ('POST', '/pipeline/templates/9007199254740993/restore', 'restore'),
     ],
 )
 async def test_every_template_write_uses_authenticated_owner_and_requires_login(

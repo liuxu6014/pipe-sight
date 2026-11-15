@@ -3,10 +3,10 @@
 from copy import deepcopy
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import text, update
 
 from app.business_ids import parse_business_id, wire_id
-from app.business_time import format_business_time
+from app.business_time import audit_now, format_business_time
 from app.intelligence.models.configuration import PipelineTemplateVersion
 from app.research.repositories.research_repository import ResearchDao
 from app.research.services.model_generation import ModelGateway
@@ -25,10 +25,20 @@ class PipelineTemplateService:
                 text('SELECT pg_advisory_xact_lock(hashtext(:key))'), {'key': f'template-presets:{user_id}'}
             )
         rows = await ResearchDao.list_templates(db, user_id=user_id)
-        existing = {(row.purpose, row.report_type, row.name) for row in rows}
+        keys = {row.preset_key for row in rows if row.preset_key}
+        existing = {(row.purpose, row.report_type, row.name): row for row in rows if not row.preset_key}
         created = []
         for preset in builtin_templates():
-            if (preset['purpose'], preset['report_type'], preset['name']) in existing:
+            if preset['preset_key'] in keys:
+                continue
+            previous = existing.get((preset['purpose'], preset['report_type'], preset['name']))
+            if previous is not None:
+                # Adopt an existing copy without changing its contents or edit time.
+                await db.execute(
+                    update(PipelineTemplateVersion)
+                    .where(PipelineTemplateVersion.id == previous.id, PipelineTemplateVersion.user_id == user_id)
+                    .values(preset_key=preset['preset_key'], updated_at=previous.updated_at)
+                )
                 continue
             row = PipelineTemplateVersion(**deepcopy(preset), user_id=user_id)
             db.add(row)
@@ -41,6 +51,12 @@ class PipelineTemplateService:
         """旧表没有周期列：仅识别受控全名，不从用途或任意子串推断通用。"""
         if row.purpose != 'digest':
             return None
+        preset_cadence = {
+            'digest-v1-weekly': 'weekly',
+            'digest-v1-monthly': 'monthly',
+        }.get(getattr(row, 'preset_key', None))
+        if preset_cadence:
+            return preset_cadence
         names = {
             f'{prefix}{label}{suffix}': cadence
             for prefix in ('', '科技情报', '管网科技情报')
@@ -68,6 +84,7 @@ class PipelineTemplateService:
 
     @staticmethod
     def _dict(row) -> dict:
+        deleted_at = getattr(row, 'deleted_at', None)
         return {
             'id': wire_id(row.id),
             'templateKey': wire_id(row.id),
@@ -83,21 +100,30 @@ class PipelineTemplateService:
             'sections': deepcopy(row.sections),
             'imageConfig': deepcopy(row.image_config),
             'isEnabled': row.is_enabled,
-            'status': 'published' if row.is_enabled else 'retired',
+            'isDeleted': deleted_at is not None,
+            'deletedAt': format_business_time(deleted_at) if deleted_at else None,
+            'status': 'deleted' if deleted_at else 'published' if row.is_enabled else 'retired',
             'formats': ['docx', 'pdf'],
             'updatedAt': format_business_time(row.updated_at),
         }
 
     @staticmethod
     async def ensure_default_templates(db) -> None:
-        # 默认模板由迁移映射；运行时不自动创建模板或模型配置。
+        # 启动时不创建共享模板；个人默认模板在已认证的列表入口按用户初始化。
         return None
 
     @classmethod
-    async def list_templates(cls, db, category=None, published_only=False, user_id=None) -> dict:
+    async def list_templates(cls, db, category=None, published_only=False, user_id=None, include_deleted=False) -> dict:
         purpose = {'project': 'research'}.get(category, category)
         rows = await ResearchDao.list_templates(db, purpose, user_id)
-        rows = [row for row in rows if not published_only or row.is_enabled]
+        # Daily briefs are historical-only. Keep saved rows for old reports,
+        # but omit them from management and new-generation template choices.
+        rows = [
+            row for row in rows
+            if cls.digest_cadence(row) != 'daily'
+            and (include_deleted or row.deleted_at is None)
+            and (not published_only or (row.is_enabled and row.deleted_at is None))
+        ]
         result = []
         for row in rows:
             model_id, image_id = await cls.generation_model_ids(db, row.purpose, row, {'enabled': True})
@@ -129,7 +155,7 @@ class PipelineTemplateService:
         if template_key is None:
             return None
         row = await ResearchDao.get_template(db, parse_business_id(template_key), user_id)
-        return row if row and row.is_enabled else None
+        return row if row and row.is_enabled and getattr(row, 'deleted_at', None) is None else None
 
     @staticmethod
     async def generation_model_ids(db, purpose, template, image_config=None, *, required=False) -> tuple:
@@ -205,6 +231,8 @@ class PipelineTemplateService:
         row = await ResearchDao.get_template(db, template_key, user_id) if template_key is not None else None
         if template_key is not None and row is None:
             raise ServiceException(message='模板不存在或无权操作')
+        if row is not None and row.deleted_at is not None:
+            raise ServiceException(message='模板已删除，请先恢复后再编辑')
         if row is None:
             row = PipelineTemplateVersion(is_enabled=True, user_id=user_id)
             db.add(row)
@@ -224,7 +252,7 @@ class PipelineTemplateService:
     @classmethod
     async def publish(cls, db, template_key, user_id=None, **_) -> dict:
         row = await ResearchDao.get_template(db, parse_business_id(template_key), user_id)
-        if not row:
+        if not row or row.deleted_at is not None:
             raise ServiceException(message='模板不存在或无权操作')
         row.is_enabled = True
         await db.commit()
@@ -236,5 +264,24 @@ class PipelineTemplateService:
         if not row:
             raise ServiceException(message='模板不存在或无权操作')
         row.is_enabled = False
+        await db.commit()
+        return cls._dict(row)
+
+    @classmethod
+    async def archive(cls, db, template_key, *, user_id: int) -> dict:
+        row = await ResearchDao.get_template(db, parse_business_id(template_key), user_id)
+        if row is None:
+            raise ServiceException(message='模板不存在或无权操作')
+        row.deleted_at = row.deleted_at or audit_now()
+        row.is_enabled = False
+        await db.commit()
+        return cls._dict(row)
+
+    @classmethod
+    async def restore(cls, db, template_key, *, user_id: int) -> dict:
+        row = await ResearchDao.get_template(db, parse_business_id(template_key), user_id)
+        if row is None:
+            raise ServiceException(message='模板不存在或无权操作')
+        row.deleted_at = None
         await db.commit()
         return cls._dict(row)

@@ -1,7 +1,7 @@
--- compact-v15中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；自动计划累计执行结果。
+-- compact-v16中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；自动计划累计执行结果。
 -- 27个业务created_at/updated_at为北京时间timestamp(0)无时区；其他运行时间字段保持原类型。
 -- 普通不透明令牌保留；系统幂等键内嵌ID、显式JSON引用及语义指纹按实体映射核验。
--- 28张基线表347字段，2张保留功能表23字段；共30张物理表370字段。
+-- 28张基线表349字段，2张保留功能表23字段；共30张物理表372字段。
 -- 仅COMMENT及存在性保护块；调用方管理事务，不修改字段、约束或业务数据。
 
 COMMENT ON TABLE public."news_articles" IS '网站与公众号新闻原文及中文译文；每篇最多关联一个类别，无人工审核流程';
@@ -88,6 +88,8 @@ COMMENT ON TABLE public."templates" IS '文章、科研报告与简报生成模�
 COMMENT ON COLUMN public."templates"."report_type" IS '科研报告类型：research-demand、technology-route、project-demand；旧模板未绑定时为空，不从名称推断';
 COMMENT ON COLUMN public."templates"."id" IS '生成模板数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系';
 COMMENT ON COLUMN public."templates"."user_id" IS '模板所有者ID，关联sys_user.id；每个用户仅可见和管理自己的模板';
+COMMENT ON COLUMN public."templates"."preset_key" IS '个人默认模板的稳定标识；同一用户唯一，改名或软删除不改变该标识，防止重复初始化；自建模板为空';
+COMMENT ON COLUMN public."templates"."deleted_at" IS '模板软删除时间；为空表示未删除，已删除模板不可用于新任务，可恢复；历史报告和快照保留';
 COMMENT ON COLUMN public."templates"."name" IS '用户选择模板时显示的名称；必填且禁止空白文本';
 COMMENT ON COLUMN public."templates"."purpose" IS '模板用途：article生成文章、research科研报告、digest周期简报';
 COMMENT ON COLUMN public."templates"."description" IS '模板用途及适用范围说明；可空，不冒充正文生成结果';

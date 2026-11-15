@@ -57,16 +57,84 @@ async def test_real_sessions_scope_create_list_edit_and_enable_to_each_user(env,
 @pytest.mark.asyncio
 async def test_builtins_are_private_repeatable_and_never_overwrite_user_edits(env, db) -> None:
     service, repo = env.template.PipelineTemplateService, env.repo.ResearchDao
-    assert (await service.install_builtins(db, user_id=7))['created'] == 12
+    assert (await service.install_builtins(db, user_id=7))['created'] == 11
     first = (await repo.list_templates(db, user_id=7))[0]
     first.prompt, first.is_enabled = '保留用户自行编写的提示词', False
     await db.commit()
-    assert (await service.install_builtins(db, user_id=8))['created'] == 12
+    assert (await service.install_builtins(db, user_id=8))['created'] == 11
     assert (await service.install_builtins(db, user_id=7))['created'] == 0
     assert first.prompt == '保留用户自行编写的提示词' and not first.is_enabled
     a, b = await repo.list_templates(db, user_id=7), await repo.list_templates(db, user_id=8)
-    assert len(a) == len(b) == 12 and not ({r.id for r in a} & {r.id for r in b})
-    assert {service.digest_cadence(r) for r in b if r.purpose == 'digest'} == {'daily', 'weekly', 'monthly'}
+    assert len(a) == len(b) == 11 and not ({r.id for r in a} & {r.id for r in b})
+    assert {service.digest_cadence(r) for r in b if r.purpose == 'digest'} == {'weekly', 'monthly'}
+    weekly = next(r for r in b if service.digest_cadence(r) == 'weekly')
+    weekly.name = '我自己的检测情报'
+    assert service.digest_cadence(weekly) == 'weekly'
+
+
+@pytest.mark.asyncio
+async def test_default_identity_survives_rename_delete_refresh_and_restore(env, db) -> None:
+    service, repo = env.template.PipelineTemplateService, env.repo.ResearchDao
+    await service.install_builtins(db, user_id=7)
+    row = (await repo.list_templates(db, user_id=7))[0]
+    ident, key = row.id, row.preset_key
+    row.name, row.prompt = '我改过的模板名称', '保留我的提示词'
+    await db.commit()
+    assert (await service.install_builtins(db, user_id=7))['created'] == 0
+    for action in ('archive', 'restore'):
+        with pytest.raises(env.exc):
+            await getattr(service, action)(db, ident, user_id=8)
+    await service.archive(db, ident, user_id=7)
+    assert await service.get_published(db, ident, user_id=7) is None
+    assert (await service.install_builtins(db, user_id=7))['created'] == 0
+    assert (await service.list_templates(db, user_id=7))['total'] == 10
+    deleted = (await service.list_templates(db, user_id=7, include_deleted=True))['rows']
+    assert len(deleted) == 11 and next(r for r in deleted if r['id'] == str(ident))['isDeleted']
+    with pytest.raises(env.exc):
+        await service.save_draft(db, template_key=ident, payload=template_data(), operator_id=7, operator_name='', user_id=7)
+    await service.restore(db, ident, user_id=7)
+    assert row.preset_key == key and row.prompt == '保留我的提示词' and row.name == '我改过的模板名称'
+    assert not row.is_enabled and row.deleted_at is None
+    assert (await service.list_templates(db, user_id=7))['total'] == 11
+
+
+@pytest.mark.asyncio
+async def test_existing_default_is_adopted_without_overwriting_edits_or_edit_time(env, db) -> None:
+    service, repo = env.template.PipelineTemplateService, env.repo.ResearchDao
+    template, _ = seed(env, db)
+    template.name, template.purpose, template.report_type = '生产痛点与关键技术攻关需求', 'research', 'research-demand'
+    template.prompt, template.is_enabled = '已改写的个人内容', False
+    await db.commit()
+    before = template.updated_at
+    assert (await service.install_builtins(db, user_id=7))['created'] == 10
+    assert template.preset_key and template.updated_at == before
+    assert template.prompt == '已改写的个人内容' and not template.is_enabled
+    assert len(await repo.list_templates(db, user_id=7)) == 11
+
+
+@pytest.mark.asyncio
+async def test_legacy_daily_template_is_hidden_without_changing_saved_content(env, db) -> None:
+    service, repo = env.template.PipelineTemplateService, env.repo.ResearchDao
+    legacy, _ = seed(env, db)
+    legacy.purpose, legacy.name = 'digest', '管网科技情报日报'
+    legacy.prompt = '保留历史日报提示词及引用用途'
+    await db.commit()
+    for name in ('管网科技情报周报', '管网科技情报月报'):
+        await service.save_draft(
+            db,
+            template_key=None,
+            payload={'purpose': 'digest', 'name': name, 'prompt': '根据公开资料编制简报'},
+            operator_id=7,
+            operator_name='',
+            user_id=7,
+        )
+    for published_only in (False, True):
+        result = await service.list_templates(db, user_id=7, published_only=published_only)
+        assert result['total'] == 2
+        assert {r['digestCadence'] for r in result['rows']} == {'weekly', 'monthly'}
+    saved = await repo.get_template(db, legacy.id, user_id=7)
+    assert saved is not None and saved.prompt == '保留历史日报提示词及引用用途' and saved.is_enabled
+    assert len(await repo.list_templates(db, user_id=7)) == 3
 
 
 @pytest.mark.asyncio

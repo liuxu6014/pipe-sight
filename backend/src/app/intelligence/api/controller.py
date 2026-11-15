@@ -213,6 +213,7 @@ async def published_templates(
     current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
     category: str | None = None,
 ) -> Response:
+    await PipelineTemplateService.install_builtins(query_db, user_id=current_user.user.user_id)
     return ResponseUtil.success(
         data=await PipelineTemplateService.list_templates(
             query_db, category=category, published_only=True, user_id=current_user.user.user_id
@@ -226,9 +227,10 @@ async def templates(
     current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
     category: str | None = None,
 ) -> Response:
+    await PipelineTemplateService.install_builtins(query_db, user_id=current_user.user.user_id)
     return ResponseUtil.success(
         data=await PipelineTemplateService.list_templates(
-            query_db, category=category, user_id=current_user.user.user_id
+            query_db, category=category, user_id=current_user.user.user_id, include_deleted=True
         )
     )
 
@@ -288,4 +290,26 @@ async def disable_template(
 ) -> Response:
     return ResponseUtil.success(
         data=await PipelineTemplateService.retire(query_db, identity, user_id=current_user.user.user_id)
+    )
+
+
+@controller.post('/templates/{identity}/archive')
+async def delete_personal_template(
+    identity: BusinessId,
+    query_db: DB,
+    current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
+) -> Response:
+    return ResponseUtil.success(
+        data=await PipelineTemplateService.archive(query_db, identity, user_id=current_user.user.user_id)
+    )
+
+
+@controller.post('/templates/{identity}/restore')
+async def restore_personal_template(
+    identity: BusinessId,
+    query_db: DB,
+    current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
+) -> Response:
+    return ResponseUtil.success(
+        data=await PipelineTemplateService.restore(query_db, identity, user_id=current_user.user.user_id)
     )

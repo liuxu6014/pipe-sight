@@ -7,10 +7,14 @@ from pathlib import Path
 def builtin_templates() -> list[dict]:
     path = Path(__file__).resolve().parents[4] / 'data/templates/research-presets-v1.json'
     rows = json.loads(path.read_text(encoding='utf-8'))['templates']
-    for label in ('日报', '周报', '月报'):
+    # This versioned catalog's order is stable; identity survives user renaming.
+    for index, row in enumerate(rows, 1):
+        row['preset_key'] = f'research-v1-{index}'
+    for label in ('周报', '月报'):
         rows.append(
             {
                 'name': f'管网科技情报{label}',
+                'preset_key': 'digest-v1-weekly' if label == '周报' else 'digest-v1-monthly',
                 'purpose': 'digest',
                 'report_type': None,
                 'description': f'依据所选周期的公开资讯编制科技情报{label}，区分本期进展和历史背景。',

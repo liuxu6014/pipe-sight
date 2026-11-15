@@ -134,6 +134,14 @@ export function retirePipelineTemplate(templateKey) {
   })
 }
 
+export function deletePipelineTemplate(templateKey) {
+  return request({ url: `/pipeline/templates/${requireBusinessId(templateKey)}/archive`, method: 'post' })
+}
+
+export function restorePipelineTemplate(templateKey) {
+  return request({ url: `/pipeline/templates/${requireBusinessId(templateKey)}/restore`, method: 'post' })
+}
+
 export function listPipelineTasks() {
   return request({
     url: '/pipeline/tasks',

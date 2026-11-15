@@ -413,26 +413,56 @@ test('category list filters never narrow the combined prompt or mutate saved cat
   assert.deepEqual(view.writes, [])
 })
 
-test('personal templates can be created without admin permissions and built-ins reload only the own list', async () => {
-  const events = [], installs = []
-  const p = page('template', ['canSaveTemplate', 'addBuiltins', 'templates', 'form', 'saveTemplate', 'activeCategory', 'createTemplate'], {
+test('personal templates load defaults through the normal own list and allow user creation', async () => {
+  const events = []
+  const p = page('template', ['canSaveTemplate', 'loadTemplates', 'templates', 'form', 'saveTemplate', 'activeCategory', 'createTemplate'], {
     defineProps: () => ({ personal: true }), checkPermi: () => false,
     defineEmits: () => event => events.push(event),
-    installPipelineTemplatePresets: async () => { installs.push('own-presets'); return { data: { created: 12 } } },
     listPipelineTemplates: async () => ({ data: { rows: [{ id: '500', purpose: 'research', reportType: 'research-demand', name: '个人模板' }] } })
   })
   assert.equal(p.canSaveTemplate.value, true)
-  await p.addBuiltins()
-  assert.deepEqual(installs, ['own-presets'])
+  await p.loadTemplates()
   assert.deepEqual(p.templates.value.map(row => row.id), ['500'])
   Object.assign(p.form, { name: '本人新增', prompt: '原文依据', purpose: 'research', reportType: 'research-demand', userId: 'other-user' })
   await p.saveTemplate()
   const request = p.writes.find(([action]) => action === 'template-create')[1]
   assert.equal(Object.hasOwn(request, 'userId'), false)
-  assert.deepEqual(events, ['changed', 'changed'])
+  assert.deepEqual(events, ['changed'])
   p.activeCategory.value = 'digest'
   p.createTemplate()
   assert.equal(p.form.purpose, 'digest')
   assert.equal(p.form.reportType, '')
   assert.equal(p.form.name, '通用简报模板')
+})
+
+test('personal template deletion hides normal rows and deleted copies can be restored', async () => {
+  const row = { id: '501', purpose: 'research', reportType: 'research-demand', name: '个人模板', isEnabled: true, isDeleted: false }
+  const calls = []
+  const p = page('template', ['loadTemplates', 'templates', 'status', 'filteredTemplates', 'countCategory', 'removeTemplate', 'restoreTemplate'], {
+    defineProps: () => ({ personal: true }),
+    listPipelineTemplates: async () => ({ data: { rows: [copy(row)] } }),
+    deletePipelineTemplate: async id => { calls.push(['delete', id]); row.isDeleted = true; row.isEnabled = false },
+    restorePipelineTemplate: async id => { calls.push(['restore', id]); row.isDeleted = false }
+  })
+  await p.loadTemplates()
+  await p.removeTemplate(p.templates.value[0])
+  assert.equal(p.filteredTemplates.value.length, 0)
+  assert.equal(p.countCategory('all'), 0)
+  p.status.value = 'deleted'
+  assert.equal(p.filteredTemplates.value[0].id, '501')
+  await p.restoreTemplate(p.templates.value[0])
+  p.status.value = 'all'
+  assert.equal(p.filteredTemplates.value[0].isEnabled, false)
+  assert.deepEqual(calls, [['delete', '501'], ['restore', '501']])
+})
+
+test('cancelling personal template deletion performs no write', async () => {
+  let writes = 0
+  const p = page('template', ['removeTemplate'], {
+    defineProps: () => ({ personal: true }),
+    ElMessageBox: { confirm: async () => { throw 'cancel' } },
+    deletePipelineTemplate: async () => { writes++ }
+  })
+  await p.removeTemplate({ id: '501', name: '保留' })
+  assert.equal(writes, 0)
 })
