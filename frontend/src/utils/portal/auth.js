@@ -39,10 +39,11 @@ export function isManagementIdentity(roles = [], permissions = []) {
 export function canAccessApplicationPath(user = {}, path = '') {
   const isProfile = path === '/user/profile' || path.startsWith('/user/profile/')
   if (isAuditOnly(user.roles)) return AUDIT_PAGES.includes(path) || isProfile || isPublicAuthPath(path)
-  return isManagementIdentity(user.roles || [], user.permissions || [])
-    || isPortalProtectedPath(path)
-    || isProfile
-    || isPublicAuthPath(path)
+  if (isManagementIdentity(user.roles || [], user.permissions || [])) {
+    // 管理端只访问管理界面，不再进入用户门户。
+    return !isPortalProtectedPath(path)
+  }
+  return isPortalProtectedPath(path) || isProfile || isPublicAuthPath(path)
 }
 
 export function getDefaultLoginPath(user = {}) {
@@ -71,7 +72,8 @@ export function resolvePostLoginPath(user = {}, requestedPath) {
     return isPortalProtectedPath(requestedPath) ? requestedPath : defaultPath
   }
   if (isAuditOnly(user.roles)) return canAccessApplicationPath(user, requestedPath.split(/[?#]/)[0]) ? requestedPath : defaultPath
-  return isPublicAuthPath(requestedPath.split(/[?#]/)[0]) ? defaultPath : requestedPath
+  // 管理端登录后固定回工作台，除非明确请求管理界面。
+  return isPublicAuthPath(requestedPath.split(/[?#]/)[0]) || isPortalProtectedPath(requestedPath) ? defaultPath : requestedPath
 }
 
 export function getPublicAuthPaths() {

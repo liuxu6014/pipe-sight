@@ -80,8 +80,8 @@ test('keeps post-login redirects on the surface that matches the signed-in ident
   assert.equal(typeof portalAuth.resolvePostLoginPath, 'function')
   assert.equal(portalAuth.resolvePostLoginPath({ roles: ['admin'], permissions: [] }, '/index'), '/pipeline/dashboard')
   assert.equal(portalAuth.resolvePostLoginPath({ roles: ['admin'], permissions: [] }, '/pipeline/dashboard'), '/pipeline/dashboard')
-  assert.equal(portalAuth.resolvePostLoginPath({ roles: ['admin'], permissions: [] }, '/portal/news'), '/portal/news')
-  assert.equal(portalAuth.resolvePostLoginPath({ roles: [], permissions: ['*:*:*'] }, '/portal'), '/portal')
+  assert.equal(portalAuth.resolvePostLoginPath({ roles: ['admin'], permissions: [] }, '/portal/news'), '/pipeline/dashboard')
+  assert.equal(portalAuth.resolvePostLoginPath({ roles: [], permissions: ['*:*:*'] }, '/portal'), '/pipeline/dashboard')
   assert.equal(portalAuth.resolvePostLoginPath({ roles: ['ROLE_DEFAULT'], permissions: [] }, '/pipeline/dashboard'), '/portal')
   assert.equal(portalAuth.resolvePostLoginPath({ roles: ['ROLE_DEFAULT'], permissions: [] }, '/portal/news'), '/portal/news')
   assert.equal(portalAuth.resolvePostLoginPath({ roles: ['admin'], permissions: [] }, '/pipeline/report'), '/pipeline/report')
@@ -89,12 +89,14 @@ test('keeps post-login redirects on the surface that matches the signed-in ident
 
 test('preserves report deep links and rejects external login redirects', () => {
   const reportPath = '/portal/research/reports/report-sample?tab=versions'
-  for (const user of [{ roles: ['admin'] }, { roles: ['ROLE_DEFAULT'] }]) {
+  for (const user of [{ roles: ['ROLE_DEFAULT'] }]) {
     assert.equal(portalAuth.resolvePostLoginPath(user, reportPath), reportPath)
     for (const unsafe of ['https://example.com', '//example.com', '/\\example.com', ['/portal']]) {
       assert.equal(portalAuth.resolvePostLoginPath(user, unsafe), getDefaultLoginPath(user))
     }
   }
+  // 管理端不再通过门户报告深链进入用户门户。
+  assert.equal(portalAuth.resolvePostLoginPath({ roles: ['admin'] }, reportPath), '/pipeline/dashboard')
 })
 
 test('remembers only the account name and clears legacy password cookies', async () => {
