@@ -387,7 +387,7 @@ async def test_save_version_copies_optional_metadata_and_keeps_unknown_legacy_pr
 
 
 @pytest.mark.asyncio
-async def test_automatic_generation_saves_frozen_material_citations_not_template_outline_as_result_sections(
+async def test_automatic_generation_saves_real_confirmed_chapter_prose_and_frozen_citations(
     env: Any,
     db: Any,
     monkeypatch: pytest.MonkeyPatch,
@@ -399,7 +399,9 @@ async def test_automatic_generation_saves_frozen_material_citations_not_template
     monkeypatch.setattr(execution, 'AsyncSessionLocal', lambda: AsyncMemory(Session(db.s.bind, expire_on_commit=False)))
     monkeypatch.setattr(execution.ResearchExecutionService, '_heartbeat', AsyncMock())
     monkeypatch.setattr(
-        execution.ResearchModelGenerationService, 'generate_content', AsyncMock(return_value='真实替身正文[1]。')
+        execution.ResearchModelGenerationService,
+        'generate_content',
+        AsyncMock(return_value='**计划章节**\n\n' + '真实替身正文' * 150 + '[1]。'),
     )
     await execution.ResearchExecutionService.process(job_id=result['jobId'], user_id=7, owner_name='用户')
     db.s.expire_all()
@@ -407,9 +409,9 @@ async def test_automatic_generation_saves_frozen_material_citations_not_template
     job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
     version = await env.repo.ResearchDao.get_report_version(db, report.id, report.version)
     assert job.status == 'completed' and version.source == 'generated'
-    assert version.sections[0] == {'id': 1, 'title': '正文', 'content': '真实替身正文[1]。'}
+    assert version.sections[0] == {'id': 1, 'title': '计划章节', 'content': '真实替身正文' * 150 + '[1]。'}
     assert version.sections[1] == {'id': 2, 'title': '参考资料', 'content': '[1] 资料；用户资料'}
-    assert all(section['title'] != '计划章节' for section in version.sections)
+    assert version.model_snapshot['checks']['outline']['status'] == 'passed'
     assert version.citations[0]['sourceId'] == '101'
     assert version.citations[0]['source'] == {'filename': 'a.txt'}
     assert version.model_snapshot == job.config_snapshot

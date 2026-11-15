@@ -11,6 +11,7 @@ import * as businessIds from '../src/utils/portal/businessId.js'
 import * as evidence from '../src/utils/portal/evidenceInput.js'
 import { resolveBasketSelection } from '../src/utils/portal/basketSelection.js'
 import { allocateReportWords } from '../src/utils/portal/reportLength.js'
+import { cleanResultMeta } from '../src/utils/portal/discovery.js'
 
 const names = ['ResearchCreateView', 'DigestCreateView']
 const sources = Object.fromEntries(names.map(name => [name, readFileSync(new URL(`../src/views/portal/pages/${name}.vue`, import.meta.url), 'utf8')]))
@@ -27,7 +28,7 @@ async function mount(name, { query = {}, api = {}, basket = [], timers = {} } = 
   let mutations = 0
   const forbidden = () => { mutations++; throw new Error('This test must never generate, upload or schedule') }
   const dependencies = {
-    ...vue, useRoute, useRouter, ...businessIds, ...businessTimes, ...evidence, templateGenerationError, resolveBasketSelection, allocateReportWords,
+    ...vue, useRoute, useRouter, ...businessIds, ...businessTimes, ...evidence, templateGenerationError, resolveBasketSelection, allocateReportWords, cleanResultMeta,
     usePortalStore: () => store, PortalPageHeader: {}, PortalEmptyState: {}, DigestScheduleDialog: {}, ResearchChapterPrompt: {}, PersonalTemplateDialog: {},
     ElMessage: Object.fromEntries(['success', 'warning', 'error'].map(level => [level, text => messages.push({ level, text })])),
     ...Object.fromEntries(['ArrowLeft', 'Check', 'Close', 'Delete', 'Plus', 'Rank', 'Search', 'UploadFilled', 'Refresh', 'Warning'].map(icon => [icon, {}])),
@@ -839,6 +840,20 @@ test('digest keyword groups larger than one page do not overflow or lose later k
   assert.equal(new Set([...first.rows, ...second.rows].map(item => item.id)).size, 12)
 })
 
+test('digest candidate source display hides verification notes and midnight while preserving original evidence metadata', async () => {
+  const ctx = await mount('DigestCreateView', { api: {
+    searchPipelineIntelligence: async () => ({ data: { rows: [{ id: '701' }], total: 1 } }),
+    getPipelineIntelligenceDetail: async id => ({ data: article(id, { source: '工人日报（国家管网官网转载）', publish_time: '2026-10-13 00:00:00' }) })
+  } })
+  try {
+    const item = ctx.page.candidateItems.value[0]
+    assert.match(item.meta, /国家管网官网转载/)
+    assert.equal(ctx.page.cleanResultMeta(item.meta), '工人日报 · 2026-10-13')
+    assert.match(sources.DigestCreateView, /<small>\{\{ cleanResultMeta\(item\.meta\) \}\}<\/small>/)
+    assert.equal(ctx.mutations, 0)
+  } finally { ctx.close() }
+})
+
 test('digest preserves cross-page explicit selections and builds only those IDs without generating', async () => {
   const calls = []
   const ctx = await mount('DigestCreateView', { api: {
@@ -941,11 +956,13 @@ test('digest invalid/reversed periods do not query, and cleared controls never b
     await settle()
     assert.equal(calls.length, before)
     assert.deepEqual(ctx.page.buildReportPeriod().period, [])
-    assert.match(ctx.page.previewError.value, /报告周期/)
+    assert.equal(ctx.page.previewError.value, '')
+    assert.equal(ctx.page.candidateItems.value.length, 0)
     ctx.page.form.type = '周报'
     ctx.page.form.period = [new Date(2027, 0, 2), new Date(2026, 11, 31)]
     await settle()
     assert.equal(calls.length, before)
+    assert.equal(ctx.page.previewError.value, '')
     assert.equal(ctx.mutations, 0)
   } finally { ctx.close() }
 })

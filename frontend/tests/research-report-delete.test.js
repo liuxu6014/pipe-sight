@@ -1,3 +1,5 @@
+import { usePagedResults } from '../src/utils/portal/usePagedResults.js'
+import { reportSummaryRow } from '../src/utils/portal/reportSummary.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -13,7 +15,7 @@ function setup(confirm, remove = async () => {}) {
   const source = readFileSync(new URL('../src/views/portal/pages/ResearchWorkbenchView.vue', import.meta.url), 'utf8').split('<script setup>')[1].split('</script>')[0].replace(/^import .*\n/gm, '')
   let dispose
   const scope = vue.effectScope()
-  const context = vm.createContext({ ...vue, onMounted() {}, onBeforeUnmount(fn) { dispose = fn },
+  const context = vm.createContext({ ...vue, usePagedResults, reportSummaryRow, onMounted() {}, onBeforeUnmount(fn) { dispose = fn },
     setTimeout, clearTimeout, useRoute: () => ({ query: {} }), useRouter: () => ({}), usePortalStore: () => store, useUserStore: () => user,
     canDeleteResearchReport, createResearchRefresh, removeDeletedReport, reportRowActions,
     buildPersonalReports: ({ reports }) => reports, isDigestType: () => false, sortResearchReports: rows => rows,

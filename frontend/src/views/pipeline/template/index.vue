@@ -47,7 +47,7 @@
       </div>
       <el-empty v-if="!loading && !filteredTemplates.length" description="当前筛选下暂无模板" :image-size="72" />
     </section>
-    <div class="template-result-count" aria-live="polite">共 {{ filteredTemplates.length }} 个模板<span v-if="unassignedCount"> · {{ unassignedCount }} 个未绑定报告类型</span></div>
+    <div class="template-result-count"><el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :total="total" :page-sizes="[10, 20, 50]" layout="total, sizes, ->, prev, pager, next, jumper" background aria-label="模板列表分页" /></div>
     <el-dialog
       v-model="editorVisible"
       :title="editingTemplate?.id ? '编辑模板' : '新建模板'"
@@ -70,6 +70,9 @@
               </el-select>
             </el-form-item>
           </div>
+          <el-form-item v-if="form.purpose === 'digest'" label="适用周期" required>
+            <el-select v-model="form.digestCadence" aria-label="简报模板适用周期"><el-option label="周报与月报通用" value="all" /><el-option label="周报" value="weekly" /><el-option label="月报" value="monthly" /></el-select>
+          </el-form-item>
           <p class="template-contract-note">模板按报告类型展示；同一类型可创建多个模板。</p>
           <el-form-item label="模板说明">
             <el-input v-model="form.description" type="textarea" :rows="2" />
@@ -127,16 +130,18 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Document, Files, Plus, Search, Edit, View } from '@element-plus/icons-vue'
-import { createPipelineTemplate, deletePipelineTemplate, restorePipelineTemplate, listPipelineTemplates, retirePipelineTemplate, updatePipelineTemplate } from '@/api/pipeline/intelligence'
+import { createPipelineTemplate, deletePipelineTemplate, restorePipelineTemplate, getPipelineTemplate, listPipelineTemplates, retirePipelineTemplate, updatePipelineTemplate } from '@/api/pipeline/intelligence'
 import { listModelAll } from '@/api/ai/model'
 import { modelsFor } from '@/utils/pipeline/compactContract'
 import { checkPermi } from '@/utils/permission'
 const { personal = false } = defineProps({ personal: Boolean })
 const emit = defineEmits(['changed'])
 const activeCategory = ref('all'), keyword = ref(''), status = ref('all')
+const currentPage = ref(1), pageSize = ref(10), total = ref(0), categoryCounts = ref({})
+let listRequest = 0, searchTimer
 const editorVisible = ref(false), previewVisible = ref(false), previewingTemplate = ref(null), editingTemplate = ref(null)
 const saving = ref(false), loading = ref(false), templateError = ref('')
 const canSaveTemplate = computed(() => personal || checkPermi(['pipeline:template:save']))
@@ -146,12 +151,12 @@ if (personal) categories.push({ name: '情报简报', value: 'digest', icon: Doc
 function reportTypeOf(item) { if (item?.purpose === 'digest') return 'digest'; return ['research-demand', 'technology-route', 'project-demand'].find(key => key === item?.reportType || key === item?.purpose) || '' }
 function reportTypeLabel(item) { if (item?.purpose === 'digest') return '情报简报'; return ({ 'research-demand': '科研需求报告', 'technology-route': '技术路线报告', 'project-demand': '科技项目需求表' })[reportTypeOf(item)] || '报告类型待绑定' }
 const templates = ref([]), models = ref([]), modelError = ref('')
-const unassignedCount = computed(() => templates.value.filter(item => !item.isDeleted && !reportTypeOf(item)).length)
+const unassignedCount = computed(() => categoryCounts.value.unassigned || 0)
 const textModels = computed(() => modelsFor(models.value, 'text_generate'))
 const imageModels = computed(() => modelsFor(models.value, 'image_generate'))
-const form = reactive({ name: '', purpose: 'research', reportType: '', prompt: '', description: '', modelId: null, imageModelId: null, sections: [], imageConfig: { enabled: false }, isEnabled: true })
-const filteredTemplates = computed(() => templates.value.filter(item => (activeCategory.value === 'all' || reportTypeOf(item) === activeCategory.value) && (status.value === 'all' ? !item.isDeleted : item.status === status.value) && (!keyword.value.trim() || `${item.name} ${item.description || ''}`.includes(keyword.value.trim()))))
-function countCategory(value) { return templates.value.filter(item => (status.value === 'deleted' ? item.isDeleted : !item.isDeleted) && (value === 'all' || reportTypeOf(item) === value)).length }
+const form = reactive({ name: '', purpose: 'research', reportType: '', digestCadence: 'all', prompt: '', description: '', modelId: null, imageModelId: null, sections: [], imageConfig: { enabled: false }, isEnabled: true })
+const filteredTemplates = computed(() => templates.value)
+function countCategory(value) { return categoryCounts.value[value] || 0 }
 function modelLabel(id) {
  if (!id) return '未配置'
  const model = models.value.find(item => String(item.modelId) === String(id))
@@ -160,24 +165,29 @@ function modelLabel(id) {
 function statusTag(value) { return value === 'enabled' ? 'success' : 'info' }
 function statusLabel(value) { return ({ enabled: '已启用', disabled: '已停用', deleted: '已删除' })[value] || '已停用' }
 function resetForm(item = null) {
- Object.assign(form, { name: item?.name || '', purpose: item?.purpose || 'research', reportType: reportTypeOf(item) || (['all', 'digest'].includes(activeCategory.value) ? '' : activeCategory.value), prompt: item?.prompt || '', description: item?.description || '', modelId: item?.modelId ?? null, imageModelId: item?.imageModelId ?? null, sections: (item?.sections || []).map(section => ({ ...section })), imageConfig: item ? JSON.parse(JSON.stringify(item.imageConfig || {})) : {}, isEnabled: item?.isEnabled ?? true })
+ Object.assign(form, { name: item?.name || '', purpose: item?.purpose || 'research', digestCadence: item?.digestCadence || 'all', reportType: reportTypeOf(item) || (['all', 'digest'].includes(activeCategory.value) ? '' : activeCategory.value), prompt: item?.prompt || '', description: item?.description || '', modelId: item?.modelId ?? null, imageModelId: item?.imageModelId ?? null, sections: (item?.sections || []).map(section => ({ ...section })), imageConfig: item ? JSON.parse(JSON.stringify(item.imageConfig || {})) : {}, isEnabled: item?.isEnabled ?? true })
  form.imageConfig.enabled ??= false
  form.imageConfig.count ??= 1
  form.imageConfig.prompt ??= ''
 }
 function createTemplate() { if (!canSaveTemplate.value) return; editingTemplate.value = null; resetForm(); if (personal && activeCategory.value === 'digest') { form.purpose = 'digest'; form.name = '通用简报模板' }; editorVisible.value = true }
-function editTemplate(item) { if (!canSaveTemplate.value) return; editingTemplate.value = item; resetForm(item); editorVisible.value = true }
-function previewTemplate(item) { previewingTemplate.value = JSON.parse(JSON.stringify(item)); previewVisible.value = true }
+async function editTemplate(item) { if (!canSaveTemplate.value) return; try { const { data } = await getPipelineTemplate(item.id); editingTemplate.value = data; resetForm(data); editorVisible.value = true } catch (error) { ElMessage.error(error?.msg || error?.message || '模板详情加载失败') } }
+async function previewTemplate(item) { try { const detail = item.id ? (await getPipelineTemplate(item.id)).data : item; previewingTemplate.value = JSON.parse(JSON.stringify(detail)); previewVisible.value = true } catch (error) { ElMessage.error(error?.msg || error?.message || '模板详情加载失败') } }
 async function loadTemplates() {
+ const request = ++listRequest
  loading.value = true; templateError.value = ''
  try {
-  const res = await listPipelineTemplates()
+  const res = await listPipelineTemplates({ page: currentPage.value, pageSize: pageSize.value, keyword: keyword.value.trim(), reportType: activeCategory.value === 'all' ? undefined : activeCategory.value, category: personal ? undefined : 'research', status: status.value })
+  if (request !== listRequest) return
+  total.value = res.data?.total || 0; categoryCounts.value = res.data?.counts || {}
+  const lastPage = Math.max(1, Math.ceil(total.value / pageSize.value))
+  if (currentPage.value > lastPage) { currentPage.value = lastPage; return loadTemplates() }
   const rows = res.data?.rows || []
   const reportRows = rows.filter(item => personal || item.purpose === 'research' || (reportTypeOf(item) && reportTypeOf(item) !== 'digest'))
   templates.value = reportRows.map(item => ({ ...item, status: item.isDeleted ? 'deleted' : item.isEnabled ? 'enabled' : 'disabled' }))
  }
- catch (error) { templateError.value = error?.msg || error?.message || '模板加载失败，请重试' }
- finally { loading.value = false }
+ catch (error) { if (request === listRequest) templateError.value = error?.msg || error?.message || '模板加载失败，请重试' }
+ finally { if (request === listRequest) loading.value = false }
 }
 async function loadModels() {
  if (!checkPermi(['ai:model:query'])) return
@@ -186,7 +196,7 @@ async function loadModels() {
  catch (error) { models.value = []; modelError.value = error?.msg || error?.message || '模型列表加载失败；可稍后配置模型' }
 }
 function templatePayload(item = form) {
- return { name: item.name.trim(), purpose: item.purpose, reportType: item.purpose === 'research' ? item.reportType || null : null, prompt: item.prompt.trim(), description: item.description, modelId: item.modelId || null, imageModelId: item.imageModelId || null, sections: item.sections, imageConfig: item.imageConfig, isEnabled: item.isEnabled }
+ return { name: item.name.trim(), purpose: item.purpose, digestCadence: item.purpose === 'digest' ? item.digestCadence || 'all' : null, reportType: item.purpose === 'research' ? item.reportType || null : null, prompt: item.prompt.trim(), description: item.description, modelId: item.modelId || null, imageModelId: item.imageModelId || null, sections: item.sections, imageConfig: item.imageConfig, isEnabled: item.isEnabled }
 }
 async function saveTemplate() {
  if (!canSaveTemplate.value || saving.value) return
@@ -205,7 +215,7 @@ async function toggleTemplate(item) {
  saving.value = true
  try {
   if (item.isEnabled) await retirePipelineTemplate(item.id)
-  else await updatePipelineTemplate(item.id, templatePayload({ ...item, isEnabled: true }))
+  else { const { data } = await getPipelineTemplate(item.id); await updatePipelineTemplate(item.id, templatePayload({ ...data, isEnabled: true })) }
   ElMessage.success(item.isEnabled ? '模板已停用' : '模板已启用'); await loadTemplates(); emit('changed')
  }
  catch (error) { ElMessage.error(error?.msg || error?.message || '模板状态保存失败') }
@@ -227,6 +237,10 @@ async function restoreTemplate(item) {
  catch (error) { ElMessage.error(error?.msg || error?.message || '恢复失败') }
  finally { saving.value = false }
 }
+watch([activeCategory, status, pageSize], () => { currentPage.value = 1; loadTemplates() })
+watch(currentPage, loadTemplates)
+watch(keyword, () => { clearTimeout(searchTimer); listRequest++; searchTimer = setTimeout(() => { currentPage.value = 1; loadTemplates() }, 250) })
+onBeforeUnmount(() => { clearTimeout(searchTimer); listRequest++ })
 onMounted(() => { loadTemplates(); loadModels() })
 </script>
 <style scoped>

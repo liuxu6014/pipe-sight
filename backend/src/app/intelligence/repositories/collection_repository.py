@@ -21,6 +21,7 @@ from app.intelligence.models.collection import PipelineSource as Source
 
 ACTIVE = ('queued', 'running', 'stopping')
 TERMINAL = ('success', 'failed', 'cancelled')
+DISABLED_MANUAL_TRIAL = '_manual_admitted_while_disabled'
 
 
 def write_operation(method) -> Callable[..., Any]:
@@ -146,7 +147,9 @@ class CollectionRepository:
                 raise CollectionConflict('request_id 已被其他请求使用')
             await db.commit()
             return previous
-        if not source.is_enabled:
+        # Disabled means no unattended scheduling/retry. An explicitly requested
+        # administrator trial must work before the source is enabled.
+        if not source.is_enabled and trigger_type != 'manual':
             raise CollectionConflict('数据源已停用')
         if trigger_type not in ('manual', 'schedule', 'retry') or (
             (trigger_type == 'retry') != (parent_id is not None)
@@ -166,6 +169,12 @@ class CollectionRepository:
         if active:
             await db.commit()
             return active
+        frozen_snapshot = deepcopy(snapshot)
+        if trigger_type == 'manual':
+            # Server-owned admission fact, never copied from request/config
+            # input. Distinguish a disabled-source trial from an enabled-source
+            # queue subsequently disabled by another configuration writer.
+            frozen_snapshot[DISABLED_MANUAL_TRIAL] = not source.is_enabled
         run = Run(
             source_id=source_id,
             parent_id=parent_id,
@@ -173,7 +182,7 @@ class CollectionRepository:
             trigger_type=trigger_type,
             status='queued',
             available_at=available_at or now,
-            config_snapshot=deepcopy(snapshot),
+            config_snapshot=frozen_snapshot,
             checkpoint=deepcopy(checkpoint or {}),
             fetched_count=0,
             saved_count=0,
@@ -222,7 +231,12 @@ class CollectionRepository:
         if run.status != 'queued' or aware(run.available_at) > now:
             await db.commit()
             return None
-        if not source.is_enabled:
+        disabled_trial = (
+            run.trigger_type == 'manual'
+            and isinstance(run.config_snapshot, dict)
+            and run.config_snapshot.get(DISABLED_MANUAL_TRIAL) is True
+        )
+        if not source.is_enabled and not disabled_trial:
             run.stop_requested_at = now
             cls.terminal(run, 'cancelled', now)
             await db.commit()

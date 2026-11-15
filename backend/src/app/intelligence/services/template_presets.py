@@ -16,6 +16,7 @@ def builtin_templates() -> list[dict]:
                 'name': f'管网科技情报{label}',
                 'preset_key': 'digest-v1-weekly' if label == '周报' else 'digest-v1-monthly',
                 'purpose': 'digest',
+                'digest_cadence': 'weekly' if label == '周报' else 'monthly',
                 'report_type': None,
                 'description': f'依据所选周期的公开资讯编制科技情报{label}，区分本期进展和历史背景。',
                 'prompt': f'撰写管网科技情报{label}。只使用所选资料及已确认的覆盖周期。'

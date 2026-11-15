@@ -25,6 +25,7 @@ class PipelineTemplateSaveModel(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     purpose: Literal['article', 'research', 'digest']
     report_type: Literal['research-demand', 'technology-route', 'project-demand'] | None = None
+    digest_cadence: Literal['weekly', 'monthly', 'all'] | None = None
     prompt: str = Field(min_length=1, max_length=100000)
     description: str = Field(default='', max_length=1000)
     model_id: BusinessId | None = None

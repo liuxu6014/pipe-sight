@@ -14,6 +14,7 @@ from app.intelligence.services.application import IntelligenceApplicationService
 from app.intelligence.services.categories import CategoryService
 from app.intelligence.services.collection_translation import translate_paper_abstract, translate_paper_title
 from app.intelligence.services.templates import PipelineTemplateService
+from app.research.repositories.research_repository import ResearchDao
 from app.system.api.dependencies import CurrentUserDependency, CurrentUserModel, PreAuthDependency
 from common.aspect.db_seesion import DBSessionDependency
 from common.aspect.interface_auth import RoleInterfaceAuthDependency
@@ -226,13 +227,35 @@ async def templates(
     query_db: DB,
     current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
     category: str | None = None,
+    page: int | None = Query(None, ge=1),
+    page_size: int = Query(10, alias='pageSize', ge=1, le=100),
+    keyword: str = Query('', max_length=255),
+    report_type: Literal['research-demand', 'technology-route', 'project-demand', 'digest'] | None = Query(
+        None, alias='reportType'
+    ),
+    status: Literal['all', 'enabled', 'disabled', 'deleted'] = 'all',
 ) -> Response:
     await PipelineTemplateService.install_builtins(query_db, user_id=current_user.user.user_id)
+    paging = (
+        {'page': page, 'page_size': page_size, 'keyword': keyword, 'report_type': report_type, 'status': status}
+        if page is not None
+        else {}
+    )
     return ResponseUtil.success(
         data=await PipelineTemplateService.list_templates(
-            query_db, category=category, user_id=current_user.user.user_id, include_deleted=True
+            query_db, category=category, user_id=current_user.user.user_id, include_deleted=True, **paging
         )
     )
+
+
+@controller.get('/templates/{identity}')
+async def template_detail(
+    identity: BusinessId, query_db: DB, current_user: Annotated[CurrentUserModel, CurrentUserDependency()]
+) -> Response:
+    row = await ResearchDao.get_template(query_db, identity, current_user.user.user_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail='模板不存在或无权访问')
+    return ResponseUtil.success(data=PipelineTemplateService._dict(row))
 
 
 @controller.post('/templates')

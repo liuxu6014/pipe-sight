@@ -52,18 +52,18 @@
         </el-table-column>
         <template #empty>
       <PortalEmptyState
-        v-if="!isInitialLoading && !filteredDocuments.length && !documentsError"
+        v-if="!isInitialLoading && !total && !documentsError"
         :title="hasFilters ? '没有匹配资料' : '还没有研究资料'"
         :description="hasFilters ? '请调整搜索词或筛选条件。' : '上传项目报告、标准或会议纪要，建立可检索的证据库。'"
         :action-label="hasFilters ? '清除筛选' : '上传第一份资料'"
         @action="hasFilters ? clearFilters() : openUpload()"
       />
-      <PortalEmptyState v-else-if="!isInitialLoading && !filteredDocuments.length && documentsError" title="暂时无法确认资料列表" description="资料获取失败，请重新获取后再检查筛选结果。" action-label="重新获取" @action="refreshDocuments" />
+      <PortalEmptyState v-else-if="!isInitialLoading && !total && documentsError" title="暂时无法确认资料列表" description="资料获取失败，请重新获取后再检查筛选结果。" action-label="重新获取" @action="refreshDocuments" />
         </template>
       </el-table>
     </section>
-    <div v-if="filteredDocuments.length && !isInitialLoading" class="ps-pagination" aria-label="研究资料列表分页">
-      <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :page-sizes="[10, 20, 50]" :total="filteredDocuments.length" :pager-count="5" layout="total, sizes, ->, prev, pager, next, jumper" background />
+    <div v-if="total && !isInitialLoading" class="ps-pagination" aria-label="研究资料列表分页">
+      <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :page-sizes="[10, 20, 50]" :total="total" :pager-count="5" layout="total, sizes, ->, prev, pager, next, jumper" background />
     </div>
 
     <el-dialog v-model="uploadVisible" title="上传资料" width="min(620px, calc(100vw - 24px))" :close-on-click-modal="!uploading" :close-on-press-escape="!uploading" :show-close="!uploading" destroy-on-close @closed="resetUpload">
@@ -114,6 +114,7 @@ import {
   uploadPipelineKnowledgeDocument
 } from '@/api/pipeline/intelligence'
 import { useListQuery, validPage } from '@/utils/portal/listQuery'
+import { usePagedResults } from '@/utils/portal/usePagedResults'
 import { buildLibraryItems, libraryItemPath } from '@/utils/portal/libraryItems'
 import { contentCategory } from '@/utils/portal/contentPresentation'
 
@@ -147,7 +148,8 @@ const uploading = ref(false)
 const completedUploads = ref(0)
 const reparsingIds = ref(new Set())
 
-const documents = computed(() => portalStore.knowledgeDocuments || [])
+const params = computed(() => ({ pageNum: currentPage.value, pageSize: pageSize.value, keyword: keyword.value, status: parseStatus.value, classification: classification.value }))
+const { rows: documents, total, error: pageError, loading: pageLoading, refresh: loadDocumentPage } = usePagedResults(listPipelineKnowledgeDocuments, params, computed(() => portalStore.workspaceEpoch), currentPage)
 const libraryItems = computed(() => buildLibraryItems([], documents.value))
 const libraryCategories = computed(() => [...new Set(libraryItems.value.map(contentCategory).filter(Boolean))])
 const parsingRefreshError = ref('')
@@ -156,6 +158,7 @@ let parsingTimer
 let parsingStopped = false
 let parsingRunning = false
 let parsingGeneration = 0
+watch(params, () => { parsingGeneration++ }, { flush: 'sync' })
 function scheduleParsingRefresh() {
   if (!parsingStopped && !parsingTimer && hasParsingDocuments.value) parsingTimer = setTimeout(() => {
     parsingTimer = undefined
@@ -181,32 +184,23 @@ async function refreshParsingDocuments() {
   const generation = ++parsingGeneration
   const epoch = portalStore.workspaceEpoch
   try {
-    const response = await listPipelineKnowledgeDocuments()
+    const response = await listPipelineKnowledgeDocuments(params.value)
     if (parsingStopped || generation !== parsingGeneration || epoch !== portalStore.workspaceEpoch) return
     if (!Array.isArray(response?.data?.rows)) throw new Error('资料状态响应无效')
-    portalStore.liveDocuments = response.data.rows
+    documents.value = response.data.rows
+    total.value = response.data.total
     if (portalStore.sectionErrors) portalStore.sectionErrors = { ...portalStore.sectionErrors, documents: '' }
     parsingRefreshError.value = ''
   } catch {
     if (!parsingStopped && generation === parsingGeneration && epoch === portalStore.workspaceEpoch) parsingRefreshError.value = '状态更新暂时失败，正在自动重试'
   } finally { parsingRunning = false; scheduleParsingRefresh() }
 }
-const documentsError = computed(() => portalStore.sectionErrors?.documents || (!portalStore.sectionErrors ? portalStore.dataError : ''))
-const isInitialLoading = computed(() => portalStore.dataLoading && !portalStore.dataLoaded)
+const documentsError = pageError
+const isInitialLoading = computed(() => pageLoading.value && !documents.value.length)
 const hasFilters = computed(() => Boolean(keyword.value || parseStatus.value !== 'all' || classification.value))
-const filteredDocuments = computed(() => {
-  const query = keyword.value.toLocaleLowerCase('zh-CN')
-  return libraryItems.value.filter(item => {
-    const searchText = [item.name, item.summary, item.owner, item.source, item.journal, ...(safeTags(item))].filter(Boolean).join(' ').toLocaleLowerCase('zh-CN')
-    return (!classification.value || contentCategory(item) === classification.value)
-      && (parseStatus.value === 'all' || parseStatusGroup(item.status) === parseStatus.value)
-      && (!query || searchText.includes(query))
-  })
-})
-const pagedDocuments = computed(() => filteredDocuments.value.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value))
-watch([() => filteredDocuments.value.length, pageSize, () => portalStore.dataLoaded], () => {
-  if (!isInitialLoading.value && portalStore.dataLoaded) currentPage.value = validPage(filteredDocuments.value.length, pageSize.value, currentPage.value)
-}, { immediate: true })
+const filteredDocuments = libraryItems
+const pagedDocuments = libraryItems
+watch([keyword, parseStatus, classification, pageSize], () => { currentPage.value = 1 }, { flush: 'sync' })
 
 function safeTags(doc) { return Array.isArray(doc?.tags) ? doc.tags : [] }
 function scanStatusLabel(status) {
@@ -258,7 +252,7 @@ function handleFileChange(uploadFile, currentFiles) {
   }
 }
 function handleUploadExceed() { ElMessage.warning('单次最多上传 10 份资料') }
-async function refreshDocuments() { await portalStore.hydrate(true) }
+async function refreshDocuments() { await loadDocumentPage() }
 async function reparse(doc) {
   if (parsingStopped) return
   if (doc.canManage === false) return ElMessage.warning('仅资料所有者可以重新解析')
@@ -270,7 +264,7 @@ async function reparse(doc) {
     const response = await reparsePipelineKnowledgeDocument(doc.id)
     if (parsingStopped || epoch !== portalStore.workspaceEpoch) return
     if (!response?.data || String(response.data.id) !== String(doc.id)) throw new Error('重试状态获取失败，请稍后刷新')
-    portalStore.liveDocuments = portalStore.liveDocuments.map(row => String(row.id) === String(doc.id) ? { ...row, ...response.data } : row)
+    documents.value = documents.value.map(row => String(row.id) === String(doc.id) ? { ...row, ...response.data } : row)
     ElMessage.success('已提交重新解析')
   } catch (error) {
     if (!parsingStopped && epoch === portalStore.workspaceEpoch) ElMessage.error(error?.msg || error?.message || '重试失败，请稍后再试')
@@ -300,7 +294,7 @@ async function removeDocument(doc) {
       portalStore.liveDocuments = portalStore.liveDocuments.filter(item => String(item.id) !== String(id))
       portalStore.basket = portalStore.basket.filter(item => String(item.id) !== String(id))
     }
-    await portalStore.hydrate(true)
+    await loadDocumentPage()
     if (!parsingStopped && epoch === portalStore.workspaceEpoch) ElMessage.success('资料已删除')
   } catch (error) {
     if (error === 'cancel' || error === 'close') return
@@ -335,7 +329,7 @@ async function finishUpload() {
   }
   if (parsingStopped || epoch !== portalStore.workspaceEpoch) return
   try {
-    if (completedUploads.value) await portalStore.hydrate(true)
+    if (completedUploads.value) await loadDocumentPage()
     if (parsingStopped || epoch !== portalStore.workspaceEpoch) return
     if (!failures.length) {
       uploadFiles.value = []
@@ -351,7 +345,7 @@ async function finishUpload() {
 }
 
 onMounted(() => {
-  portalStore.hydrate()
+  void loadDocumentPage()
   if (route.query.upload === '1') openUpload()
 })
 </script>

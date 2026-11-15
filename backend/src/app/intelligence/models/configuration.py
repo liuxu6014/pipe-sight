@@ -38,6 +38,10 @@ class PipelineTemplateVersion(Base):
             "report_type IS NULL OR (purpose = 'research' AND report_type IN ('research-demand','technology-route','project-demand'))",
             name='ck_templates_report_type',
         ),
+        CheckConstraint(
+            "digest_cadence IS NULL OR (purpose='digest' AND digest_cadence IN ('weekly','monthly','all','daily'))",
+            name='ck_templates_digest_cadence',
+        ),
         CheckConstraint('length(trim(name)) > 0 AND length(trim(prompt)) > 0', name='ck_templates_name_prompt'),
         CheckConstraint("jsonb_typeof(sections)='array'", name='ck_templates_sections').ddl_if(dialect='postgresql'),
         CheckConstraint("jsonb_typeof(image_config)='object'", name='ck_templates_image_config').ddl_if(
@@ -51,6 +55,7 @@ class PipelineTemplateVersion(Base):
     name = Column(String(255), nullable=False)
     purpose = Column(String(16), nullable=False)
     report_type = Column(String(32), nullable=True)
+    digest_cadence = Column(String(16), nullable=True, comment='简报适用周期：weekly、monthly、all；daily仅兼容历史')
     description = Column(Text)
     prompt = Column(Text, nullable=False)
     model_id = Column(BigInteger, ForeignKey('ai_models.id', ondelete='RESTRICT'), nullable=True)

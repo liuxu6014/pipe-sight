@@ -3,9 +3,9 @@
     <template v-for="(block, index) in blocks" :key="index">
       <h3 v-if="block.role === 'event'" data-role="event">{{ block.text }}</h3>
       <p v-else :class="`ps-digest-${block.role}`" :data-role="block.role" :data-url="block.url" :data-number="block.number">
-        <template v-if="block.role === 'source' && block.url">{{ block.number }} <a :href="block.url" target="_blank" rel="noopener noreferrer" @click="editable && $event.preventDefault()">{{ block.text }}</a></template>
+        <template v-if="block.role === 'source' && block.url">{{ block.number }} <a :href="block.url" target="_blank" rel="noopener noreferrer" @click="editable && $event.preventDefault()">{{ editable ? block.text : cleanSource(block.text) }}</a></template>
         <template v-else-if="block.label"><strong>{{ block.label }}</strong>{{ block.text }}</template>
-        <template v-else>{{ block.text }}</template>
+        <template v-else>{{ block.role === 'source' && !editable ? cleanSource(block.text) : block.text }}</template>
       </p>
     </template>
   </div>
@@ -14,6 +14,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { vStableCaret } from '@/utils/portal/stableCaret'
+import { cleanSource } from '@/utils/portal/discovery'
 const props = defineProps({ content: { type: String, default: '' }, editable: Boolean })
 const emit = defineEmits(['update:content'])
 const contentElement = ref()

@@ -68,6 +68,14 @@ def env():
         remark = Column(Text)
         updated_at = Column(DateTime)
 
+    class SysUser(Base):
+        __tablename__ = 'sys_user'
+        id = Column(BigInteger, primary_key=True)
+        nickname = Column(String(30), nullable=True)
+
+    user_module = types.ModuleType('app.system.models.user')
+    user_module.SysUser = SysUser
+    sys.modules[user_module.__name__] = user_module
     config_module = types.ModuleType('app.system.models.config')
     config_module.SysConfig = SysConfig
     sys.modules[config_module.__name__] = config_module
@@ -86,6 +94,7 @@ def env():
         FILE_SCAN_TIMEOUT_SECONDS=1,
     )
     cfg.JwtConfig = NS(jwt_secret_key='offline-test-key')
+    cfg.AppConfig = NS(app_env='test')
     sys.modules['config.env'] = cfg
     package = types.ModuleType('app.intelligence.models')
     package.__path__ = [str(root / 'src/app/intelligence/models')]

@@ -146,7 +146,7 @@ const filteredResults = computed(() => (data.value?.rows || []).map(item => ({
       summary: item.summary,
       titleParts: item.title_parts || [{ text: item.title || '', match: false }],
       summaryParts: item.summary_parts || [{ text: item.summary || '', match: false }],
-      meta: item.meta,
+      meta: cleanResultMeta(item.meta),
       tags: Array.isArray(item.tags) ? item.tags : [],
       sourceKind: item.source_kind,
       publishedAt: item.published_at,

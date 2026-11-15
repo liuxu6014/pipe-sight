@@ -89,10 +89,11 @@ test('API wrappers use confirmed paths, canonical payloads and idempotency keys 
 })
 
 test('collection refreshes running and stopping to cancelled, preserves errors, and clears timers on exit', async () => {
-  let status = 'running', fail = false, stops = 0
+  let status = 'running', fail = false, stops = 0, trials = 0
   const h = page('views/pipeline/task/index.vue', {
     listPipelineTasks: async () => { if (fail) throw new Error('刷新失败'); return { data: { rows: [{ id: 'source', latestRunId: 'run', isEnabled: true, status }] } } },
-    stopPipelineCollectionRun: async id => { assert.equal(id, 'run'); stops++; status = 'stopping'; return { data: { status } } }
+    stopPipelineCollectionRun: async id => { assert.equal(id, 'run'); stops++; status = 'stopping'; return { data: { status } } },
+    runPipelineTask: async id => { assert.equal(id, 'source'); trials++; return { data: { status: 'queued' } } }
   }, 'rows, taskError, loadTasks, handleStop, handleRetry, handleRunTask')
   try {
     await h.loadTasks(); assert.equal(h.timers.size, 1)
@@ -104,8 +105,33 @@ test('collection refreshes running and stopping to cancelled, preserves errors, 
     assert.equal(h.taskError.value, ''); assert.equal(h.rows.value[0].status, 'cancelled'); assert.equal(h.timers.size, 0)
     await h.handleRetry(h.rows.value[0]) // cancelled is not a failed retry candidate
     await h.handleRunTask({ id: 'source', isEnabled: false, status: 'waiting' })
+    assert.equal(trials, 1) // stopped sources can be explicitly trialled before enabling schedules
   } finally { h.close() }
   assert.equal(h.timers.size, 0)
+})
+
+test('manual trials on stopped sources retain active and permission guards while retry remains blocked', async () => {
+  const calls = []
+  let allowed = true
+  const h = page('views/pipeline/task/index.vue', {
+    checkPermi: () => allowed,
+    runPipelineTask: async id => { calls.push(id); return { data: { status: 'queued' } } },
+    retryPipelineTask: async () => { throw new Error('disabled retries must never be submitted') },
+    listPipelineTasks: async () => ({ data: { rows: [] } })
+  }, 'handleRunTask, handleRetry')
+  try {
+    for (const status of ['queued', 'running', 'stopping']) await h.handleRunTask({ id: 'source', isEnabled: false, status })
+    assert.equal(calls.length, 0)
+    await h.handleRetry({ id: 'source', latestRunId: 'failed', isEnabled: false, status: 'failed' })
+    await h.handleRunTask({ id: 'source', isEnabled: false, status: 'failed' })
+    assert.deepEqual(calls, ['source'])
+  } finally { h.close() }
+  const denied = page('views/pipeline/task/index.vue', {
+    checkPermi: () => false,
+    runPipelineTask: async () => { throw new Error('permission denied') }
+  }, 'handleRunTask')
+  try { await denied.handleRunTask({ id: 'source', isEnabled: false, status: 'waiting' }) }
+  finally { denied.close() }
 })
 
 test('failed retry calls the failed run and refreshes to the returned new active run', async () => {
@@ -137,7 +163,7 @@ test('template saves canonical configuration with NULL models and never invokes 
   try {
     Object.assign(h.form, { name: '模板', reportType: 'research-demand', prompt: '依据资料生成', modelId: null, imageModelId: null })
     await h.saveTemplate()
-    assert.deepEqual(Object.keys(saved).sort(), ['name','purpose','reportType','prompt','description','modelId','imageModelId','sections','imageConfig','isEnabled'].sort())
+    assert.deepEqual(Object.keys(saved).sort(), ['name','purpose','reportType','digestCadence','prompt','description','modelId','imageModelId','sections','imageConfig','isEnabled'].sort())
     assert.equal(saved.modelId, null); assert.equal(saved.isEnabled, true)
   } finally { h.close() }
 })

@@ -13,6 +13,9 @@ _USER_AGENT = 'PipeSight/1.0 (+local research platform)'
 _PIPECHINA_HOME = 'https://www.pipechina.com.cn'
 DEFAULT_PIPECHINA_ENDPOINT = f'{_PIPECHINA_HOME}/groupnews.html'
 DEFAULT_CROSSREF_ENDPOINT = 'https://api.crossref.org/works'
+# Processing needs factual source text, not a title-only metadata record.
+# Crossref documents this presence filter at /documentation/retrieve-metadata/rest-api/rest-api-filters/.
+CROSSREF_FILTER = 'from-pub-date:2022-01-01,type:journal-article,has-abstract:true'
 
 
 def _clean_text(value: str) -> str:
@@ -112,7 +115,7 @@ def collect_crossref_records(endpoint: str, config: dict) -> list[dict]:
     """抓取并解析 Crossref 管道论文。"""
     rows = min(max(int(config.get('limit', 12)), 1), 25)
     query = str(config.get('query') or 'oil gas pipeline integrity monitoring')
-    params = f'?query={quote_plus(query)}&filter=from-pub-date:2022-01-01,type:journal-article&rows={rows}&select=DOI,title,author,published,container-title,publisher,abstract,URL'
+    params = f'?query={quote_plus(query)}&filter={CROSSREF_FILTER}&rows={rows}&select=DOI,title,author,published,container-title,publisher,abstract,URL'
     request_url = f'{endpoint or DEFAULT_CROSSREF_ENDPOINT}{params}'
     payload = json.loads(_fetch_text(request_url, accept='application/json'))
     records = []

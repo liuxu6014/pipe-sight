@@ -10,7 +10,7 @@ import { canCreateSourceType, supportsSourceAdapter } from '../src/utils/pipelin
 import { buildManagementNavigation, resolveActiveNavigation } from '../src/utils/management-navigation.js'
 
 const source = readFileSync(new URL('../src/views/pipeline/source/index.vue', import.meta.url), 'utf8')
-const { sourceIntervalChoices, sourceIntervalCron, sourceFrequency, sourceFrequencyText, existingSourcePayload, newWechatSourcePayload } = management
+const { sourceIntervalChoices, sourceIntervalCron, sourceFrequency, sourceFrequencyText, existingSourcePayload, newWechatSourcePayload, configuredSourcePayload } = management
 const page = (path, extra = {}) => ({ path, component: () => {}, meta: { title: path }, ...extra })
 const sample = (extra = {}) => ({
   id: '100000000000001', name: '现有来源', type: 'paper', adapter: 'crossref_works',
@@ -20,8 +20,8 @@ const sample = (extra = {}) => ({
 })
 
 // Execute actual page handlers with local spies only. Never import the API client.
-function harness({ rows = [], permissions = true, list, update, create, disable } = {}) {
-  const calls = { list: 0, update: [], create: [], disable: [], errors: [] }
+function harness({ rows = [], permissions = true, list, update, create, disable, run } = {}) {
+  const calls = { list: 0, update: [], create: [], disable: [], run: [], errors: [] }
   const context = vm.createContext({
     ...Vue, ...management, sourceEnabled, defineOptions() {}, onMounted() {},
     checkPermi: keys => typeof permissions === 'function' ? permissions(keys) : permissions,
@@ -29,16 +29,17 @@ function harness({ rows = [], permissions = true, list, update, create, disable 
     listPipelineSources: async () => { calls.list++; return list ? list() : { data: { rows } } },
     updatePipelineSource: async (...args) => { calls.update.push(args); return update?.(...args) },
     createPipelineSource: async data => { calls.create.push(data); return create?.(data) },
-    disablePipelineSource: async id => { calls.disable.push(id); return disable?.(id) }
+    disablePipelineSource: async id => { calls.disable.push(id); return disable?.(id) },
+    runPipelineTask: async id => { calls.run.push(id); return run ? run(id) : { data: { id: 'run-1' } } }
   })
   const script = parse(source).descriptor.scriptSetup.content.replace(/^import .*$/gm, '')
-  vm.runInContext(`${script}\nglobalThis.view = { rows, sourceError, loading, dialogVisible, dialogError, saving, sourceForm, frequency, intervalChoices, frequencyPreview, editingSource, pendingSourceId, busy, activeType, sourceTypeOptions, filteredRows, openEditDialog, editDetails, sourceTable, page, pageSize, pagedRows, loadSources, openCreateDialog, openFrequencyDialog, resetIntervalAmount, saveSource, toggleSource }`, context)
+  vm.runInContext(`${script}\nglobalThis.view = { rows, sourceError, loading, dialogVisible, dialogError, saving, sourceForm, frequency, intervalChoices, frequencyPreview, editingSource, pendingSourceId, busy, activeType, sourceTypeOptions, filteredRows, openEditDialog, editDetails, sourceTable, page, pageSize, pagedRows, loadSources, openCreateDialog, openFrequencyDialog, resetIntervalAmount, saveSource, toggleSource, runSource, runningId }`, context)
   return { state: context.view, calls }
 }
 
-test('only WeChat may be created; registered adapters do not constitute a source whitelist', () => {
-  for (const type of ['website', 'news', 'paper', 'unknown', undefined]) assert.equal(canCreateSourceType(type), false)
-  assert.equal(canCreateSourceType('wechat'), true)
+test('only supported website, paper and WeChat source types can be created', () => {
+  for (const type of ['unknown', undefined]) assert.equal(canCreateSourceType(type), false)
+  for (const type of ['wechat', 'website', 'paper']) assert.equal(canCreateSourceType(type), true)
   assert.equal(supportsSourceAdapter({ type: 'wechat', adapter: 'wechat_rss' }), true)
   assert.equal(supportsSourceAdapter({ type: 'news', adapter: 'pipechina_group_news' }), true)
 })
@@ -96,10 +97,94 @@ test('legacy source aliases preserve URLs, model IDs, adapters and disabled stat
 test('new WeChat payload is constrained and contains no fabricated source or translation setting', () => {
   const payload = newWechatSourcePayload({ sourceType: 'wechat', name: '  测试公众号  ', feedUrl: ' http://example.com/feed/1.xml ', adapterKey: 'crossref_works', modelId: 99 }, { unit: 'hour', amount: 6 })
   assert.deepEqual(payload, { name: '测试公众号', type: 'wechat', adapter: 'wechat_rss', url: null, cron: '0 */6 * * *', timezone: 'Asia/Shanghai', config: { feed_url: 'http://example.com/feed/1.xml', limit: 12 }, modelId: null, isEnabled: true })
-  for (const sourceType of ['website', 'paper', 'news']) assert.throws(() => newWechatSourcePayload({ sourceType }, { unit: 'off' }), /仅支持新增公众号/)
+  for (const sourceType of ['website', 'paper', 'news']) assert.throws(() => newWechatSourcePayload({ sourceType }, { unit: 'off' }), /请选择公众号来源/)
   for (const feedUrl of ['', 'not a URL', 'javascript:alert(1)', 'https://user:pass@example.com']) {
     assert.throws(() => newWechatSourcePayload({ sourceType: 'wechat', name: '测试', feedUrl }, { unit: 'off' }), /RSS/)
   }
+})
+
+test('website and paper configuration restrict endpoints, credential fields and collection limits', () => {
+  const frequency = { unit: 'hour', amount: 6 }
+  const cases = [
+    { sourceType: 'website', url: 'https://www.pipechina.com.cn/front/news', adapter: 'pipechina_group_news' },
+    { sourceType: 'paper', url: 'https://api.crossref.org/works', adapter: 'crossref_works' }
+  ]
+  for (const entry of cases) {
+    const payload = configuredSourcePayload({ ...entry, name: ' 测试来源 ', limit: 30, query: 'pipeline safety' }, frequency)
+    assert.equal(payload.name, '测试来源')
+    assert.equal(payload.url, entry.url)
+    assert.equal(payload.adapter, entry.adapter)
+    assert.equal(payload.config.limit, 30)
+    assert.equal(payload.isEnabled, false)
+    assert.equal(payload.modelId, null)
+    for (const url of [entry.url.replace('https:', 'http:'), entry.url.replace('https://', 'https://user:pass@'), entry.url + '?token=secret', entry.url + '#fragment', 'https://evil.example/works']) {
+      assert.throws(() => configuredSourcePayload({ ...entry, name: '测试', url }, frequency))
+    }
+    for (const limit of [0, -1, 31, 1.5, 'bad']) assert.throws(() => configuredSourcePayload({ ...entry, name: '测试', limit }, frequency), /采集数量/)
+  }
+  assert.throws(() => configuredSourcePayload({ sourceType: 'paper', name: '测试', url: 'https://api.crossref.org/other' }, frequency))
+})
+
+test('a website without a custom endpoint uses the backend group-news listing default', async () => {
+  const expected = 'https://www.pipechina.com.cn/groupnews.html'
+  const payload = configuredSourcePayload({ sourceType: 'website', name: '官网新闻' }, { unit: 'off' })
+  assert.equal(payload.url, expected)
+  assert.equal(payload.adapter, 'pipechina_group_news')
+  const { state, calls } = harness()
+  state.openCreateDialog()
+  Object.assign(state.sourceForm, { sourceType: 'website', name: '官网新闻', url: '' })
+  await state.saveSource()
+  assert.equal(calls.create.length, 1)
+  assert.equal(calls.create[0].url, expected)
+})
+
+test('editing historical manual website adapter repairs it while preserving approved scheduling settings', async () => {
+  const config = { limit: 19, request_timeout: 25, total_timeout: 200, retry: { enabled: true, max_retries: 2 }, request_interval: 1 }
+  const row = sample({ type: 'news', adapter: 'manual', url: 'https://www.pipechina.com.cn/front/news', config })
+  const { state, calls } = harness()
+  state.openEditDialog(row)
+  state.sourceForm.name = '修复后的来源'
+  await state.saveSource()
+  assert.equal(calls.update.length, 1)
+  const [id, payload] = calls.update[0]
+  assert.equal(id, row.id)
+  assert.equal(payload.type, 'website')
+  assert.equal(payload.adapter, 'pipechina_group_news')
+  assert.equal(payload.name, '修复后的来源')
+  assert.equal(payload.cron, row.cron)
+  assert.equal(payload.timezone, row.timezone)
+  assert.equal(payload.isEnabled, false)
+  assert.deepEqual(payload.config, config)
+  assert.equal(row.adapter, 'manual')
+})
+
+test('trial collection reports errors, releases pending state and blocks duplicate or unauthorized requests', async () => {
+  const row = sample()
+  let reject
+  const { state, calls } = harness({ run: () => new Promise((resolve, fail) => { reject = fail }) })
+  const running = state.runSource(row)
+  assert.equal(state.runningId.value, row.id)
+  await state.runSource(row)
+  assert.equal(calls.run.length, 1)
+  reject(new Error('尚未配置内容处理模型'))
+  await running
+  assert.equal(state.runningId.value, '')
+  assert.deepEqual(calls.errors, ['尚未配置内容处理模型'])
+  const readOnly = harness({ permissions: keys => keys.includes('pipeline:source:list') })
+  await readOnly.state.runSource(row)
+  assert.equal(readOnly.calls.run.length, 0)
+  await state.runSource(sample({ adapter: 'kafka_content_import' }))
+  assert.equal(calls.run.length, 1)
+})
+
+test('successful manual trial accepts a stopped source and refreshes the visible list', async () => {
+  const row = sample({ isEnabled: false })
+  const { state, calls } = harness({ rows: [row] })
+  await state.runSource(row)
+  assert.deepEqual(calls.run, [row.id])
+  assert.equal(calls.list, 1)
+  assert.equal(row.isEnabled, false)
+  assert.equal(state.runningId.value, '')
 })
 
 test('page loads all existing types including unsupported adapters and normalizes news type statistics', async () => {
@@ -150,21 +235,29 @@ test('frequency action changes cron only and keeps a disabled source disabled', 
   assert.equal(calls.create.length, 0)
 })
 
-test('new source dialog has no news/paper save path and rejects invalid RSS before any request', async () => {
+test('new source dialog validates RSS then creates each supported type disabled for trial collection', async () => {
   const { state, calls } = harness()
   state.openCreateDialog()
   assert.equal(state.sourceForm.sourceType, 'wechat')
   await state.saveSource()
   assert.ok(state.dialogError.value)
-  Object.assign(state.sourceForm, { name: '测试', feedUrl: 'https://example.com/rss', sourceType: 'paper' })
+  Object.assign(state.sourceForm, { name: '测试', feedUrl: 'not a valid URL', sourceType: 'wechat' })
   await state.saveSource()
-  assert.match(state.dialogError.value, /仅支持新增公众号/)
+  assert.match(state.dialogError.value, /RSS/)
   assert.equal(calls.create.length, 0)
-  state.sourceForm.sourceType = 'wechat'
+  state.sourceForm.feedUrl = 'https://example.com/rss'
   await state.saveSource()
   assert.equal(calls.create.length, 1)
   assert.equal(calls.create[0].type, 'wechat')
+  assert.equal(calls.create[0].isEnabled, false)
   assert.equal(state.dialogVisible.value, false)
+  for (const type of ['website', 'paper']) {
+    state.openCreateDialog()
+    Object.assign(state.sourceForm, { sourceType: type, name: `新${type}` })
+    await state.saveSource()
+    assert.equal(calls.create.at(-1).type, type)
+    assert.equal(calls.create.at(-1).isEnabled, false)
+  }
 })
 
 test('interval unit changes reset incompatible values without modifying any server data', () => {
@@ -256,7 +349,7 @@ test('user management navigation remains the same authorized RuoYi group', () =>
   assert.deepEqual(before[0].children.map(menu => menu.path), ['/system/user', '/system/role'])
 })
 
-test('actual source SFC compiles, exposes exactly two row actions, and uses only scoped styles', () => {
+test('actual source SFC compiles, exposes guarded edit, frequency, trial and status actions, and uses scoped styles', () => {
   const { descriptor, errors } = parse(source)
   assert.deepEqual(errors, [])
   const script = compileScript(descriptor, { id: 'source-management' })
@@ -274,32 +367,36 @@ test('actual source SFC compiles, exposes exactly two row actions, and uses only
   assert.match(frequencyColumn, /openFrequencyDialog\(row\)/)
   assert.match(frequencyColumn, /v-if="canSourceSave"/)
   assert.match(actions, /toggleSource\(row\)/)
-  assert.doesNotMatch(source, /runPipelineTask|runSource|VideoPlay|listModelAll|翻译模型|调度表达式/)
-  assert.doesNotMatch(descriptor.template.content, /sourceForm\.sourceType|sourceForm\.modelId/)
-  assert.match(frequencyColumn, /sourceType\(row\) === 'wechat'/)
+  assert.doesNotMatch(source, /VideoPlay|listModelAll|翻译模型|调度表达式/)
+  assert.doesNotMatch(descriptor.template.content, /sourceForm\.modelId/)
+  assert.match(frequencyColumn, /!isExternalSource\(row\)/)
+  assert.match(descriptor.template.content, /canSourceRun && !isExternalSource\(row\)/)
+  assert.match(descriptor.template.content, /v-model="sourceForm.sourceType"/)
   assert.match(descriptor.template.content, /<el-table[^>]*height="100%"/)
   for (const label of ['数据源名称', '来源类型', '采集频率', '最后采集', '是否启用']) assert.ok(descriptor.template.content.includes(`label="${label}"`))
 })
 
 
-test('three source categories stay visible when empty; news and papers only allow status changes', async () => {
+test('three source categories stay visible when empty and external sources retain status-only controls', async () => {
   const { state, calls } = harness()
   assert.deepEqual(Array.from(state.sourceTypeOptions.value, item => item.label), ['全部（0）', '论文（0）', '新闻网站（0）', '公众号（0）'])
   for (const type of ['paper', 'website', 'news']) {
     const row = sample({ type })
     state.openFrequencyDialog(row)
-    assert.equal(state.dialogVisible.value, false)
-    state.editingSource.value = row
+    assert.equal(state.dialogVisible.value, true)
     await state.saveSource()
-    assert.match(state.dialogError.value, /仅支持启停/)
-    assert.equal(calls.update.length, 0)
-    state.editingSource.value = null
+    assert.equal(calls.update.at(-1)[1].cron, row.cron)
   }
+  const external = sample({ adapter: 'news_pipelines_spider', type: 'website' })
+  state.openFrequencyDialog(external)
+  assert.equal(state.dialogVisible.value, false)
+  state.openEditDialog(external)
+  assert.equal(state.dialogVisible.value, false)
   const row = sample({ type: 'website' })
   await state.toggleSource(row)
-  assert.equal(calls.update.length, 1)
-  assert.equal(calls.update[0][1].cron, row.cron)
-  assert.equal(calls.update[0][1].isEnabled, true)
+  assert.equal(calls.update.length, 4)
+  assert.equal(calls.update.at(-1)[1].cron, row.cron)
+  assert.equal(calls.update.at(-1)[1].isEnabled, true)
 })
 
 
@@ -367,5 +464,5 @@ test('editing WeChat updates name and RSS while preserving state, schedule and u
   assert.equal(readOnly.state.dialogVisible.value, false)
   const news = harness()
   news.state.openEditDialog(sample({ type: 'website' }))
-  assert.equal(news.state.dialogVisible.value, false)
+  assert.equal(news.state.dialogVisible.value, true)
 })

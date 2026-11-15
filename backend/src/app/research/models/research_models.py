@@ -150,6 +150,8 @@ class PipelineDigestSchedule(Base):
     failure_count = Column(BigInteger, nullable=False, server_default=text('0'), comment='累计派发和生成失败次数')
     skipped_count = Column(BigInteger, nullable=False, server_default=text('0'), comment='累计未匹配资料和节假日跳过次数')
     last_failed_due_at = Column(DateTime(timezone=True), comment='最近已计数的派发失败周期时间')
+    next_retry_at = Column(DateTime(timezone=True), comment='瞬时派发失败后的最早重试时间，不改变业务周期')
+    retry_count = Column(Integer, nullable=False, default=0, server_default=text('0'), comment='当前周期连续派发失败次数')
     created_at = Column(BeijingAuditTime(), nullable=False, default=audit_now, server_default=server_now())
     updated_at = Column(
         BeijingAuditTime(),

@@ -42,6 +42,12 @@ def _source_text(value) -> str:
     return re.sub(r'[\[\]()*<>`#]', '', ' '.join(str(value or '').split())).strip()
 
 
+def clean_source_display(value) -> str:
+    # Remove editorial provenance notes only from the displayed publisher.
+    # The frozen source remains intact for evidence and audit purposes.
+    return re.sub(r'\s*[（(][^（）()]*(?:官网|核验|核实|验证|转载)[^（）()]*[）)]', '', str(value or ''))
+
+
 def source_url(source) -> str:
     value = source.get('url') or (f'https://doi.org/{source["doi"]}' if source.get('doi') else '')
     return str(value) if urlparse(str(value)).scheme in {'http', 'https'} else ''
@@ -121,11 +127,13 @@ def normalize_digest_document(content, materials, *, generation_options=None) ->
                         pass
                 name = _source_text(material.get('title')) or '未命名资料'
                 publisher = _source_text(
-                    source.get('journal')
-                    or source.get('publisher')
-                    or source.get('name')
-                    or {'article': '新闻正文', 'paper': '论文摘要', 'file': '内部资料'}.get(
-                        material.get('type'), '资料'
+                    clean_source_display(
+                        source.get('journal')
+                        or source.get('publisher')
+                        or source.get('name')
+                        or {'article': '新闻正文', 'paper': '论文摘要', 'file': '内部资料'}.get(
+                            material.get('type'), '资料'
+                        )
                     )
                 )
                 label = f'{name}【{publisher}】' if publisher else name

@@ -104,8 +104,10 @@ def _prefer_content(data: dict) -> str | None:
     """优先取保留段落边界的正文：content_md 换行更多时用 markdown 转纯文本。"""
     content = data.get('content')
     content_md = data.get('content_md')
-    if isinstance(content_md, str) and content_md.strip() and (
-        not isinstance(content, str) or content_md.count('\n') > content.count('\n')
+    if (
+        isinstance(content_md, str)
+        and content_md.strip()
+        and (not isinstance(content, str) or content_md.count('\n') > content.count('\n'))
     ):
         return _markdown_to_plain_text(content_md)
     return content if isinstance(content, str) and content.strip() else None
@@ -348,6 +350,13 @@ async def _consume_once(stop_event: asyncio.Event, args) -> None:
                         stats['skipped'] += 1
                     else:
                         stats['errors'] += 1
+                        # getmany already advanced this consumer's position. Not
+                        # committing alone would still skip the failed article on
+                        # the next poll, and a later success could commit past it.
+                        # Retry the failed offset before processing this partition.
+                        if not args.dry_run:
+                            consumer.seek(TopicPartition(msg.topic, msg.partition), msg.offset)
+                        break
                     if not args.dry_run and outcome != 'error':
                         try:
                             await consumer.commit(

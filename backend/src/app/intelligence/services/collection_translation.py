@@ -4,11 +4,16 @@ import asyncio
 import hashlib
 import json
 import re
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from copy import deepcopy
 from typing import Any
 from urllib.parse import urlsplit
+from weakref import WeakValueDictionary
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, text
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.business_ids import parse_business_id, wire_id
 
@@ -16,6 +21,7 @@ MAX_INPUT_CHARS = 20_000
 MAX_OUTPUT_CHARS = 40_000
 MAX_RESPONSE_BYTES = 256 * 1024
 MAX_CALL_TIMEOUT_SECONDS = 60
+_paper_translation_locks = WeakValueDictionary()
 MODEL_PARAMETER_KEYS = frozenset(
     {
         'timeout_seconds',
@@ -253,11 +259,114 @@ async def translate_paper_abstract(db, paper_id: int) -> str:
     return await _translate_paper_field(db, paper_id, field='abstract')
 
 
+@asynccontextmanager
+async def _paper_translation_guard(db, paper_id, field) -> AsyncIterator[None]:
+    """Single-flight per field across API workers, without holding a paper row lock.
+
+    PostgreSQL session locks use a dedicated pinned connection because the model
+    gateway commits its own audit transaction. Transaction advisory locks would
+    disappear before the paid call. The in-process lock also keeps local waiters
+    from consuming all pool connections; SQLite is only the offline test fallback.
+    """
+    key = f'paper-translation:{paper_id}:{field}'
+    lock = _paper_translation_locks.setdefault(key, asyncio.Lock())
+    async with lock:
+        bind = getattr(db, 'bind', None)
+        if bind is None and hasattr(db, 'get_bind'):
+            bind = db.get_bind()
+        dialect = getattr(getattr(bind, 'dialect', None), 'name', None)
+        if dialect != 'postgresql':
+            if dialect != 'sqlite':
+                raise TranslationConfigurationError('论文翻译需要支持并发保护的数据库')
+            yield
+            return
+        if any(getattr(db, name, ()) for name in ('new', 'dirty', 'deleted')):
+            raise TranslationConfigurationError('请先保存当前操作后再提交论文翻译')
+        # Authentication may have opened a read transaction on this request's
+        # session. Release it before reserving a second connection for the lock,
+        # otherwise concurrent distinct papers could exhaust the pool waiting
+        # for their own second connection. Never commit unrelated pending writes.
+        await db.commit()
+        identity = int.from_bytes(hashlib.sha256(key.encode()).digest()[:8], 'big', signed=True)
+        # Lock holders cannot consume the business pool: otherwise distinct
+        # papers could each reserve its last connection, then all wait for an
+        # audit connection. Use the same URL/driver options with no pooled slots.
+        lock_engine = create_async_engine(bind.url, poolclass=NullPool, echo=False)
+        try:
+            deadline = asyncio.get_running_loop().time() + MAX_CALL_TIMEOUT_SECONDS + 10
+            while True:
+                remaining = deadline - asyncio.get_running_loop().time()
+                if remaining <= 0:
+                    raise TimeoutError
+                async with lock_engine.connect() as connection:
+                    try:
+                        async with asyncio.timeout(remaining):
+                            acquired = bool(
+                                (
+                                    await connection.execute(
+                                        text('SELECT pg_try_advisory_lock(:key)'), {'key': identity}
+                                    )
+                                ).scalar()
+                            )
+                            await connection.commit()
+                        if acquired:
+                            yield
+                            return
+                    finally:
+                        await _release_translation_lock(connection, identity)
+                # A waiter must return its connection while the winner makes model
+                # audit queries, rather than exhausting the pool with idle probes.
+                await asyncio.sleep(0.1)
+        finally:
+            await lock_engine.dispose()
+
+
+async def _release_translation_lock(connection, identity) -> None:
+    async def unlock() -> None:
+        try:
+            # Cancellation can arrive after PostgreSQL acquired the lock but
+            # before the await assigned its result. Always attempt release on
+            # this same connection, including that race.
+            await connection.rollback()
+            await connection.execute(text('SELECT pg_advisory_unlock(:key)'), {'key': identity})
+            await connection.commit()
+        except BaseException:
+            await connection.invalidate()
+            raise
+
+    cleanup = asyncio.create_task(unlock())
+    cancelled = False
+    while not cleanup.done():
+        try:
+            await asyncio.shield(cleanup)
+        except asyncio.CancelledError:  # noqa: PERF203 -- cancellation must not release a still-locked connection
+            cancelled = True
+    # Never let the connection context return to the pool while unlock or
+    # invalidation is still running in a shielded background task.
+    cleanup.result()
+    if cancelled:
+        raise asyncio.CancelledError
+
+
 async def _translate_paper_field(db, paper_id: int, *, field: str) -> str:
+    from exceptions.exception import ServiceException  # noqa: PLC0415
+
+    try:
+        async with _paper_translation_guard(db, paper_id, field):
+            return await _translate_paper_field_locked(db, paper_id, field=field)
+    except TimeoutError as error:
+        raise ServiceException(message='论文翻译正在处理中，请稍后重试') from error
+    except TranslationConfigurationError as error:
+        raise ServiceException(message=str(error)) from error
+
+
+async def _translate_paper_field_locked(db, paper_id: int, *, field: str) -> str:
     from app.intelligence.models.content import PipelinePaper  # noqa: PLC0415
     from exceptions.exception import ServiceException  # noqa: PLC0415
 
-    paper = await db.get(PipelinePaper, paper_id)
+    # A waiting caller must reload the committed result rather than its identity-map
+    # copy. Failures leave no cached value, so a later caller can retry normally.
+    paper = await db.get(PipelinePaper, paper_id, populate_existing=True)
     if paper is None:
         raise ServiceException(message='论文不存在')
     target = f'{field}_zh'

@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.business_ids import parse_business_id
@@ -106,6 +106,15 @@ class ResearchDao:
     async def claim_research_job(
         cls, db, job_id, user_id, *, worker_id='', lease_seconds=900, max_attempts=3
     ) -> Job | None:
+        from app.research.services.concurrency import (  # noqa: PLC0415
+            RESEARCH_CAPACITY_LOCK,
+            RESEARCH_GLOBAL_LIMIT,
+            RESEARCH_MODEL_LIMIT,
+            RESEARCH_USER_LIMIT,
+        )
+
+        if db.get_bind().dialect.name == 'postgresql':
+            await db.execute(text('SELECT pg_advisory_xact_lock(:key)'), {'key': RESEARCH_CAPACITY_LOCK})
         job = await cls.get_research_job(db, job_id, user_id, lock=True)
         now = utcnow()
         if not job or job.status not in {'queued', 'running'}:
@@ -117,6 +126,33 @@ class ResearchDao:
             job.execution_token = job.lease_expires_at = None
             await cls.record_schedule_generation(db, job)
             await db.commit()
+            return None
+        running = (
+            select(Job)
+            .join(Report, Report.id == Job.report_id)
+            .where(
+                Job.status == 'running',
+                Job.lease_expires_at > now,
+            )
+        )
+
+        def count_query(query) -> Any:
+            return select(func.count()).select_from(query.subquery())
+
+        global_count = await db.scalar(count_query(running))
+        user_count = await db.scalar(count_query(running.where(Report.user_id == user_id)))
+        model_id = str((job.config_snapshot.get('model') or {}).get('id') or '')
+        model_count = (
+            await db.scalar(count_query(running.where(Job.config_snapshot['model']['id'].as_string() == model_id)))
+            if model_id
+            else 0
+        )
+        if (
+            global_count >= RESEARCH_GLOBAL_LIMIT
+            or user_count >= RESEARCH_USER_LIMIT
+            or model_count >= RESEARCH_MODEL_LIMIT
+        ):
+            await db.rollback()
             return None
         job.status = 'running'
         job.attempts += 1
@@ -157,16 +193,56 @@ class ResearchDao:
 
     @staticmethod
     async def list_research_job_ids_for_dispatch(
-        db, *, now, max_attempts=3, schedule_ids=None
+        db, *, now, max_attempts=3, schedule_ids=None, limit=40, exclude_ids=()
     ) -> list[tuple[int, int, str]]:
+        from app.research.services.concurrency import (  # noqa: PLC0415
+            RESEARCH_GLOBAL_LIMIT,
+            RESEARCH_MODEL_LIMIT,
+            RESEARCH_USER_LIMIT,
+        )
+
+        active = (Job.status == 'running') & (Job.lease_expires_at > now)
+        if await db.scalar(select(func.count()).select_from(Job).where(active)) >= RESEARCH_GLOBAL_LIMIT:
+            return []
+        busy_users = (
+            select(Report.user_id)
+            .join(Job, Job.report_id == Report.id)
+            .where(active)
+            .group_by(Report.user_id)
+            .having(func.count() >= RESEARCH_USER_LIMIT)
+        )
+        model_key = Job.config_snapshot['model']['id'].as_string()
+        busy_models = (
+            select(model_key)
+            .where(active, model_key.is_not(None))
+            .group_by(model_key)
+            .having(func.count() >= RESEARCH_MODEL_LIMIT)
+        )
         query = (
-            select(Job.id, Report.user_id)
+            select(
+                Job.id.label('job_id'),
+                Report.user_id.label('user_id'),
+                Job.created_at.label('created_at'),
+                func.row_number()
+                .over(partition_by=Report.user_id, order_by=(Job.created_at, Job.id))
+                .label('user_rank'),
+            )
             .join(Report, Report.id == Job.report_id)
             .where(or_(Job.status == 'queued', (Job.status == 'running') & (Job.lease_expires_at <= now)))
+            .where(Report.user_id.not_in(busy_users), or_(model_key.is_(None), model_key.not_in(busy_models)))
         )
         if schedule_ids is not None:
             query = query.where(Job.schedule_id.in_([parse_business_id(value) for value in schedule_ids]))
-        rows = (await db.execute(query)).all()
+        if exclude_ids:
+            query = query.where(Job.id.not_in([parse_business_id(value) for value in exclude_ids]))
+        fair = query.subquery()
+        rows = (
+            await db.execute(
+                select(fair.c.job_id, fair.c.user_id)
+                .order_by(fair.c.user_rank, fair.c.created_at, fair.c.job_id)
+                .limit(max(1, min(limit, 200)))
+            )
+        ).all()
         return [(row[0], row[1], '') for row in rows]
 
     @staticmethod
@@ -222,8 +298,11 @@ class ResearchDao:
         return list(await db.scalars(query))
 
     @staticmethod
-    async def list_report_export_ids_for_dispatch(db, **_) -> list[int]:
-        return list(await db.scalars(select(Asset.id).where(Asset.status == 'queued')))
+    async def list_report_export_ids_for_dispatch(db, *, limit=40, exclude_ids=(), **_) -> list[int]:
+        query = select(Asset.id).where(Asset.status == 'queued')
+        if exclude_ids:
+            query = query.where(Asset.id.not_in([parse_business_id(value) for value in exclude_ids]))
+        return list(await db.scalars(query.order_by(Asset.created_at, Asset.id).limit(max(1, min(limit, 200)))))
 
     @staticmethod
     async def list_workspace_items(db, user_id) -> list[Basket]:
@@ -307,7 +386,11 @@ class ResearchDao:
 
     @staticmethod
     async def list_due_schedules(db, now, schedule_ids=None) -> list[Schedule]:
-        query = select(Schedule).where(Schedule.is_enabled.is_(True), Schedule.next_run_at <= now)
+        query = select(Schedule).where(
+            Schedule.is_enabled.is_(True),
+            Schedule.next_run_at <= now,
+            or_(Schedule.next_retry_at.is_(None), Schedule.next_retry_at <= now),
+        )
         if schedule_ids is not None:
             query = query.where(Schedule.id.in_([parse_business_id(value) for value in schedule_ids]))
         return list(await db.scalars(query.with_for_update(skip_locked=True)))

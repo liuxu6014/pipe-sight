@@ -77,3 +77,36 @@ async def test_stop_recovery_tasks_cancels_inflight_research_and_export_tasks() 
         release.set()
         research_job_scheduler._recovery_tasks.clear()
         research_job_scheduler._export_recovery_tasks.clear()
+
+
+@pytest.mark.asyncio
+async def test_stop_recovery_tasks_joins_material_cleanup_when_other_queues_are_empty(monkeypatch) -> None:
+    from app.library.tasks import material_parse_scheduler
+
+    started, cleaned = asyncio.Event(), asyncio.Event()
+
+    async def parsing() -> None:
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            # The worker must join cancellation cleanup, not only issue cancel.
+            await asyncio.sleep(0)
+            cleaned.set()
+
+    monkeypatch.setattr(research_job_scheduler, '_recovery_tasks', {})
+    monkeypatch.setattr(research_job_scheduler, '_recovery_owners', {})
+    monkeypatch.setattr(research_job_scheduler, '_export_recovery_tasks', {})
+    monkeypatch.setattr(material_parse_scheduler, '_material_tasks', {})
+    task = asyncio.create_task(parsing())
+    material_parse_scheduler._material_tasks['material-only'] = task
+    await started.wait()
+    try:
+        await research_job_scheduler.stop_recovery_tasks()
+        assert task.cancelled()
+        assert cleaned.is_set()
+        assert material_parse_scheduler._material_tasks == {}
+    finally:
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)

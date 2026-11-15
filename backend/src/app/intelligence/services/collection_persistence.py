@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.business_ids import parse_business_id
 from app.intelligence.repositories.collection_repository import CollectionRepository
+from app.intelligence.services.processing_errors import processing_failure_message
 
 
 def canonical_url(value) -> str:
@@ -206,7 +207,8 @@ class CollectionPersistenceService:
                 )
                 if classification_failed:
                     failed += 1
-                    run.error = '候选条目处理失败，请检查内容处理模型及类别规则后重试'
+                    code = record.get('_processing_error_code') if isinstance(record, dict) else None
+                    run.error = processing_failure_message(code)
                     continue
                 try:
                     async with db.begin_nested():

@@ -481,16 +481,26 @@ async def test_request_id_race_recomputes_fingerprint_with_winners_frozen_materi
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('valid', [True, False])
-async def test_reference_digest_queue_execution_and_serializer_keep_per_event_sources(env, db, monkeypatch, valid) -> None:
+@pytest.mark.parametrize('cadence', ['weekly', 'monthly'])
+async def test_reference_digest_queue_execution_and_serializer_keep_per_event_sources(env, db, monkeypatch, valid, cadence) -> None:
     import json
 
     template, _ = seed(env, db)
-    template.name, template.purpose = '周报', 'digest'
+    template.name, template.purpose = ('月报' if cadence == 'monthly' else '周报'), 'digest'
+    template.digest_cadence = cadence
     monkeypatch.setattr(env.repo.ResearchDao, 'load_content', AsyncMock(return_value=None))
     await db.commit()
-    result = await queue(env, db, payload(report_type='weekly', period=['2026-10-19', '2026-10-25']))
+    result = await queue(env, db, payload(report_type=cadence, period=['2026-10-19', '2026-10-25']))
     job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
     assert job.config_snapshot['document_format'] == 'digest-reference-v1'
+    # Live templates retain old research-like chapter plans, which are not the
+    # event-group structure used by reference digests. Both execution and the
+    # task serializer must ignore those plans for this format.
+    snapshot = deepcopy(job.config_snapshot)
+    snapshot['request']['outline'] = [{'title': '本期要闻', 'words': 2000}, {'title': '趋势综述', 'words': 2000}]
+    snapshot['request']['options'] = {'summaryLength': 'long', 'itemCount': 1}
+    job.config_snapshot = snapshot
+    await db.commit()
     execution, _ = execution_context(env, db, monkeypatch)
     raw = json.dumps({'format': 'digest-reference-v1', 'groups': [{'category': '油气管网', 'items': [{
         'title': '检测技术进展', 'summary': '资料记载的事实。', 'insight': '适用条件仍需核实。',
@@ -507,6 +517,29 @@ async def test_reference_digest_queue_execution_and_serializer_keep_per_event_so
         assert '### 1. 检测技术进展' in report.content and '数据源：' in report.content
         display = env.app.ResearchApplicationService.job_dict(job, report=report)
         assert display['resultContent'] == report.content and not display['applyConflict']
+        saved_content = report.content
+        assert job.config_snapshot['result_application']['report_version'] == report.version
+        normalizer = importlib.import_module('app.research.services.digest_document')
+        monkeypatch.setattr(normalizer, 'normalize_digest_document', lambda *args, **kwargs: {'content': '新版来源排版'})
+        # Reading a task after a renderer upgrade uses its applied immutable
+        # version, and never attributes a formatting difference to the user.
+        display = await env.app.ResearchApplicationService.get_job(db, 7, job.id)
+        assert display['resultContent'] == saved_content and not display['applyConflict']
+        # Existing completed tasks predate result_application. Their versioned
+        # passed checks and identical generated snapshot provide the safe bridge.
+        history = await env.repo.ResearchDao.get_report_version(db, report.id, report.version)
+        legacy_snapshot = deepcopy(job.config_snapshot)
+        legacy_snapshot.pop('result_application')
+        job.config_snapshot = legacy_snapshot
+        history.model_snapshot = deepcopy(legacy_snapshot)
+        await db.commit()
+        display = await env.app.ResearchApplicationService.get_job(db, 7, job.id)
+        assert display['resultContent'] == saved_content and not display['applyConflict']
+        report.content += '\n\n用户补充的真实修改。'
+        edited_display = await env.app.ResearchApplicationService.get_job(db, 7, job.id)
+        assert edited_display['applyConflict'] is True
+        assert edited_display['resultContent'] == saved_content
+        assert job.result_content == raw
     else:
         assert job.status == 'failed' and '简报格式检查未通过' in job.error
         assert report.content == ''

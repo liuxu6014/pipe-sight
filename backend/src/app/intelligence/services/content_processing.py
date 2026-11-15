@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import json
+import logging
 import re
 from copy import deepcopy
 
@@ -29,6 +30,8 @@ from app.intelligence.services.entities import (
     validated_summary,
 )
 from app.intelligence.services.translation_settings import PROCESSING_MODEL_KEY, configured_model_id
+
+logger = logging.getLogger(__name__)
 
 
 def build_processing_prompt(categories, kind) -> str:
@@ -66,7 +69,7 @@ class ContentProcessingService:
         frozen['processing_model'] = None
         frozen['processing_categories'] = []
         if identity is None:
-            return frozen
+            raise TranslationConfigurationError('尚未配置内容处理模型，请管理员配置后重新发起采集')
         try:
             model = await CollectionTranslationService._model(db, identity)
             parameters = _parameters(model.parameters or {})
@@ -107,6 +110,8 @@ class ContentProcessingService:
         records = deepcopy(records)
         classifications = []
         frozen = snapshot.get('processing_model')
+        if frozen is None:
+            raise TranslationConfigurationError('运行缺少内容处理模型，请修复配置后重新发起采集')
         kind = 'paper' if snapshot['type'] == 'paper' else 'news'
         categories = snapshot.get('processing_categories', [])
         system = build_processing_prompt(categories, kind)
@@ -115,18 +120,22 @@ class ContentProcessingService:
                 classifications.append((None, True))
                 continue
             record.pop('_processing_excluded', None)
-            if frozen is None:
-                classifications.append((None, False))
-                continue
+            record.pop('_processing_error_code', None)
             content = (
                 (record.get('abstract_zh') or record.get('abstract') or '')
                 if kind == 'paper'
                 else (record.get('content_zh') or record.get('content') or '')
             )
             title = record.get('title')
+            stage = 'processing_input_invalid'
+            request_id = None
             try:
                 if not isinstance(title, str) or not title.strip() or not isinstance(content, str):
                     raise ValueError('无效文章')
+                stage = 'processing_input_missing'
+                if not content.strip():
+                    raise ValueError('缺少可处理的原文')
+                stage = 'processing_input_limit'
                 if len(content) + len(title) > MAX_INPUT_CHARS:
                     raise ValueError('内容超过处理上限')
                 prompt = json.dumps({'sourceType': kind, 'title': title, 'content': content}, ensure_ascii=False)
@@ -140,11 +149,13 @@ class ContentProcessingService:
                         ).encode()
                     ).hexdigest()
                 )
+                stage = 'processing_model_unavailable'
                 async with sessions() as db:
                     current = await CollectionTranslationService._model(db, frozen['id'])
                     if any(getattr(current, key) != frozen.get(key) for key in ('provider', 'code', 'base_url')):
                         raise ValueError('内容处理模型身份已变化，请重新发起采集')
                     await db.commit()
+                    stage = 'processing_model_call_failed'
                     try:
                         answer = await asyncio.wait_for(
                             ModelGateway.call(
@@ -165,17 +176,21 @@ class ContentProcessingService:
                         await db.commit()
                         raise
                     await db.commit()
+                stage = 'processing_response_invalid'
                 if not isinstance(answer, str) or len(answer.encode()) > frozen['parameters']['max_response_bytes']:
                     raise ValueError('处理结果无效')
+                stage = 'processing_json_invalid'
                 fence = re.fullmatch(r'```(?:json)?\s*(.*?)\s*```', answer.strip(), re.S | re.I)
                 result = json.loads(fence[1] if fence else answer, object_pairs_hook=_unique_object)
                 if not isinstance(result, dict):
                     raise ValueError('处理结果必须是对象')
+                stage = 'processing_filter_invalid'
                 filtering = result.get('filter')
                 if not isinstance(filtering, dict) or filtering.get('decision') not in ('keep', 'review', 'exclude'):
                     raise ValueError('缺少有效过滤结论')
                 decision = filtering['decision']
                 if decision == 'exclude':
+                    stage = 'processing_exclusion_invalid'
                     evidence = filtering.get('evidence')
                     if (
                         not isinstance(evidence, str)
@@ -187,6 +202,7 @@ class ContentProcessingService:
                     record['_processing_excluded'] = True
                     classifications.append((None, False))
                     continue
+                stage = 'processing_category_invalid'
                 identity = result.get('category_id')
                 if identity is not None:
                     identity = parse_business_id(identity)
@@ -196,10 +212,12 @@ class ContentProcessingService:
                 elif result.get('category_name') is not None:
                     raise ValueError('分类名称与标识不一致')
                 # All fields pass through existing evidence/length validators and persistence validation.
+                stage = 'processing_entities_invalid'
                 entities = validated_entities(result.get('entities'), title=title, content=content)
                 if entities is None:
                     raise ValueError('缺少有效核心实体数组')
                 record['entities'] = entities
+                stage = 'processing_summary_invalid'
                 summary = validated_summary(result.get('summary'), content)
                 if summary is None:
                     raise ValueError('缺少有效中文摘要')
@@ -212,5 +230,9 @@ class ContentProcessingService:
                 classifications.append((identity, False))
             except Exception:
                 # Failed output is never persisted as a successfully processed article.
+                # Codes disclose the failed contract, never raw inputs, responses,
+                # endpoint credentials or provider exception strings.
+                record['_processing_error_code'] = stage
+                logger.warning('Content processing rejected: code=%s request_id=%s', stage, request_id)
                 classifications.append((None, True))
         return records, classifications

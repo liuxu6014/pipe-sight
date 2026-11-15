@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from app.system.services.file_scan import FileScanService
-from config.env import UploadConfig, UploadSettings
+from config.env import AppConfig, UploadConfig, UploadSettings
 
 
 def test_scan_settings_read_environment_at_instantiation(monkeypatch, tmp_path) -> None:
@@ -89,3 +89,13 @@ def test_basic_scan_quarantines_common_executable_signature(monkeypatch: pytest.
 
     assert result.status == 'quarantined'
     assert result.signature == 'executable-signature'
+
+
+def test_production_never_marks_basic_scan_as_clean(monkeypatch, tmp_path):
+    source = tmp_path / 'document.txt'
+    source.write_text('普通文字')
+    monkeypatch.setattr(UploadConfig, 'FILE_SCAN_MODE', 'basic')
+    monkeypatch.setattr(AppConfig, 'app_env', 'prod')
+    result = FileScanService.scan(str(source))
+    assert result.status == 'pending'
+    assert '外部扫描器' in result.message

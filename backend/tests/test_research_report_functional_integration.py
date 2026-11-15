@@ -231,7 +231,7 @@ async def seed_flow(env: Any, case: Any) -> Any:
         request_id='manual:local-functional-' + str(report.id),
         status='completed',
         progress=100,
-        result_content='任务生成正文',
+        result_content='**用户确认章节**\n\n' + '任务生成正文' * 200 + '[1]。',
         materials=materials,
         config_snapshot=deepcopy(snapshot),
     )

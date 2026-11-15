@@ -31,6 +31,8 @@
     <el-alert v-if="report.readOnly" title="正在只读查看其他用户的报告" description="可查看正文和引用；编辑及导出文件由报告所有者操作。" type="info" :closable="false" show-icon />
     <el-alert v-else-if="isReadOnly" title="当前报告已正式发布，处于只读状态" description="可阅读正文、查看引用和导出报告。如需修改，请先由管理员撤销发布。" type="info" :closable="false" show-icon />
     <el-alert v-if="report.requiresReview" title="当前报告为待复核草稿" :description="report.generationWarning || '该报告未完成全量模型生成，请配置可用模型或人工复核后再作为正式成果使用。'" type="warning" :closable="false" show-icon />
+    <el-alert v-if="!isDigest" class="ps-citation-check-status" :title="citationCheckLabel" description="仅检查引用编号、来源与正文位置的对应关系；不代表事实核验通过。" :type="citationCheckState === 'passed' ? 'success' : citationCheckState === 'warning' || citationCheckState === 'stale' ? 'warning' : 'info'" :closable="false" />
+    <el-alert v-if="!isDigest && ['warning', 'stale'].includes(outlineCheckState)" class="ps-outline-check-status" :title="outlineCheckLabel" :description="outlineCheckDescription" type="warning" :closable="false" show-icon />
     <div class="ps-editor-layout" :class="{ 'is-reading': !isEditing, 'has-outline': outlineVisible, 'has-inspector': inspectorVisible }">
       <aside v-if="outlineVisible" ref="outlinePanelRef" class="ps-outline-panel">
         <div class="ps-editor-panel-head"><span>报告目录</span><el-button :icon="Plus" circle class="ps-ui-action" v-if="isEditing" aria-label="新增章节" :disabled="isReadOnly" @click="addSection" /></div>
@@ -354,6 +356,27 @@ function digestCategoryNumber(number) {
   const digits = '零一二三四五六七八九'
   return number < 10 ? digits[number] : `${number >= 20 ? digits[Math.floor(number / 10)] : ''}十${number % 10 ? digits[number % 10] : ''}`
 }
+const citationCheckState = computed(() => saveState.value !== 'saved' ? 'stale' : report.value.metadata?.modelSnapshot?.checks?.citation?.status || 'not_run')
+const citationCheckLabel = computed(() => ({ passed: '引用完整性检查已通过', warning: '引用完整性检查存在提示，请核对来源', stale: '正文已修改，请重新核对引用；旧版检查已失效', not_run: '尚未执行引用完整性检查' })[citationCheckState.value] || '尚未执行引用完整性检查')
+const outlineCheck = computed(() => report.value.metadata?.modelSnapshot?.checks?.outline)
+const outlineIssues = computed(() => {
+  const recorded = outlineCheck.value?.issues
+  return Array.isArray(recorded) && recorded.length ? recorded : Array.isArray(report.value.qualityIssues) ? report.value.qualityIssues : []
+})
+const outlineCheckState = computed(() => {
+  if (saveState.value !== 'saved') return 'stale'
+  const check = outlineCheck.value
+  if (check?.version != null && report.value.versionNo != null && Number(check.version) !== Number(report.value.versionNo)) return 'stale'
+  if (outlineIssues.value.length || check?.status === 'warning') return 'warning'
+  return check?.status === 'passed' ? 'passed' : 'not_run'
+})
+const outlineCheckLabel = computed(() => outlineCheckState.value === 'stale' ? '正文已修改，旧版篇幅检查已失效' : '生成篇幅与规划存在偏差，请核对')
+const outlineCheckDescription = computed(() => {
+  if (outlineCheckState.value === 'stale') return '修改后的篇幅尚未校验，上次生成的检查结果不能代表当前版本。'
+  return outlineIssues.value.map(issue => issue?.message || (issue?.actualWords != null && issue?.targetWords != null
+    ? `章节“${issue.section || '未命名'}”约 ${issue.actualWords} 字词，规划 ${issue.targetWords} 字。` : '存在篇幅偏差，请核对章节正文与规划字数。')).join('；')
+    || '存在篇幅偏差，请核对章节正文与规划字数。引用检查通过不代表篇幅符合要求。'
+})
 const referenceDigest = computed(() => isDigest.value && report.value.metadata?.modelSnapshot?.document_format === 'digest-reference-v1')
 const projectForm = computed(() => report.value.metadata?.projectDemandForm)
 const referencePeriod = computed(() => digestPeriodLabel(report.value.metadata?.period))

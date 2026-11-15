@@ -65,7 +65,6 @@
             <template #dropdown>
               <el-dropdown-menu class="ps-user-menu">
                 <el-dropdown-item command="profile"><User />个人资料</el-dropdown-item>
-                <el-dropdown-item command="templates"><Collection />我的模板</el-dropdown-item>
                 <el-dropdown-item v-if="isAdministrator" divided command="management"><Setting />管理控制台</el-dropdown-item>
                 <el-dropdown-item divided command="logout"><SwitchButton />退出登录</el-dropdown-item>
               </el-dropdown-menu>
@@ -150,7 +149,6 @@ const currentUserName = computed(() => userStore.nickName || userStore.name || '
 const isAdministrator = computed(() => isManagementIdentity(userStore.roles, userStore.permissions))
 
 function handleCommand(command) {
-  if (command === 'templates') { router.push('/portal/templates'); return }
   if (command === 'profile') {
     router.push('/portal/profile')
     return

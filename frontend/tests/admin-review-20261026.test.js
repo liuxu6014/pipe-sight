@@ -9,11 +9,19 @@ const source = page => readFileSync(new URL(`../src/views/pipeline/${page}.vue`,
 function setup(page, names, mocks = {}) {
   const script = source(page).match(/<script setup>([\s\S]*?)<\/script>/)[1]
     .replace(/^import[\s\S]*?from ['"][^'"]+['"]\s*$/gm, '')
-  const dependencies = { isDigestType, computed, reactive, ref, watch, onMounted() {}, defineOptions() {}, defineProps: () => ({}), defineEmits: () => () => {},
+  const dependencies = { isDigestType, computed, reactive, ref, watch, onMounted() {}, onBeforeUnmount() {}, defineOptions() {}, defineProps: () => ({}), defineEmits: () => () => {},
     ElMessage: { warning() {}, error() {}, success() {}, info() {} },
     checkPermi: () => true, modelsFor: () => [],
     Calendar: {}, Collection: {}, Delete: {}, Document: {}, Files: {}, Plus: {}, Rank: {}, Search: {},
     useRoute: () => ({ query: { id: '18' }, path: '/pipeline/report' }), useRouter: () => ({}),
+    useUserStore: () => ({ id: 1 }),
+    usePagedResults(load, params) {
+      const rows = ref([]), total = ref(0), error = ref(''), loading = ref(false)
+      return { rows, total, error, loading, refresh: async () => {
+        const response = await load(params.value)
+        rows.value = response.data.rows; total.value = response.data.total
+      } }
+    },
     ...mocks }
   return new Function(...Object.keys(dependencies), `${script}\nreturn { ${names.join(',')} }`)(...Object.values(dependencies))
 }
@@ -73,12 +81,13 @@ test('A03 queue counts and filtering compare parseStatus codes despite translate
 
 test('A06 retire does not PUT the disabled model config; enable keeps full validation payload', async () => {
   const retired = [], updated = []
+  const item = { id: '17', name: ' 模板 ', prompt: ' 提示词 ', isEnabled: true, modelId: '8', sections: [] }
   const page = setup('template/index', ['toggleTemplate'], {
     retirePipelineTemplate: async id => retired.push(id),
     updatePipelineTemplate: async (...args) => updated.push(args),
-    listPipelineTemplates: async () => ({ data: { rows: [] } })
+    listPipelineTemplates: async () => ({ data: { rows: [], total: 0 } }),
+    getPipelineTemplate: async id => { assert.equal(id, item.id); return { data: item } }
   })
-  const item = { id: '17', name: ' 模板 ', prompt: ' 提示词 ', isEnabled: true, modelId: '8', sections: [] }
   await page.toggleTemplate(item)
   assert.deepEqual(retired, ['17'])
   assert.deepEqual(updated, [])
@@ -138,12 +147,16 @@ test('A04 dashboard shows source names and counts without a fabricated percentag
 
 test('A01 report management uses the dedicated admin transport', async () => {
   let calls = 0
-  const page = setup('report/index', ['loadReports', 'rows'], {
-    listPipelineAdminReports: async () => { calls++; return { data: { rows: [{ id: '2', owner: '其他作者' }] } } }
+  const page = setup('report/index', ['loadReports', 'pagedRows'], {
+    listPipelineAdminReports: async params => {
+      calls++
+      assert.deepEqual(params, { pageNum: 1, pageSize: 10, keyword: '', status: '', kind: 'research' })
+      return { data: { rows: [{ id: '2', owner: '其他作者' }], total: 1 } }
+    }
   })
   await page.loadReports()
   assert.equal(calls, 1)
-  assert.equal(page.rows.value[0].owner, '其他作者')
+  assert.equal(page.pagedRows.value[0].owner, '其他作者')
 })
 
 test('L03 chapter row reserves one track per chapter control', () => {

@@ -14,6 +14,12 @@ env = support.env
 translation = support.translation
 
 
+@pytest.fixture(autouse=True)
+def real_processing_admission(env, monkeypatch):
+    monkeypatch.setattr(env.processing, 'freeze', env.real_processing_freeze)
+    monkeypatch.setattr(env.processing, 'prepare', env.real_processing_prepare)
+
+
 def output(**overrides):
     return json.dumps(
         {
@@ -129,17 +135,103 @@ async def test_filter_only_excludes_with_evidence_and_never_silently_drops_revie
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'answer,code',
+    [
+        ('PRIVATE_RESPONSE not JSON', 'processing_json_invalid'),
+        (output(filter=None), 'processing_filter_invalid'),
+        (output(category_id='999', category_name='未知'), 'processing_category_invalid'),
+        (output(entities=None), 'processing_entities_invalid'),
+        (output(summary='PRIVATE_RESPONSE'), 'processing_summary_invalid'),
+        (RuntimeError('PRIVATE_PROVIDER_KEY=do-not-disclose'), 'processing_model_call_failed'),
+    ],
+)
+async def test_processing_failure_reports_safe_stage_without_disclosing_provider_or_article(
+    env, translation, caplog, answer, code
+):
+    e = env
+    source = await configured(e)
+    item = record()
+    item['content_zh'] = '研究机构开展管道检测试验。'
+    item['_processing_error_code'] = 'PRIVATE_CANDIDATE_MARKER'
+    e.state.category_reply = answer
+    e.state.batches = [e.batch([item], {})]
+    run = await enqueue(e, source['id'])
+    with caplog.at_level('WARNING', logger='app.intelligence.services.content_processing'):
+        assert (await execute(e, run['id']))['status'] == 'failed'
+    persisted = await e.repo.run(e.db, run['id'])
+    assert code in persisted.error and '重新试采' in persisted.error
+    assert persisted.failed_count == 1 and persisted.saved_count == 0
+    assert code in caplog.text
+    for sensitive in ('PRIVATE_RESPONSE', 'PRIVATE_PROVIDER_KEY', 'PRIVATE_CANDIDATE_MARKER', item['content_zh']):
+        assert sensitive not in persisted.error and sensitive not in caplog.text
+    assert not e.db.sync.scalars(select(e.content.PipelineArticle)).all()
+
+
+def test_processing_diagnostics_never_echo_unknown_candidate_error_codes():
+    from app.intelligence.services.processing_errors import processing_failure_message
+
+    for value in ('PRIVATE_PROVIDER_KEY=secret', ['untrusted'], None):
+        message = processing_failure_message(value)
+        assert 'processing_failed' in message and 'PRIVATE_PROVIDER_KEY' not in message
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind', ['website', 'paper'])
+@pytest.mark.parametrize('missing', [None, '', '  \n  '])
+async def test_missing_source_text_fails_before_any_paid_translation_or_processing_call(
+    env, translation, kind, missing
+):
+    e = env
+    source = await configured(e, kind)
+    item = record(kind)
+    field = 'abstract' if kind == 'paper' else 'content'
+    item[field] = missing
+    item.pop(field + '_zh', None)
+    e.state.category_reply = RuntimeError('model must not be called without source evidence')
+    e.state.batches = [e.batch([item], {})]
+    run = await enqueue(e, source['id'])
+    assert (await execute(e, run['id']))['status'] == 'failed'
+    stored = await e.repo.run(e.db, run['id'])
+    assert 'processing_input_missing' in stored.error
+    assert stored.failed_count == 1 and stored.saved_count == 0
+    assert not e.state.category_requests
+    assert not e.db.sync.scalars(
+        select(e.content.PipelinePaper if kind == 'paper' else e.content.PipelineArticle)
+    ).all()
+
+
+@pytest.mark.asyncio
 async def test_unconfigured_processing_does_not_fall_back_to_source_or_sole_model(env, translation):
     e = env
     source, _ = await configured_source(e)
     item = record()
     item['content_zh'] = '已有中文正文'
     e.state.batches = [e.batch([item], {})]
-    run = await enqueue(e, source['id'])
-    assert (await execute(e, run['id']))['status'] == 'success'
+    with pytest.raises(e.collection.ConfigurationError, match='尚未配置内容处理模型'):
+        await enqueue(e, source['id'])
     assert e.state.category_requests == []
-    saved = e.db.sync.scalars(select(e.content.PipelineArticle)).one()
-    assert saved.summary is None and saved.entities is None
+    assert not e.db.sync.scalars(select(e.content.PipelineArticle)).all()
+    assert not await e.repo.history(e.db)
+
+
+@pytest.mark.asyncio
+async def test_old_unconfigured_snapshot_fails_and_fresh_run_recovers_after_configuration(env, translation):
+    e = env
+    source = await configured(e)
+    run = await enqueue(e, source['id'])
+    saved_run = await e.repo.run(e.db, run['id'])
+    saved_run.config_snapshot = {**saved_run.config_snapshot, 'processing_model': None}
+    await e.db.commit()
+    item = record()
+    item['content_zh'] = '研究机构开展管道检测试验。'
+    e.state.batches = [e.batch([item], {})]
+    assert (await execute(e, run['id']))['status'] == 'failed'
+    assert not e.db.sync.scalars(select(e.content.PipelineArticle)).all()
+    e.state.category_reply = output()
+    recovered = await enqueue(e, source['id'], request_id='manual:fixed-processing')
+    assert (await execute(e, recovered['id']))['status'] == 'success'
+    assert e.db.sync.scalars(select(e.content.PipelineArticle)).one().summary
 
 
 @pytest.mark.asyncio

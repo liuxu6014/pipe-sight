@@ -1,6 +1,7 @@
 """执行冻结输入；完成时同时检查执行令牌、租约和成果起始版本。"""
 
 import asyncio
+import hashlib
 from copy import deepcopy
 from typing import Any
 
@@ -10,6 +11,7 @@ from app.research.repositories.research_repository import ResearchDao
 from app.research.services.model_generation import ModelOutputLimitError, ResearchModelGenerationService
 from app.research.services.report_content import (
     ManuscriptValidationError,
+    check_citation_integrity,
     normalize_task_report,
     validate_generated_article,
 )
@@ -65,6 +67,15 @@ class ResearchExecutionService:
                 article = normalize_task_report(content, materials, snapshot)
             cited_materials = article.get('materials', materials)
             validate_generated_article(article['content'], cited_materials)
+            request = snapshot.get('request') or {}
+            citation_requested = request.get('citation_check', request.get('citationCheck', True))
+            citation_check = (
+                check_citation_integrity(article['content'], cited_materials)
+                if citation_requested
+                else {'status': 'not_run', 'reason': 'not_requested', 'factsVerified': False}
+            )
+            if citation_check['status'] == 'failed':
+                raise ManuscriptValidationError('文稿检查未通过：引用完整性检查失败，请核对来源编号后重试生成')
             async with AsyncSessionLocal() as result_db:
                 job = await ResearchDao.lock_running_research_job(result_db, job_id, user_id, token)
                 if not job:
@@ -79,17 +90,24 @@ class ResearchExecutionService:
                     report.version += 1
                     report.updated_at = utcnow()
                     result_snapshot = deepcopy(snapshot)
-                    request = snapshot.get('request') or {}
-                    # 规范化只调整正文/引用格式，未执行引用完整性或事实质量检查。
-                    # 绑定具体成果版本；后续编辑不能把旧状态当成本版检查结果。
+                    result_snapshot['result_application'] = {
+                        'job_id': wire_id(job.id),
+                        'report_version': report.version,
+                        'content_sha256': hashlib.sha256(report.content.encode('utf-8')).hexdigest(),
+                    }
+                    # Deterministic checks are versioned separately from factual review.
                     result_snapshot['checks'] = {
-                        'documentIntegrity': {'status': 'passed', 'factsVerified': False},
+                        'documentIntegrity': {'status': 'passed', 'factsVerified': False, 'version': report.version},
                         'citation': {
-                            'requested': request.get('citation_check', request.get('citationCheck', True)),
-                            'status': 'not_run',
-                            'reason': 'normalization_only',
+                            **citation_check,
+                            'requested': citation_requested,
                             'normalization': 'completed',
                             'version': report.version,
+                        },
+                        'outline': {
+                            'status': 'warning' if article.get('qualityIssues') else 'passed',
+                            'version': report.version,
+                            'issues': article.get('qualityIssues', []),
                         },
                         'quality': {'status': 'not_run', 'version': report.version},
                     }
@@ -104,7 +122,7 @@ class ResearchExecutionService:
                         result_snapshot,
                         sections=article['sections'],
                         citations=cls.material_citations(cited_materials),
-                        quality_issues=[],
+                        quality_issues=article.get('qualityIssues', []),
                     )
                 job.status, job.progress, job.finished_at = 'completed', 100, utcnow()
                 job.execution_token = job.lease_expires_at = None
@@ -181,6 +199,16 @@ class ResearchExecutionService:
                 if previous
                 else ({'template': {'id': wire_id(report.template_id)}} if report.template_id is not None else {})
             )
+        snapshot = deepcopy(snapshot)
+        if source != 'generated':
+            for check in (snapshot.get('checks') or {}).values():
+                if isinstance(check, dict) and check.get('version') != report.version:
+                    check.update(
+                        status='stale',
+                        checkedVersion=check.get('version'),
+                        version=report.version,
+                        reason='content_changed',
+                    )
 
         def metadata(value: list[dict] | None, name: str) -> list[dict]:
             return deepcopy(value if value is not None else getattr(previous, name, None) or [])

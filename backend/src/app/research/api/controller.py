@@ -21,8 +21,10 @@ from app.intelligence.schemas.pipeline import (
 from app.research.digest_policy import DIGEST_SELECTION_LIMIT
 from app.research.repositories.research_repository import ResearchDao as PipelineDao
 from app.research.schemas.generation import ApplyGenerationResultModel, ReportRewriteModel
+from app.research.schemas.listing import JobListQuery, ReportListQuery
 from app.research.services.application import ResearchApplicationService
 from app.research.services.exports import ResearchReportExportService
+from app.research.services.list_queries import job_page, report_page
 from app.research.services.reports import ResearchReportService
 from app.research.services.rewrite import ReportRewriteService
 from app.system.api.dependencies import CurrentUserDependency, CurrentUserModel, PreAuthDependency
@@ -141,10 +143,11 @@ async def delete_pipeline_workspace_item(
 @controller.get('/research/jobs', summary='查询当前用户科研生成任务')
 async def list_pipeline_research_jobs(
     request: Request,
+    query: Annotated[JobListQuery, Query()],
     query_db: Annotated[AsyncSession, DBSessionDependency()],
     current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
 ) -> Response:
-    data = await ResearchApplicationService.list_jobs(query_db, current_user.user.user_id)
+    data = await job_page(query_db, user_id=current_user.user.user_id, **query.model_dump())
     return ResponseUtil.success(data=data)
 
 
@@ -294,8 +297,9 @@ async def delete_pipeline_digest_schedule(
 )
 async def list_pipeline_admin_reports(
     query_db: Annotated[AsyncSession, DBSessionDependency()],
+    query: Annotated[ReportListQuery, Query()],
 ) -> Response:
-    return ResponseUtil.success(data=await ResearchApplicationService.list_admin_reports(query_db))
+    return ResponseUtil.success(data=await report_page(query_db, **query.model_dump()))
 
 
 @controller.get('/research/reports', summary='查询当前用户科研报告与日报周月报')
@@ -303,12 +307,11 @@ async def list_pipeline_research_reports(
     request: Request,
     query_db: Annotated[AsyncSession, DBSessionDependency()],
     current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
+    query: Annotated[ReportListQuery, Query()],
 ) -> Response:
-    data = await ResearchApplicationService.list_reports(
-        query_db,
-        current_user.user.user_id,
+    return ResponseUtil.success(
+        data=await report_page(query_db, user_id=current_user.user.user_id, **query.model_dump())
     )
-    return ResponseUtil.success(data=data)
 
 
 @controller.get('/research/reports/{report_id}', summary='获取科研报告详情')
@@ -333,9 +336,7 @@ async def delete_pipeline_research_report(
     query_db: Annotated[AsyncSession, DBSessionDependency()],
     current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
 ) -> Response:
-    data = await ResearchReportService.delete_report(
-        query_db, user_id=current_user.user.user_id, report_id=report_id
-    )
+    data = await ResearchReportService.delete_report(query_db, user_id=current_user.user.user_id, report_id=report_id)
     return ResponseUtil.success(data=data, msg='报告已删除')
 
 

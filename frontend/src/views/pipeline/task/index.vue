@@ -12,7 +12,7 @@
     <el-table-column label="最新消息" min-width="220"><template #default="{ row }">{{ row.error || row.latestMessage || row.latest_message || '—' }}</template></el-table-column>
     <el-table-column label="下次采集" width="180"><template #default="{ row }">{{ formatBusinessTime(row.nextRunAt || row.next_run_at || row.next_run_time) || '仅手动 / 未启用' }}</template></el-table-column>
     <el-table-column label="操作" width="280" fixed="right"><template #default="{ row }">
-     <el-button v-if="canTaskRun" plain type="primary" :disabled="!sourceEnabled(row) || active(row.status) || Boolean(actionId)" @click="handleRunTask(row)">立即采集</el-button>
+     <el-button v-if="canTaskRun" plain type="primary" :disabled="active(row.status) || Boolean(actionId)" @click="handleRunTask(row)">立即采集</el-button>
      <el-button v-if="canTaskRun && ['queued','running','stopping'].includes(row.status)" plain type="warning" :disabled="row.status === 'stopping' || Boolean(actionId)" @click="handleStop(row)">{{ row.status === 'stopping' ? '正在停止' : row.status === 'queued' ? '取消排队' : '停止本次' }}</el-button>
      <el-button v-if="canTaskRun && row.status === 'failed'" plain type="warning" :disabled="!sourceEnabled(row) || Boolean(actionId)" @click="handleRetry(row)">失败重试</el-button>
      <el-button plain type="primary" :icon="Document" @click="showTaskLog(row)">详情</el-button>
@@ -71,7 +71,7 @@ async function loadTasks(background = false) {
  finally { loading.value = false; if (!background) scheduleRefresh() }
 }
 async function handleRunTask(row) {
- if (!canTaskRun.value || actionId.value || !sourceEnabled(row) || active(row.status)) return
+ if (!canTaskRun.value || actionId.value || active(row.status)) return
  actionId.value = row.id
  try { const res = await runPipelineTask(row.sourceId || row.source_id || row.id); ElMessage.success(res.msg || '采集请求已提交'); await loadTasks() }
  catch (error) { ElMessage.error(error?.msg || error?.message || '采集请求失败') }

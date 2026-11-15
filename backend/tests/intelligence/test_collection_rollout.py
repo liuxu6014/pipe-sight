@@ -188,6 +188,30 @@ def env(monkeypatch):
     collection = importlib.import_module('app.intelligence.services.collection')
     persistence = importlib.import_module('app.intelligence.services.collection_persistence')
     sources = importlib.import_module('app.intelligence.services.sources')
+    processing = importlib.import_module('app.intelligence.services.content_processing').ContentProcessingService
+    real_processing_freeze = processing.freeze
+    real_processing_prepare = processing.prepare
+
+    async def isolated_processing_contract(db, snapshot):
+        # State-machine/translation tests isolate the processing provider boundary;
+        # unlike legacy snapshots the frozen processing contract must be explicit.
+        # Real admission and output validation are covered by test_content_processing.
+        return {
+            **snapshot,
+            'processing_model': {
+                'id': '900999',
+                'provider': 'compatible',
+                'code': 'offline-processor',
+                'base_url': 'https://example.test/processor',
+                'parameters': {},
+            },
+        }
+
+    async def isolated_processing_output(sessions, snapshot, records):
+        return records, [(None, False) for _ in records]
+
+    monkeypatch.setattr(processing, 'freeze', isolated_processing_contract)
+    monkeypatch.setattr(processing, 'prepare', isolated_processing_output)
     state = SimpleNamespace(batches=[], calls=[], cleanup=False, category_requests=[], category_reply='{"match":true}')
     gateway = ModuleType('app.research.services.model_generation')
 
@@ -244,6 +268,9 @@ def env(monkeypatch):
         sources=sources,
         collection=collection,
         persistence=persistence,
+        processing=processing,
+        real_processing_freeze=real_processing_freeze,
+        real_processing_prepare=real_processing_prepare,
         registry=registry,
         state=state,
         clock=lambda: NOW,
@@ -354,16 +381,18 @@ async def test_disable_cancels_queue_and_enable_does_not_revive(env) -> None:
     assert disabled['next_run_at'] is None
     run = await e.repo.run(e.db, r['id'])
     assert run.status == 'cancelled' and run.stop_requested_at and run.finished_at and run.started_at is None
-    with pytest.raises(e.conflict):
-        await enqueue(e, s['id'], 'manual:new')
+    trial = await enqueue(e, s['id'], 'manual:new')
+    assert trial['status'] == 'queued'
+    await e.service.stop_collection_run(e.db, trial['id'], clock=e.clock)
     await e.service.set_enabled(e.db, s['id'], True, registry=e.registry, clock=e.clock)
     assert (await execute(e, r['id']))['status'] == 'skipped'
 
 
 @pytest.mark.asyncio
-async def test_stopping_blocks_writes_and_waits_for_cleanup(env) -> None:
+@pytest.mark.parametrize('enabled', [True, False])
+async def test_stopping_blocks_writes_and_waits_for_cleanup(env, enabled) -> None:
     e = env
-    s = await source(e)
+    s = await source(e, is_enabled=enabled)
     r = await enqueue(e, s['id'])
 
     async def stop_during_request():
@@ -394,6 +423,74 @@ async def test_disable_running_does_not_fake_stop(env) -> None:
     await e.service.set_enabled(e.db, s['id'], False, registry=e.registry, clock=e.clock)
     assert (await e.repo.run(e.db, r['id'])).status == 'running'
     assert (await e.repo.finish(e.db, r['id'], token, now=NOW)).status == 'success'
+
+
+@pytest.mark.asyncio
+async def test_disabled_source_manual_trial_never_enables_schedule_or_retry(env) -> None:
+    e = env
+    s = await source(e, is_enabled=False, cron='0 8 * * *', config={'retry': {'enabled': True, 'max_retries': 2}})
+    assert await e.service.schedule_due_source(e.db, s['id'], registry=e.registry, clock=e.clock) is None
+    with pytest.raises(e.conflict, match='已停用'):
+        await e.repo.enqueue(
+            e.db, s['id'], request_id='schedule:disabled', now=NOW, snapshot={}, trigger_type='schedule'
+        )
+    e.state.batches = [e.batch([{'title': '手动试采', 'url': 'https://example.test/trial', 'content': '实际正文'}], {})]
+    r = await enqueue(e, s['id'])
+    assert (await e.repo.run(e.db, r['id'])).config_snapshot['_manual_admitted_while_disabled'] is True
+    assert (await execute(e, r['id']))['status'] == 'success'
+    saved = e.db.sync.scalars(select(e.content.PipelineArticle)).one()
+    assert saved.title == '手动试采'
+    disabled = await e.repo.source(e.db, s['id'])
+    assert disabled.is_enabled is False and disabled.next_run_at is None
+    e.state.batches = [e.collection.TransientCollectionError('temporary offline error')]
+    failed = await enqueue(e, s['id'], 'manual:fail')
+    assert (await execute(e, failed['id']))['status'] == 'failed'
+    assert await e.repo.active(e.db, s['id']) is None
+    with pytest.raises(e.conflict, match='启用来源'):
+        await e.service.retry_collection_run(e.db, failed['id'], registry=e.registry, clock=e.clock)
+    with pytest.raises(e.conflict, match='已停用'):
+        await e.repo.enqueue(
+            e.db,
+            s['id'],
+            request_id='retry:disabled',
+            now=NOW,
+            snapshot={},
+            trigger_type='retry',
+            parent_id=failed['id'],
+        )
+    trial = await enqueue(e, s['id'], 'manual:disable-again')
+    await e.service.set_enabled(e.db, s['id'], False, registry=e.registry, clock=e.clock)
+    assert (await e.repo.run(e.db, trial['id'])).status == 'cancelled'
+    assert await e.repo.claim(e.db, trial['id'], now=NOW, lease_seconds=60) is None
+
+
+@pytest.mark.asyncio
+async def test_disabled_trial_marker_is_server_owned_and_old_runs_fail_closed(env) -> None:
+    e = env
+    s = await source(e)
+    # A supplied flag cannot turn an enabled-source request into a trial that
+    # survives a subsequent disable by a separate configuration writer.
+    run = await e.repo.enqueue(
+        e.db,
+        s['id'],
+        request_id='manual:forged-trial',
+        now=NOW,
+        snapshot={'_manual_admitted_while_disabled': True},
+    )
+    assert run.config_snapshot['_manual_admitted_while_disabled'] is False
+    current = await e.repo.source(e.db, s['id'])
+    current.is_enabled = False
+    await e.db.commit()
+    assert await e.repo.claim(e.db, run.id, now=NOW, lease_seconds=60) is None
+    assert (await e.repo.run(e.db, run.id)).status == 'cancelled'
+    legacy = await enqueue(e, s['id'], 'manual:legacy-no-admission')
+    stored = await e.repo.run(e.db, legacy['id'])
+    stored.config_snapshot = {
+        key: value for key, value in stored.config_snapshot.items() if key != '_manual_admitted_while_disabled'
+    }
+    await e.db.commit()
+    assert await e.repo.claim(e.db, stored.id, now=NOW, lease_seconds=60) is None
+    assert (await e.repo.run(e.db, stored.id)).status == 'cancelled'
 
 
 @pytest.mark.asyncio
@@ -966,7 +1063,7 @@ async def test_real_crossref_bridge_replays_existing_metadata_in_multiple_pages(
 
     async def handler(request):
         assert request.url.host == 'api.crossref.org' and request.url.path == '/works'
-        assert request.url.params['filter'] == 'from-pub-date:2022-01-01,type:journal-article'
+        assert request.url.params['filter'] == 'from-pub-date:2022-01-01,type:journal-article,has-abstract:true'
         offset, count = int(request.url.params['offset']), int(request.url.params['rows'])
         return httpx.Response(200, json={'message': {'items': items[offset : offset + count]}})
 
@@ -980,8 +1077,15 @@ async def test_real_crossref_bridge_replays_existing_metadata_in_multiple_pages(
     assert [request.url.params['offset'] for request in replay.requests] == ['0', '2']
     assert all(client.is_closed for client in replay.clients)
     legacy = importlib.import_module('app.intelligence.integrations.public_sources')
-    monkeypatch.setattr(legacy, '_fetch_text', lambda *args, **kwargs: json.dumps({'message': {'items': items}}))
+    legacy_urls = []
+
+    def legacy_fetch(url, *args, **kwargs):
+        legacy_urls.append(url)
+        return json.dumps({'message': {'items': items}})
+
+    monkeypatch.setattr(legacy, '_fetch_text', legacy_fetch)
     old_records = legacy.collect_crossref_records(legacy.DEFAULT_CROSSREF_ENDPOINT, {'limit': 3})
+    assert 'has-abstract:true' in legacy_urls[0]
     assert {row.doi: (row.title, row.abstract, row.authors) for row in papers} == {
         row['doi']: (row['title'], row['abstract'], row['authors_text']) for row in old_records
     }
@@ -1115,11 +1219,10 @@ async def configured_category(e, *, kind='all', enabled=True) -> None:
     await e.db.commit()
 
 
-@pytest.mark.parametrize('source_type', ['website', 'wechat'])
+@pytest.mark.parametrize('source_type', ['website', 'wechat', 'paper'])
 @pytest.mark.asyncio
-async def test_legacy_category_service_called_outside_run_locks_and_saved(env, source_type) -> None:
+async def test_legacy_snapshots_without_processing_contract_fail_before_any_paid_call(env, source_type) -> None:
     e = env
-    await configured_category(e, kind='news')
     s = await source(e, type=source_type)
     r = await enqueue(e, s['id'])
     legacy = await e.repo.run(e.db, r['id'])
@@ -1128,76 +1231,28 @@ async def test_legacy_category_service_called_outside_run_locks_and_saved(env, s
     }
     await e.db.commit()
     e.state.batches = [
-        e.batch([{'title': '管网新闻', 'url': 'https://example.test/article', 'content': '真实采集正文输入'}], {})
-    ]
-    assert (await execute(e, r['id']))['status'] == 'success'
-    article = e.db.sync.scalars(select(e.content.PipelineArticle)).one()
-    assert article.category_id == 900101
-    model, call = e.state.category_requests[0]
-    assert model['id'] == 1 and '管理员实际分类提示词' in call['system_prompt']
-    assert '真实采集正文输入' in call['prompt']
-
-
-@pytest.mark.asyncio
-async def test_legacy_paper_classification_never_receives_fulltext_and_failure_retries(env) -> None:
-    e = env
-    await configured_category(e, kind='paper')
-    s = await source(e, type='paper')
-    r = await enqueue(e, s['id'])
-    legacy = await e.repo.run(e.db, r['id'])
-    legacy.config_snapshot = {
-        key: value for key, value in legacy.config_snapshot.items() if not key.startswith('processing_')
-    }
-    await e.db.commit()
-    e.state.batches = [
         e.batch(
-            [{'title': '论文', 'doi': '10.1234/abstract', 'abstract': '实际摘要', 'content': 'SECRET_FULLTEXT'}], {}
+            [
+                {
+                    'title': '历史未完成文章',
+                    'url': 'https://example.test/legacy',
+                    'content': '原文',
+                    'abstract': '原摘要',
+                }
+            ],
+            {},
         )
     ]
-    e.state.category_reply = '{"match":[true,false]}'
     assert (await execute(e, r['id']))['status'] == 'failed'
     run = await e.repo.run(e.db, r['id'])
-    assert (run.fetched_count, run.saved_count, run.failed_count) == (1, 0, 1)
-    assert 'SECRET_FULLTEXT' not in e.state.category_requests[0][1]['prompt']
-    retry = await e.service.retry_collection_run(e.db, r['id'], registry=e.registry, clock=e.clock)
-    e.state.category_reply = '{"match":true}'
-    e.clock = lambda: NOW + timedelta(seconds=30)
-    assert (await execute(e, retry['id']))['status'] == 'success'
-    assert e.db.sync.scalars(select(e.content.PipelinePaper)).one().category_id == 900101
-
-
-@pytest.mark.asyncio
-async def test_legacy_stop_while_classifying_cancels_model_task_without_writing(env) -> None:
-    e = env
-    await configured_category(e)
-    s = await source(e)
-    r = await enqueue(e, s['id'])
-    legacy = await e.repo.run(e.db, r['id'])
-    legacy.config_snapshot = {
-        key: value for key, value in legacy.config_snapshot.items() if not key.startswith('processing_')
-    }
-    await e.db.commit()
-    cleaned = []
-
-    async def waiting_model(classification_db) -> None:
-        # This offline fake releases its read transaction before simulating an
-        # in-flight model call. The real service is unchanged/main-owned.
-        await classification_db.rollback()
-        async with AsyncMemorySession(e.engine) as other:
-            stopped = await e.service.stop_collection_run(other, r['id'], clock=e.clock)
-            assert stopped['status'] == 'stopping'
-        try:
-            await asyncio.Event().wait()
-        finally:
-            cleaned.append(True)
-
-    e.state.category_reply = waiting_model
-    e.state.batches = [e.batch([{'title': '待分类', 'url': 'https://example.test/classify'}], {})]
-    result = await e.collection.PipelineCollectionService.execute(
-        e.db, r['id'], registry=e.registry, clock=e.clock, pulse_seconds=0.005
-    )
-    assert result['status'] == 'cancelled' and cleaned
+    assert '修复后新建手动运行' in run.error
+    assert not e.state.category_requests
     assert not e.db.sync.scalars(select(e.content.PipelineArticle)).all()
+    assert not e.db.sync.scalars(select(e.content.PipelinePaper)).all()
+    with pytest.raises(e.conflict):
+        await e.service.retry_collection_run(e.db, r['id'], registry=e.registry, clock=e.clock)
+    recovered = await enqueue(e, s['id'], request_id='manual:processing-configured')
+    assert (await execute(e, recovered['id']))['status'] == 'success'
 
 
 @pytest.mark.asyncio
@@ -1309,7 +1364,11 @@ async def test_formal_frontend_routes_call_services_with_camelcase_and_optional_
         assert (await client.post(f'/pipeline/tasks/runs/{run_id}/retry')).status_code == 409
         disabled = await client.delete(f'/pipeline/sources/{s["id"]}')
         assert disabled.json()['data']['isEnabled'] is False
-        assert (await client.post(f'/pipeline/tasks/{s["id"]}/run')).status_code == 409
+        trial = await client.post(f'/pipeline/tasks/{s["id"]}/run')
+        assert trial.status_code == 200 and trial.json()['data']['status'] == 'queued'
+        task = (await client.get('/pipeline/tasks')).json()['data']['rows'][0]
+        assert task['isEnabled'] is False and task['latestRunId'] == trial.json()['data']['runId']
+        assert (await client.post(f'/pipeline/tasks/{s["id"]}/run', headers={'x-role': 'user'})).status_code == 403
         updated = await client.put(
             f'/pipeline/sources/{s["id"]}',
             json={'name': '已更新', 'type': 'paper', 'adapter': 'crossref_works', 'isEnabled': True},

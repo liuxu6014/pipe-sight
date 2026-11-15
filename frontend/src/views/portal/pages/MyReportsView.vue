@@ -5,8 +5,8 @@
       <el-button v-if="query.q || query.status !== 'all'" @click="query.q = ''; query.status = 'all'">清除筛选</el-button>
     </div>
     <div class="ps-personal-status ps-segmented-row"><el-segmented v-model="query.status" :options="statusTabs.map(tab => ({ label: `${tab.label} ${tab.count}`, value: tab.value }))" aria-label="报告生成状态" /></div>
-    <div v-if="loadError" class="ps-inline-state is-warning" role="alert"><span>部分报告记录未加载，以下仅显示已加载记录。</span><el-button plain :loading="store.dataLoading" @click="store.hydrate(true)">重新加载</el-button></div>
-    <el-skeleton v-if="store.dataLoading && !store.dataLoaded" :rows="5" animated />
+    <div v-if="loadError" class="ps-inline-state is-warning" role="alert"><span>部分报告记录未加载，以下仅显示已加载记录。</span><el-button plain :loading="store.dataLoading" @click="refresh">重新加载</el-button></div>
+    <el-skeleton v-if="loading && !rows.length" :rows="5" animated />
     <template v-else>
       <div class="ps-list-scroll" tabindex="0" aria-label="个人报告记录">
       <section class="ps-personal-report-list" aria-label="我的报告列表">
@@ -19,12 +19,16 @@
       </section>
       <PortalEmptyState v-if="!visibleRows.length && !loadError" :title="query.q || query.status !== 'all' ? '没有匹配记录' : '还没有报告记录'" :description="query.q || query.status !== 'all' ? '请调整关键词或生成状态。' : '科研报告与情报简报的生成进度、失败记录和结果都在这里查看。'" />
       </div>
+      <el-pagination v-if="total" v-model:current-page="page" v-model:page-size="pageSize" :total="total" :page-sizes="[10,20,50]" layout="total, sizes, prev, pager, next" />
     </template>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, ref, watch, onBeforeUnmount } from 'vue'
+import { listPipelineResearchReports } from '@/api/pipeline/intelligence'
+import { usePagedResults } from '@/utils/portal/usePagedResults'
+import { reportSummaryRow } from '@/utils/portal/reportSummary'
 import { useRouter } from 'vue-router'
 import usePortalStore from '@/store/modules/portal'
 import useUserStore from '@/store/modules/user'
@@ -36,18 +40,25 @@ const router = useRouter()
 const store = usePortalStore()
 const user = useUserStore()
 const query = useListQuery({ q: '', status: 'all' })
-const rows = computed(() => buildPersonalReports({ reports: [...store.researchReports, ...store.digestReports], tasks: store.tasks, userId: user.id }))
+const page = ref(1), pageSize = ref(10)
+const params = computed(() => ({ pageNum: page.value, pageSize: pageSize.value, keyword: query.q, status: query.status }))
+const { rows: pageRows, total, error: loadError, loading, refresh } = usePagedResults(listPipelineResearchReports, params, computed(() => store.workspaceEpoch), page)
+const rows = computed(() => pageRows.value.map(reportSummaryRow))
+watch([() => query.q, () => query.status, pageSize], () => { page.value = 1 }, { flush: 'sync' })
 const statusTabs = computed(() => [
   { value: 'all', label: '全部' }, { value: 'active', label: '生成中' }, { value: 'generated', label: '已生成' }, { value: 'failed', label: '失败' }, { value: 'cancelled', label: '已取消' }
-].map(tab => ({ ...tab, count: rows.value.filter(row => tab.value === 'all' || row.status === tab.value).length })))
-const visibleRows = computed(() => rows.value.filter(row => (query.status === 'all' || row.status === query.status) && (!query.q || `${row.title} ${row.typeLabel}`.toLocaleLowerCase().includes(query.q.toLocaleLowerCase()))))
-const loadError = computed(() => store.sectionErrors?.tasks || store.sectionErrors?.reports || store.sectionErrors?.digests)
+].map(tab => ({ ...tab, count: tab.value === query.status ? total.value : '—' })))
+const visibleRows = rows
+
+let refreshTimer
+watch([rows, loading], () => { clearTimeout(refreshTimer); if (!loading.value && rows.value.some(row => row.status === 'active')) refreshTimer = setTimeout(refresh, 5000) })
+onBeforeUnmount(() => clearTimeout(refreshTimer))
 function rowAction(row) { return row.hasOutput ? '编辑 / 导出' : row.status === 'failed' ? '查看原因 / 重试' : row.status === 'cancelled' ? '查看 / 重新生成' : row.status === 'generated' ? '查看生成记录' : '查看进度' }
 function rowHint(row) {
   if (row.hasOutput) return row.requiresReview ? '已生成草稿，需复核后使用。' : '可查看、编辑和导出；发布状态以报告详情为准。'
   return ({ active: `当前进度 ${row.progress}%`, failed: '查看失败原因后可重新生成。', cancelled: '已取消，可按原配置重新生成。', generated: '任务已完成，结果记录尚未同步，可进入生成记录查看。' })[row.status]
 }
-onMounted(() => store.hydrate())
+
 </script>
 
 <style scoped>

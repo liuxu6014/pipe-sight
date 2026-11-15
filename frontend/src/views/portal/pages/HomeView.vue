@@ -47,7 +47,7 @@
         <li v-for="item in latestItems" :key="`${item.kind}-${item.id}`">
           <el-button :auto-insert-space="false" native-type="button" class="ps-home-latest-item ps-ui-control" @click="openPortalContent(router, item.path)">
             <img v-if="item.cover_image" :src="item.cover_image" alt="文章配图" loading="lazy" />
-            <span class="ps-home-latest-copy"><span class="ps-home-item-meta"><b>{{ item.kindLabel }}</b><time>{{ item.date }}</time></span><strong>{{ item.title }}</strong><span class="ps-home-item-summary">{{ item.summary || '摘要未提供，可进入详情阅读。' }}</span><small>{{ item.source || '来源未提供' }}</small></span><ArrowRight class="ps-home-latest-arrow" />
+            <span class="ps-home-latest-copy"><span class="ps-home-item-meta"><b>{{ item.kindLabel }}</b><time v-if="item.date">{{ item.date }}</time></span><strong>{{ item.title }}</strong><span class="ps-home-item-summary">{{ item.summary || '摘要未提供，可进入详情阅读。' }}</span><small>{{ item.source || '来源未提供' }}</small></span><ArrowRight class="ps-home-latest-arrow" />
           </el-button>
         </li>
       </ul>

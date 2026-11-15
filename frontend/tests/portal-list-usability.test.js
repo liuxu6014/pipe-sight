@@ -1,3 +1,5 @@
+import { usePagedResults } from '../src/utils/portal/usePagedResults.js'
+import { reportSummaryRow } from '../src/utils/portal/reportSummary.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -88,8 +90,26 @@ async function mountPage(name, { query = {}, api = {}, documents = [], pageProps
     async hydrate() {}
   })
   const empty = async () => ({ data: { rows: [], total: 0 } })
+  const serverPage = (rows, params) => ({ data: { rows: rows.slice((params.pageNum - 1) * params.pageSize, params.pageNum * params.pageSize), total: rows.length } })
+  const listDocuments = async params => {
+    const groups = { '处理中': ['解析中', '待解析', '等待解析', '待安全扫描', 'queued', 'parsing'], '异常': ['解析失败', '已隔离', '扫描失败'], '已解析': ['已解析', 'indexed'] }
+    const rows = store.liveDocuments.filter(row => (!params.keyword || `${row.name || ''} ${row.summary || ''}`.includes(params.keyword))
+      && (!params.status || params.status === 'all' || (groups[params.status] || [params.status]).includes(row.status || row.parseStatus)))
+    return serverPage(rows, params)
+  }
+  const listReports = async params => {
+    const digest = params.kind !== 'research'
+    const types = { '周报': 'weekly', '月报': 'monthly', '日报': 'daily' }
+    let rows = (digest ? store.digestReports : store.researchReports).filter(row => row.ownerId === undefined || row.ownerId === 7).map(row => ({ ...row, hasOutput: true, listStatus: 'generated', reportType: types[row.reportType || row.type] || row.reportType || row.type }))
+    if (!digest) rows.push(...store.tasks.filter(row => !['completed', 'generated'].includes(row.status)).map(row => ({ ...row, jobId: row.id, hasOutput: false, listStatus: ['running', 'queued'].includes(row.status) ? 'active' : row.status })))
+    rows = rows.filter(row => (!params.keyword || row.title.includes(params.keyword))
+      && (!params.status || params.status === 'all' || row.listStatus === params.status)
+      && (params.kind === 'research' || params.kind === 'digest' || params.kind === 'brief' && ['weekly', 'monthly'].includes(row.reportType) || row.reportType === params.kind))
+    if (params.sort?.startsWith('title')) rows.sort((a, b) => a.title.localeCompare(b.title, 'zh-CN') * (params.sort === 'title-desc' ? -1 : 1))
+    return serverPage(rows, params)
+  }
   const injected = {
-    ...vue, useRoute, useRouter, ...normalizers,
+    ...vue, usePagedResults, reportSummaryRow, useRoute, useRouter, ...normalizers,
     openPortalContent: (router, path) => router.push(path),
     useListQuery, useListRequest, useListWorkspace, validPage, materialBasketReason, cleanSummary, cleanResultMeta, combineLatest, newsDate, resultPath,
     usePortalStore: () => store, periodOverlaps, isDigestType, useBasketSelection, useBasketParsing, buildLibraryItems, libraryItemPath, libraryItemReason, prepareLibrarySelection,
@@ -101,11 +121,11 @@ async function mountPage(name, { query = {}, api = {}, documents = [], pageProps
     ElMessageBox: { confirm: async () => {} },
     ...Object.fromEntries(['Collection', 'ChatDotRound', 'Document', 'DocumentAdd', 'Reading', 'Plus', 'Refresh', 'ArrowRight', 'Grid', 'List', 'Search', 'Star', 'StarFilled', 'Filter', 'Close', 'MoreFilled', 'UploadFilled', 'WarningFilled', 'InfoFilled'].map(icon => [icon, {}])),
     getPipelineContentFilters: empty, listPipelineIntelligence: empty, searchPipelineIntelligence: empty, getPipelinePortalOverview: empty,
-    listPipelineTemplates: empty, listPipelineDigestSchedules: empty, listPipelineResearchJobs: empty, listPipelineResearchReports: empty,
+    listPipelineTemplates: empty, listPipelineDigestSchedules: empty, listPipelineResearchJobs: empty, listPipelineResearchReports: listReports,
     setTimeout: () => 0, clearTimeout() {},
     exportPipelineResearchReport: empty, deletePipelineDigestSchedule: empty, runPipelineDigestSchedule: empty, updatePipelineDigestSchedule: empty,
     savePipelineWorkspaceItem: empty, deletePipelineWorkspaceItem: empty,
-    deletePipelineKnowledgeDocument: empty, reparsePipelineKnowledgeDocument: empty, uploadPipelineKnowledgeDocument: empty, listPipelineKnowledgeDocuments: empty,
+    deletePipelineKnowledgeDocument: empty, reparsePipelineKnowledgeDocument: empty, uploadPipelineKnowledgeDocument: empty, listPipelineKnowledgeDocuments: listDocuments,
     ...api, ...timers
   }
   const { descriptor } = parse(sources[name])
@@ -137,10 +157,10 @@ async function mountPage(name, { query = {}, api = {}, documents = [], pageProps
 test('knowledge parsing automatically refreshes without resetting controls and stops when complete', async () => {
   const timers = new Map()
   let token = 0
-  let rows = Array.from({ length: 25 }, (_, i) => ({ id: `doc-${i}`, name: `资料${i}`, status: i === 0 ? '解析中' : '已解析', type: '内部文献' }))
+  let rows = Array.from({ length: 25 }, (_, i) => ({ id: `doc-${i}`, name: `资料${i}`, status: i === 10 ? '解析中' : '已解析', type: '内部文献' }))
   const ctx = await mountPage('KnowledgeView', { documents: rows, query: { q: '资料', page: '2' }, timers: {
     setTimeout: (callback, ms) => { assert.equal(ms, 3000); timers.set(++token, callback); return token }, clearTimeout: id => timers.delete(id)
-  }, api: { listPipelineKnowledgeDocuments: async () => ({ data: { rows } }) } })
+  }, api: { listPipelineKnowledgeDocuments: async params => ({ data: { rows: rows.slice((params.pageNum - 1) * params.pageSize, params.pageNum * params.pageSize), total: rows.length } }) } })
   try {
     assert.equal(timers.size, 1)
     rows = rows.map(row => ({ ...row, status: '已解析' }))
@@ -172,14 +192,28 @@ test('knowledge retry is single-flight and immediately resumes tracking', async 
   } finally { ctx.close() }
 })
 
+test('knowledge first page failure does not restore stale documents from the store', async () => {
+  const ctx = await mountPage('KnowledgeView', { documents: [{ id: '44', name: '旧会话私有资料', status: '已解析' }], api: {
+    listPipelineKnowledgeDocuments: async () => { throw new Error('当前账户列表未加载') }
+  } })
+  try {
+    assert.deepEqual(ctx.page.documents.value, [])
+    assert.equal(ctx.page.total.value, 0)
+    assert.equal(ctx.page.documentsError.value, '当前账户列表未加载')
+    assert.equal(ctx.store.liveDocuments.length, 1)
+  } finally { ctx.close() }
+})
+
 test('knowledge refresh retains documents on failure and ignores results after unmount', async () => {
-  let fail = true
+  let fail = false, initial = true
   const pending = deferred()
   const doc = { id: 'doc', name: '资料', status: '解析中' }
   const ctx = await mountPage('KnowledgeView', { documents: [doc], api: {
-    listPipelineKnowledgeDocuments: async () => { if (fail) throw new Error('离线'); return pending.promise }
+    listPipelineKnowledgeDocuments: async () => { if (initial) return { data: { rows: [doc], total: 1 } }; if (fail) throw new Error('离线'); return pending.promise }
   } })
   try {
+    initial = false
+    fail = true
     await ctx.page.refreshParsingDocuments()
     assert.equal(ctx.page.documents.value[0].status, '解析中')
     assert.match(ctx.page.parsingRefreshError.value, /自动重试/)
@@ -188,7 +222,7 @@ test('knowledge refresh retains documents on failure and ignores results after u
     ctx.close()
     pending.resolve({ data: { rows: [{ ...doc, status: '已解析' }] } })
     await refresh
-    assert.equal(ctx.store.liveDocuments[0].status, '解析中')
+    assert.equal(ctx.page.documents.value[0].status, '解析中')
   } finally { ctx.close() }
 })
 
@@ -213,11 +247,13 @@ test('knowledge retry respects ownership and leaves failed documents retryable a
 test('knowledge refresh cannot overwrite a newer retry with an older list response', async () => {
   const doc = { id: 'doc', name: '资料', status: '解析中' }
   const pending = deferred()
+  let initial = true
   const ctx = await mountPage('KnowledgeView', { documents: [doc], api: {
-    listPipelineKnowledgeDocuments: async () => pending.promise,
+    listPipelineKnowledgeDocuments: async () => { if (initial) return { data: { rows: [doc], total: 1 } }; return pending.promise },
     reparsePipelineKnowledgeDocument: async () => ({ data: { ...doc, status: '待解析' } })
   } })
   try {
+    initial = false
     const refresh = ctx.page.refreshParsingDocuments()
     await ctx.page.reparse(doc)
     pending.resolve({ data: { rows: [{ ...doc, status: '解析失败' }] } })
@@ -248,7 +284,7 @@ test('research reports use the selected page size and reset or clamp their page'
   const ctx = await mountPage('ResearchWorkbenchView')
   try {
     ctx.store.researchReports = Array.from({ length: 25 }, (_, i) => ({ id: `r${i}`, ownerId: 7, title: `报告${i}`, type: '科研报告' }))
-    await settle()
+    await ctx.page.loadReportPage(); await settle()
     assert.equal(ctx.page.pagedReports.value.length, 10)
     ctx.page.currentPage.value = 3; await settle()
     assert.equal(ctx.page.pagedReports.value.length, 5)
@@ -285,23 +321,62 @@ test('research workspace refreshes active jobs only and stops polling at termina
     setTimeout(callback, ms) { assert.equal(ms, 5000); scheduled.set(++counter, callback); return counter },
     clearTimeout(id) { scheduled.delete(id) },
   }, api: {
-    listPipelineResearchJobs: async () => { calls++; return { data: { rows: [{ id: '70', title: '目标报告', type: 'research', status, progress: status === 'completed' ? 100 : 35 }] } } },
-    listPipelineResearchReports: async () => ({ data: { rows: [] } }),
+    listPipelineResearchJobs: async () => { assert.fail('列表轮询应只加载分页summary，不加载全量jobs') },
+    listPipelineResearchReports: async () => { calls++; return { data: { rows: [{ id: '70', jobId: '70', title: '目标报告', type: 'research', status, hasOutput: status === 'completed', listStatus: status === 'completed' ? 'generated' : 'active', progress: status === 'completed' ? 100 : 35 }], total: 1 } } },
   } })
   try {
     assert.equal(calls, 1)
     assert.equal(scheduled.size, 1)
-    assert.equal(ctx.page.filteredReports.value[0].progress, 35)
+    assert.equal(ctx.page.researchReports.value[0].progress, 35)
     ctx.page.pageSize.value = 20
     status = 'completed'
     const [id, callback] = scheduled.entries().next().value
     scheduled.delete(id); await callback(); await settle()
-    assert.equal(ctx.page.filteredReports.value[0].status, 'generated')
+    assert.equal(ctx.page.researchReports.value[0].status, 'generated')
     assert.equal(ctx.page.keyword.value, '目标报告')
     assert.equal(ctx.page.pageSize.value, 20)
     assert.equal(scheduled.size, 0)
   } finally { ctx.close() }
   assert.equal(scheduled.size, 0)
+})
+
+test('digest report summary polling preserves page and filters and stops after completion', async () => {
+  const timers = new Map(), calls = []
+  let token = 0, finished = false
+  const ctx = await mountPage('DigestListView', { timers: {
+    document: { hidden: false },
+    setTimeout(callback, ms) { assert.equal(ms, 5000); timers.set(++token, callback); return token },
+    clearTimeout(id) { timers.delete(id) },
+  }, api: {
+    listPipelineResearchReports: async params => {
+      calls.push({ ...params })
+      return { data: { rows: [{ id: '77', jobId: '88', title: '目标周报', reportType: 'weekly', status: finished ? 'completed' : 'running', listStatus: finished ? 'generated' : 'active', hasOutput: finished, progress: finished ? 100 : 42 }], total: 23 } }
+    }
+  } })
+  try {
+    ctx.page.date.value = ['2026-11-01', '2026-11-07']
+    ctx.page.keyword.value = '目标'
+    await delay(210); await settle()
+    ctx.page.currentPage.value = 2
+    await settle()
+    assert.equal(timers.size, 1)
+    assert.equal(ctx.page.pagedReports.value[0].progress, 42)
+    assert.equal(ctx.page.pagedReports.value[0].status, '生成中')
+    const before = calls.length
+    finished = true
+    const [id, callback] = timers.entries().next().value
+    timers.delete(id); callback(); await settle()
+    assert.equal(calls.length, before + 1)
+    assert.equal(calls.at(-1).pageNum, 2)
+    assert.equal(calls.at(-1).keyword, '目标')
+    assert.equal(calls.at(-1).start, '2026-11-01')
+    assert.equal(calls.at(-1).end, '2026-11-07')
+    assert.equal(ctx.page.currentPage.value, 2)
+    assert.equal(ctx.page.pagedReports.value[0].status, '已完成')
+    assert.equal(ctx.page.pagedReports.value[0].progress, 100)
+    assert.equal(timers.size, 0)
+  } finally { ctx.close() }
+  assert.equal(timers.size, 0)
 })
 
 test('home inline search sends the selected size and resets its page on size change', async () => {
@@ -361,7 +436,7 @@ test('digest reports and schedules paginate separately and reset on tab changes'
   try {
     ctx.store.digestReports = Array.from({ length: 25 }, (_, i) => ({ id: `d${i}`, title: `简报${i}`, type: '周报' }))
     ctx.page.schedules.value = Array.from({ length: 23 }, (_, i) => ({ id: `s${i}`, name: `计划${i}` }))
-    await settle()
+    await ctx.page.loadReports(); await settle()
     assert.equal(ctx.page.pagedReports.value.length, 10)
     ctx.page.currentPage.value = 3; await settle()
     assert.equal(ctx.page.pagedReports.value.length, 5)
@@ -390,7 +465,7 @@ test('digest list exposes only weekly and monthly reports without changing store
     ]
     ctx.store.digestReports = rows
     const snapshot = JSON.stringify(rows)
-    await settle()
+    await ctx.page.loadReports(); await settle()
     assert.deepEqual(ctx.page.pagedReports.value.map(row => row.id), ['weekly', 'monthly', 'weekly-code'])
     assert.equal(ctx.page.listTotal.value, 3)
     ctx.page.activeTab.value = '周报'; await settle()
@@ -441,16 +516,22 @@ test('unified research page includes outputs and unfinished jobs and preserves o
   try {
     ctx.store.researchReports = [{ id: '3001', ownerId: 7, title: '科研成果', type: '科研报告' }, { id: '3008', ownerId: 8, title: '他人成果' }]
     ctx.store.tasks = [{ id: '3002', status: 'completed', reportId: '3001', title: '已完成任务' }, { id: '3004', status: 'failed', title: '失败任务', reportType: 'research-demand' }, { id: 't3', status: 'running', title: '生成任务', progress: 42, reportType: 'research-demand' }]
+    ctx.page.status.value = ''
+    await ctx.page.loadReportPage(); await settle()
+    assert.equal(ctx.page.total.value, 3)
+    assert.deepEqual(ctx.page.researchReports.value.map(x => x.title), ['科研成果', '失败任务', '生成任务'])
+    ctx.page.status.value = 'failed'
     await settle()
-    assert.equal(ctx.page.researchReports.value.length, 3)
-    assert.deepEqual(ctx.page.filteredReports.value.map(x => x.title), ['失败任务'])
-    assert.match(ctx.page.filteredReports.value[0].path, /tasks\/3004/)
+    assert.equal(ctx.page.total.value, 1)
+    assert.deepEqual(ctx.page.researchReports.value.map(x => x.title), ['失败任务'])
+    assert.match(ctx.page.researchReports.value[0].path, /tasks\/3004/)
     await ctx.router.replace({ path: '/portal/research', query: { status: 'completed' } })
     await settle()
     assert.equal(ctx.page.status.value, 'generated')
-    assert.deepEqual(ctx.page.filteredReports.value.map(x => x.title), ['科研成果'])
+    assert.deepEqual(ctx.page.researchReports.value.map(x => x.title), ['科研成果'])
     ctx.page.status.value = 'active'
-    assert.equal(ctx.page.filteredReports.value[0].progress, 42)
+    await settle()
+    assert.equal(ctx.page.researchReports.value[0].progress, 42)
     assert.equal(ctx.page.activeView, undefined)
     assert.doesNotMatch(sources.ResearchWorkbenchView, /报告模板|loadReportTemplates|listPipelineTemplates/)
     assert.doesNotMatch(sources.ResearchWorkbenchView, /ps-research-list-heading|<h2>报告列表/)
@@ -729,12 +810,13 @@ test('knowledge paginates filtered real data and returns to a valid page after d
   try {
     assert.equal(ctx.page.pagedDocuments.value.length, 3)
     ctx.store.knowledgeDocuments.splice(20)
-    await settle()
+    await ctx.page.loadDocumentPage(); await settle()
     assert.equal(ctx.page.currentPage.value, 2)
     ctx.page.keyword.value = '资料1'
-    await settle()
+    await delay(210); await settle()
     assert.equal(ctx.page.currentPage.value, 1)
-    assert.equal(ctx.page.filteredDocuments.value.length, 11)
+    assert.equal(ctx.page.total.value, 11)
+    assert.equal(ctx.page.filteredDocuments.value.length, 10)
     assert.doesNotMatch(sources.KnowledgeView, /value="项目组可见"|value="受限"/)
   } finally { ctx.close() }
 })
@@ -744,11 +826,12 @@ test('upload library only manages files and ignores legacy type filters', async 
   try {
     ctx.store.basket = [{ id: '26', type: 'paper', title: '论文' }, { id: '18', type: 'article', title: '新闻' }]
     await settle()
-    assert.equal(ctx.page.libraryItems.value.length, 12)
+    assert.equal(ctx.page.total.value, 12)
+    assert.equal(ctx.page.libraryItems.value.length, 10)
     assert.ok(ctx.page.libraryItems.value.every(item => item.kind === 'document'))
     assert.doesNotMatch(sources.KnowledgeView, /v-model="libraryKind"|label="全部类型"|<el-checkbox|新建报告|createFromSelection|ps-library-selection-tools/)
     ctx.page.keyword.value = '上传11'
-    await settle()
+    await delay(210); await settle()
     assert.deepEqual(ctx.page.filteredDocuments.value.map(item => item.id), ['111'])
     ctx.page.openDocument(ctx.page.filteredDocuments.value[0])
     await settle()
@@ -772,6 +855,7 @@ test('library status filters group parsing and scan states and support old filte
     assert.deepEqual(matchingStatuses(), statuses.slice(1, 5))
     assert.equal(ctx.router.currentRoute.value.query.status, '处理中')
     ctx.page.parseStatus.value = '已解析'
+    await settle()
     assert.deepEqual(matchingStatuses(), ['已解析'])
   } finally { ctx.close() }
 })
@@ -839,14 +923,23 @@ test('duplicate upload feedback explicitly says that the existing material was r
 })
 
 test('knowledge clamps restored pages and distinguishes its own loading error from unrelated sections', async () => {
-  const ctx = await mountPage('KnowledgeView', { query: { page: '99' }, documents: [{ id: '3005', name: '资料', status: '已解析' }] })
+  let fail = false
+  const ctx = await mountPage('KnowledgeView', { query: { page: '99' }, api: {
+    listPipelineKnowledgeDocuments: async () => {
+      if (fail) throw new Error('当前分页请求失败')
+      return { data: { rows: [{ id: '3005', name: '资料', status: '已解析' }], total: 1 } }
+    }
+  } })
   try {
     assert.equal(ctx.page.currentPage.value, 1)
     ctx.store.sectionErrors = { reports: '报告失败', documents: '' }
     ctx.store.dataError = '部分数据加载失败'
     assert.equal(ctx.page.documentsError.value, '')
     ctx.store.sectionErrors.documents = '资料获取失败'
-    assert.equal(ctx.page.documentsError.value, '资料获取失败')
+    assert.equal(ctx.page.documentsError.value, '')
+    fail = true
+    await ctx.page.loadDocumentPage()
+    assert.equal(ctx.page.documentsError.value, '当前分页请求失败')
   } finally { ctx.close() }
 })
 

@@ -64,8 +64,8 @@
           <div v-else-if="previewError" class="ps-inline-state is-warning" role="alert"><span>{{ previewError }}</span><el-button plain @click="refreshPreview">重试</el-button></div>
           <template v-if="!refreshing">
             <p v-if="previewTruncated" role="status">结果较多，请缩小筛选范围。</p>
-            <div v-for="item in candidateItems" :key="item.id" class="ps-material-option"><el-checkbox :model-value="selectedCandidateIds.includes(item.id)" :aria-label="`选择简报资讯：${item.title}`" :disabled="submitting" @change="toggleCandidate(item.id, $event)" /><span><strong>{{ item.title }}</strong><small>{{ item.meta }}</small></span></div>
-            <p v-if="!candidateItems.length && !previewError" class="ps-inspector-empty">暂无匹配资料，请调整日期或筛选条件</p>
+            <div v-for="item in candidateItems" :key="item.id" class="ps-material-option"><el-checkbox :model-value="selectedCandidateIds.includes(item.id)" :aria-label="`选择简报资讯：${item.title}`" :disabled="submitting" @change="toggleCandidate(item.id, $event)" /><span><strong>{{ item.title }}</strong><small>{{ cleanResultMeta(item.meta) }}</small></span></div>
+            <p v-if="!candidateItems.length && !previewError" class="ps-inspector-empty">{{ buildReportPeriod().period.length !== 2 ? '请先选择报告周期，再筛选候选资料' : '暂无匹配资料，请调整日期或筛选条件' }}</p>
           </template>
           </div>
           <div v-if="previewTotal > 0" class="ps-pagination ps-digest-candidate-pagination" aria-label="简报资料列表分页">
@@ -100,6 +100,7 @@ import { displayId, decimalId, requireBusinessId, ID_UPGRADE_NOTICE } from '@/ut
 import { templateGenerationError } from '@/utils/pipeline/compactContract'
 import PersonalTemplateDialog from '../components/PersonalTemplateDialog.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { cleanResultMeta } from '@/utils/portal/discovery'
 import { calendarDate, parseCalendarDate } from '@/utils/portal/businessTime'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -239,6 +240,7 @@ async function refreshPreview() {
   const session = portalStore.workspaceEpoch
   const key = scopeKey.value
   const scope = JSON.parse(key)
+  if (!scope.period || scope.period.length !== 2 || scope.period.some(value => !value) || scope.period[0] > scope.period[1]) { previewError.value = ''; previewPages.value = {}; previewTotal.value = 0; refreshing.value = false; return }
   const page = previewPage.value
   const pageSize = previewPageSize.value
   const pageKey = previewPageKey.value

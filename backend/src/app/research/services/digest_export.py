@@ -21,7 +21,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFError, TTFont
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
-from app.research.services.digest_document import digest_masthead, digest_period
+from app.research.services.digest_document import clean_source_display, digest_masthead, digest_period
 
 TEMPLATE_PATH = Path(__file__).resolve().parents[4] / 'data/templates/digest-reference-v1.docx'
 LINK = re.compile(r'^\[(\d+)\] \[(.+)\]\((https?://[^\s]+)\)$')
@@ -58,6 +58,14 @@ def digest_blocks(content) -> Iterator[tuple[str, str]]:
         elif line == '数据源：':
             yield 'source_label', line
         elif re.match(r'^\[\d+\] ', line):
+            # Saved historical Markdown can contain old provenance notes. Clean
+            # just its visible label for both exporters; never rewrite its URL.
+            match = LINK.fullmatch(line)
+            if match:
+                number, label, url = match.groups()
+                line = f'[{number}] [{clean_source_display(label)}]({url})'
+            else:
+                line = clean_source_display(line)
             yield 'source', line
         else:
             yield 'summary', line

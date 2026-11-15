@@ -13,7 +13,7 @@
     <div class="ps-report-workspace-content ps-list-stack">
       <section class="ps-panel ps-report-main ps-list-stack">
         <div v-if="loadError" class="ps-inline-state is-warning" role="alert"><span>{{ loadError }}</span><el-button plain :loading="refreshing" @click="refreshWorkspace">重试</el-button></div>
-        <el-skeleton v-if="portalStore.dataLoading && !portalStore.dataLoaded" :rows="5" animated />
+        <el-skeleton v-if="pageLoading && !pagedReports.length" :rows="5" animated />
         <template v-else>
           <div ref="listRegion" class="ps-list-scroll ps-report-list-region" aria-label="科研报告列表">
             <el-table :data="pagedReports" row-key="key" :max-height="listHeight" style="width: 100%" class="ps-report-records-table" :default-sort="{ prop: 'updatedAt', order: 'descending' }" @sort-change="changeReportSort">
@@ -42,7 +42,7 @@
               <template #empty><span role="status">{{ loadError ? '列表加载失败，请重试' : keyword || status ? '暂无匹配报告' : '暂无报告' }}</span></template>
             </el-table>
           </div>
-          <div v-if="filteredReports.length" class="ps-pagination" aria-label="科研报告列表分页"><el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :page-sizes="[10, 20, 50]" :total="filteredReports.length" :pager-count="5" layout="total, sizes, ->, prev, pager, next, jumper" background /></div>
+          <div v-if="total" class="ps-pagination" aria-label="科研报告列表分页"><el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :page-sizes="[10, 20, 50]" :total="total" :pager-count="5" layout="total, sizes, ->, prev, pager, next, jumper" background /></div>
         </template>
       </section>
     </div>
@@ -57,7 +57,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import usePortalStore from '@/store/modules/portal'
 import { buildPersonalReports } from '@/utils/portal/personalReports'
 import useUserStore from '@/store/modules/user'
-import { sortResearchReports } from '../utils/reportList'
+import { usePagedResults } from '@/utils/portal/usePagedResults'
+import { reportSummaryRow } from '@/utils/portal/reportSummary'
 import { isDigestType } from '../utils/routing'
 import { canDeleteResearchReport, createResearchRefresh, removeDeletedReport, reportRowActions } from '@/utils/portal/researchWorkspace'
 import { deletePipelineResearchReport, listPipelineResearchJobs, listPipelineResearchReports } from '@/api/pipeline/intelligence'
@@ -79,8 +80,7 @@ watch(listRegion, element => {
   })
   listResizeObserver.observe(element)
 }, { flush: 'post' })
-const refresher = createResearchRefresh({ store: portalStore, loadJobs: listPipelineResearchJobs,
-  loadReports: listPipelineResearchReports, waitForHydration: () => portalStore.hydrate() })
+const refresher = { invalidate: () => invalidateReportPage(), stop: () => invalidateReportPage() }
 let refreshTimer, disposed = false
 function scheduleRefresh() {
   clearTimeout(refreshTimer)
@@ -92,7 +92,7 @@ async function refreshWorkspace() {
   if (disposed || refreshing.value || deletingId.value) return
   const epoch = portalStore.workspaceEpoch
   refreshing.value = true
-  try { await refresher.run() }
+  try { await loadReportPage() }
   catch { if (!disposed && epoch === portalStore.workspaceEpoch) portalStore.sectionErrors.reports = '列表暂时无法更新，已保留原内容，请重试' }
   finally { refreshing.value = false; scheduleRefresh() }
 }
@@ -117,6 +117,7 @@ async function deleteReport(report) {
     if (disposed || epoch !== portalStore.workspaceEpoch || owner !== userStore.id) return
     refresher.invalidate()
     removeDeletedReport(portalStore, id)
+    await loadReportPage()
     ElMessage.success('报告已删除')
   } catch (error) {
     if (error !== 'cancel' && error !== 'close' && !disposed && epoch === portalStore.workspaceEpoch) {
@@ -127,7 +128,6 @@ async function deleteReport(report) {
     scheduleRefresh()
   }
 }
-const researchReports = computed(() => buildPersonalReports({ reports: portalStore.researchReports, tasks: portalStore.tasks.filter(task => !isDigestType(task.reportType || task.type)), userId: userStore.id }))
 const keyword = ref(String(route.query.q || ''))
 const normalizeStatus = value => value === 'completed' ? 'generated' : ['active', 'generated', 'failed', 'cancelled', 'unavailable'].includes(value) ? value : ''
 const status = ref(normalizeStatus(route.query.status))
@@ -140,15 +140,16 @@ function changeReportSort({ prop, order }) {
     : order === 'ascending' ? 'updated-asc' : 'updated-desc'
 }
 const reportStatuses = [{ value: 'active', label: '生成中' }, { value: 'generated', label: '已生成' }, { value: 'failed', label: '失败' }, { value: 'cancelled', label: '已取消' }, { value: 'unavailable', label: '暂无正文' }]
-const loadError = computed(() => portalStore.sectionErrors.reports || portalStore.sectionErrors.tasks || portalStore.sectionErrors.digests)
-const filteredReports = computed(() => researchReports.value.filter(item => (!status.value || item.status === status.value) && (!keyword.value || `${item.title} ${item.typeLabel}`.toLocaleLowerCase().includes(keyword.value.toLocaleLowerCase()))))
-const pagedReports = computed(() => sortResearchReports(filteredReports.value, sort.value).slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value))
-watch([keyword, status, sort, pageSize], () => { currentPage.value = 1 })
-watch(() => filteredReports.value.length, count => { currentPage.value = Math.min(currentPage.value, Math.max(1, Math.ceil(count / pageSize.value))) })
+const params = computed(() => ({ pageNum: currentPage.value, pageSize: pageSize.value, keyword: keyword.value, status: status.value, kind: 'research', sort: sort.value }))
+const { rows: pageRows, total, error: loadError, loading: pageLoading, refresh: loadReportPage, invalidate: invalidateReportPage } = usePagedResults(listPipelineResearchReports, params, computed(() => portalStore.workspaceEpoch), currentPage)
+const researchReports = computed(() => pageRows.value.map(reportSummaryRow))
+const pagedReports = researchReports
+watch([keyword, status, sort, pageSize], () => { currentPage.value = 1 }, { flush: 'sync' })
+
 function statusClass(value) { return ({ active: 'running', generated: 'success', failed: 'danger', cancelled: 'muted' })[value] || 'muted' }
 watch(() => researchReports.value.some(item => item.status === 'active'), scheduleRefresh)
-watch(() => portalStore.workspaceEpoch, () => { clearTimeout(refreshTimer); refresher.invalidate() })
-onMounted(() => { void refreshWorkspace(); if (typeof document !== 'undefined') document.addEventListener('visibilitychange', handleVisibility) })
+watch(() => portalStore.workspaceEpoch, () => { clearTimeout(refreshTimer) })
+onMounted(() => { if (typeof document !== 'undefined') document.addEventListener('visibilitychange', handleVisibility) })
 onBeforeUnmount(() => { listResizeObserver?.disconnect(); disposed = true; clearTimeout(refreshTimer); refresher.stop(); if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', handleVisibility) })
 </script>
 

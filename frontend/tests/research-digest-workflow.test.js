@@ -26,6 +26,8 @@ function setup(name, expose, overrides = {}) {
     useRoute: () => reactive({ query: {}, params: { id: '41' } }), useRouter: () => ({ push() {} }), usePortalStore: () => store,
     ElMessage: { warning() {}, success() {}, error() {}, info() {} }, ElMessageBox: { confirm: write },
     useEvidenceSelection: () => selection,
+    usePagedResults: () => ({ rows: ref([]), total: ref(0), error: ref(''), loading: ref(false), refresh: async () => {} }),
+    listPipelineResearchReports: async () => ({ data: { rows: [], total: 0 } }),
     searchPipelineResearchMaterials: async () => ({ data: { rows: [], total: 0 } }),
     getPipelineIntelligenceDetail() {}, getPipelineKnowledgeDocument() {}, getToken: () => 'mock',
     getCitationPath: () => '', DIGEST_SELECTION_LIMIT: 50,

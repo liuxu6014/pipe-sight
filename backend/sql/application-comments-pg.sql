@@ -1,7 +1,7 @@
--- compact-v16中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；自动计划累计执行结果。
+-- compact-v17中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；自动计划累计执行结果。
 -- 27个业务created_at/updated_at为北京时间timestamp(0)无时区；其他运行时间字段保持原类型。
 -- 普通不透明令牌保留；系统幂等键内嵌ID、显式JSON引用及语义指纹按实体映射核验。
--- 28张基线表349字段，2张保留功能表23字段；共30张物理表372字段。
+-- 28张基线表352字段，2张保留功能表23字段；共30张物理表375字段。
 -- 仅COMMENT及存在性保护块；调用方管理事务，不修改字段、约束或业务数据。
 
 COMMENT ON TABLE public."news_articles" IS '网站与公众号新闻原文及中文译文；每篇最多关联一个类别，无人工审核流程';
@@ -85,6 +85,7 @@ COMMENT ON COLUMN public."knowledge_files"."created_at" IS '上传资料保存�
 COMMENT ON COLUMN public."knowledge_files"."updated_at" IS '资料编辑或解析状态最近更新时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss';
 
 COMMENT ON TABLE public."templates" IS '文章、科研报告与简报生成模板；正文及图片模型由管理员配置，可暂未配置';
+COMMENT ON COLUMN public."templates"."digest_cadence" IS '简报适用周期：weekly周报、monthly月报、all通用；daily仅兼容历史，与名称无关';
 COMMENT ON COLUMN public."templates"."report_type" IS '科研报告类型：research-demand、technology-route、project-demand；旧模板未绑定时为空，不从名称推断';
 COMMENT ON COLUMN public."templates"."id" IS '生成模板数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系';
 COMMENT ON COLUMN public."templates"."user_id" IS '模板所有者ID，关联sys_user.id；每个用户仅可见和管理自己的模板';
@@ -162,6 +163,8 @@ COMMENT ON COLUMN public."report_assets"."created_at" IS '资源生成或导出�
 COMMENT ON COLUMN public."report_assets"."updated_at" IS '资源状态或文件存储结果最近更新时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss';
 
 COMMENT ON TABLE public."digest_schedules" IS '用户周期简报计划；支持每日、指定星期和每月日期，选材配置与生成配置分开';
+COMMENT ON COLUMN public."digest_schedules"."next_retry_at" IS '瞬时派发失败后的最早重试时间，不推进原业务周期';
+COMMENT ON COLUMN public."digest_schedules"."retry_count" IS '当前业务周期连续派发失败次数；成功或手动恢复后清零';
 COMMENT ON COLUMN public."digest_schedules"."id" IS '周期简报计划数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系';
 COMMENT ON COLUMN public."digest_schedules"."user_id" IS '计划所有者ID，关联sys_user.id；周期生成的成果必须属于同一用户';
 COMMENT ON COLUMN public."digest_schedules"."name" IS '用户维护的周期计划名称；用于计划选择和管理';

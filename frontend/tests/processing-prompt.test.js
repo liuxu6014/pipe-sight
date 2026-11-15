@@ -15,7 +15,7 @@ const category = (id, extra = {}) => ({ id, name: `类别${id}`, prompt: `原文
 function page(name, names, mocks = {}) {
   const messages = [], writes = []
   const dependencies = {
-    computed, reactive, ref, onMounted() {}, defineProps: () => ({ section: 'models' }), defineEmits: () => () => {}, ...prompts, ...contract,
+    computed, reactive, ref, watch() {}, onBeforeUnmount() {}, onMounted() {}, defineProps: () => ({ section: 'models' }), defineEmits: () => () => {}, ...prompts, ...contract,
     Files: {}, Document: {}, Plus: {},
     checkPermi: () => true, checkRole: () => true,
     ElMessage: Object.fromEntries(['success', 'warning', 'error', 'info'].map(level => [level, text => messages.push({ level, text })])),
@@ -24,7 +24,8 @@ function page(name, names, mocks = {}) {
     getTranslationModelConfig: async () => ({ data: { modelId: null } }),
     updateTranslationModelConfig: async data => writes.push(['translation-config', copy(data)]),
     listPipelineCategories: async () => ({ data: { rows: [] } }),
-    listPipelineTemplates: async () => ({ data: { rows: [] } }),
+    listPipelineTemplates: async () => ({ data: { rows: [], total: 0, counts: {} } }),
+    getPipelineTemplate: async id => ({ data: { id, name: '模板', purpose: 'research', reportType: 'research-demand', prompt: '规则', sections: [], imageConfig: { enabled: false } } }),
     createPipelineCategory: async data => writes.push(['category-create', copy(data)]),
     deletePipelineCategory: async id => writes.push(['category-delete', id]),
     updatePipelineCategory: async (id, data) => writes.push(['category-update', id, copy(data)]),
@@ -259,12 +260,12 @@ test('report filters retain all templates per exact canonical key and never gues
   const rows = keys.flatMap((reportType, i) => [0, 1].map(n => ({ id: `${i}${n}`, name: `模板${n}`, purpose: 'research', reportType, isEnabled: n === 0 })))
   rows.push({ id: 'legacy', name: '科研需求报告', purpose: 'research', reportType: 'research', isEnabled: true }, { id: 'digest', purpose: 'digest' }, { id: 'article', purpose: 'article' })
   const h = page('template', 'loadTemplates, filteredTemplates, activeCategory, countCategory, unassignedCount, reportTypeOf', {
-    listPipelineTemplates: async () => ({ data: { rows } })
+    listPipelineTemplates: async params => ({ data: { rows: rows.filter(row => row.purpose === 'research' && (!params.reportType || row.reportType === params.reportType)), total: params.reportType ? 2 : 7, counts: { all: 7, unassigned: 1, 'research-demand': 2, 'technology-route': 2, 'project-demand': 2 } } })
   })
   await h.loadTemplates()
-  for (const key of keys) { h.activeCategory.value = key; assert.equal(h.filteredTemplates.value.length, 2); assert.equal(h.countCategory(key), 2) }
+  for (const key of keys) { h.activeCategory.value = key; await h.loadTemplates(); assert.equal(h.filteredTemplates.value.length, 2); assert.equal(h.countCategory(key), 2) }
   assert.equal(h.unassignedCount.value, 1)
-  h.activeCategory.value = 'all'; assert.equal(h.filteredTemplates.value.length, 7)
+  h.activeCategory.value = 'all'; await h.loadTemplates(); assert.equal(h.filteredTemplates.value.length, 7)
   assert.equal(h.reportTypeOf(rows.at(-3)), ''); assert.deepEqual(h.writes, [])
 })
 
@@ -440,7 +441,7 @@ test('personal template deletion hides normal rows and deleted copies can be res
   const calls = []
   const p = page('template', ['loadTemplates', 'templates', 'status', 'filteredTemplates', 'countCategory', 'removeTemplate', 'restoreTemplate'], {
     defineProps: () => ({ personal: true }),
-    listPipelineTemplates: async () => ({ data: { rows: [copy(row)] } }),
+    listPipelineTemplates: async params => { const rows = (params.status === 'deleted') === row.isDeleted ? [copy(row)] : []; return { data: { rows, total: rows.length, counts: { all: rows.length } } } },
     deletePipelineTemplate: async id => { calls.push(['delete', id]); row.isDeleted = true; row.isEnabled = false },
     restorePipelineTemplate: async id => { calls.push(['restore', id]); row.isDeleted = false }
   })
@@ -449,9 +450,11 @@ test('personal template deletion hides normal rows and deleted copies can be res
   assert.equal(p.filteredTemplates.value.length, 0)
   assert.equal(p.countCategory('all'), 0)
   p.status.value = 'deleted'
+  await p.loadTemplates()
   assert.equal(p.filteredTemplates.value[0].id, '501')
   await p.restoreTemplate(p.templates.value[0])
   p.status.value = 'all'
+  await p.loadTemplates()
   assert.equal(p.filteredTemplates.value[0].isEnabled, false)
   assert.deepEqual(calls, [['delete', '501'], ['restore', '501']])
 })
@@ -465,4 +468,41 @@ test('cancelling personal template deletion performs no write', async () => {
   })
   await p.removeTemplate({ id: '501', name: '保留' })
   assert.equal(writes, 0)
+})
+
+test('template paging delegates filter and category totals to server and ignores stale responses', async () => {
+  const requests = [], pending = []
+  const h = page('template', 'loadTemplates, currentPage, pageSize, activeCategory, keyword, templates, total, countCategory, loading', {
+    defineProps: () => ({ personal: true }),
+    listPipelineTemplates: params => { requests.push(params); return new Promise(resolve => pending.push(resolve)) }
+  })
+  const first = h.loadTemplates()
+  h.currentPage.value = 2; h.pageSize.value = 20; h.activeCategory.value = 'digest'; h.keyword.value = '腐蚀'
+  const second = h.loadTemplates()
+  pending[1]({ data: { rows: [{ id: '902', name: '月报模板', purpose: 'digest', digestCadence: 'monthly' }], total: 31, counts: { all: 44, digest: 31 } } })
+  await second
+  pending[0]({ data: { rows: [{ id: '901', name: '过期结果' }], total: 1, counts: {} } })
+  await first
+  assert.equal(h.templates.value[0].id, '902'); assert.equal(h.total.value, 31); assert.equal(h.countCategory('digest'), 31)
+  assert.equal(h.loading.value, false)
+  assert.deepEqual(requests[1], { page: 2, pageSize: 20, keyword: '腐蚀', reportType: 'digest', category: undefined, status: 'all' })
+})
+
+test('digest template saves explicit cadence independently of its display name', async () => {
+  const h = page('template', 'form, saveTemplate, createTemplate, activeCategory', { defineProps: () => ({ personal: true }) })
+  h.activeCategory.value = 'digest'; h.createTemplate()
+  Object.assign(h.form, { name: '腐蚀技术周报', prompt: '仅引用提供的证据', digestCadence: 'monthly' })
+  await h.saveTemplate()
+  const saved = h.writes.find(([kind]) => kind === 'template-create')[1]
+  assert.equal(saved.digestCadence, 'monthly'); assert.equal(saved.name, '腐蚀技术周报')
+})
+
+test('template edit fetches owner-scoped prompt detail rather than editing an incomplete list summary', async () => {
+  const reads = []
+  const h = page('template', 'editTemplate, form, editorVisible', {
+    getPipelineTemplate: async id => { reads.push(id); return { data: { id, name: '本人模板', purpose: 'digest', digestCadence: 'weekly', prompt: '从详情加载的完整提示词', sections: [{ title: '要闻', description: '保留原句引用' }] } } }
+  })
+  await h.editTemplate({ id: '888', name: '本人模板' })
+  assert.deepEqual(reads, ['888']); assert.equal(h.form.prompt, '从详情加载的完整提示词'); assert.equal(h.form.digestCadence, 'weekly')
+  assert.equal(h.editorVisible.value, true); assert.deepEqual(h.writes, [])
 })

@@ -121,6 +121,7 @@ COLUMN_COMMENTS = {
         'updated_at': '资料编辑或解析状态最近更新时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss',
     },
     'templates': {
+        'digest_cadence': '简报适用周期：weekly周报、monthly月报、all通用；daily仅兼容历史，与名称无关',
         'report_type': '科研报告类型：research-demand、technology-route、project-demand；旧模板未绑定时为空，不从名称推断',
         'id': '生成模板数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系',
         'user_id': '模板所有者ID，关联sys_user.id；每个用户仅可见和管理自己的模板',
@@ -198,6 +199,8 @@ COLUMN_COMMENTS = {
         'updated_at': '资源状态或文件存储结果最近更新时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss',
     },
     'digest_schedules': {
+        'next_retry_at': '瞬时派发失败后的最早重试时间，不推进原业务周期',
+        'retry_count': '当前业务周期连续派发失败次数；成功或手动恢复后清零',
         'id': '周期简报计划数值主键；BIGINT正整数，由12张业务表共享序列business_id_seq分配；API以十进制字符串返回，旧字符串ID通过迁移映射保留对应关系',
         'user_id': '计划所有者ID，关联sys_user.id；周期生成的成果必须属于同一用户',
         'name': '用户维护的周期计划名称；用于计划选择和管理',

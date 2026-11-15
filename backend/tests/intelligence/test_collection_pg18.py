@@ -94,8 +94,31 @@ def domain(monkeypatch):
     collection = importlib.import_module('app.intelligence.services.collection')
     sources = importlib.import_module('app.intelligence.services.sources')
     persistence = importlib.import_module('app.intelligence.services.collection_persistence')
+    processing = importlib.import_module('app.intelligence.services.content_processing').ContentProcessingService
     bridge = importlib.import_module('app.intelligence.integrations.public_source_bridge')
     state = SimpleNamespace(batches=[], cleaned=False, clients=[], requests=[])
+
+    async def freeze_processing_provider(db, snapshot):
+        # Rehearse the real PG state machine with an explicit frozen processing
+        # contract, while keeping paid provider I/O outside this offline suite.
+        # Processing admission/output validation have their own service tests.
+        return {
+            **snapshot,
+            'processing_model': {
+                'id': '900999',
+                'provider': 'compatible',
+                'code': 'offline-processor',
+                'base_url': 'https://example.test/processor',
+                'parameters': {},
+            },
+        }
+
+    async def process_records(sessions, snapshot, records):
+        assert snapshot['processing_model']['code'] == 'offline-processor'
+        return records, [(None, False) for _ in records]
+
+    monkeypatch.setattr(processing, 'freeze', freeze_processing_provider)
+    monkeypatch.setattr(processing, 'prepare', process_records)
 
     async def fixed(snapshot, checkpoint):
         try:
@@ -253,9 +276,68 @@ async def test_pg_queued_stop_and_disabled_source_prevent_claim(pg) -> None:
     assert await e.repo.claim(e.db, other['id'], now=e.now, lease_seconds=60) is None
 
 
-async def test_pg_running_stopping_fences_batches_until_executor_ack(pg) -> None:
+async def test_pg_disabled_source_manual_trial_processes_without_enabling_automatic_runs(pg) -> None:
     e = pg
     s = await new_source(e)
+    await e.service.set_enabled(e.db, s['id'], False, registry=e.registry, clock=e.clock)
+    assert await e.service.schedule_due_source(e.db, s['id'], registry=e.registry, clock=e.clock) is None
+    with pytest.raises(e.repository.CollectionConflict, match='已停用'):
+        await e.repo.enqueue(
+            e.db, s['id'], request_id=f'{e.prefix}:disabled-schedule', now=e.now, snapshot={}, trigger_type='schedule'
+        )
+    r = await queue(e, s['id'])
+    e.state.batches = [
+        e.collection.CollectionBatch(
+            [{'title': e.prefix, 'url': f'https://example.test/{e.prefix}', 'content': '手动试采正文'}], {}
+        )
+    ]
+    result = await e.collection.PipelineCollectionService.execute(e.db, r['id'], registry=e.registry, clock=e.clock)
+    assert result['status'] == 'success'
+    run = await e.repo.run(e.db, r['id'])
+    assert run.saved_count == 1 and run.fetched_count == 1 and run.failed_count == 0
+    source = await e.repo.source(e.db, s['id'])
+    assert source.is_enabled is False and source.next_run_at is None
+    with pytest.raises(e.repository.CollectionConflict, match='已停用'):
+        await e.repo.enqueue(
+            e.db,
+            s['id'],
+            request_id=f'{e.prefix}:disabled-retry',
+            now=e.now,
+            snapshot={},
+            trigger_type='retry',
+            parent_id=r['id'],
+        )
+    queued = await queue(e, s['id'])
+    await e.service.set_enabled(e.db, s['id'], False, registry=e.registry, clock=e.clock)
+    assert (await e.repo.run(e.db, queued['id'])).status == 'cancelled'
+    assert await e.repo.claim(e.db, queued['id'], now=e.now, lease_seconds=60) is None
+
+
+async def test_pg_enabled_admission_cannot_bypass_later_direct_configuration_disable(pg) -> None:
+    e = pg
+    s = await new_source(e)
+    run = await e.repo.enqueue(
+        e.db,
+        s['id'],
+        request_id=f'{e.prefix}:forged-trial',
+        now=e.now,
+        snapshot={'_manual_admitted_while_disabled': True},
+    )
+    assert run.config_snapshot['_manual_admitted_while_disabled'] is False
+    current = await e.repo.source(e.db, s['id'])
+    current.is_enabled = False
+    await e.db.commit()
+    assert await e.repo.claim(e.db, run.id, now=e.now, lease_seconds=60) is None
+    run = await e.repo.run(e.db, run.id)
+    assert run.status == 'cancelled' and run.started_at is None and run.stop_requested_at and run.finished_at
+
+
+@pytest.mark.parametrize('enabled', [True, False])
+async def test_pg_running_stopping_fences_batches_until_executor_ack(pg, enabled) -> None:
+    e = pg
+    s = await new_source(e)
+    if not enabled:
+        await e.service.set_enabled(e.db, s['id'], False, registry=e.registry, clock=e.clock)
     r = await queue(e, s['id'])
     token = await claim(e, r['id'])
     result = await e.service.stop_collection_run(e.db, r['id'], clock=e.clock)

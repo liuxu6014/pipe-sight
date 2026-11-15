@@ -30,14 +30,14 @@
           </template>
         </el-table-column>
       </el-table>
-      <el-skeleton v-if="portalStore.dataLoading && !portalStore.dataLoaded" :rows="4" animated />
+      <el-skeleton v-if="reportsLoading && !pagedReports.length" :rows="4" animated />
       <div v-else-if="!filteredReports.length && !currentError" class="ps-empty-state" role="status">暂无简报</div>
     </section>
     <section v-else ref="listRegion" class="ps-panel ps-digest-list ps-schedule-list ps-list-scroll" tabindex="0" aria-label="简报自动任务列表">
       <el-table v-if="pagedSchedules.length" :data="pagedSchedules" row-key="id" :max-height="listHeight" class="ps-digest-records-table ps-schedule-table" style="width: 100%">
         <el-table-column label="名称" min-width="172" header-align="center">
           <template #default="{ row: schedule }">
-            <h2 class="ps-schedule-name">{{ schedule.name }}</h2>
+            <h2 class="ps-schedule-name">{{ schedule.name }}</h2><el-tag v-if="schedule.suspended" type="danger" effect="light">配置待修复</el-tag><small v-if="schedule.lastError" class="ps-schedule-error">{{ schedule.lastError }}</small>
           </template>
         </el-table-column>
         <el-table-column label="关键词" min-width="106" header-align="center">
@@ -64,7 +64,7 @@
             <span v-else aria-label="暂无统计">—</span>
           </template>
         </el-table-column>
-        <el-table-column label="下次执行" min-width="113" header-align="center"><template #default="{ row: schedule }"><span class="ps-schedule-next-run">{{ schedule.enabled ? (formatBusinessTime(schedule.nextRunTime) || '等待调度确认') : '停用' }}</span></template></el-table-column>
+        <el-table-column label="下次执行" min-width="113" header-align="center"><template #default="{ row: schedule }"><span class="ps-schedule-next-run">{{ schedule.suspended ? '已挂起' : schedule.enabled ? (schedule.nextRetryTime ? '重试：' + formatBusinessTime(schedule.nextRetryTime) : formatBusinessTime(schedule.nextRunTime) || '等待调度确认') : '停用' }}</span></template></el-table-column>
         <el-table-column label="操作" min-width="171" header-align="center" align="right">
           <template #default="{ row: schedule }">
             <div class="ps-schedule-actions">
@@ -96,6 +96,9 @@
 <script setup>
 import { formatBusinessTime } from '@/utils/portal/businessTime'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { usePagedResults } from '@/utils/portal/usePagedResults'
+import { reportSummaryRow } from '@/utils/portal/reportSummary'
+import { listPipelineResearchReports } from '@/api/pipeline/intelligence'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Document, Plus, Search } from '@element-plus/icons-vue'
@@ -135,29 +138,31 @@ const exportingId = ref('')
 const schedules = ref([])
 const schedulesLoading = ref(false)
 const schedulesError = ref('')
-let disposed = false, scheduleRequest = 0, refreshTimer
-const currentError = computed(() => activeTab.value === '自动任务' ? schedulesError.value : portalStore.sectionErrors.digests || portalStore.sectionErrors.reports)
-const digestRows = computed(() => portalStore.digestReports
-  .filter(item => ['周报', '月报'].includes(scheduleType(item.reportType || item.type)))
-  .map(item => ({ ...item, ...digestReportState(item) })))
-const reportStatuses = computed(() => [...new Set(digestRows.value.map(item => item.status).filter(Boolean))])
+let disposed = false, scheduleRequest = 0, refreshTimer, reportRefreshTimer
+const currentError = computed(() => activeTab.value === '自动任务' ? schedulesError.value : reportsError.value)
+const reportStatuses = computed(() => ['已完成', '生成中', '生成失败', '已取消'])
 const runningScheduleId = ref('')
 const changingScheduleId = ref('')
 const deletingScheduleId = ref('')
 const tabs = ['全部', '周报', '月报', '自动任务']
 function isDaily(row) { return ['daily', '日报'].includes(row?.reportType || row?.type) }
-const filteredReports = computed(() => digestRows.value.filter(item => {
-  const matchesDate = periodOverlaps(item, date.value)
-  return (activeTab.value === '全部' || scheduleType(item.reportType || item.type) === activeTab.value) && (status.value === 'all' || item.status === status.value) && (!keyword.value || item.title.includes(keyword.value)) && matchesDate
-}))
 const filteredSchedules = computed(() => schedules.value.filter(item => !keyword.value || item.name.includes(keyword.value)))
 const currentPage = ref(1)
 const pageSize = ref(10)
-const listTotal = computed(() => activeTab.value === '自动任务' ? filteredSchedules.value.length : filteredReports.value.length)
-const pagedReports = computed(() => filteredReports.value.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value))
+const params = computed(() => ({ pageNum: currentPage.value, pageSize: pageSize.value, keyword: keyword.value, status: status.value, kind: ({ '周报': 'weekly', '月报': 'monthly' })[activeTab.value] || 'brief', start: date.value?.[0] || '', end: date.value?.[1] || '' }))
+const { rows: digestRows, total: reportsTotal, error: reportsError, loading: reportsLoading, refresh: loadReports } = usePagedResults(listPipelineResearchReports, params, computed(() => portalStore.workspaceEpoch), currentPage, computed(() => activeTab.value !== '自动任务'))
+const pagedReports = computed(() => digestRows.value.map(item => { const row = reportSummaryRow(item); return { ...row, status: row.hasOutput ? '已完成' : row.statusLabel } }))
+const filteredReports = pagedReports
+function queueReportRefresh() {
+  clearTimeout(reportRefreshTimer)
+  if (disposed || activeTab.value === '自动任务' || reportsLoading.value || reportsError.value || !pagedReports.value.some(row => row.listStatus === 'active')) return
+  reportRefreshTimer = setTimeout(() => { if (typeof document === 'undefined' || !document.hidden) void loadReports(); else queueReportRefresh() }, 5000)
+}
+watch([pagedReports, reportsLoading, reportsError, activeTab], queueReportRefresh)
+const listTotal = computed(() => activeTab.value === '自动任务' ? filteredSchedules.value.length : reportsTotal.value)
 const pagedSchedules = computed(() => filteredSchedules.value.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value))
 watch([keyword, date, status, activeTab, pageSize], () => { currentPage.value = 1 }, { deep: true })
-watch(listTotal, count => { currentPage.value = Math.min(currentPage.value, Math.max(1, Math.ceil(count / pageSize.value))) })
+watch(listTotal, count => { if (activeTab.value === '自动任务') currentPage.value = Math.min(currentPage.value, Math.max(1, Math.ceil(count / pageSize.value))) })
 function typeClass(value) { return ({ '日报': 'daily', '周报': 'weekly', '月报': 'monthly', '自动任务': 'auto' })[value] || 'daily' }
 function statusClass(value) { return ({ '已完成': 'success', '待审核': 'warning', '草稿': 'muted', '运行中': 'running' })[value] || 'muted' }
 function scheduleType(value) { return ({ daily: '日报', weekly: '周报', monthly: '月报' })[value] || value }
@@ -171,7 +176,7 @@ function digestReportState(report) {
   }
 }
 function resetFilters() { keyword.value = ''; date.value = []; status.value = 'all' }
-function refreshCurrent() { return activeTab.value === '自动任务' ? loadSchedules() : portalStore.hydrate(true) }
+function refreshCurrent() { return activeTab.value === '自动任务' ? loadSchedules() : loadReports() }
 function openSources(report) { router.push({ path: `/portal/digests/${report.id}`, query: { panel: 'sources' } }) }
 async function exportDigest(report) {
   if (!hasReportOutput(report)) return ElMessage.warning('当前简报暂无正文，请先查看生成记录')
@@ -217,8 +222,8 @@ function queueScheduleRefresh() {
   refreshTimer = setTimeout(() => { if (typeof document === 'undefined' || !document.hidden) loadSchedules(); else queueScheduleRefresh() }, 15000)
 }
 watch(activeTab, queueScheduleRefresh)
-watch(() => portalStore.workspaceEpoch, () => { scheduleRequest++; schedules.value = []; schedulesLoading.value = false; schedulesError.value = ''; clearTimeout(refreshTimer) })
-onBeforeUnmount(() => { listResizeObserver?.disconnect(); disposed = true; scheduleRequest++; clearTimeout(refreshTimer) })
+watch(() => portalStore.workspaceEpoch, () => { scheduleRequest++; schedules.value = []; schedulesLoading.value = false; schedulesError.value = ''; clearTimeout(refreshTimer); clearTimeout(reportRefreshTimer) })
+onBeforeUnmount(() => { listResizeObserver?.disconnect(); disposed = true; scheduleRequest++; clearTimeout(refreshTimer); clearTimeout(reportRefreshTimer) })
 async function toggleSchedule(schedule) {
   if (isDaily(schedule) || changingScheduleId.value) return
   changingScheduleId.value = schedule.id
@@ -274,7 +279,7 @@ async function removeSchedule(schedule) {
     deletingScheduleId.value = ''
   }
 }
-onMounted(() => { void portalStore.hydrate(true); void loadSchedules() })
+onMounted(() => { void loadSchedules() })
 </script>
 
 <style scoped>
@@ -313,3 +318,5 @@ onMounted(() => { void portalStore.hydrate(true); void loadSchedules() })
   .ps-digest-toolbar > .el-button { margin-left: 0; }
 }
 </style>
+
+<style scoped>.ps-schedule-error { display: block; margin-top: 6px; color: var(--el-color-danger); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }</style>

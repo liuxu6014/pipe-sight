@@ -72,7 +72,7 @@ export function existingSourcePayload(source, changes = {}) {
 }
 
 export function newWechatSourcePayload(form, frequency) {
-  if (!canCreateSourceType(form.sourceType)) throw new Error('仅支持新增公众号，新闻和论文来源由 Excel 白名单管理')
+  if (form.sourceType !== 'wechat') throw new Error('请选择公众号来源')
   const { name, feedUrl } = validateWechatSourceForm(form)
   if (frequency.unit === 'preserve') throw new Error('请选择公众号采集频率')
   return {
@@ -80,6 +80,25 @@ export function newWechatSourcePayload(form, frequency) {
     cron: sourceIntervalCron(frequency), timezone: 'Asia/Shanghai',
     config: { feed_url: feedUrl, limit: 12 }, modelId: null, isEnabled: true
   }
+}
+
+export function configuredSourcePayload(form, frequency, source = null) {
+  const rawType = source?.type || source?.sourceType || form.sourceType
+  const type = rawType === 'news' ? 'website' : rawType
+  if (!canCreateSourceType(type)) throw new Error('请选择支持的来源类型')
+  if (type === 'wechat') return source ? editedWechatSourcePayload(source, form, frequency) : { ...newWechatSourcePayload(form, frequency), isEnabled: false }
+  const name = String(form.name || '').trim()
+  if (!name || name.length > 255) throw new Error('请填写 255 字以内的来源名称')
+  const adapter = type === 'paper' ? 'crossref_works' : 'pipechina_group_news'
+  const url = String(form.url || (type === 'paper' ? 'https://api.crossref.org/works' : 'https://www.pipechina.com.cn/groupnews.html')).trim()
+  const parsed = new URL(url)
+  const host = type === 'paper' ? 'api.crossref.org' : 'www.pipechina.com.cn'
+  if (parsed.protocol !== 'https:' || parsed.hostname !== host || parsed.username || parsed.password || parsed.search || parsed.hash || (parsed.port && parsed.port !== '443') || (type === 'paper' && parsed.pathname !== '/works')) throw new Error(`请使用 ${host} 的 HTTPS 入口`)
+  const limit = Number(form.limit ?? 12)
+  if (!Number.isInteger(limit) || limit < 1 || limit > 30) throw new Error('每次采集数量须为 1～30')
+  const previousConfig = Object.fromEntries(Object.entries(source?.config || {}).filter(([key]) => ['request_timeout', 'total_timeout', 'retry', 'request_interval'].includes(key)))
+  const config = { ...previousConfig, limit, ...(type === 'paper' ? { query: String(form.query || '').trim() || 'oil gas pipeline integrity monitoring', batch_size: source?.config?.batch_size || 5 } : {}) }
+  return { name, type, url, adapter, config, cron: sourceIntervalCron(frequency, sourceCron(source || {})), timezone: source?.timezone || 'Asia/Shanghai', modelId: source?.modelId ?? source?.model_id ?? null, isEnabled: source ? sourceEnabled(source) : false }
 }
 
 function validateWechatSourceForm(form) {

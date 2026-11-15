@@ -3,7 +3,7 @@
 from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import File, Form, Request, Response, UploadFile
+from fastapi import File, Form, Query, Request, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +12,8 @@ from app.infrastructure.services.file_upload import FileUploadSupport
 from app.intelligence.schemas.pipeline import BusinessId, PipelineListModel
 from app.library.schemas.materials import MaterialEditModel
 from app.library.services.materials import MaterialApiService, MaterialFileService
+from app.research.schemas.listing import MaterialListQuery
+from app.research.services.list_queries import material_page
 from app.system.api.dependencies import CurrentUserDependency, CurrentUserModel, PreAuthDependency
 from common.aspect.db_seesion import DBSessionDependency
 from common.http.responses import ResponseUtil
@@ -35,9 +37,11 @@ async def list_pipeline_knowledge_documents(
     request: Request,
     query_db: Annotated[AsyncSession, DBSessionDependency()],
     current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
+    query: Annotated[MaterialListQuery, Query()],
 ) -> Response:
-    data = await MaterialApiService.list_materials(query_db, current_user.user.user_id)
-    return ResponseUtil.success(data=data)
+    return ResponseUtil.success(
+        data=await material_page(query_db, user_id=current_user.user.user_id, **query.model_dump())
+    )
 
 
 @controller.post('/knowledge/documents', summary='上传内部资料')

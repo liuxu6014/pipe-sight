@@ -5,7 +5,7 @@ test('news date formatting removes uncollected zero time but preserves real time
   assert.equal(newsDate('2025-12-04 00:00:00'), '2025-12-04')
   assert.equal(newsDate('2025-12-04 14:32:11'), '2025-12-04 14:32:11')
   assert.equal(newsDate('2024-03'), '2024-03')
-  assert.equal(newsDate(null), '日期未提供')
+  assert.equal(newsDate(null), '')
   assert.equal(cleanResultMeta('来源 · 2025-12-04 00:00:00'), '来源 · 2025-12-04')
   assert.equal(cleanResultMeta('来源 · '), '来源')
 })
@@ -13,7 +13,7 @@ test('latest news and papers are combined by actual publication dates without in
   const rows = combineLatest([{ id: 'n1', publish_time: '2025-12-04' }, { id: 'n2', source_type: 'wechat' }], [{ id: 'p1', publish_time: '2024-03' }])
   assert.deepEqual(rows.map(x => x.id), ['n1', 'p1', 'n2'])
   assert.equal(rows[1].date, '2024-03')
-  assert.equal(rows[2].date, '日期未提供')
+  assert.equal(rows[2].date, '')
 })
 test('search results retain internal detail destinations and remove editorial prefixes', () => {
   assert.equal(resultPath({ type: 'report', id: 'one', report_type: 'weekly' }), '/portal/digests/one')

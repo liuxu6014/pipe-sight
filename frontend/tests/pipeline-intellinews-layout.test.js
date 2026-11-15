@@ -147,10 +147,10 @@ test('hydrates portal pages from pipeline APIs and keeps demo data explicitly op
   assert.match(portalStore, /fallbackDocuments/)
   assert.match(portalStore, /fallbackReports/)
   assert.match(portalHeader, /store\.hydrate\(\)/)
-  assert.match(researchWorkbench, /portalStore\.researchReports/)
+  assert.match(researchWorkbench, /usePagedResults\(listPipelineResearchReports, params/)
   assert.match(researchCreate, /searchPipelineResearchMaterials/)
-  assert.match(digestList, /portalStore\.digestReports/)
-  assert.match(knowledge, /portalStore\.knowledgeDocuments/)
+  assert.match(digestList, /usePagedResults\(listPipelineResearchReports, params/)
+  assert.match(knowledge, /usePagedResults\(listPipelineKnowledgeDocuments, params/)
   assert.doesNotMatch(knowledge, /知识问答/)
 })
 
@@ -351,7 +351,8 @@ test('hardens the user knowledge workspace with real document lifecycle states',
   assert.match(knowledge, /handleUploadExceed/)
   assert.match(knowledge, /ElMessageBox\.confirm/)
   assert.match(knowledge, /reparsePipelineKnowledgeDocument/)
-  assert.match(knowledge, /portalStore\.dataError/)
+  assert.match(knowledge, /const documentsError = pageError/)
+  assert.match(knowledge, /isInitialLoading = computed\(\(\) => pageLoading.value && !documents.value.length\)/)
   assert.match(detail, /getPipelineKnowledgeDocument/)
   assert.match(detail, /资料不存在或无权访问/)
   assert.doesNotMatch(detail, /portalStore\.knowledgeDocuments\[0\]/)
@@ -616,7 +617,8 @@ test('protects backend report export with its explicit management permission', (
 
 test('keeps report reading metadata grounded in persisted records', () => {
   const reportPage = read('../src/views/pipeline/report/index.vue')
-  assert.match(reportPage, /const filteredRows = computed\(\(\) =>/)
+  assert.match(reportPage, /usePagedResults\(listPipelineAdminReports, params/)
+  assert.doesNotMatch(reportPage, /filteredRows\.value\.slice/)
   assert.match(reportPage, /v-for="\(row, index\) in pagedRows"/)
   assert.match(reportPage, /当前条件下暂无成果/)
   assert.doesNotMatch(reportPage, /系统已完成来源汇聚与结构化处理/)
@@ -651,12 +653,13 @@ test('keeps model and Prompt controls aligned with backend permissions', () => {
  assert.doesNotMatch(page, /场景路由|Prompt 版本|调用审计/)
 })
 
-test('source management only offers persistent frequency and enablement plus WeChat creation', () => {
+test('source management configures supported source types and runs permission-guarded manual trials', () => {
  const page = read('../src/views/pipeline/source/index.vue')
- for (const name of ['createPipelineSource','updatePipelineSource','disablePipelineSource','existingSourcePayload','newWechatSourcePayload']) assert.ok(page.includes(name))
- assert.doesNotMatch(page, /runPipelineTask|立即采集|翻译模型/)
- assert.match(page, /@click="openCreateDialog">新增公众号/)
- assert.match(page, /sourceForm, newWechatSourcePayload|newWechatSourcePayload\(sourceForm/)
+ for (const name of ['createPipelineSource','updatePipelineSource','disablePipelineSource','existingSourcePayload','configuredSourcePayload','runPipelineTask']) assert.ok(page.includes(name))
+ assert.doesNotMatch(page, /立即采集|翻译模型/)
+ assert.match(page, /@click="openCreateDialog">新增数据源/)
+ assert.match(page, /configuredSourcePayload\(sourceForm, frequency/)
+ assert.match(page, /canSourceRun && !isExternalSource\(row\)/)
  assert.doesNotMatch(page, /handoffMode|processorSourceCode|InsightHub/)
 })
 
@@ -684,14 +687,16 @@ test('distinguishes collection and report service failures from empty lists', ()
   const reportPage = read('../src/views/pipeline/report/index.vue')
   for (const [page, errorName, reloadHandler, rowsName] of [
     [sourcePage, 'sourceError', 'loadSources', 'rows.value = []'],
-    [taskPage, 'taskError', 'loadTasks', 'taskError.value = error'],
-    [reportPage, 'reportError', 'loadReports', 'rows.value = []']
+    [taskPage, 'taskError', 'loadTasks', 'taskError.value = error']
   ]) {
     assert.match(page, new RegExp(`${errorName} = ref\\(''\\)`))
     assert.match(page, new RegExp(`@click="${reloadHandler}"`))
     assert.match(page, new RegExp(rowsName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   }
   assert.match(taskPage, /class="table-card(?: [^"]*)?"/)
+  assert.match(reportPage, /error: reportError, loading, refresh: loadReports/)
+  assert.match(reportPage, /v-if="reportError"/)
+  assert.match(reportPage, /@click="loadReports"/)
   assert.match(reportPage, /<el-card v-else[^>]*class="panel-card report-list-card ws-list-panel"/)
 })
 

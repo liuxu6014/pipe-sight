@@ -5,7 +5,14 @@ import { formatReportDate, getReportStatusMeta } from '../src/utils/pipeline/rep
 
 test('report editor keeps source and export records without user-facing versions', () => {
   const source = readFileSync(new URL('../src/views/portal/pages/ReportEditorView.vue', import.meta.url), 'utf8')
-  assert.doesNotMatch(source, /质量问题|ps-completeness|mapQualityIssues|locateIssue|qualityIssues/)
+  const template = source.split('<script setup>')[0]
+  // Keep the generic quality/version inspector absent. Recorded deterministic
+  // outline warnings are supported; report-quality-status.test.js exercises
+  // their live, stale and missing-check behavior.
+  assert.doesNotMatch(source, /质量问题|ps-completeness|mapQualityIssues|locateIssue/)
+  assert.doesNotMatch(template, /qualityIssues|qualityScore|qualityStatus|质量评分|title="事实核验通过"|title="质量检查已通过"/)
+  assert.match(template, /class="ps-outline-check-status"[^>]*:title="outlineCheckLabel"[^>]*:description="outlineCheckDescription"[^>]*type="warning"/)
+  assert.match(source, /modelSnapshot\?\.checks\?\.outline/)
   assert.match(source, /const rightTabs = \['引用来源', '导出记录'\]/)
   assert.doesNotMatch(source.split('<script setup>')[0], /版本|report\.version/)
   assert.match(source, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/)
@@ -28,4 +35,6 @@ test('maps persisted report lifecycle statuses without falling back to draft', (
   assert.deepEqual(getReportStatusMeta('published'), { label: '已发布', type: 'success' })
   assert.deepEqual(getReportStatusMeta('archived'), { label: '已归档', type: 'info' })
   assert.deepEqual(getReportStatusMeta('failed'), { label: '生成失败', type: 'danger' })
+  assert.deepEqual(getReportStatusMeta('queued'), { label: '排队中', type: 'primary' })
+  assert.deepEqual(getReportStatusMeta('running'), { label: '生成中', type: 'primary' })
 })

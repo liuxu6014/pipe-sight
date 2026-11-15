@@ -1,6 +1,7 @@
 """简报样例格式与真实选材来源的契约。"""
 
 import json
+from copy import deepcopy
 from io import BytesIO
 from types import SimpleNamespace
 from zipfile import ZipFile
@@ -90,6 +91,17 @@ def test_digest_groups_entries_and_builds_sources_from_frozen_materials() -> Non
     validate_generated_article(text, materials())
 
 
+@pytest.mark.parametrize('publisher', ['新华网（国家管网官网转载）', '新华网(官网核验微信来源)', '新华网（尚未核实）'])
+def test_digest_sources_hide_editorial_notes_without_changing_frozen_evidence(publisher) -> None:
+    selected = materials()
+    selected[0]['source']['name'] = publisher
+    original = deepcopy(selected)
+    text = normalize_digest_document(json.dumps(document()), selected)['content']
+    assert '[检测技术公开报道【新华网】](https://example.org/news)' in text
+    assert publisher not in text
+    assert selected == original
+
+
 @pytest.mark.parametrize('change', ['source', 'summary', 'insight', 'groups', 'markup'])
 def test_invalid_digest_is_not_accepted_as_a_finished_report(change) -> None:
     data = document()
@@ -145,6 +157,34 @@ def test_generated_monthly_masthead_and_sources_fit_together() -> None:
     assert text.splitlines()[0].strip() == '管网科技情报月报'
     assert '2026年10月1日到10月31日' in text
     assert '数据源：' in text
+
+
+def test_export_saved_digest_cleans_source_labels_but_never_changes_markdown_or_urls() -> None:
+    value = report()
+    url = 'https://example.org/官网转载?original=1'
+    value.content = value.content.replace(
+        '[检测技术公开报道【国家管网】](https://example.org/news)',
+        f'[检测技术公开报道【新华网（国家管网官网转载）】]({url})',
+    )
+    original = value.content
+    word = build_docx(value, is_draft=False)[2]
+    with ZipFile(BytesIO(word)) as archive:
+        xml = archive.read('word/document.xml').decode()
+        rels = archive.read('word/_rels/document.xml.rels').decode()
+    assert '检测技术公开报道【新华网】' in xml
+    assert '国家管网官网转载' not in xml
+    assert url in rels
+    pdf = PdfReader(BytesIO(build_pdf(value, is_draft=False)[2]))
+    text = ''.join(page.extract_text() for page in pdf.pages)
+    assert '检测技术公开报道【新华网】' in text
+    assert '国家管网官网转载' not in text
+    links = [
+        annotation.get_object().get('/A', {}).get('/URI')
+        for page in pdf.pages
+        for annotation in page.get('/Annots', [])
+    ]
+    assert url in links
+    assert value.content == original
 
 
 @pytest.mark.parametrize('kind', ['weekly', 'monthly'])

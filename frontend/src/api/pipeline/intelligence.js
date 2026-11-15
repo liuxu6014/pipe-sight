@@ -107,6 +107,10 @@ export function listPipelineTemplates(params) {
   })
 }
 
+export function getPipelineTemplate(templateKey) {
+  return request({ url: `/pipeline/templates/${requireBusinessId(templateKey)}`, method: 'get' })
+}
+
 export function installPipelineTemplatePresets() {
   return request({ url: '/pipeline/templates/presets', method: 'post' })
 }
@@ -176,10 +180,10 @@ export function stopPipelineCollectionRun(runId) {
   return request({ url: `/pipeline/tasks/runs/${encodeURIComponent(requireBusinessId(runId))}/stop`, method: 'post' })
 }
 
-export function listPipelineReports() {
+export function listPipelineReports(params) {
   return request({
     url: '/pipeline/research/reports',
-    method: 'get'
+    method: 'get', params
   })
 }
 
@@ -195,10 +199,10 @@ export function searchPipelineDigestCandidates(data) {
   return request({ url: '/pipeline/research/digest-candidates', method: 'post', data })
 }
 
-export function listPipelineKnowledgeDocuments() {
+export function listPipelineKnowledgeDocuments(params) {
   return request({
     url: '/pipeline/knowledge/documents',
-    method: 'get'
+    method: 'get', params
   })
 }
 
@@ -266,10 +270,11 @@ export function deletePipelineWorkspaceItem(action, itemId) {
   })
 }
 
-export function listPipelineResearchJobs() {
+export function listPipelineResearchJobs(params) {
   return request({
     url: '/pipeline/research/jobs',
-    method: 'get'
+    method: 'get',
+    params
   })
 }
 
@@ -343,10 +348,10 @@ export function retryPipelineResearchJob(jobId) {
   })
 }
 
-export function listPipelineResearchReports() {
+export function listPipelineResearchReports(params) {
   return request({
     url: '/pipeline/research/reports',
-    method: 'get'
+    method: 'get', params
   })
 }
 

@@ -3,11 +3,13 @@
 from copy import deepcopy
 from typing import Any
 
-from sqlalchemy import text, update
+from sqlalchemy import or_, select, text, update
+from sqlalchemy.orm import load_only
 
 from app.business_ids import parse_business_id, wire_id
 from app.business_time import audit_now, format_business_time
 from app.intelligence.models.configuration import PipelineTemplateVersion
+from app.research.models.research_models import PipelineDigestSchedule
 from app.research.repositories.research_repository import ResearchDao
 from app.research.services.model_generation import ModelGateway
 from app.research.services.report_labels import display_template_name
@@ -24,11 +26,34 @@ class PipelineTemplateService:
             await db.execute(
                 text('SELECT pg_advisory_xact_lock(hashtext(:key))'), {'key': f'template-presets:{user_id}'}
             )
-        rows = await ResearchDao.list_templates(db, user_id=user_id)
+        presets = builtin_templates()
+        rows = list(
+            await db.scalars(
+                select(PipelineTemplateVersion)
+                .options(
+                    load_only(
+                        PipelineTemplateVersion.id,
+                        PipelineTemplateVersion.user_id,
+                        PipelineTemplateVersion.preset_key,
+                        PipelineTemplateVersion.purpose,
+                        PipelineTemplateVersion.report_type,
+                        PipelineTemplateVersion.name,
+                        PipelineTemplateVersion.updated_at,
+                    )
+                )
+                .where(
+                    PipelineTemplateVersion.user_id == user_id,
+                    or_(
+                        PipelineTemplateVersion.preset_key.in_([preset['preset_key'] for preset in presets]),
+                        PipelineTemplateVersion.name.in_([preset['name'] for preset in presets]),
+                    ),
+                )
+            )
+        )
         keys = {row.preset_key for row in rows if row.preset_key}
         existing = {(row.purpose, row.report_type, row.name): row for row in rows if not row.preset_key}
         created = []
-        for preset in builtin_templates():
+        for preset in presets:
             if preset['preset_key'] in keys:
                 continue
             previous = existing.get((preset['purpose'], preset['report_type'], preset['name']))
@@ -37,7 +62,11 @@ class PipelineTemplateService:
                 await db.execute(
                     update(PipelineTemplateVersion)
                     .where(PipelineTemplateVersion.id == previous.id, PipelineTemplateVersion.user_id == user_id)
-                    .values(preset_key=preset['preset_key'], updated_at=previous.updated_at)
+                    .values(
+                        preset_key=preset['preset_key'],
+                        updated_at=previous.updated_at,
+                        **({'digest_cadence': preset['digest_cadence']} if preset.get('digest_cadence') else {}),
+                    )
                 )
                 continue
             row = PipelineTemplateVersion(**deepcopy(preset), user_id=user_id)
@@ -48,9 +77,12 @@ class PipelineTemplateService:
 
     @staticmethod
     def digest_cadence(row) -> str | None:
-        """旧表没有周期列：仅识别受控全名，不从用途或任意子串推断通用。"""
+        """Explicit cadence is authoritative; legacy rows are converted by migration."""
         if row.purpose != 'digest':
             return None
+        explicit = getattr(row, 'digest_cadence', None)
+        if explicit:
+            return explicit
         preset_cadence = {
             'digest-v1-weekly': 'weekly',
             'digest-v1-monthly': 'monthly',
@@ -83,7 +115,7 @@ class PipelineTemplateService:
         return config
 
     @staticmethod
-    def _dict(row) -> dict:
+    def _dict(row, *, include_prompt=True) -> dict:
         deleted_at = getattr(row, 'deleted_at', None)
         return {
             'id': wire_id(row.id),
@@ -94,7 +126,7 @@ class PipelineTemplateService:
             'reportType': getattr(row, 'report_type', None),
             'digestCadence': PipelineTemplateService.digest_cadence(row),
             'description': row.description or '',
-            'prompt': row.prompt,
+            **({'prompt': row.prompt} if include_prompt else {}),
             'modelId': wire_id(row.model_id),
             'imageModelId': wire_id(row.image_model_id),
             'sections': deepcopy(row.sections),
@@ -113,13 +145,43 @@ class PipelineTemplateService:
         return None
 
     @classmethod
-    async def list_templates(cls, db, category=None, published_only=False, user_id=None, include_deleted=False) -> dict:
+    async def list_templates(
+        cls,
+        db,
+        category=None,
+        published_only=False,
+        user_id=None,
+        include_deleted=False,
+        *,
+        page=None,
+        page_size=10,
+        keyword='',
+        report_type=None,
+        status='all',
+    ) -> dict:
         purpose = {'project': 'research'}.get(category, category)
-        rows = await ResearchDao.list_templates(db, purpose, user_id)
+        counts = None
+        if page is not None:
+            from app.intelligence.repositories.template_repository import TemplateListDao  # noqa: PLC0415
+
+            rows, total, counts = await TemplateListDao.page(
+                db,
+                user_id=user_id,
+                purpose=purpose,
+                report_type=report_type,
+                keyword=keyword,
+                status=status,
+                published_only=published_only,
+                page=page,
+                page_size=page_size,
+            )
+        else:
+            rows = await ResearchDao.list_templates(db, purpose, user_id)
         # Daily briefs are historical-only. Keep saved rows for old reports,
         # but omit them from management and new-generation template choices.
         rows = [
-            row for row in rows
+            row
+            for row in rows
             if cls.digest_cadence(row) != 'daily'
             and (include_deleted or row.deleted_at is None)
             and (not published_only or (row.is_enabled and row.deleted_at is None))
@@ -131,7 +193,7 @@ class PipelineTemplateService:
             image = await ResearchDao.get_model(db, image_id) if image_id is not None else None
             result.append(
                 {
-                    **cls._dict(row),
+                    **cls._dict(row, include_prompt=page is None),
                     'modelId': wire_id(model_id),
                     'imageModelId': wire_id(image_id),
                     'modelConfigured': bool(
@@ -148,7 +210,11 @@ class PipelineTemplateService:
                     ),
                 }
             )
-        return {'rows': result, 'total': len(rows)}
+        return {
+            'rows': result,
+            'total': total if page is not None else len(rows),
+            **({'counts': counts} if counts is not None else {}),
+        }
 
     @staticmethod
     async def get_published(db, template_key, user_id=None) -> PipelineTemplateVersion | None:
@@ -233,6 +299,22 @@ class PipelineTemplateService:
             raise ServiceException(message='模板不存在或无权操作')
         if row is not None and row.deleted_at is not None:
             raise ServiceException(message='模板已删除，请先恢复后再编辑')
+        cadence = payload.get('digest_cadence')
+        if purpose == 'digest':
+            if payload.get('digest_cadence') is None:
+                cadence = (
+                    cls.digest_cadence(row)
+                    if row is not None
+                    else cls.digest_cadence(type('Legacy', (), {'purpose': purpose, 'name': name})()) or 'all'
+                )
+            if cadence not in {'weekly', 'monthly', 'all', 'daily'}:
+                raise ServiceException(message='请选择简报适用周期')
+            if cadence == 'daily' and (row is None or cls.digest_cadence(row) != 'daily'):
+                raise ServiceException(message='日报仅保留历史读取，不支持创建')
+        elif cadence is not None:
+            raise ServiceException(message='只有简报模板可以设置适用周期')
+        if row is not None and not bool(payload.get('is_enabled', True)):
+            await cls._check_active_schedules(db, row)
         if row is None:
             row = PipelineTemplateVersion(is_enabled=True, user_id=user_id)
             db.add(row)
@@ -241,6 +323,7 @@ class PipelineTemplateService:
         # Older clients may omit the binding; preserve it on content-only updates.
         if purpose != 'research' or 'report_type' in payload or row.id is None:
             row.report_type = selected_type
+        row.digest_cadence = cadence if purpose == 'digest' else None
         row.purpose, row.prompt = purpose, prompt
         row.sections = deepcopy(payload.get('sections') or [])
         row.image_config = deepcopy(payload.get('image_config') or {})
@@ -248,6 +331,25 @@ class PipelineTemplateService:
         await db.commit()
         await db.refresh(row)
         return cls._dict(row)
+
+    @staticmethod
+    async def _check_active_schedules(db, row) -> None:
+        schedules = list(
+            await db.scalars(
+                select(PipelineDigestSchedule)
+                .where(
+                    PipelineDigestSchedule.template_id == row.id,
+                    PipelineDigestSchedule.user_id == row.user_id,
+                    PipelineDigestSchedule.is_enabled.is_(True),
+                )
+                .with_for_update()
+            )
+        )
+        if schedules:
+            names = '、'.join(schedule.name for schedule in schedules[:5])
+            raise ServiceException(
+                message=f'模板正在被 {len(schedules)} 个启用的自动任务使用（{names}），请先停用这些任务再停用或删除模板'
+            )
 
     @classmethod
     async def publish(cls, db, template_key, user_id=None, **_) -> dict:
@@ -263,6 +365,7 @@ class PipelineTemplateService:
         row = await ResearchDao.get_template(db, parse_business_id(template_key), user_id)
         if not row:
             raise ServiceException(message='模板不存在或无权操作')
+        await cls._check_active_schedules(db, row)
         row.is_enabled = False
         await db.commit()
         return cls._dict(row)
@@ -272,6 +375,7 @@ class PipelineTemplateService:
         row = await ResearchDao.get_template(db, parse_business_id(template_key), user_id)
         if row is None:
             raise ServiceException(message='模板不存在或无权操作')
+        await cls._check_active_schedules(db, row)
         row.deleted_at = row.deleted_at or audit_now()
         row.is_enabled = False
         await db.commit()

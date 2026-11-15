@@ -5,7 +5,7 @@
         <el-input v-model.trim="keyword" clearable aria-label="查询成果名称或作者" placeholder="查询成果名称或作者" />
         <el-select v-model="statusFilter" clearable aria-label="成果业务状态" placeholder="全部业务状态"><el-option v-for="value in statusOptions" :key="value" :value="value" :label="getReportStatusMeta(value).label" /></el-select>
         <el-button v-if="keyword || statusFilter" @click="keyword = ''; statusFilter = ''">清除筛选</el-button>
-        <span class="report-management-scope" aria-live="polite">共 {{ filteredRows.length }} 份</span>
+        <span class="report-management-scope" aria-live="polite">共 {{ total }} 份</span>
         <div v-if="reportKind !== 'digest'" class="heading-actions">
           <el-button type="primary" :icon="Refresh" :loading="loading" @click="loadReports">刷新列表</el-button>
         </div>
@@ -43,10 +43,10 @@
         <el-empty v-else-if="!loading" description="当前条件下暂无成果" />
       </div>
       <pagination
-        v-if="filteredRows.length"
+        v-if="total"
         v-model:page="page"
         v-model:limit="pageSize"
-        :total="filteredRows.length"
+        :total="total"
         :auto-scroll="false"
         class="report-list-pagination"
       />
@@ -56,7 +56,9 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { usePagedResults } from '@/utils/portal/usePagedResults'
+import useUserStore from '@/store/modules/user'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Download, Refresh, View } from '@element-plus/icons-vue'
@@ -73,30 +75,19 @@ const selectedReportId = ref('')
 const reportKind = computed(() => route.path === '/pipeline/digest' ? 'digest' : 'research')
 const keyword = ref('')
 const statusFilter = ref('')
-const statusOptions = computed(() => [...new Set(rows.value.map(item => item.status).filter(Boolean))])
-const filteredRows = computed(() => rows.value.filter(item => {
-  const digest = isDigestType(item.reportType || item.type)
-  return (reportKind.value === 'digest' ? digest : !digest)
-    && (!statusFilter.value || item.status === statusFilter.value)
-    && (!keyword.value || [item.title, item.owner].filter(Boolean).join(' ').toLocaleLowerCase().includes(keyword.value.toLocaleLowerCase()))
-}))
-const loading = ref(false)
-const reportError = ref('')
+const statusOptions = computed(() => ['completed', 'failed', 'queued', 'running', 'draft'])
 const downloadingReportId = ref('')
-const rows = ref([])
 const listRegion = ref(null)
 const page = ref(1)
 const pageSize = ref(10)
 const pageOffset = computed(() => (page.value - 1) * pageSize.value)
-const pagedRows = computed(() => filteredRows.value.slice(pageOffset.value, pageOffset.value + pageSize.value))
+const params = computed(() => ({ pageNum: page.value, pageSize: pageSize.value, keyword: keyword.value, status: statusFilter.value, kind: reportKind.value }))
+const { rows: pagedRows, total, error: reportError, loading, refresh: loadReports } = usePagedResults(listPipelineAdminReports, params, computed(() => useUserStore().id), page)
 
 watch([keyword, statusFilter, reportKind, pageSize], () => {
   page.value = 1
 }, { flush: 'sync' })
 
-watch(() => filteredRows.value.length, total => {
-  page.value = Math.min(page.value, Math.max(1, Math.ceil(total / pageSize.value)))
-})
 
 watch([page, pageSize, keyword, statusFilter, reportKind], () => {
   if (listRegion.value) listRegion.value.scrollTop = 0
@@ -117,20 +108,6 @@ function reportTypeLabel(type) {
 function reportPeriod(row) {
   const period = row.period || row.metadata?.period
   return Array.isArray(period) ? period.join(' 至 ') : period
-}
-async function loadReports() {
-  loading.value = true
-  reportError.value = ''
-  try {
-    const res = await listPipelineAdminReports()
-    rows.value = res.data.rows
-  } catch (error) {
-    rows.value = []
-    reportError.value = error?.msg || '报告列表暂时无法加载，请检查服务后重试'
-    ElMessage.warning(reportError.value)
-  } finally {
-    loading.value = false
-  }
 }
 
 function downloadMarkdown(fileName, content) {
@@ -165,7 +142,7 @@ function openReport(row) {
   detailVisible.value = true
 }
 
-onMounted(loadReports)
+
 </script>
 
 <style scoped>

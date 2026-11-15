@@ -30,7 +30,7 @@ const purposes = reactive([
  { key: 'processing', label: '内容处理模型', description: '过滤、分类时一并生成摘要、提取实体与专业解读。', read: getProcessingModelConfig, write: updateProcessingModelConfig },
  { key: 'translation', label: '翻译模型', description: '将英文新闻正文、论文摘要翻译为中文。', read: getTranslationModelConfig, write: updateTranslationModelConfig },
  { key: 'image', label: '图片生成模型', capability: 'image_generate', description: '生成简报、科研报告等成果的配图，按生成设置启用。', read: () => getGenerationModelConfig('image'), write: value => updateGenerationModelConfig('image', value) },
- { key: 'digest', label: '简报生成模型', description: '生成日报、周报和月报正文，自动计划也使用此模型。', read: () => getGenerationModelConfig('digest'), write: value => updateGenerationModelConfig('digest', value) },
+ { key: 'digest', label: '简报生成模型', description: '生成周报和月报正文，自动计划也使用此模型。', read: () => getGenerationModelConfig('digest'), write: value => updateGenerationModelConfig('digest', value) },
  { key: 'research', label: '科研报告生成模型', description: '生成科研需求、技术路线等报告正文及后续改写。', read: () => getGenerationModelConfig('research'), write: value => updateGenerationModelConfig('research', value) }
 ].map(item => ({ capability: 'text_generate', ...item, modelId: '', savedId: '', loading: true, saving: false, error: '', saveError: '' })))
 function unavailable(item) { return !!item.modelId && !props.loading && !props.modelError && !availableModels(item).some(model => String(model.modelId) === item.modelId) }

@@ -20,6 +20,7 @@ from zoneinfo import ZoneInfo
 import httpx
 
 from app.intelligence.integrations.public_sources import (
+    CROSSREF_FILTER,
     DEFAULT_CROSSREF_ENDPOINT,
     DEFAULT_PIPECHINA_ENDPOINT,
     _clean_text,
@@ -224,10 +225,11 @@ async def crossref_batches(snapshot: dict[str, Any], checkpoint: dict[str, Any])
         while offset < limit:
             await asyncio.sleep(config.get('request_interval', 0))
             rows = min(config.get('batch_size', 5), limit - offset)
-            # Keep the existing collector's query/filter/select semantics.
+            # Match the legacy collector while requiring factual abstract text
+            # for subsequent classification, summary and entity extraction.
             params = {
                 'query': config.get('query') or 'oil gas pipeline integrity monitoring',
-                'filter': 'from-pub-date:2022-01-01,type:journal-article',
+                'filter': CROSSREF_FILTER,
                 'rows': rows,
                 'offset': offset,
                 'select': CROSSREF_SELECT,

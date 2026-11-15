@@ -199,6 +199,9 @@ async def test_schedule_rebuilds_current_period_without_mutating_saved_preferenc
         user_id=7,
         template_id=201,
         name='日报',
+        is_enabled=True,
+        next_retry_at=None,
+        retry_count=0,
         frequency='daily',
         run_time=time(8),
         timezone='Asia/Shanghai',
@@ -254,10 +257,12 @@ async def test_schedule_rejects_mismatched_cadence_and_honors_image_off(env):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('requested', [True, False])
-async def test_generated_version_records_normalization_separately_from_unrun_checks(env, monkeypatch, requested):
+async def test_generated_version_records_requested_citation_check_separately_from_factual_review(
+    env, monkeypatch, requested
+):
     execution = importlib.import_module('app.research.services.execution')
     snapshot = {'request': {'citation_check': requested}, 'template': {'id': '201'}, 'report_start_version': 1}
-    job = NS(execution_token='token', config_snapshot=snapshot, materials=[], report_id=301, schedule_id=None)
+    job = NS(id=401, execution_token='token', config_snapshot=snapshot, materials=[], report_id=301, schedule_id=None)
     report = NS(id=301, version=1, title='报告', content='', template_id=201)
     db = AsyncMock()
     monkeypatch.setattr(execution, 'AsyncSessionLocal', lambda: mock_session(db))
@@ -278,13 +283,16 @@ async def test_generated_version_records_normalization_separately_from_unrun_che
     version = save.await_args.args[1]
     checks = version.model_snapshot.get('checks')
     assert checks is not None
-    assert checks['citation'] == {
-        'requested': requested,
-        'status': 'not_run',
-        'reason': 'normalization_only',
-        'normalization': 'completed',
-        'version': 2,
-    }
+    assert checks['citation']['requested'] is requested
+    assert checks['citation']['status'] == ('passed' if requested else 'not_run')
+    assert checks['citation']['factsVerified'] is False
+    assert checks['citation']['normalization'] == 'completed'
+    assert checks['citation']['version'] == 2
+    if requested:
+        assert checks['citation']['scope'] == 'source_number_and_location'
+        assert checks['citation']['occurrences'] == []
+    else:
+        assert checks['citation']['reason'] == 'not_requested'
     assert checks['quality'] == {'status': 'not_run', 'version': 2}
     assert job.config_snapshot == version.model_snapshot
     assert 'checks' not in snapshot

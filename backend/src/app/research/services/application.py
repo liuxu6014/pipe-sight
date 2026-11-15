@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any
@@ -79,6 +80,8 @@ class ResearchApplicationService:
         )
         if terminal and not has_result:
             result_description = '没有已保存的生成结果'
+        elif status in {'failed', 'cancelled'}:
+            result_description = '原始输出已保留，未应用为报告正文'
         stages = [
             {'key': 'submitted', 'label': '任务提交', 'status': 'completed', 'description': '任务及输入资料快照已保存'},
             {
@@ -134,11 +137,37 @@ class ResearchApplicationService:
         normalized_result = job.result_content
         if job.result_content:
             try:
-                normalized_result = normalize_task_report(job.result_content, job.materials, snapshot)['content']
+                if snapshot.get('document_format') == 'digest-reference-v1':
+                    from app.research.services.digest_document import normalize_digest_document  # noqa: PLC0415
+
+                    # Match the execution contract: digest event groups replace
+                    # legacy template chapters and use the frozen item limits.
+                    normalized_result = normalize_digest_document(
+                        job.result_content, job.materials, generation_options=request.get('options') or {}
+                    )['content']
+                else:
+                    normalized_result = normalize_task_report(job.result_content, job.materials, snapshot)['content']
             except ValueError:
                 # Keep malformed raw output inspectable; never call it applied.
                 pass
-        apply_conflict = bool(job.status == 'completed' and report and report.content != normalized_result)
+        applied_content = getattr(job, '_applied_result_content', None)
+        application = snapshot.get('result_application') or {}
+        applied_hash = (
+            application.get('content_sha256')
+            if str(application.get('job_id')) == str(job.id)
+            else None
+        )
+        if applied_content is not None:
+            normalized_result = applied_content
+            applied_hash = hashlib.sha256(applied_content.encode('utf-8')).hexdigest()
+        # Compare the applied bytes, not today's formatter output. A formatter
+        # upgrade must not be mistaken for an edit made by the report owner.
+        if applied_hash and report:
+            apply_conflict = hashlib.sha256(report.content.encode('utf-8')).hexdigest() != applied_hash
+            if not apply_conflict:
+                normalized_result = report.content
+        else:
+            apply_conflict = bool(job.status == 'completed' and report and report.content != normalized_result)
         return {
             'id': wire_id(job.id),
             'jobId': wire_id(job.id),
@@ -367,6 +396,7 @@ class ResearchApplicationService:
         result = []
         for job in rows:
             report = await PipelineDao.get_report(db, job.report_id, user_id)
+            await cls._load_applied_job_result(db, job)
             result.append(cls.job_dict(job, report=report))
         return {'rows': result, 'total': len(result)}
 
@@ -376,7 +406,38 @@ class ResearchApplicationService:
         if not job:
             raise ServiceException(message='任务不存在或无权访问')
         report = await PipelineDao.get_report(db, job.report_id, user_id)
+        await cls._load_applied_job_result(db, job)
         return cls.job_dict(job, report=report)
+
+    @staticmethod
+    async def _load_applied_job_result(db, job) -> None:
+        """Use immutable applied history; legacy checks prove this task applied."""
+        job._applied_result_content = None
+        if job.status != 'completed':
+            return
+        snapshot = job.config_snapshot or {}
+        application = snapshot.get('result_application') or {}
+        version = application.get('report_version')
+        if application:
+            if str(application.get('job_id')) != str(job.id) or not isinstance(version, int):
+                return
+        else:
+            start = snapshot.get('report_start_version')
+            if not isinstance(start, int):
+                return
+            version = start + 1
+            integrity = (snapshot.get('checks') or {}).get('documentIntegrity') or {}
+            # This check is attached to the job only inside the successful
+            # report-application branch. Conflicted tasks never acquire it.
+            if integrity.get('status') != 'passed' or integrity.get('version') != version:
+                return
+        history = await PipelineDao.get_report_version(db, job.report_id, version)
+        if not history or history.source != 'generated' or history.model_snapshot != snapshot:
+            return
+        digest = hashlib.sha256(history.content.encode('utf-8')).hexdigest()
+        if application and digest != application.get('content_sha256'):
+            return
+        job._applied_result_content = history.content
 
     @classmethod
     async def cancel_job(cls, db: AsyncSession, user_id: int, job_id: str) -> dict[str, Any]:

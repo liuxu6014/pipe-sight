@@ -45,12 +45,14 @@ async def test_dispatch_failure_preserves_cursor_and_records_safe_reason(env, db
             stage_labels=[], job_serializer=dict, template_service=env.template.PipelineTemplateService
         )
 
-    assert (await dispatch())['failed'] == 1
+    assert not row.is_enabled
+    assert service.serialize(row)['suspended']
+    assert (await dispatch())['found'] == 0
     assert row.failure_count == 1
     row.next_run_at = before + timedelta(days=1)
     await db.commit()
-    assert (await dispatch())['failed'] == 1
-    assert row.failure_count == 2
+    assert (await dispatch())['failed'] == 0
+    assert row.failure_count == 1
 
 
 @pytest.mark.asyncio

@@ -3,6 +3,8 @@ const reportStatuses = {
   draft: { label: '草稿', type: 'info' },
   planned: { label: '规划中', type: 'primary' },
   completed: { label: '已生成', type: 'success' },
+  queued: { label: '排队中', type: 'primary' },
+  running: { label: '生成中', type: 'primary' },
   published: { label: '已发布', type: 'success' },
   archived: { label: '已归档', type: 'info' },
   failed: { label: '生成失败', type: 'danger' }

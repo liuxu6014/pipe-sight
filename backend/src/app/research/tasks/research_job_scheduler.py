@@ -12,6 +12,12 @@ from app.library.tasks.material_parse_scheduler import recover_material_parses, 
 from app.research.models.research_models import utcnow
 from app.research.repositories.research_repository import ResearchDao as PipelineDao
 from app.research.services.application import ResearchApplicationService
+from app.research.services.concurrency import (
+    EXPORT_CONCURRENCY,
+    RESEARCH_DISPATCH_BATCH,
+    RESEARCH_GLOBAL_LIMIT,
+    RESEARCH_USER_LIMIT,
+)
 from app.research.services.digest_schedules import DigestScheduleService
 from app.research.services.execution import MAX_ATTEMPTS as RESEARCH_MAX_ATTEMPTS
 from app.research.services.exports import ResearchReportExportService
@@ -24,6 +30,8 @@ if TYPE_CHECKING:
 JOB_ID = '_pipesight_research_job_recovery'
 RECOVERY_INTERVAL_SECONDS = 5
 _recovery_tasks: dict[str, asyncio.Task[Any]] = {}
+_recovery_owners: dict[str, int] = {}
+_dispatch_lock = asyncio.Lock()
 RESEARCH_WORKER_ID = f'task-worker-research-{uuid4().hex[:12]}'
 _export_recovery_tasks: dict[str, asyncio.Task[Any]] = {}
 EXPORT_JOB_ID = '_pipesight_report_export_recovery'
@@ -33,7 +41,15 @@ EXPORT_WORKER_ID = f'task-worker-export-{uuid4().hex[:12]}'
 
 async def recover_research_jobs(*, schedule_ids=None) -> dict[str, int]:
     """扫描持久队列并派发科研任务，领取和租约由数据库行锁最终裁决。"""
+    async with _dispatch_lock:
+        return await _recover_research_jobs(schedule_ids=schedule_ids)
+
+
+async def _recover_research_jobs(*, schedule_ids=None) -> dict[str, int]:
     if AsyncSessionLocal is None:
+        return {'found': 0, 'dispatched': 0}
+    capacity = max(0, RESEARCH_GLOBAL_LIMIT - len(_recovery_tasks))
+    if not capacity:
         return {'found': 0, 'dispatched': 0}
 
     now = utcnow()
@@ -42,12 +58,18 @@ async def recover_research_jobs(*, schedule_ids=None) -> dict[str, int]:
             db,
             now=now,
             max_attempts=RESEARCH_MAX_ATTEMPTS,
+            limit=RESEARCH_DISPATCH_BATCH,
+            exclude_ids=tuple(_recovery_tasks),
             **({'schedule_ids': schedule_ids} if schedule_ids is not None else {}),
         )
 
     dispatched = 0
     for job_id, user_id, owner_name in jobs:
+        if dispatched >= capacity:
+            break
         if job_id in _recovery_tasks:
+            continue
+        if sum(owner == user_id for owner in _recovery_owners.values()) >= RESEARCH_USER_LIMIT:
             continue
         task = asyncio.create_task(
             ResearchApplicationService.process_queued_job(
@@ -58,9 +80,11 @@ async def recover_research_jobs(*, schedule_ids=None) -> dict[str, int]:
             )
         )
         _recovery_tasks[job_id] = task
+        _recovery_owners[job_id] = user_id
 
         def _forget(_task: asyncio.Task[Any], item_id: str = job_id) -> None:
             _recovery_tasks.pop(item_id, None)
+            _recovery_owners.pop(item_id, None)
 
         task.add_done_callback(_forget)
         dispatched += 1
@@ -87,6 +111,9 @@ async def recover_report_exports() -> dict[str, int]:
     """扫描到期导出任务，交给租约领取逻辑执行并支持 API 重启恢复。"""
     if AsyncSessionLocal is None:
         return {'found': 0, 'dispatched': 0}
+    capacity = max(0, EXPORT_CONCURRENCY - len(_export_recovery_tasks))
+    if not capacity:
+        return {'found': 0, 'dispatched': 0}
 
     now = utcnow()
     async with AsyncSessionLocal() as db:
@@ -94,10 +121,14 @@ async def recover_report_exports() -> dict[str, int]:
             db,
             now=now,
             max_attempts=ResearchReportExportService.MAX_ATTEMPTS,
+            limit=capacity,
+            exclude_ids=tuple(_export_recovery_tasks),
         )
 
     dispatched = 0
     for export_id in export_ids:
+        if dispatched >= capacity:
+            break
         if export_id in _export_recovery_tasks:
             continue
         task = asyncio.create_task(ResearchReportExportService.process(export_id, EXPORT_WORKER_ID))
@@ -146,14 +177,12 @@ def register_report_export_recovery(scheduler: AsyncIOScheduler) -> Any:
 async def stop_recovery_tasks() -> None:
     """停止当前进程已派发的持久任务，供 API 和独立 Worker 优雅退出。"""
     tasks = [*_recovery_tasks.values(), *_export_recovery_tasks.values()]
-    if not tasks:
-        return
-
     for task in tasks:
         if not task.done():
             task.cancel()
     await asyncio.gather(*tasks, return_exceptions=True)
     _recovery_tasks.clear()
+    _recovery_owners.clear()
     _export_recovery_tasks.clear()
     await stop_material_parse_tasks()
 

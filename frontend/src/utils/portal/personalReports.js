@@ -2,7 +2,7 @@ import { ownedReports, sortByActivity } from '../../views/portal/utils/workspace
 import { getPortalReportPath, getPortalTaskPath, isDigestType } from '../../views/portal/utils/routing.js'
 
 export function hasReportOutput(report) {
-  return Boolean(String(report?.content || '').trim()
+  return report?.hasOutput === true || Boolean(String(report?.content || '').trim()
     || (Array.isArray(report?.sections) && report.sections.some(section => String(section.content || '').trim())))
 }
 

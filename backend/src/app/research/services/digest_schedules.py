@@ -387,6 +387,9 @@ class DigestScheduleService:
             'lastStatus': state or 'never',
             'lastRunTime': format_business_time(last_run),
             'lastError': error,
+            'suspended': not row.is_enabled and state == 'failed' and bool(error),
+            'nextRetryTime': row.next_retry_at.isoformat() if getattr(row, 'next_retry_at', None) else '',
+            'retryCount': getattr(row, 'retry_count', 0),
             'matchedCount': len(job.materials or []) if job else (0 if state == 'no_data' else None),
             'latestTaskId': wire_id(job.id) if job else '',
             'latestTaskProgress': job.progress if job else None,
@@ -564,6 +567,8 @@ class DigestScheduleService:
             await cls._validate_enabled_template(
                 db, row.template_id, generation, PipelineTemplateService, frequency=row.frequency, user_id=user_id
             )
+        row.retry_count, row.next_retry_at = 0, None
+        row.last_status, row.last_error = None, None
         row.is_enabled = enabled
         row.next_run_at = cls.next_run(row, research_models.utcnow()) if enabled else None
         await db.commit()
@@ -578,6 +583,7 @@ class DigestScheduleService:
         await cls._validate_enabled_template(
             db, row.template_id, generation, PipelineTemplateService, frequency=row.frequency, user_id=user_id
         )
+        row.retry_count, row.next_retry_at = 0, None
         row.next_run_at = research_models.utcnow()
         await db.commit()
         return cls.serialize(row)
@@ -612,8 +618,13 @@ class DigestScheduleService:
         async with AsyncSessionLocal() as db:
             scope = {'schedule_ids': schedule_ids} if schedule_ids is not None else {}
             schedules = await ResearchDao.list_due_schedules(db, research_models.utcnow(), **scope)
-            result['found'] = len(schedules)
             for row in schedules:
+                if not row.is_enabled or (
+                    getattr(row, 'next_retry_at', None)
+                    and ResearchDao.aware(row.next_retry_at) > research_models.utcnow()
+                ):
+                    continue
+                result['found'] += 1
                 checked_at = research_models.utcnow().replace(microsecond=0)
                 run_at = ResearchDao.aware(row.next_run_at)
                 try:
@@ -630,7 +641,11 @@ class DigestScheduleService:
                             status = 'skipped'
                         else:
                             await cls._validate_enabled_template(
-                                db, row.template_id, generation, template_service, frequency=row.frequency,
+                                db,
+                                row.template_id,
+                                generation,
+                                template_service,
+                                frequency=row.frequency,
                                 user_id=row.user_id,
                             )
                             period = cls._period_for_run(local, row.frequency)
@@ -682,6 +697,7 @@ class DigestScheduleService:
                                 )
                                 result['queued'] += 1
                                 status = 'queued'
+                        row.retry_count, row.next_retry_at = 0, None
                         row.next_run_at = cls.next_run(row, run_at)
                         if status in ('no_data', 'skipped'):
                             row.skipped_count += 1
@@ -698,7 +714,17 @@ class DigestScheduleService:
                         cls.safe_error(getattr(exc, 'message', None))
                         or f'计划派发异常（{type(exc).__name__}），请联系管理员检查任务日志。'
                     )
-                    logger.exception('周期简报派发失败；计划游标未推进')
+                    row.retry_count = (getattr(row, 'retry_count', None) or 0) + 1
+                    if isinstance(exc, (ServiceException, ValueError, TypeError)):
+                        # Invalid template, model or saved config needs explicit user repair.
+                        row.is_enabled, row.next_retry_at = False, None
+                        row.last_error = '任务已挂起，请修复配置后重新启用。' + row.last_error
+                    else:
+                        # Preserve the original period/idempotency key; retry only after backoff.
+                        row.next_retry_at = checked_at + timedelta(
+                            seconds=min(3600, 30 * 2 ** min(row.retry_count - 1, 7))
+                        )
+                    logger.exception('周期简报派发失败；已挂起或安排退避，业务周期未推进')
             await db.commit()
         return result
 

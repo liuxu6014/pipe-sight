@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from config.env import UploadConfig
+from config.env import AppConfig, UploadConfig
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +48,12 @@ class FileScanService:
             return FileScanResult('failed', '源文件不存在，无法完成安全扫描。', 'file-scan', scanned_at=datetime.now())
         path = Path(local_path).resolve()
         if UploadConfig.FILE_SCAN_MODE == 'basic':
+            if AppConfig.app_env.lower() not in {'dev', 'development', 'test', 'testing', 'local'}:
+                return FileScanResult(
+                    'pending',
+                    '正式环境不能使用基础文件检查，请配置带病毒库的外部扫描器。',
+                    'unconfigured',
+                )
             return cls._basic_scan(path)
         command_text = UploadConfig.FILE_SCAN_COMMAND
         if not command_text:

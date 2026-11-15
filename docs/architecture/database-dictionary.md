@@ -1,10 +1,10 @@
 # PipeSight PostgreSQL 数据字典
 
-数据库：`pipesight`。导出时间：2026-11-03T00:27:18.237859+08:00。
+数据库：`pipesight`。导出时间：2026-11-15T12:51:11.122560+08:00。
 
 本文件由 `backend/scripts/checks/export_database_dictionary.py` 从实际 catalog 生成，不包含业务记录或连接凭据。
 
-共 32 个表/视图、373 个字段。
+共 32 个表/视图、387 个字段。
 缺失对象注释 0 个，缺失字段注释 0 个。
 
 ## 命名与兼容规则
@@ -27,14 +27,14 @@
 | `public.categories` | 物理表 | 管理员维护的单类别及过滤分类提示词；停用不清除历史文章归类 | 9 |
 | `public.collection_runs` | 物理表 | 单次来源采集的排队、执行、停止及失败重试记录；保存独立计数和配置快照 | 20 |
 | `public.data_sources` | 物理表 | 新闻网站、公众号与论文来源及采集配置；来源开关与单次采集状态分别维护 | 13 |
-| `public.digest_schedules` | 物理表 | 用户周期简报计划；支持每日、指定星期和每月日期，选材配置与生成配置分开 | 18 |
+| `public.digest_schedules` | 物理表 | 用户周期简报计划；支持每日、指定星期和每月日期，选材配置与生成配置分开 | 24 |
 | `public.generation_tasks` | 物理表 | 单次生成任务及冻结选材快照；支持幂等提交、租约执行、取消和失败重试 | 17 |
 | `public.knowledge_files` | 物理表 | 用户私有上传资料；原文件存储键、系统提取文本与用户编辑文本分别保存 | 15 |
 | `public.list_column` | 视图 | 公共库列目录视图；按系统目录汇总字段、类型、注释及约束标记 | 8 |
 | `public.list_table` | 视图 | 公共库表目录视图；显示表名与目录注释，时间列为当前查询事务时间 | 4 |
 | `public.model_calls` | 物理表 | 实际供应商模型调用的用量和排障记录；不保存提示词、原始正文、凭证或响应原文 | 10 |
-| `public.news_articles` | 物理表 | 网站与公众号新闻原文及中文译文；每篇最多关联一个类别，无人工审核流程 | 14 |
-| `public.papers` | 物理表 | 论文文献信息及中英文摘要；保留真实发表日期精度，不保存论文全文 | 16 |
+| `public.news_articles` | 物理表 | 网站与公众号新闻原文及中文译文；每篇最多关联一个类别，无人工审核流程 | 15 |
+| `public.papers` | 物理表 | 论文文献信息及中英文摘要；保留真实发表日期精度，不保存论文全文 | 18 |
 | `public.report_assets` | 物理表 | 成果的生成图片及导出文件；每项资源独立保存存储键、执行状态和失败原因 | 14 |
 | `public.report_versions` | 物理表 | 成果编辑及恢复历史；同一成果与版本号唯一，历史正文不由并发版本字段替代 | 13 |
 | `public.reports` | 物理表 | 用户可编辑的生成文章、科研报告和周期简报正文；执行状态由生成任务维护 | 9 |
@@ -51,7 +51,7 @@
 | `public.sys_role_menu` | 物理表 | 角色与菜单权限的多对多关系；角色ID与菜单ID组成复合主键 | 2 |
 | `public.sys_user` | 物理表 | 系统用户账号及个人资料；保留原账号状态和删除编码，不存明文密码 | 20 |
 | `public.sys_user_role` | 物理表 | 用户与角色的多对多授权关系；用户ID与角色ID组成复合主键 | 2 |
-| `public.templates` | 物理表 | 文章、科研报告与简报生成模板；正文及图片模型由管理员配置，可暂未配置 | 12 |
+| `public.templates` | 物理表 | 文章、科研报告与简报生成模板；正文及图片模型由管理员配置，可暂未配置 | 17 |
 
 ## public.ai_models
 
@@ -191,6 +191,12 @@ APScheduler持久化任务表；框架管理运行时间和序列化任务，不
 | `last_run_at` | timestamp(0) without time zone | 否 | 否 | — | 最近派发检查时间；北京时间Asia/Shanghai，timestamp(0)无时区，精度到秒，YYYY-MM-DD HH:mm:ss；历史为空不回填 | — |
 | `last_status` | character varying(16) | 否 | 否 | — | 最近派发结果：queued入队、no_data无匹配、skipped节假日跳过、failed失败；历史为空；生成进度读取关联任务 | — |
 | `last_error` | text | 否 | 否 | — | 最近派发失败原因，脱敏后保存；成功或跳过时清空，不包含模型密钥或内部堆栈 | — |
+| `success_count` | bigint | 是 | 否 | '0'::bigint | 自动计划累计成功生成次数，基于已完成的关联生成任务 | — |
+| `failure_count` | bigint | 是 | 否 | '0'::bigint | 自动计划累计派发和生成失败次数，同一周期的重复派发失败只计一次 | — |
+| `skipped_count` | bigint | 是 | 否 | '0'::bigint | 自动计划累计跳过次数，包含无匹配资料和按节假日策略跳过 | — |
+| `last_failed_due_at` | timestamp with time zone | 否 | 否 | — | 最近已计数的派发失败周期时间，带时区，用于防止重复计数 | — |
+| `next_retry_at` | timestamp with time zone | 否 | 否 | — | 瞬时派发失败后的最早重试时间，不推进原业务周期 | — |
+| `retry_count` | integer | 是 | 否 | 0 | 当前业务周期连续派发失败次数；成功或手动恢复后清零 | — |
 
 ## public.generation_tasks
 
@@ -301,6 +307,7 @@ APScheduler持久化任务表；框架管理运行时间和序列化任务，不
 | `updated_at` | timestamp(0) without time zone | 是 | 否 | date_trunc('second'::text, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai'::text)) | 新闻正文或关联资料最近更新时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss | — |
 | `entities` | jsonb | 否 | 否 | — | 核心事件实体JSON数组；每项含type(地点/时间/政策/人物/机构/技术)与name；通常3至5项、最多6项，类型不凑齐；机构和技术各最多2项，其余类型各最多1项；为空表示未处理或无核心实体 | — |
 | `summary` | text | 否 | 否 | — | 约200字中文摘要，基于原文生成；正常正文控制180至220字符，短原文不凑字数；未处理时为空，不以正文截断冒充摘要 | — |
+| `ai_insight` | jsonb | 否 | 否 | — | 管网洞察六字段JSON对象：organization/people/policy/technology/policy_focus/scenario；仅官网来源新闻有值，普通新闻为NULL；每字段为附原文依据的中文字符串，缺少证据用null | — |
 
 ## public.papers
 
@@ -324,6 +331,8 @@ APScheduler持久化任务表；框架管理运行时间和序列化任务，不
 | `created_at` | timestamp(0) without time zone | 是 | 否 | date_trunc('second'::text, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai'::text)) | 论文平台入库时间，不能代替真实发表日期；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss | — |
 | `updated_at` | timestamp(0) without time zone | 是 | 否 | date_trunc('second'::text, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai'::text)) | 论文文献信息或摘要最近更新时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss | — |
 | `entities` | jsonb | 否 | 否 | — | 核心研究实体JSON数组；每项含type与name，仅依据标题和已有摘要，通常3至5项、最多6项；机构和技术各最多2项、其余类型各最多1项，不推测作者机构、不声称读取全文 | — |
+| `ai_insight` | jsonb | 否 | 否 | — | 论文AI解读四字段JSON对象：institutions/research/effect/scenario；仅依据标题和摘要，缺少证据的字段为null | — |
+| `summary` | text | 否 | 否 | — | 采集处理时生成的中文概述；与原文及译文摘要分别保存，不声称阅读全文 | — |
 
 ## public.report_assets
 
@@ -649,3 +658,8 @@ APScheduler持久化任务表；框架管理运行时间和序列化任务，不
 | `is_enabled` | boolean | 是 | 否 | true | 模板选择开关；true可用于新任务、false停用，历史任务快照不受修改影响 | — |
 | `created_at` | timestamp(0) without time zone | 是 | 否 | date_trunc('second'::text, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai'::text)) | 模板创建时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss | — |
 | `updated_at` | timestamp(0) without time zone | 是 | 否 | date_trunc('second'::text, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai'::text)) | 模板内容或模型配置最近修改时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss | — |
+| `report_type` | character varying(32) | 否 | 否 | — | 科研报告类型：research-demand、technology-route、project-demand；旧模板未绑定时为空，不从名称推断 | — |
+| `user_id` | bigint | 是 | 否 | — | 模板所有者ID，关联sys_user.id；每个用户仅可见和管理自己的模板 | FOREIGN KEY (user_id) REFERENCES sys_user(id) ON DELETE RESTRICT |
+| `preset_key` | character varying(64) | 否 | 否 | — | 个人默认模板的稳定标识；同一用户唯一，改名或软删除不改变该标识，防止重复初始化；自建模板为空 | — |
+| `deleted_at` | timestamp(0) without time zone | 否 | 否 | — | 模板软删除时间；为空表示未删除，已删除模板不可用于新任务，可恢复；历史报告和快照保留 | — |
+| `digest_cadence` | character varying(16) | 否 | 否 | — | 简报适用周期：weekly周报、monthly月报、all通用；daily仅兼容历史，与名称无关 | — |

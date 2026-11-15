@@ -4,7 +4,7 @@
       <span>全部来源 <strong>{{ rows.length }}</strong></span>
       <span>已启用 <strong>{{ enabledCount }}</strong></span>
       <div class="source-summary-actions">
-        <el-button v-if="canSourceSave" type="primary" :icon="Plus" @click="openCreateDialog">新增公众号</el-button>
+        <el-button v-if="canSourceSave" type="primary" :icon="Plus" @click="openCreateDialog">新增数据源</el-button>
       </div>
     </div>
 
@@ -24,19 +24,20 @@
         </el-table-column>
         <el-table-column label="采集频率" width="180" align="center">
           <template #default="{ row }">
-            <div v-if="sourceType(row) === 'wechat'" class="source-frequency-cell">
+            <div v-if="!isExternalSource(row)" class="source-frequency-cell">
               <el-button v-if="canSourceSave" plain type="primary" :icon="Clock" :disabled="busy" @click="openFrequencyDialog(row)">设置频率</el-button>
             </div>
-            <span v-else class="source-cell-empty">—</span>
+            <span v-else class="source-cell-empty">外部调度</span>
           </template>
         </el-table-column>
+        <el-table-column label="手动试采" width="120" align="center"><template #default="{ row }"><el-button v-if="canSourceRun && !isExternalSource(row)" :loading="runningId === row.id" :disabled="busy" @click="runSource(row)">试采</el-button><span v-else>—</span></template></el-table-column>
         <el-table-column label="最后采集" width="180" align="center">
           <template #default="{ row }">{{ formatBusinessTime(row.lastRunAt ?? row.last_run_at) || '—' }}</template>
         </el-table-column>
         <el-table-column label="是否启用" width="180" align="center">
           <template #default="{ row }">
             <div class="source-list-actions" role="group" :aria-label="`${row.name}操作`">
-              <el-button v-if="canSourceSave && sourceType(row) === 'wechat'" plain type="primary" :disabled="busy" @click="openEditDialog(row)">编辑</el-button>
+              <el-button v-if="canSourceSave && !isExternalSource(row)" plain type="primary" :disabled="busy" @click="openEditDialog(row)">编辑</el-button>
               <el-switch :model-value="sourceEnabled(row)" :disabled="!canSourceSave || busy" :loading="pendingSourceId === row.id" :aria-label="`${row.name}采集开关`" @change="toggleSource(row)" />
             </div>
           </template>
@@ -45,12 +46,19 @@
       <pagination v-model:page="page" v-model:limit="pageSize" :total="filteredRows.length" :auto-scroll="false" class="source-pagination" />
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="editingSource ? (editDetails ? '编辑公众号' : '设置采集频率') : '新增公众号'" width="min(520px, calc(100vw - 32px))" :close-on-click-modal="!saving" :close-on-press-escape="!saving" :show-close="!saving" destroy-on-close>
+    <el-dialog v-model="dialogVisible" :title="editingSource ? (editDetails ? '编辑数据源' : '设置采集频率') : '新增数据源'" width="min(520px, calc(100vw - 32px))" :close-on-click-modal="!saving" :close-on-press-escape="!saving" :show-close="!saving" destroy-on-close>
       <el-form label-position="top" :model="sourceForm" :disabled="saving" @submit.prevent="saveSource">
         <p v-if="editingSource && !editDetails" class="source-dialog-name">{{ editingSource.name }}</p>
         <template v-else>
-          <el-form-item label="公众号名称" required><el-input v-model="sourceForm.name" maxlength="255" placeholder="请输入公众号名称" /></el-form-item>
-          <el-form-item label="公众号 RSS 链接" required><el-input v-model="sourceForm.feedUrl" placeholder="请输入已授权的公众号 feed 地址" /></el-form-item>
+          <el-form-item v-if="!editingSource" label="来源类型"><el-select v-model="sourceForm.sourceType" aria-label="来源类型"><el-option label="新闻网站" value="website" /><el-option label="论文" value="paper" /><el-option label="公众号" value="wechat" /></el-select></el-form-item>
+          <el-form-item label="来源名称" required><el-input v-model="sourceForm.name" maxlength="255" placeholder="请输入来源名称" /></el-form-item>
+          <el-form-item v-if="sourceForm.sourceType === 'wechat'" label="公众号 RSS 链接" required><el-input v-model="sourceForm.feedUrl" placeholder="请输入已授权的公众号 feed 地址" /></el-form-item>
+          <template v-if="sourceForm.sourceType !== 'wechat'">
+            <el-form-item label="采集适配器"><el-input :model-value="sourceForm.sourceType === 'paper' ? 'Crossref 论文' : '国家管网资讯'" disabled /></el-form-item>
+            <el-form-item label="HTTPS 来源入口"><el-input v-model="sourceForm.url" :placeholder="sourceForm.sourceType === 'paper' ? 'https://api.crossref.org/works' : 'https://www.pipechina.com.cn/groupnews.html'" /></el-form-item>
+            <el-form-item v-if="sourceForm.sourceType === 'paper'" label="检索主题"><el-input v-model="sourceForm.query" maxlength="1000" placeholder="oil gas pipeline integrity monitoring" /></el-form-item>
+            <el-form-item label="单次采集上限"><el-input-number v-model="sourceForm.limit" :min="1" :max="30" /></el-form-item>
+          </template>
         </template>
         <el-form-item label="采集间隔">
           <div class="source-frequency-controls">
@@ -78,7 +86,7 @@
       </el-form>
       <template #footer>
         <el-button :disabled="saving" @click="dialogVisible = false">取消</el-button>
-        <el-button v-if="canSourceSave" type="primary" :loading="saving" @click="saveSource">{{ editingSource ? (editDetails ? '保存' : '保存频率') : '新增公众号' }}</el-button>
+        <el-button v-if="canSourceSave" type="primary" :loading="saving" @click="saveSource">{{ editingSource ? (editDetails ? '保存' : '保存频率') : '新增数据源' }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -89,13 +97,16 @@ import { formatBusinessTime } from '@/utils/portal/businessTime'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Clock, Plus } from '@element-plus/icons-vue'
-import { createPipelineSource, disablePipelineSource, listPipelineSources, updatePipelineSource } from '@/api/pipeline/intelligence'
+import { createPipelineSource, disablePipelineSource, listPipelineSources, updatePipelineSource, runPipelineTask } from '@/api/pipeline/intelligence'
 import { sourceEnabled } from '@/utils/pipeline/compactContract'
 import { checkPermi } from '@/utils/permission'
-import { editedWechatSourcePayload, existingSourcePayload, newWechatSourcePayload, sourceCron, sourceFrequency, sourceFrequencyText, sourceIntervalChoices, sourceIntervalCron } from '@/utils/pipeline/sourceManagement'
+import { configuredSourcePayload, existingSourcePayload, sourceCron, sourceFrequency, sourceFrequencyText, sourceIntervalChoices, sourceIntervalCron } from '@/utils/pipeline/sourceManagement'
 
 defineOptions({ name: 'PipelineSource' })
 
+const runningId = ref('')
+const canSourceRun = computed(() => checkPermi(['pipeline:task:run']))
+const isExternalSource = row => ['news_pipelines_spider', 'kafka_content_import'].includes(row.adapter)
 const loading = ref(false)
 const sourceError = ref('')
 const rows = ref([])
@@ -108,7 +119,7 @@ const pendingSourceId = ref(null)
 const canSourceList = computed(() => checkPermi(['pipeline:source:list']))
 const canSourceSave = computed(() => checkPermi(['pipeline:source:save']))
 const busy = computed(() => loading.value || saving.value || pendingSourceId.value !== null)
-const sourceForm = reactive({ name: '', sourceType: 'wechat', feedUrl: '' })
+const sourceForm = reactive({ name: '', sourceType: 'wechat', feedUrl: '', url: '', query: '', limit: 12 })
 const frequency = reactive({ unit: 'hour', amount: 6 })
 const intervalChoices = computed(() => sourceIntervalChoices[frequency.unit] || [])
 const hasExistingSchedule = computed(() => editingSource.value && sourceFrequency(sourceCron(editingSource.value)).unit === 'preserve')
@@ -166,13 +177,13 @@ function openCreateDialog() {
   if (!canSourceSave.value || busy.value) return
   editDetails.value = false
   editingSource.value = null
-  Object.assign(sourceForm, { name: '', sourceType: 'wechat', feedUrl: '' })
+  Object.assign(sourceForm, { name: '', sourceType: 'wechat', feedUrl: '', url: '', query: '', limit: 12 })
   Object.assign(frequency, { unit: 'hour', amount: 6 })
   dialogError.value = ''
   dialogVisible.value = true
 }
 function openFrequencyDialog(source) {
-  if (!canSourceSave.value || busy.value || sourceType(source) !== 'wechat') return
+  if (!canSourceSave.value || busy.value || isExternalSource(source)) return
   editDetails.value = false
   editingSource.value = source
   Object.assign(frequency, sourceFrequency(sourceCron(source)))
@@ -180,23 +191,19 @@ function openFrequencyDialog(source) {
   dialogVisible.value = true
 }
 function openEditDialog(source) {
-  if (!canSourceSave.value || busy.value || sourceType(source) !== 'wechat') return
+  if (!canSourceSave.value || busy.value || isExternalSource(source)) return
   openFrequencyDialog(source)
   editDetails.value = true
-  Object.assign(sourceForm, { name: source.name, sourceType: 'wechat', feedUrl: source.config?.feed_url || source.url || source.endpoint || '' })
+  Object.assign(sourceForm, { name: source.name, sourceType: sourceType(source), feedUrl: source.config?.feed_url || '', url: source.url || '', query: source.config?.query || '', limit: source.config?.limit || 12 })
 }
 async function saveSource() {
   if (!canSourceSave.value || busy.value) return
   dialogError.value = ''
-  if (editingSource.value && sourceType(editingSource.value) !== 'wechat') {
-    dialogError.value = '论文和新闻网站仅支持启停'
-    return
-  }
   let payload
   try {
     payload = editingSource.value
-      ? (editDetails.value ? editedWechatSourcePayload(editingSource.value, sourceForm, frequency) : existingSourcePayload(editingSource.value, { cron: sourceIntervalCron(frequency, sourceCron(editingSource.value)) }))
-      : newWechatSourcePayload(sourceForm, frequency)
+      ? (editDetails.value ? configuredSourcePayload(sourceForm, frequency, editingSource.value) : existingSourcePayload(editingSource.value, { cron: sourceIntervalCron(frequency, sourceCron(editingSource.value)) }))
+      : configuredSourcePayload(sourceForm, frequency)
   } catch (error) {
     dialogError.value = error.message
     return
@@ -206,7 +213,7 @@ async function saveSource() {
     if (editingSource.value) await updatePipelineSource(editingSource.value.id, payload)
     else await createPipelineSource(payload)
     dialogVisible.value = false
-    ElMessage.success(editingSource.value ? (editDetails.value ? '公众号已更新' : '采集频率已更新') : '公众号已新增')
+    ElMessage.success(editingSource.value ? (editDetails.value ? '数据源已更新' : '采集频率已更新') : '数据源已新增，默认停用，请先试采')
     await loadSources()
   } catch (error) {
     dialogError.value = error?.msg || error?.message || '保存失败，请重试'
@@ -230,6 +237,13 @@ async function toggleSource(source) {
   }
 }
 
+async function runSource(source) {
+  if (!canSourceRun.value || isExternalSource(source) || busy.value || runningId.value) return
+  runningId.value = source.id
+  try { const result = await runPipelineTask(source.id); ElMessage.success(`试采已入队：${result.data?.id || result.data?.runId || ''}，可在采集管理查看执行结果`); await loadSources() }
+  catch (error) { ElMessage.error(error?.msg || error?.message || '试采未能启动') }
+  finally { runningId.value = '' }
+}
 onMounted(loadSources)
 </script>
 

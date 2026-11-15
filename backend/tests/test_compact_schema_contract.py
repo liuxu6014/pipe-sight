@@ -18,6 +18,27 @@ from app.schema_contract import (
 from app.schema_migration import CONTRACT_SHA256, _contract
 
 
+def test_v17_adds_only_explicit_template_cadence_and_schedule_backoff_fields() -> None:
+    old, new = load_contract('v16'), load_contract('v17')
+    before = {table['name']: table for table in old['tables']}
+    after = {table['name']: table for table in new['tables']}
+    additions = {'templates': {'digest_cadence'}, 'digest_schedules': {'next_retry_at', 'retry_count'}}
+    assert before.keys() == after.keys()
+    for name, table in before.items():
+        extra = additions.get(name, set())
+        assert table['columns'] == [column for column in after[name]['columns'] if column['name'] not in extra]
+        added = {column['name']: column for column in after[name]['columns'] if column['name'] in extra}
+        assert set(added) == extra
+        for field, column in added.items():
+            assert not column['primary_key']
+            assert column['nullable'] == (field != 'retry_count')
+            if field == 'retry_count':
+                assert column['server_default'] == '0'
+    assert old['foreign_keys'] == new['foreign_keys']
+    assert old['optional_table_definitions'] == new['optional_table_definitions']
+    assert new['business_schema_snapshot'] == 'business-v16.json'
+
+
 def test_v16_adds_only_nullable_template_identity_and_deletion_time() -> None:
     old, new = load_contract('v15'), load_contract('v16')
     before = {t['name']: t for t in old['tables']}
@@ -69,7 +90,7 @@ def test_v7_adds_only_nullable_entities_to_news_articles_and_preserves_every_pri
     assert old['optional_table_definitions'] == new['optional_table_definitions']
     contract = load_contract()
     assert len(contract['tables']) == 28
-    assert sum(len(t['columns']) for t in contract['tables']) == 349
+    assert sum(len(t['columns']) for t in contract['tables']) == 352
     assert {t['name'] for t in contract['tables']} >= {'sys_user', 'papers', 'collection_runs'}
     for table in contract['tables']:
         if table['name'] not in FOUNDATION_TABLE_RENAMES.values():
@@ -182,8 +203,8 @@ def test_v4_stays_frozen_when_runtime_contract_advances() -> None:
         json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()
     ).hexdigest()
     assert digest == '88491613e027bcdc0058837512053d68eae7a757d9ebcadad16e46e92316b8bc'
-    assert load_contract() == load_contract('v16')
-    assert load_contract()['version'] == '20261115-compact-v16'
+    assert load_contract() == load_contract('v17')
+    assert load_contract()['version'] == '20261115-compact-v17'
 
 
 def test_v4_preserves_v3_physical_core_without_freezing_unstable_orm_ddl() -> None:

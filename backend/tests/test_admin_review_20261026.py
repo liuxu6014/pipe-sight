@@ -1,6 +1,7 @@
 """Admin review regressions. All persistence/transport boundaries are in memory."""
 
 from http import HTTPStatus
+from importlib import import_module
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -122,13 +123,19 @@ async def test_management_http_boundary_uses_real_guards(
     monkeypatch.setattr(RouteDependencyGuard, 'check_exclude_routes', staticmethod(lambda *a, **kw: None))
     owner_id = 9
     listing = AsyncMock(return_value={'rows': [{'id': '22', 'ownerId': owner_id}], 'total': 1})
-    monkeypatch.setattr(ResearchApplicationService, 'list_admin_reports', listing)
+    # Keep authentication and role/permission guards real; isolate only the
+    # bounded read model now used by the administrator list endpoint.
+    monkeypatch.setattr(import_module('app.research.api.controller'), 'report_page', listing)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
-        response = await client.get('/pipeline/research/admin/reports')
+        response = await client.get('/pipeline/research/admin/reports?pageNum=2&pageSize=10&keyword=管道')
     assert response.status_code == expected
     assert listing.await_count == (1 if expected == HTTPStatus.OK else 0)
     if expected == HTTPStatus.OK:
         assert response.json()['data']['rows'][0]['ownerId'] == owner_id
+        assert listing.await_args.kwargs['page'] == 2
+        assert listing.await_args.kwargs['page_size'] == 10
+        assert listing.await_args.kwargs['keyword'] == '管道'
+        assert 'user_id' not in listing.await_args.kwargs  # Admin reads remain all-owner.
 
 
 def result_rows(values: list[object]) -> MagicMock:

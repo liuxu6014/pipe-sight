@@ -161,20 +161,13 @@ def classification_session_factory(db) -> Any:
 class PipelineCollectionService:
     @classmethod
     async def prepare_records(cls, db, records, snapshot) -> tuple[list, list]:
+        if not isinstance(snapshot.get('processing_model'), dict):
+            raise TranslationConfigurationError('运行缺少内容处理模型，请管理员配置后重新发起采集')
         # The outer execute loop keeps heartbeats alive and cancels this task on stop.
         translated = await CollectionTranslationService.translate(classification_session_factory(db), snapshot, records)
-        kind = 'paper' if snapshot['type'] == 'paper' else 'news'
-        if 'processing_model' in snapshot:
-            from app.intelligence.services.content_processing import ContentProcessingService  # noqa: PLC0415
+        from app.intelligence.services.content_processing import ContentProcessingService  # noqa: PLC0415
 
-            return await ContentProcessingService.prepare(classification_session_factory(db), snapshot, translated)
-        # Already queued legacy runs retain their original processing contract.
-        classifications = await cls.classify_records(db, translated, kind)
-        enrichments = await cls.enrich_records(db, translated, snapshot.get('model_id'), kind=kind)
-        for record, enrichment in zip(translated, enrichments, strict=True):
-            if enrichment is not None:
-                record.update(enrichment)
-        return translated, classifications
+        return await ContentProcessingService.prepare(classification_session_factory(db), snapshot, translated)
 
     @staticmethod
     async def classify_records(db, records, kind) -> list[tuple]:

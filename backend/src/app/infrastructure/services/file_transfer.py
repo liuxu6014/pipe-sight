@@ -87,6 +87,14 @@ class FileTransferService:
             raise ServiceException(message='文件名称不合法')
         relative_resource = resource[len(prefix) :]
         filepath = cls._safe_path(UploadConfig.UPLOAD_PATH, relative_resource)
+        # Uploads contain private library documents, exports and licensed originals.
+        # Public filenames are not authorization tokens. Only the avatar namespace
+        # has a deliberately public contract; every other file uses its domain API.
+        public_root = cls._safe_path(UploadConfig.UPLOAD_PATH, '') / 'avatar'
+        try:
+            filepath.relative_to(public_root)
+        except ValueError as error:
+            raise ServiceException(message='该资源须通过所属业务的受控下载接口访问') from error
         filename = Path(relative_resource).name
         if (
             '..' in filename

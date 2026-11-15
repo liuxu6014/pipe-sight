@@ -122,6 +122,132 @@ async def test_manual_paper_title_translation_requires_a_configured_model(env, t
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('field', ['title', 'abstract'])
+async def test_concurrent_first_translation_shares_the_saved_result(env, translation, monkeypatch, field):
+    e = env
+    source_data, _ = await configured_source(e, kind='paper')
+    await e.persistence.CollectionPersistenceService.save_record(
+        e.db, SimpleNamespace(id=int(source_data['id']), type='paper'), record('paper'), NOW
+    )
+    await e.db.commit()
+    paper = e.db.sync.scalars(select(e.content.PipelinePaper)).one()
+    identity = paper.id
+    await e.db.commit()
+    reached, release = asyncio.Event(), asyncio.Event()
+    calls = []
+
+    async def gateway(db, snapshot, **kwargs):
+        calls.append(kwargs['request_id'])
+        reached.set()
+        await release.wait()
+        return json.dumps({f'{field}_zh': '管道检测的中文译文。'})
+
+    monkeypatch.setattr(importlib.import_module('app.research.services.model_generation').ModelGateway, 'call', gateway)
+
+    async def request():
+        async with AsyncMemorySession(e.engine) as db:
+            return await translation._translate_paper_field(db, identity, field=field)
+
+    first = asyncio.create_task(request())
+    await asyncio.wait_for(reached.wait(), timeout=2)
+    second = asyncio.create_task(request())
+    await asyncio.sleep(0)
+    assert len(calls) == 1
+    release.set()
+    assert await asyncio.gather(first, second) == ['管道检测的中文译文。'] * 2
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_failed_translation_releases_single_flight_for_retry(env, translation, monkeypatch):
+    from exceptions.exception import ServiceException
+
+    e = env
+    source_data, _ = await configured_source(e, kind='paper')
+    await e.persistence.CollectionPersistenceService.save_record(
+        e.db, SimpleNamespace(id=int(source_data['id']), type='paper'), record('paper'), NOW
+    )
+    await e.db.commit()
+    paper = e.db.sync.scalars(select(e.content.PipelinePaper)).one()
+    e.state.category_reply = RuntimeError('provider unavailable')
+    with pytest.raises(ServiceException):
+        await translation.translate_paper_title(e.db, paper.id)
+    e.state.category_reply = '{"title_zh":"重试成功的中文标题"}'
+    assert await translation.translate_paper_title(e.db, paper.id) == '重试成功的中文标题'
+    assert len(e.state.category_requests) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('cancel_at', ['acquire', 'cleanup'])
+async def test_pg_translation_releases_auth_read_connection_and_finishes_unlock_before_pool_return(
+    env, translation, monkeypatch, cancel_at
+):
+    events = []
+    cleanup_started, release_cleanup = asyncio.Event(), asyncio.Event()
+
+    class Connection:
+        async def __aenter__(self):
+            events.append('connect')
+            return self
+
+        async def __aexit__(self, *args):
+            assert 'unlock-complete' in events
+            events.append('pool-return')
+
+        async def execute(self, statement, params):
+            if 'try_advisory_lock' in str(statement):
+                if cancel_at == 'acquire':
+                    raise asyncio.CancelledError
+                return SimpleNamespace(scalar=lambda: True)
+            events.append('unlock-start')
+            cleanup_started.set()
+            if cancel_at == 'cleanup':
+                await release_cleanup.wait()
+            events.append('unlock-complete')
+            return None
+
+        async def commit(self):
+            pass
+
+        async def rollback(self):
+            pass
+
+        async def invalidate(self):
+            events.append('invalidated')
+
+    async def commit_read():
+        events.append('read-commit')
+
+    async def dispose():
+        events.append('dispose')
+
+    lock_engine = SimpleNamespace(connect=Connection, dispose=dispose)
+    monkeypatch.setattr(translation, 'create_async_engine', lambda *args, **kwargs: lock_engine)
+    db = SimpleNamespace(
+        bind=SimpleNamespace(dialect=SimpleNamespace(name='postgresql'), url='postgresql+asyncpg://offline'),
+        commit=commit_read,
+    )
+
+    async def request():
+        async with translation._paper_translation_guard(db, 401, 'title'):
+            pass
+
+    task = asyncio.create_task(request())
+    if cancel_at == 'cleanup':
+        # A broken precondition must fail this regression rather than leave the
+        # full suite waiting indefinitely on an unreachable fake barrier.
+        await asyncio.wait_for(cleanup_started.wait(), timeout=2)
+        task.cancel()
+        await asyncio.sleep(0)
+        assert 'pool-return' not in events
+        release_cleanup.set()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(task, timeout=2)
+    assert events.index('read-commit') < events.index('connect')
+    assert events.index('unlock-complete') < events.index('pool-return')
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('kind', ['website', 'wechat', 'paper'])
 async def test_no_translation_model_leaves_originals_and_never_calls_provider(env, translation, kind) -> None:
     e = env
@@ -397,6 +523,8 @@ async def test_category_classification_consumes_translation_and_still_sets_singl
     env, translation, monkeypatch
 ) -> None:
     e = env
+    monkeypatch.setattr(e.processing, 'freeze', e.real_processing_freeze)
+    monkeypatch.setattr(e.processing, 'prepare', e.real_processing_prepare)
     s, _ = await configured_source(e)
     e.db.add(
         e.content.PipelineCategory(

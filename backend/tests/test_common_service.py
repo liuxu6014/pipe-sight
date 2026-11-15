@@ -6,6 +6,7 @@ import aiofiles
 import pytest
 from fastapi import BackgroundTasks, UploadFile
 
+from app.infrastructure.services.file_storage import FileStorageService
 from app.infrastructure.services.file_transfer import FileTransferService
 from config.env import UploadConfig
 from exceptions.exception import ServiceException
@@ -85,3 +86,26 @@ async def test_common_resource_download_rejects_path_escape(
     with pytest.raises(ServiceException) as exc_info:
         await FileTransferService.download_resource_services('/profile/upload/../../outside.txt')
     assert exc_info.value.message == '文件名称不合法'
+
+
+@pytest.mark.asyncio
+async def test_common_resource_download_cannot_bypass_private_upload_gate(monkeypatch, tmp_path):
+    monkeypatch.setattr(UploadConfig, 'UPLOAD_PATH', str(tmp_path))
+    monkeypatch.setattr(UploadConfig, 'UPLOAD_PREFIX', '/profile')
+    upload = UploadFile(file=io.BytesIO(b'private document'), filename='private.txt')
+    stored = await FileStorageService.upload('http://test/', upload)
+    # No knowledge of a valid storage name, account role or scan state makes the
+    # generic endpoint an alternate route to the private source bytes.
+    with pytest.raises(ServiceException) as denied:
+        await FileTransferService.download_resource_services(stored.file_name)
+    assert '受控下载' in denied.value.message
+    public = tmp_path / 'avatar' / stored.new_file_name
+    public.parent.mkdir()
+    public.write_bytes(b'public avatar')
+    response = await FileTransferService.download_resource_services(f'/profile/avatar/{public.name}')
+    assert b''.join([part async for part in response.result]) == b'public avatar'
+    public.unlink()
+    public.symlink_to(next((tmp_path / 'upload').rglob('*.txt')))
+    with pytest.raises(ServiceException) as denied:
+        await FileTransferService.download_resource_services(f'/profile/avatar/{public.name}')
+    assert '受控下载' in denied.value.message

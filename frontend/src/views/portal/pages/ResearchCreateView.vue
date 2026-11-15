@@ -116,7 +116,7 @@
               <small>精简、详细和自定义会按章节比例分配字数，仍可逐章调整。</small>
             </div>
           </div>
-          <div class="ps-option-row"><el-checkbox v-model="form.diagram">生成配图</el-checkbox><el-checkbox v-model="form.citationCheck">提交前执行引用完整性检查</el-checkbox></div>
+          <div class="ps-option-row"><el-checkbox v-model="form.diagram">生成配图</el-checkbox><el-tooltip content="检查引用编号、来源和正文位置是否对应，不代表事实核验通过。"><el-checkbox v-model="form.citationCheck">生成后检查引用完整性</el-checkbox></el-tooltip></div>
         </section>
         <el-descriptions class="ps-report-review" title="生成信息" :column="2" border>
           <el-descriptions-item label="报告类型">{{ reportTypes.find(type => type.value === form.reportType)?.label }}</el-descriptions-item>

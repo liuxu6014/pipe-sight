@@ -342,7 +342,27 @@ def normalize_generated_report(content: str, materials: list[dict] | None = None
 
 def normalize_task_report(content: str, materials: list[dict], snapshot: dict) -> dict:
     if snapshot.get('document_format') != PROJECT_DEMAND_FORMAT:
-        return normalize_generated_report(content, materials, delivery=True)
+        article = normalize_generated_report(content, materials, delivery=True)
+        request = snapshot.get('request') or {}
+        outline = request.get('outline') or (snapshot.get('template') or {}).get('sections') or []
+        sections = article['sections']
+        expected = [unnumbered_chapter(str(item['title'])) for item in outline]
+        remaining = [s for s in sections[1:] if s['title'].casefold() not in DELIVERY_REFERENCE_TITLES]
+        if (
+            expected
+            and sections
+            and not sections[0]['content'].strip()
+            and unnumbered_chapter(sections[0]['title']) not in expected
+            and [unnumbered_chapter(s['title']) for s in remaining] == expected
+        ):
+            # A standalone bold document title is not a chapter. Remove it only
+            # when every remaining chapter exactly satisfies the frozen plan.
+            article['sections'] = [{**s, 'id': index} for index, s in enumerate(sections[1:], 1)]
+            article['content'] = '\n\n'.join(
+                f'**{s["title"]}**\n\n{s["content"]}' for s in article['sections']
+            )
+        article['qualityIssues'] = validate_confirmed_outline(article['sections'], snapshot)
+        return article
 
     text = normalize_generated_report(content)['content']
     sections = sections_from_markdown(_without_model_references(text))
@@ -374,4 +394,120 @@ def normalize_task_report(content: str, materials: list[dict], snapshot: dict) -
     text = marks.sub(lambda match: f'[{ordinals[int(match[1])]}]', numbered)
     if cited_materials:
         text += '\n\n**参考资料**\n\n' + _bibliography(cited_materials, numbered=True)
-    return {'content': text, 'sections': sections_from_markdown(text), 'materials': cited_materials}
+    sections = sections_from_markdown(text)
+    return {
+        'content': text,
+        'sections': sections,
+        'materials': cited_materials,
+        'qualityIssues': validate_confirmed_outline(sections, snapshot),
+    }
+
+
+def validate_confirmed_outline(sections: list[dict], snapshot: dict) -> list[dict]:
+    """Enforce frozen chapter identity/order and flag meaningful length deviations.
+
+    Word targets are approximate: Chinese characters and Latin words count as
+    units. Grossly short chapters fail; normal drafting variance is an explicit
+    warning, never a claim that the requested length was met.
+    """
+    request = snapshot.get('request') or {}
+    outline = request.get('outline') or (snapshot.get('template') or {}).get('sections') or []
+    # Historical tasks without an outline retain their existing integrity gate.
+    if not outline:
+        return []
+    expected = [unnumbered_chapter(str(item['title'])) for item in outline]
+    chapters = [section for section in sections if section['title'].casefold() not in DELIVERY_REFERENCE_TITLES]
+    if chapters and chapters[0]['title'] in {'引言', '摘要', '编制说明'} and chapters[0]['title'] not in expected:
+        chapters = chapters[1:]
+    actual = [unnumbered_chapter(section['title']) for section in chapters]
+    if actual != expected:
+        raise ManuscriptValidationError('文稿检查未通过：正文与确认的大纲章节或顺序不一致，请重试生成')
+    issues = []
+    for section, spec in zip(chapters, outline, strict=True):
+        target = spec.get('words')
+        if type(target) is not int or target <= 0:
+            continue
+        prose = re.sub(r'\[[^\]\n]+\](?:\([^\n)]*\))?', '', section['content'])
+        actual_words = len(re.findall(r'[\u3400-\u9fff]|[A-Za-z0-9]+(?:[\x27’_-][A-Za-z0-9]+)*', prose))
+        if actual_words < min(80, max(10, round(target * 0.15))):
+            raise ManuscriptValidationError(
+                f'文稿检查未通过：章节“{section["title"]}”正文过短，未满足确认篇幅，请重试生成'
+            )
+        if not target * 0.65 <= actual_words <= target * 1.5:
+            issues.append(
+                {
+                    'code': 'chapter_length_deviation',
+                    'severity': 'warning',
+                    'section': section['title'],
+                    'message': f'章节“{section["title"]}”约 {actual_words} 字词，规划 {target} 字；请核对篇幅。',
+                    'actualWords': actual_words,
+                    'targetWords': target,
+                }
+            )
+    return issues
+
+
+def check_citation_integrity(content: str, materials: list[dict]) -> dict:
+    """Map every body occurrence to a frozen source; this does not verify facts."""
+    occurrences = []
+    unresolved = []
+    used = set()
+    for section_index, section in enumerate(sections_from_markdown(content)):
+        if section['title'].casefold() in DELIVERY_REFERENCE_TITLES:
+            continue
+        prose = section['content']
+        # Preserve offsets while excluding ordinary Markdown links and inline code.
+        prose = re.sub(r'\[[^\]\n]*\]\([^\n)]*\)|`[^`\n]*`', lambda match: ' ' * len(match[0]), prose)
+        for mark in re.finditer(r'\[([^\]\n]+)\]', prose):
+            value = mark[1]
+            if not re.fullmatch(r'-?\d+', value):
+                if re.search(r'资料\d+|(?:article|paper|file):\d+', value):
+                    unresolved.append(value)
+                continue
+            number = int(value)
+            if not 1 <= number <= len(materials):
+                unresolved.append(value)
+                continue
+            start = (
+                max(
+                    prose.rfind('。', 0, mark.start()),
+                    prose.rfind('\n', 0, mark.start()),
+                    prose.rfind('！', 0, mark.start()),
+                    prose.rfind('？', 0, mark.start()),
+                )
+                + 1
+            )
+            ends = [
+                pos for punctuation in ('。', '\n', '！', '？') if (pos := prose.find(punctuation, mark.end())) >= 0
+            ]
+            end = min(ends) + 1 if ends else len(prose)
+            source = materials[number - 1]
+            used.add(number)
+            occurrences.append(
+                {
+                    'citationId': number,
+                    'sourceId': str(source['id']),
+                    'type': source.get('type'),
+                    'sectionIndex': section_index,
+                    'sectionTitle': section['title'],
+                    'offset': mark.start(),
+                    'quote': section['content'][start:end].strip(),
+                }
+            )
+    unused = [number for number in range(1, len(materials) + 1) if number not in used]
+    issues = []
+    if unresolved:
+        issues.append({'code': 'unresolved_citation', 'message': '存在无法对应来源的引用编号', 'values': unresolved})
+    if materials and not occurrences:
+        issues.append({'code': 'missing_body_citation', 'message': '正文没有对应所选资料的引用'})
+    if unused:
+        issues.append({'code': 'unused_sources', 'message': '部分来源未在正文中引用', 'citationIds': unused})
+    return {
+        'status': 'failed' if unresolved or (materials and not occurrences) else 'warning' if unused else 'passed',
+        'scope': 'source_number_and_location',
+        'factsVerified': False,
+        'occurrences': occurrences,
+        'sourceCount': len(materials),
+        'usedSourceCount': len(used),
+        'issues': issues,
+    }
