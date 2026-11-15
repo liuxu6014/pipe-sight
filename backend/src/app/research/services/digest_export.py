@@ -26,6 +26,22 @@ from app.research.services.digest_document import clean_source_display, digest_m
 TEMPLATE_PATH = Path(__file__).resolve().parents[4] / 'data/templates/digest-reference-v1.docx'
 LINK = re.compile(r'^\[(\d+)\] \[(.+)\]\((https?://[^\s]+)\)$')
 FONT_SIZES = {'title': 18, 'period': 16, 'category': 16, 'event': 14}
+LINE_HEIGHTS = {'title': 26, 'period': 23, 'category': 26, 'event': 22}
+
+
+class DigestHeadingParagraph(Paragraph):
+    """Match Word's synthetic bold when the installed FangSong has one face."""
+
+    def draw(self) -> None:
+        self.canv.saveState()
+        self.canv.setStrokeColor(self.style.textColor)
+        self.canv.setLineWidth(0.22)
+        self.canv.addLiteral('2 Tr')  # Fill and stroke, without drawing the text twice.
+        try:
+            super().draw()
+        finally:
+            self.canv.addLiteral('0 Tr')
+            self.canv.restoreState()
 
 
 def _chinese(number) -> str:
@@ -146,7 +162,9 @@ def build_digest_docx(report) -> bytes:
             snap = OxmlElement('w:snapToGrid')
             properties.append(snap)
         snap.set(qn('w:val'), '0')
-        paragraph.paragraph_format.line_spacing = 1.45
+        # Multiple spacing depends on the font's metrics and can inflate Word
+        # output compared with PDF. Use the same point-based leading in both.
+        paragraph.paragraph_format.line_spacing = Pt(LINE_HEIGHTS.get(role, 18))
         paragraph.paragraph_format.space_before = Pt(8 if role in {'category', 'event'} else 3)
         paragraph.paragraph_format.space_after = Pt(4)
         spacing = properties.find(qn('w:spacing'))
@@ -160,7 +178,7 @@ def build_digest_docx(report) -> bytes:
             paragraph.paragraph_format.keep_with_next = True
         if role in {'published', 'insight', 'source_label', 'source'}:
             paragraph.paragraph_format.first_line_indent = Pt(0)
-            paragraph.paragraph_format.line_spacing = 1.35
+            paragraph.paragraph_format.line_spacing = Pt(18)
         if role in {'published', 'insight'}:
             label, text = value.split('：', 1)
             _text(paragraph, label + '：', bold=True, underline=role == 'insight')
@@ -241,20 +259,28 @@ def build_digest_pdf(report, font_name) -> bytes:
             **{
                 **base,
                 'fontSize': FONT_SIZES['title'],
-                'leading': 26,
+                'leading': LINE_HEIGHTS['title'],
                 'textColor': HexColor('#FF0000'),
                 'alignment': TA_CENTER,
             },
         ),
         'period': ParagraphStyle(
             'DigestPeriod',
-            **{**base, 'fontSize': FONT_SIZES['period'], 'leading': 23, 'alignment': TA_CENTER, 'spaceAfter': 12},
+            **{
+                **base,
+                'fontSize': FONT_SIZES['period'],
+                'leading': LINE_HEIGHTS['period'],
+                'alignment': TA_CENTER,
+                'spaceAfter': 12,
+            },
         ),
         'category': ParagraphStyle(
-            'DigestCategory', **{**base, 'fontSize': FONT_SIZES['category'], 'leading': 26, 'keepWithNext': True}
+            'DigestCategory',
+            **{**base, 'fontSize': FONT_SIZES['category'], 'leading': LINE_HEIGHTS['category'], 'keepWithNext': True},
         ),
         'event': ParagraphStyle(
-            'DigestEvent', **{**base, 'fontSize': FONT_SIZES['event'], 'leading': 22, 'keepWithNext': True}
+            'DigestEvent',
+            **{**base, 'fontSize': FONT_SIZES['event'], 'leading': LINE_HEIGHTS['event'], 'keepWithNext': True},
         ),
         'summary': ParagraphStyle('DigestSummary', **base, firstLineIndent=24),
     }
@@ -283,8 +309,8 @@ def build_digest_pdf(report, font_name) -> bytes:
         title=str(report.title),
     )
     story = [
-        Paragraph(escape(title), styles['title']),
-        Paragraph(escape(period), styles['period']),
+        DigestHeadingParagraph(escape(title), styles['title']),
+        DigestHeadingParagraph(escape(period), styles['period']),
     ]
     from reportlab.platypus import HRFlowable  # noqa: PLC0415
 
@@ -299,6 +325,7 @@ def build_digest_pdf(report, font_name) -> bytes:
         elif role in {'published', 'insight'}:
             label, value = markup.split('：', 1)
             markup = f'<b><u>{label}：</u></b>{value}' if role == 'insight' else f'<b>{label}：</b>{value}'
-        story.append(Paragraph(markup, styles[role]))
+        paragraph_type = DigestHeadingParagraph if role in {'category', 'event', 'source_label'} else Paragraph
+        story.append(paragraph_type(markup, styles[role]))
     doc.build(story)
     return output.getvalue()

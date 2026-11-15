@@ -212,3 +212,30 @@ def test_word_and_pdf_follow_reference_layout_and_preserve_per_event_sources(kin
     assert 'w:hyperlink' in xml and 'https://example.org/news' in rels
     assert '检测技术公开报道' in xml and '检测方法研究' in xml
     assert build_pdf(value, is_draft=False)[2].startswith(b'%PDF-')
+
+
+def test_digest_exports_share_fixed_line_heights_and_pdf_headings_are_bold(monkeypatch) -> None:
+    from app.research.services import digest_export
+
+    captured = []
+    original = digest_export.SimpleDocTemplate.build
+
+    def inspect(self, flowables, *args, **kwargs):
+        captured.extend(flowables)
+        return original(self, flowables, *args, **kwargs)
+
+    monkeypatch.setattr(digest_export.SimpleDocTemplate, 'build', inspect)
+    value = report()
+    word = Document(BytesIO(build_docx(value, is_draft=False)[2]))
+    pdf = PdfReader(BytesIO(build_pdf(value, is_draft=False)[2]))
+    pdf_paragraphs = [p for p in captured if hasattr(p, 'style')]
+    assert len(word.paragraphs) == len(pdf_paragraphs)
+    for paragraph, pdf_paragraph in zip(word.paragraphs, pdf_paragraphs, strict=True):
+        assert paragraph.paragraph_format.line_spacing.pt == pdf_paragraph.style.leading
+        assert paragraph._p.pPr.find(qn('w:spacing')).get(qn('w:lineRule')) == 'exact'
+    # FangSong often ships without a bold face. The PDF must explicitly paint
+    # bold headings and reset the text state so normal body text stays normal.
+    streams = b''.join(page.get_contents().get_data() for page in pdf.pages)
+    assert streams.count(b'2 Tr') == 7  # masthead, period, category, two events, two source labels
+    assert streams.count(b'0 Tr') >= 7
+    assert sum(page.extract_text().count('检测技术验证进展') for page in pdf.pages) == 1
