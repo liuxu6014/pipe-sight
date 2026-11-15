@@ -115,7 +115,7 @@ class UserService:
         :return: 校验结果
         """
         if check_user.admin:
-            raise ServiceException(message='不允许操作超级管理员用户')
+            raise ServiceException(message='不允许操作管理员用户')
         return CrudResponseModel(is_success=True, message='校验通过')
 
     @classmethod
