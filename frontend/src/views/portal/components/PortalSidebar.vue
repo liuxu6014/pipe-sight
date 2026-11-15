@@ -33,6 +33,7 @@ import {
   FolderOpenFilled, FolderOpenOutlined,
   FundFilled, FundOutlined,
   HomeFilled, HomeOutlined,
+  LayoutFilled, LayoutOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined,
   ProfileFilled, ProfileOutlined,
   ReadFilled, ReadOutlined,
@@ -49,7 +50,8 @@ const navigationIcons = {
   '/portal/news': { outline: ProfileOutlined, filled: ProfileFilled },
   '/portal/papers': { outline: ReadOutlined, filled: ReadFilled },
   '/portal/research': { outline: FundOutlined, filled: FundFilled },
-  '/portal/digests': { outline: SnippetsOutlined, filled: SnippetsFilled }
+  '/portal/digests': { outline: SnippetsOutlined, filled: SnippetsFilled },
+  '/portal/templates': { outline: LayoutOutlined, filled: LayoutFilled }
 }
 function navigate(event, path) {
   if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return

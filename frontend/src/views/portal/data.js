@@ -3,7 +3,8 @@ export const portalNavigation = [
   { label: '新闻资讯', path: '/portal/news', match: path => path.startsWith('/portal/news') },
   { label: '科研论文', path: '/portal/papers', match: path => path.startsWith('/portal/papers') },
   { label: '科研报告', path: '/portal/research', match: path => path.startsWith('/portal/research') },
-  { label: '情报简报', path: '/portal/digests', match: path => path.startsWith('/portal/digests') }
+  { label: '情报简报', path: '/portal/digests', match: path => path.startsWith('/portal/digests') },
+  { label: '我的模板', path: '/portal/templates', match: path => path === '/portal/templates' || path.startsWith('/portal/templates/') }
 ]
 
 export const isBasketPath = path => path === '/portal/basket' || /^\/portal\/knowledge(?:\/|$)/.test(path)

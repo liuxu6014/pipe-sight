@@ -1,5 +1,5 @@
 <template>
-  <div class="app-container pipeline-page pipeline-template-page ws-list-page">
+  <div class="app-container pipeline-page pipeline-template-page ws-list-page" :class="{ 'is-personal': personal }">
     <section class="template-toolbar" aria-label="模板筛选与操作">
       <el-input v-model="keyword" :prefix-icon="Search" clearable aria-label="搜索模板" placeholder="搜索模板名称或说明" />
       <el-select v-model="status" aria-label="模板状态">
@@ -22,18 +22,20 @@
     <section v-else v-loading="loading" class="template-results ws-list-scroll" aria-label="模板列表">
       <div class="template-grid">
         <article v-for="item in filteredTemplates" :key="item.id" class="template-card">
-          <header class="template-card-head">
-            <span class="template-document-icon"><el-icon><Document /></el-icon></span>
-            <h3>{{ item.name }}</h3>
-            <el-tag :type="statusTag(item.status)" effect="light">{{ statusLabel(item.status) }}</el-tag>
-          </header>
-          <p class="template-description">{{ item.description || '暂无模板说明' }}</p>
-          <dl class="template-metadata">
-            <div><dt>报告类型</dt><dd>{{ reportTypeLabel(item) }}</dd></div>
-            <div><dt>文本模型</dt><dd>{{ modelLabel(item.modelId) }}</dd></div>
-            <div><dt>章节结构</dt><dd>{{ item.sections?.length ? `${item.sections.length} 个章节` : '未配置' }}</dd></div>
-            <div><dt>最近更新</dt><dd>{{ item.updatedAt || '—' }}</dd></div>
-          </dl>
+          <div class="template-card-main">
+            <header class="template-card-head">
+              <span class="template-document-icon"><el-icon><Document /></el-icon></span>
+              <h3 :title="item.name">{{ item.name }}</h3>
+              <el-tag :type="statusTag(item.status)" effect="light">{{ statusLabel(item.status) }}</el-tag>
+            </header>
+            <p class="template-description">{{ item.description || '暂无模板说明' }}</p>
+            <dl class="template-metadata">
+              <div><dt>报告类型</dt><dd>{{ reportTypeLabel(item) }}</dd></div>
+              <div><dt>文本模型</dt><dd>{{ modelLabel(item.modelId) }}</dd></div>
+              <div><dt>章节结构</dt><dd>{{ item.sections?.length ? `${item.sections.length} 个章节` : '未配置' }}</dd></div>
+              <div><dt>最近更新</dt><dd>{{ item.updatedAt || '—' }}</dd></div>
+            </dl>
+          </div>
           <footer class="template-card-actions">
             <el-button v-if="canSaveTemplate" type="primary" plain :icon="Edit" @click="editTemplate(item)">编辑</el-button>
             <el-button :icon="View" @click="previewTemplate(item)">预览</el-button>
@@ -233,6 +235,7 @@ onMounted(() => { loadTemplates(); loadModels() })
 .template-categories :deep(.el-segmented__item-label) { display: flex; align-items: center; gap: 8px; }
 .template-category-count { font-size: 12px; opacity: .8; font-variant-numeric: tabular-nums; }
 .template-results { min-width: 0; }
+.template-card-main { display: contents; }
 .template-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .template-card {
  min-width: 0; display: flex; flex-direction: column; padding: 20px;
@@ -250,6 +253,45 @@ onMounted(() => { loadTemplates(); loadModels() })
 .template-section-prompt { grid-column: 2 / -1; }
 .template-card-actions .el-button { margin: 0; }
 .template-result-count { color: var(--el-text-color-secondary); font-size: 13px; padding: 10px 16px; background: var(--el-bg-color); border: 1px solid var(--el-border-color-light); border-radius: 8px; }
+.is-personal {
+ display: flex; flex-direction: column; overflow: hidden;
+ border: 1px solid var(--ps-line); border-radius: 10px; background: var(--ps-paper);
+}
+.is-personal > .template-toolbar { flex-shrink: 0; padding: 16px 20px 12px; border: 0; border-radius: 0; background: transparent; }
+.is-personal > .template-categories { flex-shrink: 0; padding: 0 20px 12px; border-bottom: 1px solid var(--ps-line); }
+.is-personal > .template-results { flex: 1 1 0; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 0 20px; }
+.is-personal .template-grid { display: block; }
+.is-personal .template-card {
+ display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px 24px;
+ padding: 20px 0; border: 0; border-bottom: 1px solid var(--ps-line); border-radius: 0; background: transparent;
+}
+.is-personal .template-card-main { display: block; min-width: 0; }
+.is-personal .template-card-head { align-items: flex-start; }
+.is-personal .template-document-icon { flex: 0 0 32px; height: 32px; align-items: center; justify-content: center; padding: 0; font-size: 18px; }
+.is-personal .template-card h3 { flex: 0 1 auto; padding-block: 3px; }
+.is-personal .template-card-head > .el-tag { flex-shrink: 0; margin-top: 4px; }
+.is-personal .template-description { margin: 8px 0 12px 42px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.is-personal .template-metadata { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0 0 0 42px; font-size: 12px; line-height: 1.6; }
+.is-personal .template-metadata > div { display: flex; gap: 8px; min-width: 0; }
+.is-personal .template-metadata dt { flex-shrink: 0; }
+.is-personal .template-card-actions { justify-content: flex-end; padding: 0; border: 0; }
+.is-personal > .template-result-count { flex-shrink: 0; border: 0; border-top: 1px solid var(--ps-line); border-radius: 0; padding: 12px 20px; }
+.is-personal .template-load-error { margin: 16px 20px; }
+@container workspace (max-width: 760px) {
+ .is-personal > .template-toolbar { flex-wrap: wrap; }
+ .is-personal > .template-toolbar .el-input { flex-basis: 100%; min-width: 0; }
+ .is-personal > .template-toolbar .el-select { flex: 1 1 100px; width: auto; }
+ .is-personal .template-card { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+ .is-personal .template-card-actions { justify-content: flex-start; padding-left: 42px; }
+}
+@container workspace (max-width: 480px) {
+ .is-personal > .template-toolbar { padding: 12px; gap: 8px; }
+ .is-personal > .template-categories { padding-inline: 12px; }
+ .is-personal > .template-results { padding-inline: 12px; }
+ .is-personal .template-description, .is-personal .template-metadata { margin-left: 0; }
+ .is-personal .template-card-actions { padding-left: 0; }
+ .is-personal > .template-result-count { padding-inline: 12px; }
+}
 .template-editor-form { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; gap: 20px; }
 .template-editor-section {
  min-width: 0;

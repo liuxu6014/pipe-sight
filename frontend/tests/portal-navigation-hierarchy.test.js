@@ -6,7 +6,7 @@ import { portalNavigation, isBasketPath } from '../src/views/portal/data.js'
 const read = name => fs.readFileSync(new URL(`../src/views/portal/${name}`, import.meta.url), 'utf8')
 
 test('research owns reports while uploaded materials belong to the basket navigation', () => {
-  assert.deepEqual(portalNavigation.map(x => x.label), ['首页', '新闻资讯', '科研论文', '科研报告', '情报简报'])
+  assert.deepEqual(portalNavigation.map(x => x.label), ['首页', '新闻资讯', '科研论文', '科研报告', '情报简报', '我的模板'])
   assert.equal(portalNavigation.some(x => x.label === '我的报告'), false)
   const research = portalNavigation.find(x => x.label === '科研报告')
   for (const path of ['/portal/knowledge', '/portal/knowledge/54']) {
