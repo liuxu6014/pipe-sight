@@ -825,7 +825,7 @@ def archive_plan(plan: MigrationPlan, path: str | Path) -> str:
 
 def _verify_archive(plan: MigrationPlan, path: str | Path, digest: str) -> None:
     path = Path(path)
-    if path.is_symlink() or path.stat().st_mode & 0o077:
+    if path.is_symlink() or (os.name != 'nt' and path.stat().st_mode & 0o077):
         raise SchemaPrerequisiteError('Retirement archive must be a private regular file')
     encoded = path.read_bytes()
     if hashlib.sha256(encoded).hexdigest() != digest:

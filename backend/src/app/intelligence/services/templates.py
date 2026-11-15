@@ -285,24 +285,24 @@ class PipelineTemplateService:
             raise ServiceException(message='模型用途配置无效，请联系管理员重新设置') from exc
         if required and model_id is None and purpose in {'research', 'digest'}:
             label = GENERATION_PURPOSES[purpose][1]
-            raise ServiceException(message=f'请先在模型管理的用途配置中选择启用且具备 text_generate 能力的{label}')
+            raise ServiceException(message=f'请联系管理员在模型管理的用途配置中选择启用且具备 text_generate 能力的{label}')
         if required and (image_config or {}).get('enabled') and image_id is None:
-            raise ServiceException(message='请先在模型管理的用途配置中选择启用且具备 image_generate 能力的图片生成模型')
+            raise ServiceException(message='请联系管理员在模型管理的用途配置中选择启用且具备 image_generate 能力的图片生成模型')
         return model_id, image_id
 
     @staticmethod
     async def validate_models(db, model_id, image_model_id=None, image_config=None) -> Any:
         model = await ResearchDao.get_model(db, model_id) if model_id is not None else None
         if not model or not model.is_enabled or 'text_generate' not in (model.capabilities or []):
-            raise ServiceException(message='请先配置启用且具备 text_generate 能力的正文模型')
+            raise ServiceException(message='请联系管理员配置启用且具备 text_generate 能力的正文模型')
         if model.provider not in ModelGateway.supported_providers:
-            raise ServiceException(message='正文模型原生协议不受支持，请明确配置 compatible 端点')
+            raise ServiceException(message='正文模型原生协议不受支持，请联系管理员明确配置 compatible 端点')
         if (image_config or {}).get('enabled'):
             image = await ResearchDao.get_model(db, image_model_id) if image_model_id else None
             if not image or not image.is_enabled or 'image_generate' not in (image.capabilities or []):
-                raise ServiceException(message='配图需配置启用且具备 image_generate 能力的模型')
+                raise ServiceException(message='配图需由管理员配置启用且具备 image_generate 能力的模型')
             if image.provider not in ModelGateway.supported_providers:
-                raise ServiceException(message='图片模型原生协议不受支持，请明确配置 compatible 端点')
+                raise ServiceException(message='图片模型原生协议不受支持，请联系管理员明确配置 compatible 端点')
         return model
 
     @classmethod

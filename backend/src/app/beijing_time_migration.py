@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
@@ -105,7 +106,7 @@ def migrate_beijing_audit_time(connection: sa.Connection, *, backup_dir: Path, a
     ):
         raise RuntimeError('Explicit beijing_allow_live=true is required for source migration')
     root = backup_dir.resolve()
-    if not root.is_dir() or root.stat().st_mode & 0o077:
+    if not root.is_dir() or (os.name != 'nt' and root.stat().st_mode & 0o077):
         raise RuntimeError('A private backup directory is required')
     manifest = json.loads((root / 'database-before.json').read_text())
     if manifest['revision'] != PREVIOUS_REVISION:

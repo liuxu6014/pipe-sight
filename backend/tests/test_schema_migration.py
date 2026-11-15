@@ -246,6 +246,7 @@ def test_unmapped_basket_type_and_orphan_refused(source):
         plan(source)
 
 
+@pytest.mark.skipif(os.name == 'nt', reason='Unix file mode bits are not represented on Windows')
 def test_archive_preserves_retired_events_and_detects_stale_content(source, tmp_path):
     source['public.content_review_events'] = [{'event_id': 'old-review', 'snapshot_json': {'title': '原文'}}]
     result = plan(source)
@@ -263,6 +264,7 @@ def test_archive_preserves_retired_events_and_detects_stale_content(source, tmp_
         migration._verify_archive(plan(source), path, digest)
 
 
+@pytest.mark.skipif(os.name == 'nt', reason='Unix file mode bits are not represented on Windows')
 def test_archive_hash_and_mode_are_required(source, tmp_path):
     result = plan(source)
     path = tmp_path / 'retirement.json'

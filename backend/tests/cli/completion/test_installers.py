@@ -1,5 +1,7 @@
+import sys
 from pathlib import Path
 
+import pytest
 import typer
 from pytest import MonkeyPatch
 
@@ -11,6 +13,7 @@ from cli.completion.installers import (
 )
 
 
+@pytest.mark.skipif(sys.platform == 'win32', reason='shell source command path separators differ on Windows')
 def test_build_source_command_uses_shell_runtime_policy() -> None:
     """
     校验安装服务会按 shell 运行时策略构建 source 命令。

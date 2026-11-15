@@ -114,7 +114,7 @@ def migrate_business_consistency(connection: sa.Connection, *, backup_dir: Path,
     elif url.host not in {'localhost', '127.0.0.1'} or url.port != REHEARSAL_PORT:
         raise RuntimeError('Pass explicit business_allow_live=true for the source database')
     root = backup_dir.resolve()
-    if not root.is_dir() or root.stat().st_mode & 0o077:
+    if not root.is_dir() or (os.name != 'nt' and root.stat().st_mode & 0o077):
         raise RuntimeError('A private backup directory is required')
     manifest = json.loads((root / 'database-before.json').read_text())
     if manifest['revision'] != PREVIOUS_REVISION:

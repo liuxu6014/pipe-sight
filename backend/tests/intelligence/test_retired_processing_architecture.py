@@ -60,6 +60,7 @@ def test_processing_contains_no_runtime_code() -> None:
         assert all(isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant) for node in tree.body), path
 
 
+@pytest.mark.skipif(sys.platform == 'win32', reason='git autocrlf converts resource line endings on Windows')
 def test_resources_are_preserved_byte_for_byte() -> None:
     common_digest = '89b69d796b58d2bd8791bad2b92127300b710a88679b2ff65c913c9ae883c01f'
     files = list((PROCESSING / 'supported_text').glob('*.txt'))

@@ -7,6 +7,7 @@ socket, service, or user database is opened; real asyncpg rehearsals are separat
 from __future__ import annotations
 
 import json
+import os
 import re
 import socket
 from copy import deepcopy
@@ -225,6 +226,7 @@ def offline_migration(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Simple
     return context
 
 
+@pytest.mark.skipif(os.name == 'nt', reason='Unix file mode bits are not represented on Windows')
 def test_success_releases_savepoint_without_committing_outer_transaction(offline_migration: SimpleNamespace) -> None:
     case = offline_migration
     result = case.run()
@@ -299,7 +301,7 @@ def test_index_or_nonprimary_default_drift_is_rejected_and_rolled_back(
     [
         ('transaction', 'caller-owned'),
         ('host', 'explicit'),
-        ('permissions', 'private'),
+        pytest.param('permissions', 'private', marks=pytest.mark.skipif(os.name == 'nt', reason='Unix file mode bits are not represented on Windows')),
         ('revision', 'revision'),
         ('sha', 'SHA-256'),
         ('tables', 'table contract'),

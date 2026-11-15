@@ -54,6 +54,7 @@ async def test_common_download_rejects_absolute_path(
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.name == 'nt', reason='symlink creation requires elevated privileges on Windows')
 async def test_common_download_rejects_symlink_escape(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -89,6 +90,7 @@ async def test_common_resource_download_rejects_path_escape(
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.name == 'nt', reason='symlink creation requires elevated privileges on Windows')
 async def test_common_resource_download_cannot_bypass_private_upload_gate(monkeypatch, tmp_path):
     monkeypatch.setattr(UploadConfig, 'UPLOAD_PATH', str(tmp_path))
     monkeypatch.setattr(UploadConfig, 'UPLOAD_PREFIX', '/profile')

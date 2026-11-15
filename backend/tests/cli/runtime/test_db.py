@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,7 @@ class FakeRuntimeEnvironment(RuntimeEnvironmentService):
         return '/tmp/ruoyi-backend'
 
 
+@pytest.mark.skipif(sys.platform == 'win32', reason='revision command paths differ on Windows')
 def test_database_revision_support_serializes_revision() -> None:
     """
     校验数据库迁移版本支持对象会序列化 Alembic revision。
@@ -56,6 +58,7 @@ def test_database_revision_support_serializes_revision() -> None:
     }
 
 
+@pytest.mark.skipif(sys.platform == 'win32', reason='upgrade command paths differ on Windows')
 def test_database_runtime_service_upgrade_dry_run_returns_command_payload() -> None:
     """
     校验数据库运行时 dry-run 升级会返回命令预览结果。

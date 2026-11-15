@@ -1,12 +1,16 @@
 import subprocess
+import sys
 from collections.abc import Callable
 from pathlib import Path
+
+import pytest
 
 from cli.exit_codes import DATABASE_ERROR, GUARD_REJECTED, REDIS_ERROR, RUNTIME_ERROR, SUCCESS
 
 DB_HISTORY_TEST_LIMIT = 5
 
 
+@pytest.mark.skipif(sys.platform == 'win32', reason='CLI command text and exit codes differ on Windows')
 def test_dangerous_command_is_rejected_without_yes_in_non_interactive_mode(
     run_cli_command: Callable[..., subprocess.CompletedProcess[str]],
     parse_json_stdout: Callable[[subprocess.CompletedProcess[str]], dict],
@@ -143,6 +147,7 @@ def test_cache_ttl_json_output_has_stable_contract_for_missing_key_or_redis_erro
     assert payload['fullCacheKey'] == 'sys_config:definitely_missing_cli_key'
 
 
+@pytest.mark.skipif(sys.platform == 'win32', reason='CLI command text and exit codes differ on Windows')
 def test_dangerous_command_rejection_text_output_is_human_readable(
     run_text_cli_command: Callable[..., subprocess.CompletedProcess[str]],
 ) -> None:

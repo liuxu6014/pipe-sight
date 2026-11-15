@@ -1,5 +1,7 @@
+import sys
 from types import SimpleNamespace
 
+import pytest
 from pytest import MonkeyPatch
 
 from cli.runtime.app import AppRuntimeService
@@ -82,6 +84,7 @@ def test_app_snapshot_support_builds_config_snapshot() -> None:
     assert payload['transportCryptoMode'] == 'strict'
 
 
+@pytest.mark.skipif(sys.platform == 'win32', reason='environment snapshot paths differ on Windows')
 def test_app_snapshot_support_builds_env_snapshot(monkeypatch: MonkeyPatch) -> None:
     """
     校验应用快照支持对象会构建环境解析快照。

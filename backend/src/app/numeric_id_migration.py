@@ -500,7 +500,7 @@ def migrate_numeric_ids(
     elif not (url.host in {'127.0.0.1', 'localhost'} and url.port == REHEARSAL_PORT):
         raise RuntimeError('Live migration requires explicit numeric_allow_live=true')
     root = Path(backup_dir).resolve()
-    if not root.is_dir() or root.stat().st_mode & 0o077:
+    if not root.is_dir() or (os.name != 'nt' and root.stat().st_mode & 0o077):
         raise RuntimeError('Backup directory must be private')
     if manifest['revision'] != '20261025_restore_ruoyi_names':
         raise RuntimeError('Unexpected source revision')

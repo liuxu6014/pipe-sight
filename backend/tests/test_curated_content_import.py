@@ -16,7 +16,7 @@ spec.loader.exec_module(importer)
 
 class CuratedImportTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.manifest = json.loads(importer.DEFAULT_MANIFEST.read_text())
+        self.manifest = json.loads(importer.DEFAULT_MANIFEST.read_text(encoding='utf-8'))
         self.now = datetime(2026, 10, 14, 19, 50)
 
     def test_sources_and_counts(self) -> None:

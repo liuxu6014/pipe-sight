@@ -3,6 +3,7 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
 from pytest import MonkeyPatch
 
 BACKEND_DIR = Path(__file__).resolve().parents[3]
@@ -43,6 +44,7 @@ def test_complete_alembic_revisions_returns_default_choices_and_local_revisions(
     assert '-1' in default_candidates
 
 
+@pytest.mark.skipif(sys.platform == 'win32', reason='completion path separators differ on Windows')
 def test_complete_sql_files_returns_project_relative_sql_paths(
     tmp_path: Path,
     monkeypatch: MonkeyPatch,
@@ -103,6 +105,7 @@ def test_complete_cache_names_returns_static_cache_name_choices(monkeypatch: Mon
     assert candidates == ['sys_config']
 
 
+@pytest.mark.skipif(sys.platform == 'win32', reason='completion path separators differ on Windows')
 def test_complete_output_paths_returns_directories_and_zip_files(
     tmp_path: Path,
     monkeypatch: MonkeyPatch,

@@ -14,7 +14,7 @@ SOURCE_PATH = Path(__file__).resolve().parents[2] / 'src/app/intelligence/tasks/
 @pytest.mark.asyncio
 async def test_processing_configuration_error_rewinds_before_later_offsets_can_commit():
     path = SOURCE_PATH
-    tree = ast.parse(path.read_text())
+    tree = ast.parse(path.read_text(encoding='utf-8'))
     function = next(
         node for node in tree.body if isinstance(node, ast.AsyncFunctionDef) and node.name == '_consume_once'
     )
