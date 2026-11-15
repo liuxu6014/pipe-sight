@@ -36,7 +36,7 @@ def test_v17_adds_only_explicit_template_cadence_and_schedule_backoff_fields() -
                 assert column['server_default'] == '0'
     assert old['foreign_keys'] == new['foreign_keys']
     assert old['optional_table_definitions'] == new['optional_table_definitions']
-    assert new['business_schema_snapshot'] == 'business-v16.json'
+    assert new['business_schema_snapshot'] == 'business-v17.json'
 
 
 def test_v16_adds_only_nullable_template_identity_and_deletion_time() -> None:

@@ -1,7 +1,7 @@
 {
   "version": "20261115-compact-v17",
   "runtime_version": "v17",
-  "business_schema_snapshot": "business-v16.json",
+  "business_schema_snapshot": "business-v17.json",
   "source": "output/管网平台精简数据库设计_20261025.md",
   "tables": [
     {

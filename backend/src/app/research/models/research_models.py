@@ -129,6 +129,7 @@ class PipelineDigestSchedule(Base):
             "jsonb_typeof(generation_config)='object'", name='ck_digest_schedules_generation_config'
         ).ddl_if(dialect='postgresql'),
         Index('idx_digest_schedules_next_run_at', 'next_run_at', postgresql_where=text('is_enabled')),
+        Index('idx_digest_schedules_user_id', 'user_id'),
     )
     id = business_pk()
     user_id = Column(BigInteger, ForeignKey('sys_user.id', ondelete='RESTRICT'), nullable=False)

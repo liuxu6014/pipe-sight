@@ -49,7 +49,7 @@ CATALOG_INDEX_NAMES = {
         'uk_collection_runs_id_source_id',
     },
     'data_sources': {'idx_data_sources_next_run_at'},
-    'digest_schedules': {'idx_digest_schedules_next_run_at'},
+    'digest_schedules': {'idx_digest_schedules_next_run_at', 'idx_digest_schedules_user_id'},
     'generation_tasks': {
         'idx_generation_tasks_lease',
         'idx_generation_tasks_report_id',
