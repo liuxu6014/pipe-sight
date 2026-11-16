@@ -25,10 +25,10 @@ class _FakeScheduler:
 
 
 @pytest.mark.asyncio
-async def test_operational_worker_registers_only_collection_refresh_and_queue(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_operational_worker_registers_collection_jobs_and_model_calls_retention(monkeypatch: pytest.MonkeyPatch) -> None:
     scheduler = _FakeScheduler()
     register_collection = AsyncMock(return_value=['source-1'])
-    monkeypatch.setattr(operational_scheduler, 'AsyncIOScheduler', lambda: scheduler)
+    monkeypatch.setattr(operational_scheduler, 'AsyncIOScheduler', lambda **kwargs: scheduler)
     monkeypatch.setattr(operational_scheduler, 'register_real_collection_schedules', register_collection)
 
     stop_event = asyncio.Event()
@@ -47,15 +47,18 @@ async def test_operational_worker_registers_only_collection_refresh_and_queue(mo
     assert tuple(job['id'] for job in scheduler.jobs) == (
         operational_scheduler.REFRESH_JOB_ID,
         operational_scheduler.QUEUED_COLLECTION_JOB_ID,
+        operational_scheduler.MODEL_CALLS_RETENTION_JOB_ID,
     )
     assert scheduler.jobs[1]['seconds'] == operational_scheduler.QUEUED_COLLECTION_POLL_INTERVAL_SECONDS
     assert scheduler.jobs[1]['func'] is operational_scheduler.run_queued_collections
+    assert scheduler.jobs[2]['trigger'] == 'cron'
+    assert scheduler.jobs[2]['func'] is operational_scheduler.purge_expired_model_calls
 
 
 @pytest.mark.asyncio
 async def test_operational_worker_stops_scheduler_when_cancelled(monkeypatch: pytest.MonkeyPatch) -> None:
     scheduler = _FakeScheduler()
-    monkeypatch.setattr(operational_scheduler, 'AsyncIOScheduler', lambda: scheduler)
+    monkeypatch.setattr(operational_scheduler, 'AsyncIOScheduler', lambda **kwargs: scheduler)
     monkeypatch.setattr(operational_scheduler, 'register_real_collection_schedules', AsyncMock())
 
     async def cancel_wait(_event: asyncio.Event, _timeout: float) -> None:

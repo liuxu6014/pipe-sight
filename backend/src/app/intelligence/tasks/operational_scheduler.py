@@ -9,6 +9,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.infrastructure.services.logging_support import logger
 from app.intelligence.tasks.collection_scheduler import register_real_collection_schedules, run_queued_collections
+from app.intelligence.tasks.model_calls_retention import MODEL_CALLS_RETENTION_JOB_ID, purge_expired_model_calls
 
 # Keep the refresh job outside JOB_PREFIX from collection_scheduler.  That
 # prefix is intentionally reserved for per-source jobs; using it here makes
@@ -37,7 +38,7 @@ async def _refresh_collection_schedules(scheduler: Any) -> None:
 async def run_operational_scheduler(stop_event: asyncio.Event | None = None) -> None:
     """在独立进程中运行数据采集队列及数据源调度刷新。"""
     stop_event = stop_event or asyncio.Event()
-    scheduler = AsyncIOScheduler()
+    scheduler = AsyncIOScheduler(timezone='Asia/Shanghai')
     scheduler.start()
     try:
         await _refresh_collection_schedules(scheduler)
@@ -61,6 +62,18 @@ async def run_operational_scheduler(stop_event: asyncio.Event | None = None) -> 
             replace_existing=True,
             coalesce=True,
             max_instances=1,
+        )
+        scheduler.add_job(
+            purge_expired_model_calls,
+            trigger='cron',
+            hour=4,
+            minute=30,
+            id=MODEL_CALLS_RETENTION_JOB_ID,
+            name='模型调用记录保留期清理',
+            replace_existing=True,
+            coalesce=True,
+            max_instances=1,
+            misfire_grace_time=3600,
         )
         logger.info('数据采集独立 Worker 已启动。')
         while not stop_event.is_set():
