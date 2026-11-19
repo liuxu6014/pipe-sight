@@ -12,19 +12,42 @@ export function parseTime(time, pattern) {
   }
   const format = pattern || '{y}-{m}-{d} {h}:{i}:{s}'
   let date
-  if (typeof time === 'object') {
+  if (time instanceof Date) {
     date = time
   } else {
-    if ((typeof time === 'string') && (/^[0-9]+$/.test(time))) {
-      time = parseInt(time)
-    } else if (typeof time === 'string') {
-      time = time.replace(new RegExp(/-/gm), '/').replace('T', ' ').replace(new RegExp(/\.[\d]{3}/gm), '');
+    if (typeof time === 'string') {
+      time = time.trim()
+      if (!time) return null
+      if (/^[0-9]+$/.test(time)) {
+        time = Number(time)
+      } else {
+        // Preserve the timezone in ISO values. Replacing '-' with '/' breaks
+        // ISO timestamps with Z/offsets and fractional seconds.
+        const local = time.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?)?$/)
+        if (local) {
+          const [, year, month, day, hour = '0', minute = '0', second = '0', fraction = ''] = local
+          const parts = [year, month, day, hour, minute, second].map(Number)
+          date = new Date(0)
+          date.setFullYear(parts[0], parts[1] - 1, parts[2])
+          date.setHours(parts[3], parts[4], parts[5], Number(fraction.padEnd(3, '0').slice(0, 3)))
+          if ([date.getFullYear(), date.getMonth() + 1, date.getDate(), date.getHours(), date.getMinutes(), date.getSeconds()].some((value, index) => value !== parts[index])) return null
+        } else {
+          const isoDay = time.match(/^(\d{4})-(\d{2})-(\d{2})T/)
+          if (isoDay) {
+            const calendar = new Date(0)
+            calendar.setUTCFullYear(Number(isoDay[1]), Number(isoDay[2]) - 1, Number(isoDay[3]))
+            if (calendar.getUTCFullYear() !== Number(isoDay[1]) || calendar.getUTCMonth() + 1 !== Number(isoDay[2]) || calendar.getUTCDate() !== Number(isoDay[3])) return null
+          }
+        }
+      }
     }
+    if (typeof time !== 'number' && typeof time !== 'string') return null
     if ((typeof time === 'number') && (time.toString().length === 10)) {
       time = time * 1000
     }
-    date = new Date(time)
+    if (!date) date = new Date(time)
   }
+  if (!Number.isFinite(date.getTime())) return null
   const formatObj = {
     y: date.getFullYear(),
     m: date.getMonth() + 1,

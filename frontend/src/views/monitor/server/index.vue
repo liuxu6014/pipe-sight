@@ -157,7 +157,7 @@
                   <td class="el-table__cell is-leaf"><div class="cell">{{ sysFile.total }}</div></td>
                   <td class="el-table__cell is-leaf"><div class="cell">{{ sysFile.free }}</div></td>
                   <td class="el-table__cell is-leaf"><div class="cell">{{ sysFile.used }}</div></td>
-                  <td class="el-table__cell is-leaf"><div class="cell" :class="{'text-danger': sysFile.usage > 80}">{{ sysFile.usage }}%</div></td>
+                  <td class="el-table__cell is-leaf"><div class="cell" :class="{'text-danger': Number.parseFloat(sysFile.usage) > 80}">{{ Number.isFinite(Number.parseFloat(sysFile.usage)) ? Number.parseFloat(sysFile.usage) + '%' : '—' }}</div></td>
                 </tr>
               </tbody>
             </table>
