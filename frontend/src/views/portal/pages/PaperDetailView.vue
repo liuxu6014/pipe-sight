@@ -2,7 +2,7 @@
   <div class="ps-page ps-reading-page ps-paper-reading-page">
     <PortalEmptyState v-if="detailLoading" title="正在加载论文" description="正在读取最新的权限和内容状态。" />
     <PortalEmptyState v-else-if="detailError" title="论文暂时无法读取" :description="detailError" action-label="重新加载" @action="loadPaper" />
-    <PortalEmptyState v-else-if="!paper" title="论文不存在" description="该论文记录可能已移除，或当前账号没有访问权限。" action-label="返回论文资料" @action="router.push('/portal/papers')" />
+    <PortalEmptyState v-else-if="!paper" title="论文不存在" description="该论文记录可能已移除，或当前账号没有访问权限。" action-label="返回上一页" @action="returnFromPaperDetail(router)" />
     <template v-else>
     <section class="ps-paper-detail-hero" aria-labelledby="paper-detail-title">
       <div class="ps-paper-detail-toolbar">

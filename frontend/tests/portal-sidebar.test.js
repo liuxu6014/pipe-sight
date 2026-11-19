@@ -13,7 +13,7 @@ test('desktop navigation collapse restores and persists independently of mobile 
   let layout
   const storage = new Map([['ps-portal-navigation-collapsed', 'true']])
   const code = script.content.replace(/^import[^\n]*\n/gm, '').replace('export default', 'return')
-  const component = new Function('computed', 'ref', 'provide', 'useRoute', 'localStorage', 'PortalHeader', 'PortalTaskPanel', 'PortalSidebar', code)(computed, ref, (key, value) => { layout = value }, () => ({ name: 'PortalPapers' }), { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) }, {}, {}, {})
+  const component = new Function('computed', 'ref', 'provide', 'usePortalStore', 'useRoute', 'localStorage', 'PortalHeader', 'PortalTaskPanel', 'PortalSidebar', code)(computed, ref, (key, value) => { layout = value }, () => ({ workspaceEpoch: 0 }), () => ({ name: 'PortalPapers' }), { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) }, {}, {}, {})
   component.setup({}, { expose() {} })
   assert.equal(layout.collapsed.value, true)
   layout.toggle()

@@ -7,6 +7,7 @@ import '../../src/assets/styles/index.scss'
 import './preview.css'
 import Portal from '../../src/views/portal/index.vue'
 import useUserStore from '../../src/store/modules/user'
+import usePortalStore from '../../src/store/modules/portal'
 
 const pages = import.meta.glob('../../src/views/portal/pages/*.vue')
 const page = name => pages[`../../src/views/portal/pages/${name}.vue`]
@@ -68,5 +69,7 @@ const Root = { render: () => {
 ]) } }
 const app = createApp(Root).use(createPinia()).use(router).use(ElementPlus)
 const user = useUserStore()
-user.id = '900007'; user.name = 'preview-only'; user.nickName = '预览用户'; user.roles = ['admin']; user.permissions = ['*:*:*']
+const queueDemo = new URLSearchParams(window.location.search).get('queueDemo') === '1'
+if (queueDemo) usePortalStore().tasks = []
+user.id = queueDemo ? '900017' : '900007'; user.name = 'preview-only'; user.nickName = '预览用户'; user.roles = ['admin']; user.permissions = ['*:*:*']
 app.mount('#app')

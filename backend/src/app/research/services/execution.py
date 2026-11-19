@@ -8,6 +8,7 @@ from typing import Any
 from app.business_ids import parse_business_id, wire_id
 from app.research.models.research_models import PipelineReportVersion, utcnow
 from app.research.repositories.research_repository import ResearchDao
+from app.research.services.digest_document import DigestScreeningError, digest_material_key, digest_result_materials
 from app.research.services.model_generation import ModelOutputLimitError, ResearchModelGenerationService
 from app.research.services.report_content import (
     ManuscriptValidationError,
@@ -47,8 +48,37 @@ class ResearchExecutionService:
         try:
             async with AsyncSessionLocal() as model_db:
                 try:
+                    screening = snapshot.get('digest_screening')
+                    if screening is not None and 'labels' not in screening:
+                        snapshot = deepcopy(snapshot)
+                        screening = snapshot['digest_screening']
+                        if screening.get('categories'):
+                            screening.update(
+                                await ResearchModelGenerationService.classify_task_digest(
+                                    model_db, snapshot, materials, task_id=job_id
+                                )
+                            )
+                        else:
+                            screening['retained_ids'] = await ResearchModelGenerationService.screen_digest(
+                                model_db, snapshot, materials, task_id=job_id
+                            )
+                    if screening is not None:
+                        materials = digest_result_materials(snapshot, materials)
+                        if not materials:
+                            raise DigestScreeningError(message='选材筛选后没有符合模板规则的文章，请调整选材或筛选规则')
+                    writing_materials = materials
+                    if screening and 'labels' in screening:
+                        labels = screening['labels']
+                        writing_materials = [
+                            {
+                                **item,
+                                'digestCategory': labels[digest_material_key(item)]['category'],
+                                'digestTags': labels[digest_material_key(item)]['tags'],
+                            }
+                            for item in materials
+                        ]
                     content = await ResearchModelGenerationService.generate_content(
-                        model_db, snapshot, materials, task_id=job_id
+                        model_db, snapshot, writing_materials, task_id=job_id
                     )
                 except Exception:
                     await model_db.commit()
@@ -59,7 +89,10 @@ class ResearchExecutionService:
 
                 try:
                     article = normalize_digest_document(
-                        content, materials, generation_options=(snapshot.get('request') or {}).get('options') or {}
+                        content,
+                        materials,
+                        generation_options=(snapshot.get('request') or {}).get('options') or {},
+                        screening=screening,
                     )
                 except ValueError as error:
                     raise ManuscriptValidationError(f'简报格式检查未通过：{error}；请重试生成') from error
@@ -82,6 +115,7 @@ class ResearchExecutionService:
                     return
                 report = await ResearchDao.get_report(result_db, job.report_id, user_id, lock=True)
                 job.result_content = content
+                job.config_snapshot = deepcopy(snapshot)
                 # 用户已经编辑则仅保存任务结果，绝不悄悄覆盖。
                 if report.version == snapshot['report_start_version']:
                     await cls.save_version(result_db, report, 'before_generation', user_id, owner_name)
@@ -146,13 +180,15 @@ class ResearchExecutionService:
                             str(error)
                             if isinstance(error, ManuscriptValidationError)
                             else error.message
-                            if isinstance(error, ModelOutputLimitError)
+                            if isinstance(error, (ModelOutputLimitError, DigestScreeningError))
                             else '生成未完成，请检查模型配置或稍后明确重试'
                         ),
                         utcnow(),
                     )
                     if isinstance(error, ManuscriptValidationError):
                         job.result_content = content
+                    if 'retained_ids' in (snapshot.get('digest_screening') or {}):
+                        job.config_snapshot = deepcopy(snapshot)
                     job.execution_token = job.lease_expires_at = None
                     await ResearchDao.record_schedule_generation(error_db, job)
                     await error_db.commit()

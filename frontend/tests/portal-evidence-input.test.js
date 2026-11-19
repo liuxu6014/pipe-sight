@@ -1,3 +1,4 @@
+import { useWizardHistory } from '../src/utils/portal/wizardHistory.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -5,31 +6,42 @@ import { setImmediate } from 'node:timers/promises'
 import * as vue from 'vue'
 import { createMemoryHistory, createRouter, useRoute, useRouter } from 'vue-router'
 import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
-import { templateGenerationError } from '../src/utils/pipeline/compactContract.js'
+import { digestTemplatesFor, templateGenerationError } from '../src/utils/pipeline/compactContract.js'
 import * as businessTimes from '../src/utils/portal/businessTime.js'
 import * as businessIds from '../src/utils/portal/businessId.js'
 import * as evidence from '../src/utils/portal/evidenceInput.js'
 import { resolveBasketSelection } from '../src/utils/portal/basketSelection.js'
 import { allocateReportWords } from '../src/utils/portal/reportLength.js'
 import { cleanResultMeta } from '../src/utils/portal/discovery.js'
+import { screeningRulesError } from '../src/utils/portal/digestScreeningRules.js'
 
 const names = ['ResearchCreateView', 'DigestCreateView']
 const sources = Object.fromEntries(names.map(name => [name, readFileSync(new URL(`../src/views/portal/pages/${name}.vue`, import.meta.url), 'utf8')]))
 const later = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no }); return { promise, resolve, reject } }
 const settle = async () => { for (let i = 0; i < 4; i++) { await vue.nextTick(); await setImmediate() } }
 const article = (id, overrides = {}) => ({ id, title: `真实资讯 ${id}`, category: 'news', status: 'approved', summary: '真实摘要', content: '真实正文', source_type: 'news', source: '实际来源', publish_time: '2026-10-13 12:00:00', ...overrides })
+const screeningId = 'a'.repeat(32)
+const screenedArticle = (id, keep = true, extras = {}) => ({
+  id, title: `真实资讯 ${id}`, keep, category: '检测技术', tags: ['管道检测'], reason: '判断依据', ...extras
+})
+const screeningStart = (total = 1) => ({ data: { screeningId, total, processed: 0 } })
+const screeningResult = rows => ({ data: { screeningId, total: rows.length, processed: rows.length, rows } })
+async function screenWeekly(page) {
+  page.form.period = [new Date(2026, 9, 13), new Date(2026, 9, 19)]
+  await page.refreshPreview()
+}
 const material = (id, overrides = {}) => ({ id, name: `资料 ${id}`, status: '已解析', parseStatus: 'indexed', scanStatus: 'clean', allowAiUse: true, parsedText: '实际解析正文', ...overrides })
 
 // Execute the actual SFC setup/lifecycle with Vue and a memory router. All APIs
 // are injected. Generation, scheduling and upload throw if accidentally called.
 async function mount(name, { query = {}, api = {}, basket = [], timers = {} } = {}) {
   const messages = []
-  const store = vue.reactive({ workspaceEpoch: 0, basket, newsItems: [], paperItems: [], knowledgeDocuments: [], hydrate: async () => {} })
+  const store = vue.reactive({ workspaceEpoch: 0, basket, newsItems: [], paperItems: [], knowledgeDocuments: [], hydrate: async () => {}, registerGenerationTask() {} })
   let mutations = 0
   const forbidden = () => { mutations++; throw new Error('This test must never generate, upload or schedule') }
   const dependencies = {
-    ...vue, useRoute, useRouter, ...businessIds, ...businessTimes, ...evidence, templateGenerationError, resolveBasketSelection, allocateReportWords, cleanResultMeta,
-    usePortalStore: () => store, PortalPageHeader: {}, PortalEmptyState: {}, DigestScheduleDialog: {}, ResearchChapterPrompt: {}, PersonalTemplateDialog: {},
+    ...vue, useRoute, useRouter, useWizardHistory, ...businessIds, ...businessTimes, ...evidence, digestTemplatesFor, templateGenerationError, resolveBasketSelection, allocateReportWords, cleanResultMeta,
+    usePortalStore: () => store, PortalPageHeader: {}, PortalEmptyState: {}, DigestScheduleDialog: {}, DigestScreeningRules: {}, screeningRulesError, ResearchChapterPrompt: {}, PersonalTemplateDialog: {},
     ElMessage: Object.fromEntries(['success', 'warning', 'error'].map(level => [level, text => messages.push({ level, text })])),
     ...Object.fromEntries(['ArrowLeft', 'Check', 'Close', 'Delete', 'Plus', 'Rank', 'Search', 'UploadFilled', 'Refresh', 'Warning'].map(icon => [icon, {}])),
     getPipelineIntelligenceDetail: async id => ({ data: article(id) }),
@@ -37,10 +49,11 @@ async function mount(name, { query = {}, api = {}, basket = [], timers = {} } = 
     getPipelineResearchJob: async () => ({ data: {} }),
     getPipelineContentFilters: async () => ({ data: { articleCategories: ['后台类别'] } }),
     searchPipelineIntelligence: async () => ({ data: { rows: [], total: 0 } }),
-    searchPipelineDigestCandidates: params => (api.searchPipelineIntelligence || (async () => ({ data: { rows: [], total: 0 } })))(params),
+    startPipelineDigestScreening: async () => screeningStart(),
+    advancePipelineDigestScreening: async () => screeningResult([screenedArticle('504')]),
     searchPipelineResearchMaterials: async () => ({ data: { rows: [], total: 0 } }),
     listPipelineTemplates: async () => ({ data: { rows: [{ templateKey: '100', modelId: 1, modelConfigured: true, name: '已发布模板', reportType: name === 'DigestCreateView' ? 'weekly' : 'research-demand', digestCadence: name === 'DigestCreateView' ? 'weekly' : null, version: 'V4', sections: [{ id: 1, title: '实际章节', words: 1000 }] }] } }),
-    createPipelineResearchJob: forbidden, createPipelineDigestSchedule: forbidden, uploadPipelineKnowledgeDocument: forbidden, reparsePipelineKnowledgeDocument: forbidden,
+    createPipelineResearchJob: forbidden, createPipelineTemplate: forbidden, createPipelineDigestSchedule: forbidden, uploadPipelineKnowledgeDocument: forbidden, reparsePipelineKnowledgeDocument: forbidden,
     ...api, ...timers
   }
   const { descriptor } = parse(sources[name])
@@ -112,44 +125,123 @@ test('mounted research wizard validates parameters before template and evidence 
   } finally { ctx.close() }
 })
 
-test('digest starts unfiltered and uses administrator category labels', async () => {
+test('digest preloads template rules and starts only with the current prompt', async () => {
   const calls = []
-  const ctx = await mount('DigestCreateView', { api: { searchPipelineDigestCandidates: async params => { calls.push(params); return { data: { rows: [], total: 0 } } } } })
+  const ctx = await mount('DigestCreateView', { api: {
+    listPipelineTemplates: async () => ({ data: { rows: [
+      { id: '201', name: '专题周报', purpose: 'digest', digestCadence: 'weekly', screeningPrompt: '本期检测技术' }
+    ], defaultScreeningPrompt: '系统规则' } }),
+    startPipelineDigestScreening: async data => { calls.push(data); return screeningStart() }
+  } })
   try {
-    assert.deepEqual(ctx.page.form.keywords, [])
-    assert.deepEqual(ctx.page.form.directions, [])
-    assert.deepEqual(ctx.page.categoryOptions.value, ['后台类别'])
-    assert.deepEqual(calls[0].keywords, [])
-    ctx.page.updateKeywords([' 管道 ', '不存在', '管道', ' '])
+    assert.equal(ctx.page.screeningPrompt.value, '系统规则')
+    ctx.page.form.templateId = '201'
+    assert.equal(ctx.page.screeningPrompt.value, '本期检测技术')
+    ctx.page.screeningPrompt.value = ' 只纳入技术落地报道 '
     await settle()
-    assert.deepEqual(calls.at(-1).keywords, ['管道', '不存在'])
-    assert.deepEqual(ctx.page.form.keywords, ['管道', '不存在'])
-    ctx.page.updateKeywords(undefined)
-    await settle()
-    assert.deepEqual(calls.at(-1).keywords, [])
-    ctx.page.keywordDraft.value = ' 管道 '
-    ctx.page.addKeyword()
-    assert.deepEqual(ctx.page.form.keywords, ['管道'])
-    assert.equal(ctx.page.keywordDraft.value, '')
-    ctx.page.removeKeyword('管道')
-    assert.deepEqual(ctx.page.form.keywords, [])
+    assert.equal(calls.length, 0)
+    await screenWeekly(ctx.page)
+    assert.equal(calls[0].screeningPrompt, '只纳入技术落地报道')
+    assert.equal(calls[0].templateId, '201')
+    for (const field of ['sources', 'keywords', 'directions']) assert.equal(Object.hasOwn(calls[0], field), false)
+    ctx.page.form.templateId = ''
+    assert.equal(ctx.page.screeningPrompt.value, '系统规则')
+    assert.equal(ctx.page.screeningRows.value, null)
     assert.equal(ctx.mutations, 0)
   } finally { ctx.close() }
 })
 
-test('digest generates from verified candidates without loading a personal template catalog', async () => {
+test('only explicit save-as creates a reusable digest template and selects the returned copy', async () => {
+  const base = { id: '201', purpose: 'digest', name: '原模板', digestCadence: 'all', prompt: '原正文要求', screeningPrompt: '原通用要求', screeningCategories: [] }
+  const calls = []
+  const ctx = await mount('DigestCreateView', { api: {
+    listPipelineTemplates: async () => ({ data: { rows: [base], defaultWritingPrompts: { monthly: '系统月报正文要求' }, defaultScreeningPrompt: '系统通用要求' } }),
+    createPipelineTemplate: async body => {
+      calls.push(body)
+      if (calls.length === 1) throw Error('保存失败')
+      return { data: { ...body, id: String(300 + calls.length) } }
+    }
+  } })
+  try {
+    const page = ctx.page
+    page.form.type = '月报'
+    page.form.templateId = base.id
+    const rules = [{ name: '方向二', prompt: '现场数据' }, { name: '方向一', prompt: '公开试验' }]
+    page.screeningCategories.value = rules
+    page.screeningPrompt.value = ' 仅收录新进展 '
+    page.openSaveTemplate()
+    page.saveDialogOpen.value = false
+    await page.refreshPreview()
+    await page.saveAsTemplate()
+    assert.equal(calls.length, 0)
+    page.openSaveTemplate()
+    page.newTemplateName.value = ' 月报副本 '
+    await page.saveAsTemplate()
+    assert.equal(page.saveDialogOpen.value, true)
+    assert.equal(page.form.templateId, base.id)
+    assert.match(page.saveTemplateError.value, /保存失败/)
+    await Promise.all([page.saveAsTemplate(), page.saveAsTemplate()])
+    assert.equal(calls.length, 2)
+    assert.deepEqual(calls[1], { name: '月报副本', purpose: 'digest', digestCadence: 'monthly', isEnabled: true,
+      description: '', prompt: base.prompt, screeningPrompt: '仅收录新进展', screeningCategories: rules })
+    assert.equal(page.saveDialogOpen.value, false)
+    assert.equal(page.form.templateId, '302')
+    assert.deepEqual(page.screeningCategories.value, rules)
+    assert.equal(page.screeningPrompt.value, '仅收录新进展')
+    assert.equal(page.screeningId.value, '')
+    assert.deepEqual(base.screeningCategories, [])
+    assert.equal(base.screeningPrompt, '原通用要求')
+    page.form.templateId = ''
+    page.openSaveTemplate()
+    page.newTemplateName.value = '基于系统模板'
+    await page.saveAsTemplate()
+    assert.equal(calls.at(-1).prompt, '系统月报正文要求')
+    assert.equal(calls.at(-1).screeningPrompt, '系统通用要求')
+  } finally { ctx.close() }
+})
+
+test('digest submits all ordered categories together and discards stale results when their rules change', async () => {
+  const templateRules = [{ name: '检测技术', prompt: '检测方法有新进展' }, { name: '工程应用', prompt: '工程试点已落地' }]
+  const calls = []
+  const ctx = await mount('DigestCreateView', { api: {
+    listPipelineTemplates: async () => ({ data: { rows: [], defaultScreeningCategories: templateRules } }),
+    startPipelineDigestScreening: async data => { calls.push(data); return screeningStart(3) },
+    advancePipelineDigestScreening: async () => screeningResult([
+      screenedArticle('111'), screenedArticle('112', true, { category: '工程应用' }), screenedArticle('113', false)
+    ])
+  } })
+  const page = ctx.page
+  try {
+    page.screeningCategories.value = [templateRules[1], templateRules[0]]
+    await screenWeekly(page)
+    assert.deepEqual(calls.map(call => call.screeningCategories), [[templateRules[1], templateRules[0]]])
+    assert.deepEqual(page.categoryCounts.value, [{ name: '工程应用', count: 1 }, { name: '检测技术', count: 1 }])
+    assert.deepEqual(page.passedRows.value.map(row => row.id), ['111', '112'])
+    assert.equal(page.buildDigestPayload().screeningId, screeningId)
+    page.screeningCategories.value = [templateRules[0], { name: '检测技术', prompt: '另一规则' }]
+    assert.equal(page.canStart.value, false)
+    assert.equal(page.screeningId.value, '')
+    page.resetRules()
+    assert.deepEqual(page.screeningCategories.value, templateRules)
+    assert.equal(page.canStart.value, true)
+  } finally { ctx.close() }
+})
+
+
+test('digest can use the system default when the personal template catalog cannot load', async () => {
   let catalogCalls = 0, payload
   const ctx = await mount('DigestCreateView', { api: {
     listPipelineTemplates: async () => { catalogCalls++; throw Error('template catalog is not a digest dependency') },
-    searchPipelineDigestCandidates: async () => ({ data: { rows: [article('504')], total: 1 } }),
     createPipelineResearchJob: async data => { payload = data; return { data: { jobId: '900' } } }
   } })
   try {
-    ctx.page.selectCurrentPage()
+    await screenWeekly(ctx.page)
     await ctx.page.createDigest()
-    assert.equal(catalogCalls, 0)
+    assert.equal(catalogCalls, 1)
     assert.equal(payload.reportType, 'weekly')
-    assert.deepEqual(payload.selectedItemIds, ['504'])
+    assert.equal(payload.screeningId, screeningId)
+    assert.equal(Object.hasOwn(payload, 'materials'), false)
+    assert.equal(Object.hasOwn(payload, 'selectedItemIds'), false)
     for (const field of ['templateId', 'templateVersion', 'outline', 'templatePrompt', 'template_prompt']) {
       assert.equal(Object.hasOwn(payload, field), false)
     }
@@ -173,19 +265,18 @@ test('NULL model templates stay selectable and research submission makes no gene
 test('digest displays backend model configuration errors and preserves selected evidence for retry', async () => {
   let attempts = 0
   const ctx = await mount('DigestCreateView', { api: {
-    searchPipelineDigestCandidates: async () => ({ data: { rows: [article('504')], total: 1 } }),
     createPipelineResearchJob: async () => { attempts++; throw { msg: '请先配置简报生成模型' } }
   } })
   try {
-    ctx.page.selectCurrentPage()
+    await screenWeekly(ctx.page)
     ctx.page.form.summaryLength = 'short'
     await ctx.page.createDigest()
     assert.equal(attempts, 1)
-    assert.deepEqual(ctx.page.selectedCandidateIds.value, ['504'])
+    assert.deepEqual(ctx.page.passedRows.value.map(row => row.id), ['504'])
     assert.equal(ctx.page.form.summaryLength, 'short')
     assert.equal(ctx.page.submitting.value, false)
     assert.ok(ctx.messages.some(item => item.level === 'error' && item.text === '请先配置简报生成模型'))
-    assert.deepEqual(ctx.page.buildDigestPayload().selectedItemIds, ['504'])
+    assert.equal(ctx.page.buildDigestPayload().screeningId, screeningId)
   } finally { ctx.close() }
 })
 
@@ -612,26 +703,25 @@ test('research outline controls reorder the submitted chapters and preserve at l
   } finally { ctx.close() }
 })
 
-test('checkbox selections are idempotent, removable and locked during submission', async () => {
-  for (const name of names) {
-    const ctx = await mount(name)
-    try {
-      const toggle = name === 'ResearchCreateView' ? ctx.page.toggleMaterial : ctx.page.toggleCandidate
-      const selected = name === 'ResearchCreateView' ? ctx.page.selectedIds : ctx.page.selectedCandidateIds
-      toggle('111', true)
-      toggle('111', true)
-      toggle('112', true)
-      assert.deepEqual([...selected.value], ['111', '112'])
-      toggle('111', false)
-      assert.deepEqual([...selected.value], ['112'])
-      ctx.page.submitting.value = true
-      toggle('112', false)
-      assert.deepEqual([...selected.value], ['112'])
-      assert.equal(ctx.mutations, 0)
-      assert.doesNotMatch(sources[name], /<el-checkbox v-model="(?:selectedIds|selectedCandidateIds)"/)
-    } finally { ctx.close() }
-  }
+test('research checkbox selections are idempotent, removable and locked during submission', async () => {
+  const ctx = await mount('ResearchCreateView')
+  try {
+    const toggle = ctx.page.toggleMaterial
+    const selected = ctx.page.selectedIds
+    toggle('111', true)
+    toggle('111', true)
+    toggle('112', true)
+    assert.deepEqual([...selected.value], ['111', '112'])
+    toggle('111', false)
+    assert.deepEqual([...selected.value], ['112'])
+    ctx.page.submitting.value = true
+    toggle('112', false)
+    assert.deepEqual([...selected.value], ['112'])
+    assert.equal(ctx.mutations, 0)
+    assert.doesNotMatch(sources.ResearchCreateView, /<el-checkbox v-model="selectedIds"/)
+  } finally { ctx.close() }
 })
+
 
 test('research keeps missing and denied IDs visible and blocks payloads instead of using snapshots', async () => {
   const ctx = await mount('ResearchCreateView', { basket: [{ id: '115', type: 'article' }, { id: '108', type: 'article', title: '私有快照标题' }], api: { getPipelineIntelligenceDetail: async id => { if (id === '108') throw { msg: '资料不存在或无权访问' }; return { data: article(id) } }, getPipelineKnowledgeDocument: async () => { throw { msg: '资料不存在或无权访问' } } } })
@@ -771,24 +861,22 @@ test('manual digest generation switches cadence without schedule configuration',
   } finally { ctx.close() }
 })
 
-test('digest refuses over-limit single and page selections atomically and still allows deselection', async () => {
-  const ctx = await mount('DigestCreateView')
+test('digest above capacity requests a tighter rule without dropping articles', async () => {
+  const rows = Array.from({ length: 51 }, (_, i) => screenedArticle(`${900 + i}`))
+  const ctx = await mount('DigestCreateView', { api: {
+    startPipelineDigestScreening: async () => screeningStart(rows.length),
+    advancePipelineDigestScreening: async () => screeningResult(rows)
+  } })
   try {
-    ctx.page.selectedCandidateIds.value = Array.from({ length: 50 }, (_, i) => `${900 + i}`)
-    ctx.page.toggleCandidate('125', true)
-    assert.equal(ctx.page.selectedCandidateIds.value.length, 50)
-    assert.match(ctx.page.selectionNotice.value, /最多选择 50/)
-    ctx.page.previewPages.value = { '10:1': { rows: [{ id: '125', ready: true }] } }
-    ctx.page.selectCurrentPage()
-    assert.equal(ctx.page.selectedCandidateIds.value.length, 50)
-    ctx.page.toggleCandidate('900', false)
-    ctx.page.toggleCandidate('125', true)
-    assert.equal(ctx.page.selectedCandidateIds.value.length, 50)
-    assert.ok(ctx.page.selectedCandidateIds.value.includes('125'))
-    ctx.page.selectedCandidateIds.value.push('137')
-    assert.throws(() => ctx.page.buildDigestPayload(), /最多选择 50/)
+    await screenWeekly(ctx.page)
+    assert.equal(ctx.page.passedRows.value.length, 51)
+    assert.match(ctx.page.capacityNotice.value, /50 篇.*收紧筛选提示词/)
+    assert.equal(ctx.page.canGenerate.value, false)
+    await ctx.page.createDigest()
+    assert.equal(ctx.mutations, 0)
   } finally { ctx.close() }
 })
+
 
 test('digest queries the server by direction/keyword and actual page, then checks detail dates and sources', async () => {
   const calls = []
@@ -842,103 +930,85 @@ test('digest keyword groups larger than one page do not overflow or lose later k
   assert.equal(new Set([...first.rows, ...second.rows].map(item => item.id)).size, 12)
 })
 
-test('digest candidate source display hides verification notes and midnight while preserving original evidence metadata', async () => {
+test('digest waits for every automatic screening batch and submits its receipt with all approved articles', async () => {
+  const rows = [...Array.from({ length: 11 }, (_, i) => screenedArticle(`${701 + i}`)), screenedArticle('999', false)]
+  const lastBatch = later()
+  let batches = 0
   const ctx = await mount('DigestCreateView', { api: {
-    searchPipelineIntelligence: async () => ({ data: { rows: [{ id: '701' }], total: 1 } }),
-    getPipelineIntelligenceDetail: async id => ({ data: article(id, { source: '工人日报（国家管网官网转载）', publish_time: '2026-10-13 00:00:00' }) })
+    startPipelineDigestScreening: async () => screeningStart(rows.length),
+    advancePipelineDigestScreening: () => ++batches === 1
+      ? Promise.resolve({ data: { screeningId, total: rows.length, processed: 8 } })
+      : lastBatch.promise
   } })
   try {
-    const item = ctx.page.candidateItems.value[0]
-    assert.match(item.meta, /国家管网官网转载/)
-    assert.equal(ctx.page.cleanResultMeta(item.meta), '工人日报 · 2026-10-13')
-    assert.match(sources.DigestCreateView, /<small>\{\{ cleanResultMeta\(item\.meta\) \}\}<\/small>/)
+    const screening = screenWeekly(ctx.page)
+    await settle()
+    assert.equal(ctx.page.screeningProcessed.value, 8)
+    assert.equal(ctx.page.passedRows.value.length, 0)
+    assert.equal(ctx.page.refreshing.value, true)
+    lastBatch.resolve(screeningResult(rows))
+    await screening
+    assert.deepEqual(ctx.page.passedRows.value[0].tags, ['管道检测'])
+    assert.equal(ctx.page.screeningRows.value.length, rows.length)
+    assert.equal(ctx.page.passedRows.value.length, 11)
+    assert.equal(ctx.page.canGenerate.value, true)
+    const payload = ctx.page.buildDigestPayload()
+    assert.equal(Object.hasOwn(payload, 'materials'), false)
+    assert.equal(Object.hasOwn(payload, 'selectedItemIds'), false)
+    assert.equal(payload.screeningId, screeningId)
+    assert.equal(batches, 2)
     assert.equal(ctx.mutations, 0)
   } finally { ctx.close() }
 })
 
-test('digest preserves cross-page explicit selections and builds only those IDs without generating', async () => {
-  const calls = []
-  const ctx = await mount('DigestCreateView', { api: {
-    searchPipelineIntelligence: async params => { calls.push(params); return { data: { rows: [{ id: `${700 + params.pageNum}` }], total: 45 } } }
-  } })
-  try {
-    ctx.page.form.period = [new Date(2026, 9, 13), new Date(2026, 9, 19)]
-    await settle()
-    assert.equal(ctx.page.previewPageSize.value, 10)
-    assert.equal(calls.at(-1).pageSize, 10)
-    ctx.page.selectCurrentPage()
-    ctx.page.previewPage.value = 2
-    await settle()
-    ctx.page.selectCurrentPage()
-    assert.deepEqual([...ctx.page.selectedCandidateIds.value], ['701', '702'])
-    assert.equal(calls.at(-1).pageNum, 2)
-    assert.equal(ctx.page.checkedCandidates.value.length, 2)
-    assert.deepEqual(ctx.page.buildDigestPayload().selectedItemIds, ['701', '702'])
-    assert.equal(ctx.page.currentCandidatePageSelected.value, true)
-    ctx.page.selectCurrentPage()
-    assert.deepEqual([...ctx.page.selectedCandidateIds.value], ['701'])
-    assert.equal(ctx.page.currentCandidatePageSelected.value, false)
-    ctx.page.selectCurrentPage()
-    assert.deepEqual([...ctx.page.selectedCandidateIds.value], ['701', '702'])
-    ctx.page.submitting.value = true
-    ctx.page.selectCurrentPage()
-    assert.deepEqual([...ctx.page.selectedCandidateIds.value], ['701', '702'])
-    ctx.page.submitting.value = false
-    ctx.page.previewPageSize.value = 20
-    await settle()
-    assert.equal(ctx.page.previewPage.value, 1)
-    assert.equal(calls.at(-1).pageSize, 20)
-    assert.deepEqual([...ctx.page.selectedCandidateIds.value], ['701', '702'])
-    assert.deepEqual(ctx.page.buildDigestPayload().selectedItemIds, ['701', '702'])
-    ctx.page.previewPageSize.value = 50
-    await settle()
-    assert.equal(calls.at(-1).pageSize, 50)
-    assert.deepEqual(ctx.page.buildDigestPayload().selectedItemIds, ['701', '702'])
-    ctx.page.toggleCandidate('701', false)
-    assert.deepEqual(ctx.page.buildDigestPayload().selectedItemIds, ['702'])
-    assert.equal(ctx.mutations, 0)
-  } finally { ctx.close() }
-})
 
-test('digest scope changes invalidate old pages and selections; a late old response cannot publish', async () => {
+test('digest scope changes invalidate old classifications and reject late batch responses', async () => {
   const old = later()
   let calls = 0
-  const ctx = await mount('DigestCreateView', { api: { searchPipelineIntelligence: () => ++calls === 1 ? old.promise : Promise.resolve({ data: { rows: [{ id: '125' }], total: 1 } }) } })
+  const ctx = await mount('DigestCreateView', { api: {
+    advancePipelineDigestScreening: () => ++calls === 1 ? old.promise : Promise.resolve(screeningResult([screenedArticle('125')]))
+  } })
   try {
-    ctx.page.form.period = [new Date(2026, 9, 13), new Date(2026, 9, 19)]
-    ctx.page.form.keywords = ['新关键词']
+    const first = screenWeekly(ctx.page)
     await settle()
-    old.resolve({ data: { rows: [{ id: '120' }], total: 1 } })
-    await settle()
-    assert.deepEqual(ctx.page.candidateItems.value.map(item => item.id), ['125'])
-    ctx.page.selectCurrentPage()
-    ctx.page.form.sources = ['微信公众号']
-    await settle()
-    assert.equal(ctx.page.selectedCandidateIds.value.length, 0)
-    assert.equal(ctx.page.candidateItems.value.length, 0)
+    ctx.page.screeningPrompt.value = '新的筛选规则'
+    await ctx.page.refreshPreview()
+    old.resolve(screeningResult([screenedArticle('120')]))
+    await first
+    assert.deepEqual(ctx.page.passedRows.value.map(item => item.id), ['125'])
+    ctx.page.screeningPrompt.value = '再次修改筛选规则'
+    assert.equal(ctx.page.screeningId.value, '')
+    assert.equal(ctx.page.passedRows.value.length, 0)
     assert.equal(ctx.mutations, 0)
   } finally { ctx.close() }
 })
 
-test('digest request or detail failure is visible, not a zero candidate conclusion, and retry recovers', async () => {
-  let fail = true
-  const ctx = await mount('DigestCreateView', { api: { searchPipelineIntelligence: async () => { if (fail) throw { msg: '查询失败' }; return { data: { rows: [{ id: '111' }], total: 1 } } } } })
+
+test('digest batch failure is distinct from no matches and can resume', async () => {
+  let fail = true, starts = 0
+  const ctx = await mount('DigestCreateView', { api: {
+    startPipelineDigestScreening: async () => { starts++; return screeningStart() },
+    advancePipelineDigestScreening: async () => { if (fail) throw { msg: '模型复筛失败' }; return screeningResult([screenedArticle('111')]) }
+  } })
   try {
-    ctx.page.form.period = [new Date(2026, 9, 13), new Date(2026, 9, 19)]
+    ctx.page.confirmGeneration()
     await settle()
-    assert.equal(ctx.page.previewError.value, '查询失败')
+    assert.equal(ctx.page.activeStep.value, 1)
+    assert.equal(ctx.page.previewError.value, '模型复筛失败')
     assert.equal(ctx.page.refreshing.value, false)
-    assert.throws(() => ctx.page.buildDigestPayload(), /加载失败/)
+    assert.throws(() => ctx.page.buildDigestPayload(), /完成系统筛选/)
     fail = false
     await ctx.page.refreshPreview()
     assert.equal(ctx.page.previewError.value, '')
-    assert.equal(ctx.page.candidateItems.value.length, 1)
+    assert.equal(ctx.page.passedRows.value.length, 1)
+    assert.equal(starts, 1)
     assert.equal(ctx.mutations, 0)
   } finally { ctx.close() }
   await assert.rejects(() => evidence.fetchDigestPage({ period: ['2026-10-13'], sources: ['新闻网站'], directions: [], keywords: [] }, {
     search: async () => ({ data: { rows: [{ id: '108' }], total: 1 } }), getIntelligence: async () => { throw { msg: '已撤权' } }
   }, 1), /108.*已撤权/)
 })
+
 
 test('digest dedicated pagination can access the full filtered pool and rejects malformed totals', async () => {
   const scope = { period: ['2026-10-13'], sources: ['新闻网站'], directions: [], keywords: [] }
@@ -951,7 +1021,7 @@ test('digest dedicated pagination can access the full filtered pool and rejects 
 
 test('digest invalid/reversed periods do not query, and cleared controls never become an epoch date', async () => {
   const calls = []
-  const ctx = await mount('DigestCreateView', { api: { searchPipelineIntelligence: async params => { calls.push(params); return { data: { rows: [], total: 0 } } } } })
+  const ctx = await mount('DigestCreateView', { api: { startPipelineDigestScreening: async params => { calls.push(params); return screeningStart() } } })
   try {
     const before = calls.length
     ctx.page.form.period = []
@@ -959,10 +1029,10 @@ test('digest invalid/reversed periods do not query, and cleared controls never b
     assert.equal(calls.length, before)
     assert.deepEqual(ctx.page.buildReportPeriod().period, [])
     assert.equal(ctx.page.previewError.value, '')
-    assert.equal(ctx.page.candidateItems.value.length, 0)
+    assert.equal(ctx.page.passedRows.value.length, 0)
     ctx.page.form.type = '周报'
     ctx.page.form.period = [new Date(2027, 0, 2), new Date(2026, 11, 31)]
-    await settle()
+    await ctx.page.refreshPreview()
     assert.equal(calls.length, before)
     assert.equal(ctx.page.previewError.value, '')
     assert.equal(ctx.mutations, 0)
@@ -971,11 +1041,14 @@ test('digest invalid/reversed periods do not query, and cleared controls never b
 
 test('digest late requests after unmount cannot publish candidates', async () => {
   const response = later()
-  const ctx = await mount('DigestCreateView', { api: { searchPipelineIntelligence: () => response.promise } })
-  ctx.close()
-  response.resolve({ data: { rows: [{ id: '136' }], total: 1 } })
+  const ctx = await mount('DigestCreateView', { api: { advancePipelineDigestScreening: () => response.promise } })
+  const pending = screenWeekly(ctx.page)
   await settle()
-  assert.equal(ctx.page.candidateItems.value.length, 0)
+  ctx.close()
+  response.resolve(screeningResult([screenedArticle('136')]))
+  await pending
+  await settle()
+  assert.equal(ctx.page.passedRows.value.length, 0)
   assert.equal(ctx.mutations, 0)
 })
 
@@ -998,29 +1071,36 @@ test('stale template IDs warn without replacing authored text or outline on temp
   } finally { ctx.close() }
 })
 
-test('digest ignores legacy template query and source-task template overrides while retaining evidence controls', async () => {
+test('digest copy restores a screening prompt but never submits a stale writing prompt or outline', async () => {
   let catalogCalls = 0
   const ctx = await mount('DigestCreateView', { query: { template: 'old-template-uuid', sourceTask: '77' }, api: {
-    listPipelineTemplates: async () => { catalogCalls++; throw Error('must not load templates') },
-    getPipelineResearchJob: async () => ({ data: { type: 'weekly', config: {
+    listPipelineTemplates: async params => {
+      catalogCalls++
+      assert.equal(params.category, 'digest')
+      return { data: { rows: [{ id: '9007199254740993', purpose: 'digest', digestCadence: 'weekly' }] } }
+    },
+    getPipelineResearchJob: async () => ({ data: { type: 'weekly', screeningPrompt: '仅纳入创新进展', config: {
       templateId: '9007199254740993', template_prompt: '旧模板中的提示词', outline: [{ title: '旧章节' }],
       period: ['2026-10-13', '2026-10-19'], keywords: [], options: { summaryLength: 'short' }
     } } }),
-    searchPipelineDigestCandidates: async () => ({ data: { rows: [article('504')], total: 1 } })
   } })
   try {
-    ctx.page.selectCurrentPage()
+    await ctx.page.refreshPreview()
     const payload = ctx.page.buildDigestPayload()
-    assert.deepEqual(payload.selectedItemIds, ['504'])
+    assert.equal(payload.screeningId, screeningId)
+    assert.equal(Object.hasOwn(payload, 'materials'), false)
+    assert.equal(Object.hasOwn(payload, 'selectedItemIds'), false)
+    assert.equal(ctx.page.screeningPrompt.value, '仅纳入创新进展')
     assert.equal(payload.options.summaryLength, 'short')
     assert.equal(Object.hasOwn(ctx.page.form, 'template'), false)
-    for (const field of ['templateId', 'templateVersion', 'outline', 'templatePrompt', 'template_prompt']) {
+    assert.equal(payload.templateId, '9007199254740993')
+    for (const field of ['templateVersion', 'outline', 'templatePrompt', 'template_prompt']) {
       assert.equal(Object.hasOwn(payload, field), false)
     }
     await ctx.router.replace({ path: '/create', query: { template: 'another-old-template-uuid', sourceTask: '77' } })
     await settle()
-    assert.deepEqual(ctx.page.buildDigestPayload().selectedItemIds, ['504'])
-    assert.equal(catalogCalls, 0)
+    assert.equal(ctx.page.buildDigestPayload().screeningId, screeningId)
+    assert.equal(catalogCalls, 1)
     assert.equal(ctx.mutations, 0)
   } finally { ctx.close() }
 })
@@ -1074,4 +1154,86 @@ test('research legacy template queries never select a replacement and retain use
       assert.ok(ctx.messages.some(item => item.text.includes('编号已升级')))
     } finally { ctx.close() }
   }
+})
+
+test('digest Back and Forward restore the same screening without submitting or screening twice', async () => {
+  let screenings = 0
+  const ctx = await mount('DigestCreateView', { api: {
+    startPipelineDigestScreening: async () => { screenings++; return screeningStart() }
+  } })
+  try {
+    ctx.page.confirmGeneration()
+    await settle()
+    assert.equal(ctx.page.activeStep.value, 1)
+    assert.equal(ctx.page.passedRows.value.length, 1)
+    ctx.page.advanceStep()
+    assert.equal(ctx.page.activeStep.value, 1)
+    ctx.page.goBack()
+    await settle()
+    assert.equal(ctx.page.activeStep.value, 0)
+    ctx.router.forward()
+    await settle()
+    assert.equal(ctx.page.activeStep.value, 1)
+    assert.equal(ctx.page.passedRows.value.length, 1)
+    assert.equal(screenings, 1)
+    assert.equal(ctx.mutations, 0)
+  } finally { ctx.close() }
+})
+
+
+test('weekly and monthly move directly to confirmation while the system screens and generation waits for completion', async () => {
+  for (const type of ['周报', '月报']) {
+    const batch = later()
+    const created = []
+    let starts = 0
+    const ctx = await mount('DigestCreateView', { api: {
+      startPipelineDigestScreening: async () => { starts++; return screeningStart(2) },
+      advancePipelineDigestScreening: () => batch.promise,
+      createPipelineResearchJob: async payload => { created.push(payload); return { data: { jobId: '432' } } }
+    } })
+    const page = ctx.page
+    try {
+      page.form.type = type
+      await settle()
+      page.confirmGeneration()
+      await settle()
+      assert.equal(page.activeStep.value, 1)
+      assert.equal(page.refreshing.value, true)
+      assert.equal(page.canGenerate.value, false)
+      await page.createDigest()
+      assert.equal(created.length, 0)
+      page.form.summaryLength = 'long'
+      batch.resolve(screeningResult([screenedArticle('701'), screenedArticle('702', false)]))
+      await settle()
+      assert.equal(page.activeStep.value, 1)
+      assert.equal(page.refreshing.value, false)
+      assert.equal(page.canGenerate.value, true)
+      assert.equal(starts, 1)
+      assert.equal(created.length, 0)
+      await page.createDigest()
+      assert.equal(created.length, 1)
+      assert.equal(created[0].reportType, type === '周报' ? 'weekly' : 'monthly')
+      assert.equal(created[0].screeningId, screeningId)
+      assert.equal(created[0].options.summaryLength, 'long')
+      assert.equal(Object.hasOwn(created[0], 'selectedItemIds'), false)
+    } finally { ctx.close() }
+  }
+})
+
+
+test('confirmation stays on the second step and blocks generation when every article is excluded', async () => {
+  const ctx = await mount('DigestCreateView', { api: {
+    advancePipelineDigestScreening: async () => screeningResult([screenedArticle('701', false)])
+  } })
+  try {
+    ctx.page.confirmGeneration()
+    await settle()
+    assert.equal(ctx.page.activeStep.value, 1)
+    assert.equal(ctx.page.screeningTotal.value, 1)
+    assert.equal(ctx.page.refreshing.value, false)
+    assert.equal(ctx.page.previewError.value, '')
+    assert.equal(ctx.page.canGenerate.value, false)
+    await ctx.page.createDigest()
+    assert.equal(ctx.mutations, 0)
+  } finally { ctx.close() }
 })

@@ -176,3 +176,21 @@ test('old cached UUIDs cannot mutate workspace and clearing never silently disca
   assert.equal(store.basket[0].title, '保留原选材')
   assert.equal(store.favorites[0], old)
 })
+
+test('a queued submission stays registered through late hydration and terminal status cannot regress', () => {
+  const { store } = portalStore()
+  const queued = { jobId: '701', ownerId: '7', reportId: '801', type: 'monthly', title: '本期月报', status: 'queued' }
+  store.registerGenerationTask(queued)
+  assert.deepEqual(Array.from(store.submittedTaskIds), ['701'])
+  store.setGenerationTasks([])
+  assert.equal(store.tasks[0].id, '701')
+  store.setGenerationTasks([{ ...queued, status: 'completed', reportStatus: 'completed', progress: 100 }])
+  store.setGenerationTasks([queued])
+  assert.equal(store.tasks[0].status, 'completed')
+  assert.equal(store.tasks[0].reportType, 'monthly')
+  assert.equal(store.tasks[0].ownerId, '7')
+  store.taskPanelVisible = true
+  store.reset()
+  assert.equal(store.submittedTaskIds.length, 0)
+  assert.equal(store.taskPanelVisible, false)
+})

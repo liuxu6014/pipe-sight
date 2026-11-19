@@ -22,12 +22,15 @@
       </nav>
 
       <div class="ps-header-tools">
+        <el-badge type="primary" :value="store.runningTaskCount" :hidden="!store.runningTaskCount" :max="99" class="ps-generation-queue-badge">
+          <el-button :icon="Clock" class="ps-generation-queue ps-ui-control" aria-label="生成队列" aria-haspopup="dialog" @click="store.taskPanelVisible = true">生成队列</el-button>
+        </el-badge>
         <el-button
           class="ps-header-search ps-ui-control"
           :icon="Search"
           aria-label="搜索平台内容"
           aria-haspopup="dialog"
-          @click="searchOpen = true"
+          @click="openSearch"
         >搜索资讯、论文、资料</el-button>
 
         <el-button :auto-insert-space="false"
@@ -89,7 +92,7 @@
         :icon="Search"
         aria-label="搜索平台内容（移动端）"
         aria-haspopup="dialog"
-        @click="searchOpen = true"
+        @click="openSearch"
       >搜索资讯、论文、资料</el-button>
       <el-button :auto-insert-space="false" class="ps-ui-control"
         v-for="item in portalNavigation"
@@ -104,7 +107,8 @@
     </nav>
 
     <el-dialog
-      v-model="searchOpen"
+      :model-value="searchOpen"
+      :before-close="closeSearch"
       class="ps-global-search-dialog"
       width="min(820px, calc(100vw - 24px))"
       align-center
@@ -119,7 +123,7 @@
           <span class="ps-global-search-status" role="status">{{ dialogSearch?.dialogStatus }}</span>
         </div>
       </template>
-      <SearchView ref="dialogSearch" in-dialog @result-opened="searchOpen = false" />
+      <SearchView ref="dialogSearch" in-dialog :initial-filters="searchFilters" @filters-changed="rememberSearch" @result-opened="closeSearch" />
     </el-dialog>
   </header>
 </template>
@@ -127,7 +131,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Collection, Menu, Refresh, Search, Setting, SwitchButton, User } from '@element-plus/icons-vue'
+import { Clock, Collection, Menu, Refresh, Search, Setting, SwitchButton, User } from '@element-plus/icons-vue'
 import { portalNavigation } from '../data'
 import usePortalStore from '@/store/modules/portal'
 import useUserStore from '@/store/modules/user'
@@ -144,7 +148,26 @@ const searchOpen = ref(false)
 const dialogSearch = ref(null)
 const mobileOpen = ref(false)
 watch(() => route.fullPath, () => { mobileOpen.value = false })
-watch(() => route.path, () => { searchOpen.value = false })
+const searchFilters = ref({})
+const history = router.options.history
+function openSearch() {
+  return router.push({
+    path: route.path, query: route.query, hash: route.hash, force: true,
+    state: { wizard: history.state.wizard, portalSearch: { owner: userStore.id } }
+  })
+}
+function closeSearch() {
+  if (history.state.portalSearch?.owner === userStore.id && searchOpen.value) router.back()
+}
+function rememberSearch(filters) {
+  if (!searchOpen.value || history.state.portalSearch?.owner !== userStore.id) return
+  history.replace(route.fullPath, { ...history.state, portalSearch: { owner: userStore.id, filters } })
+}
+watch([() => router.currentRoute.value, () => userStore.id], () => {
+  const entry = history.state.portalSearch
+  searchOpen.value = Boolean(entry && entry.owner === userStore.id)
+  if (searchOpen.value) searchFilters.value = entry.filters || {}
+}, { immediate: true })
 const currentUserName = computed(() => userStore.nickName || userStore.name || '管网用户')
 const isAdministrator = computed(() => isManagementIdentity(userStore.roles, userStore.permissions))
 
@@ -175,6 +198,8 @@ onMounted(() => store.hydrate())
 @media (min-width: 1051px) {
   .ps-main-nav, .ps-basket-button { display: none; }
 }
+.ps-generation-queue-badge { flex-shrink: 0; }
+.ps-generation-queue { margin: 0; }
 .ps-user-account-actions { display: flex; align-items: center; }
 .ps-header-search.el-button, .ps-mobile-search.el-button {
   justify-content: flex-start;

@@ -199,6 +199,15 @@ export function searchPipelineDigestCandidates(data) {
   return request({ url: '/pipeline/research/digest-candidates', method: 'post', data })
 }
 
+export function startPipelineDigestScreening(data) {
+  return request({ url: '/pipeline/research/digest-screening', method: 'post', data })
+}
+
+export function advancePipelineDigestScreening(id) {
+  if (!/^[0-9a-f]{32}$/.test(id)) throw new Error('复筛编号无效，请重新复筛')
+  return request({ url: `/pipeline/research/digest-screening/${id}/batch`, method: 'post', timeout: 135000, headers: { repeatSubmit: false } })
+}
+
 export function listPipelineKnowledgeDocuments(params) {
   return request({
     url: '/pipeline/knowledge/documents',

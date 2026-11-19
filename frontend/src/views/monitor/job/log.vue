@@ -231,8 +231,7 @@ function jobExecutorFormat(row, column) {
 }
 // 返回按钮
 function handleClose() {
-  const obj = { path: "/monitor/job" };
-  proxy.$tab.closeOpenPage(obj);
+  proxy.$tab.returnFromPage("/monitor/job");
 }
 /** 搜索按钮操作 */
 function handleQuery() {

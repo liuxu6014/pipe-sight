@@ -11,8 +11,9 @@ export function digestPeriodLabel(period) {
 export function digestMasthead(title, period) {
   if (!Array.isArray(period) || period.length !== 2 || !digestPeriodLabel(period)) return title
   const [start, end] = period
-  if (title === `管网科技情报周报 ${start} 至 ${end}`) return '管网科技情报周报'
+  const defaultTitle = title?.replace(/^管网/, '')
+  if (defaultTitle === `科技情报周报 ${start} 至 ${end}`) return '科技情报周报'
   const month = /^(\d{4})-(\d{2})-01$/.exec(start)
-  if (month && title === `管网科技情报月报 ${month[1]}年${Number(month[2])}月`) return '管网科技情报月报'
+  if (month && defaultTitle === `科技情报月报 ${month[1]}年${Number(month[2])}月`) return '科技情报月报'
   return title
 }

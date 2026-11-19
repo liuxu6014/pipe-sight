@@ -1,14 +1,14 @@
 <template>
   <div class="ps-page ps-create-page ps-research-create-page">
     <header class="ps-create-context">
-      <el-button :icon="Back" circle class="ps-ui-action ps-create-back" aria-label="返回科研工作台" title="返回科研工作台" @click="router.push('/portal/research')" />
+      <el-button :icon="Back" circle class="ps-ui-action ps-create-back" :disabled="submitting" :title="activeStep ? '返回上一步' : '返回上一页'" :aria-label="activeStep ? '返回上一步' : '返回上一页'" @click="goBack" />
       <div class="ps-create-heading">
         <h1>新建报告</h1>
       </div>
     </header>
     <div v-if="sourceTaskLoading || sourceTaskError" class="ps-inline-state is-warning" role="status">
       <span>{{ sourceTaskLoading ? '正在载入原任务，尚未确认选材范围…' : sourceTaskError }}</span>
-      <el-button v-if="sourceTaskError" plain @click="loadSourceTask(String(route.query.sourceTask))">重试载入原任务</el-button>
+      <el-button v-if="sourceTaskError" plain @click="loadSourceTask(String(draftQuery.sourceTask))">重试载入原任务</el-button>
     </div>
     <el-alert v-if="templateUpgradeNotice" :title="templateUpgradeNotice" type="warning" :closable="false" />
     <el-steps :active="activeStep" finish-status="success" align-center class="ps-create-steps"><el-step title="基本信息" /><el-step title="选择资料" /><el-step title="选择模板" /><el-step title="确认大纲与写作要求" /></el-steps>
@@ -132,9 +132,9 @@
       </div>
       <el-alert v-if="activeStep === 3 && finalGenerationError" :title="finalGenerationError" type="warning" :closable="false" show-icon />
       <footer class="ps-step-footer">
-        <el-button v-if="activeStep > 0" :disabled="submitting" @click="activeStep--">上一步</el-button>
+        <el-button v-if="activeStep > 0" :disabled="submitting" @click="goBack">上一步</el-button>
         <div class="ps-step-footer-actions">
-          <el-button v-if="activeStep === 0" @click="router.push('/portal/research')">取消</el-button>
+          <el-button v-if="activeStep === 0" @click="goBack">取消</el-button>
           <el-button v-if="activeStep < 3" type="primary" :disabled="nextStepBlocked" @click="nextStep">下一步</el-button>
           <el-button v-else type="primary" :loading="submitting" :disabled="Boolean(finalGenerationError)" @click="submitTask">提交生成任务</el-button>
         </div>
@@ -152,6 +152,7 @@
 </template>
 
 <script setup>
+import { useWizardHistory } from '@/utils/portal/wizardHistory'
 import { templatePreview } from '@/utils/portal/researchWorkspace'
 import { allocateReportWords } from '@/utils/portal/reportLength'
 import { displayId, decimalId, requireBusinessId, ID_UPGRADE_NOTICE } from '@/utils/portal/businessId'
@@ -174,7 +175,7 @@ const router = useRouter()
 const portalStore = usePortalStore()
 const MATERIAL_STEP = 1
 const TEMPLATE_STEP = 2
-const activeStep = ref(0)
+const { activeStep, advanceStep, goBack, isCurrentVisit, draftQuery } = useWizardHistory(router, route, '/portal/research', canEnterResearchStep)
 const stepCard = ref()
 watch(activeStep, async () => {
   await nextTick()
@@ -204,10 +205,10 @@ const reportTypes = [
   { value: 'technology-route', label: '技术路线报告' },
   { value: 'project-demand', label: '科技项目需求表' }
 ]
-const form = reactive({ reportType: 'research-demand', template: String(route.query.template || ''), version: '', language: 'zh', length: 'standard', project: '', projectDescription: '', period: [], keywords: [], templatePrompt: '', requirements: '', diagram: false, publicSupplement: false, citationCheck: true })
+const form = reactive({ reportType: 'research-demand', template: String(draftQuery.value.template || ''), version: '', language: 'zh', length: 'standard', project: '', projectDescription: '', period: [], keywords: [], templatePrompt: '', requirements: '', diagram: false, publicSupplement: false, citationCheck: true })
 const projectKeywords = computed(() => [...new Set(form.keywords.map(keyword => String(keyword ?? '').trim()).filter(Boolean))])
 let suggestedMaterialKeyword = ''
-watch(() => route.query.template, value => {
+watch(() => draftQuery.value.template, value => {
   if (value === undefined) return
   form.template = String(value)
   const configuredType = templateReportType(reportTemplates.value.find(item => item.id === form.template))
@@ -276,10 +277,14 @@ let parsingTimer
 let parsingRefreshRunning = false
 const parsingVersions = new Map()
 function scheduleParsingRefresh() {
-  if (!materialStopped && !parsingTimer && parsingMaterialIds.value.length) {
+  if (isCurrentVisit() && !materialStopped && !parsingTimer && parsingMaterialIds.value.length) {
     parsingTimer = setTimeout(() => { parsingTimer = undefined; void refreshParsingMaterials() }, 3000)
   }
 }
+watch(isCurrentVisit, current => {
+  if (current) scheduleParsingRefresh()
+  else { clearTimeout(parsingTimer); parsingTimer = undefined }
+})
 watch(parsingMaterialIds, ids => {
   if (!ids.length) { clearTimeout(parsingTimer); parsingTimer = undefined; parsingRefreshError.value = '' }
   else scheduleParsingRefresh()
@@ -385,9 +390,12 @@ const finalGenerationError = computed(() => {
   const error = templateGenerationError(selectedTemplate.value, { images: form.diagram })
   return error ? error.replace('当前模板未配置可用的文本生成模型', '科研报告生成模型尚未配置').replace('请联系管理员配置后再生成', '请联系管理员在模型管理的用途配置中设置后再生成') : ''
 })
-const nextStepBlocked = computed(() => activeStep.value === 0 ? !form.project.trim()
-  : activeStep.value === TEMPLATE_STEP ? !selectedTemplate.value || templatesLoading.value
-  : activeStep.value === MATERIAL_STEP ? uploading.value || !selectedIds.value.length || verifying.value || Boolean(selectionProblems.value.length) || sourceTaskLoading.value || Boolean(sourceTaskError.value) : false)
+function canEnterResearchStep(step) {
+  if (!form.project.trim()) return false
+  if (step >= TEMPLATE_STEP && (uploading.value || !selectedIds.value.length || verifying.value || selectionProblems.value.length || sourceTaskLoading.value || sourceTaskError.value)) return false
+  return step <= TEMPLATE_STEP || (step === 3 && Boolean(selectedTemplate.value) && !templatesLoading.value)
+}
+const nextStepBlocked = computed(() => !canEnterResearchStep(activeStep.value + 1))
 function materialDescription(item) {
   const detail = item.detail || {}
   const metadata = [detail.journal || detail.source || detail.owner, detail.year || detail.publish_time || detail.publishTime].filter(Boolean).join(' · ') || item.meta || (item.itemType === 'material' ? '内部资料' : '')
@@ -426,7 +434,7 @@ function nextStep() {
       materialKeyword.value = suggestedMaterialKeyword
     }
   }
-  activeStep.value += 1
+  advanceStep()
 }
 function formatDate(value) {
   return calendarDate(value)
@@ -506,9 +514,12 @@ async function submitTask() {
     if (session !== portalStore.workspaceEpoch || idsBefore !== JSON.stringify(selectedIds.value)) return ElMessage.warning('账号或选材已变化，请重新确认后提交')
     const payload = buildResearchPayload()
     const res = await createPipelineResearchJob({ ...payload, requestId: ensureRequestId(payload) })
+    if (session !== portalStore.workspaceEpoch) return
+    portalStore.registerGenerationTask(res.data)
     await portalStore.hydrate(true)
-    ElMessage.success('任务已进入后台生成队列，可在任务页查看实时进度')
-    router.push(`/portal/research/tasks/${res.data.jobId || res.data.id}`)
+    if (session !== portalStore.workspaceEpoch) return
+    ElMessage.success('任务已进入后台生成队列，切换页面后会继续生成，完成后将提醒查看')
+    if (isCurrentVisit()) router.push(`/portal/research/tasks/${res.data.jobId || res.data.id}`)
   } catch (error) {
     ElMessage.error(error?.msg || error?.message || '任务创建失败，请确认后端已启动并完成业务表初始化')
   } finally {
@@ -568,13 +579,13 @@ onMounted(async () => {
   const generation = sourceTaskGeneration
   await Promise.all([loadTemplates(), portalStore.hydrate()])
   if (generation !== sourceTaskGeneration) return
-  const selection = resolveBasketSelection(portalStore.basket, route.query.selected)
+  const selection = resolveBasketSelection(portalStore.basket, draftQuery.value.selected)
   setSelection(selection.items)
   if (selection.upgraded) ElMessage.warning(ID_UPGRADE_NOTICE)
   else if (selection.missing) ElMessage.warning(`${selection.missing} 条选材已不在当前资料库中，请重新选择`)
-  if (route.query.sourceTask) await loadSourceTask(String(route.query.sourceTask))
+  if (draftQuery.value.sourceTask) await loadSourceTask(String(draftQuery.value.sourceTask))
 })
-watch(() => route.query.sourceTask, taskId => { if (taskId) void loadSourceTask(String(taskId)) })
+watch(() => draftQuery.value.sourceTask, taskId => { if (taskId) void loadSourceTask(String(taskId)) })
 
 async function loadSourceTask(taskId) {
   if (!decimalId(taskId)) { sourceTaskError.value = ID_UPGRADE_NOTICE; return }

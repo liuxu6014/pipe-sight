@@ -20,7 +20,15 @@ class TemplateListDao:
         page=1,
         page_size=10,
     ) -> tuple:
-        filters = [Template.purpose != 'digest']
+        filters = [
+            or_(
+                Template.purpose != 'digest',
+                and_(
+                    Template.digest_cadence.in_(('weekly', 'monthly', 'all')),
+                    or_(Template.preset_key.is_(None), ~Template.preset_key.startswith('digest-fixed-v1-')),
+                ),
+            )
+        ]
         if user_id is not None:
             filters.append(Template.user_id == user_id)
         if purpose:
@@ -56,7 +64,7 @@ class TemplateListDao:
         total = await db.scalar(select(func.count()).select_from(Template).where(*filters))
         query = (
             select(Template)
-            .options(defer(Template.prompt))
+            .options(defer(Template.prompt), defer(Template.screening_prompt), defer(Template.screening_categories))
             .where(*filters)
             .order_by(Template.updated_at.desc(), Template.id.desc())
             .offset((page - 1) * page_size)

@@ -3,7 +3,7 @@
 from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import Query, Request, Response
+from fastapi import Path, Query, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.business_ids import wire_id
@@ -13,6 +13,7 @@ from app.intelligence.schemas.pipeline import (
     PipelineDigestCandidatesModel,
     PipelineDigestScheduleCreateModel,
     PipelineDigestScheduleToggleModel,
+    PipelineDigestScreeningModel,
     PipelineReportExportCreateModel,
     PipelineReportUpdateModel,
     PipelineResearchJobCreateModel,
@@ -23,6 +24,8 @@ from app.research.repositories.research_repository import ResearchDao as Pipelin
 from app.research.schemas.generation import ApplyGenerationResultModel, ReportRewriteModel
 from app.research.schemas.listing import JobListQuery, ReportListQuery
 from app.research.services.application import ResearchApplicationService
+from app.research.services.digest_document import DigestScreeningError
+from app.research.services.digest_screening import DigestScreeningService
 from app.research.services.exports import ResearchReportExportService
 from app.research.services.list_queries import job_page, report_page
 from app.research.services.reports import ResearchReportService
@@ -79,6 +82,32 @@ async def search_digest_candidates(
             'total': total,
             'selectionLimit': DIGEST_SELECTION_LIMIT,
         }
+    )
+
+
+@controller.post('/research/digest-screening', summary='确定本期简报的完整复筛范围')
+async def begin_digest_screening(
+    request: Request,
+    body: PipelineDigestScreeningModel,
+    query_db: Annotated[AsyncSession, DBSessionDependency()],
+    current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
+) -> Response:
+    return ResponseUtil.success(
+        data=await DigestScreeningService.begin(query_db, request.app.state.redis, current_user.user.user_id, body)
+    )
+
+
+@controller.post('/research/digest-screening/{screening_id}/batch', summary='复筛本人的下一批候选文章')
+async def advance_digest_screening(
+    request: Request,
+    screening_id: Annotated[str, Path(pattern=r'^[0-9a-f]{32}$')],
+    query_db: Annotated[AsyncSession, DBSessionDependency()],
+    current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
+) -> Response:
+    return ResponseUtil.success(
+        data=await DigestScreeningService.advance(
+            query_db, request.app.state.redis, current_user.user.user_id, screening_id
+        )
     )
 
 
@@ -151,18 +180,21 @@ async def list_pipeline_research_jobs(
     return ResponseUtil.success(data=data)
 
 
-@controller.post('/research/jobs', summary='创建科研报告或日报周月报任务')
+@controller.post('/research/jobs', summary='创建科研报告或简报任务')
 async def create_pipeline_research_job(
     request: Request,
     body: PipelineResearchJobCreateModel,
     query_db: Annotated[AsyncSession, DBSessionDependency()],
     current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
 ) -> Response:
+    if body.report_type in {'weekly', 'monthly'} and not body.screening_id:
+        raise DigestScreeningError(message='请先按筛选提示词完成系统筛选，再提交简报')
     data = await ResearchApplicationService.queue_job(
         query_db,
         user_id=current_user.user.user_id,
         owner_name=current_user.user.nick_name or current_user.user.user_name,
         payload=body,
+        **({'screening_cache': request.app.state.redis} if body.screening_id else {}),
     )
     return ResponseUtil.success(data=data, msg='任务已进入后台生成队列')
 

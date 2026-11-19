@@ -12,7 +12,7 @@ import { isDigestType } from '../src/views/portal/utils/routing.js'
 import * as vue from 'vue'
 import { createMemoryHistory, createRouter, useRoute, useRouter } from 'vue-router'
 import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
-import { materialBasketReason, readListQuery, useListQuery, useListRequest, useListWorkspace, validPage } from '../src/utils/portal/listQuery.js'
+import { materialBasketReason, readListQuery, bindListQuery, useListQuery, useListRequest, useListWorkspace, validPage } from '../src/utils/portal/listQuery.js'
 import { ownedReports, unfinishedTasks, publicationDate, periodOverlaps } from '../src/views/portal/utils/workspace.js'
 import { useBasketSelection } from '../src/utils/portal/basketSelection.js'
 import { buildLibraryItems, libraryItemPath, libraryItemReason, prepareLibrarySelection } from '../src/utils/portal/libraryItems.js'
@@ -111,7 +111,7 @@ async function mountPage(name, { query = {}, api = {}, documents = [], pageProps
   const injected = {
     ...vue, usePagedResults, reportSummaryRow, useRoute, useRouter, ...normalizers,
     openPortalContent: (router, path) => router.push(path),
-    useListQuery, useListRequest, useListWorkspace, validPage, materialBasketReason, cleanSummary, cleanResultMeta, combineLatest, newsDate, resultPath,
+    bindListQuery, useListQuery, useListRequest, useListWorkspace, validPage, materialBasketReason, cleanSummary, cleanResultMeta, combineLatest, newsDate, resultPath,
     usePortalStore: () => store, periodOverlaps, isDigestType, useBasketSelection, useBasketParsing, buildLibraryItems, libraryItemPath, libraryItemReason, prepareLibrarySelection,
     basketItemLabel, basketItemPath, uploadBasketFile, validateBasketUpload, Tickets: {},
     useUserStore: () => ({ id: 7 }), ownedReports, unfinishedTasks, publicationDate, buildPersonalReports, hasReportOutput, sortResearchReports, createResearchRefresh, reportRowActions,

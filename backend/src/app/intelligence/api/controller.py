@@ -214,7 +214,9 @@ async def published_templates(
     current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
     category: str | None = None,
 ) -> Response:
-    await PipelineTemplateService.install_builtins(query_db, user_id=current_user.user.user_id)
+    await PipelineTemplateService.install_builtins(
+        query_db, user_id=current_user.user.user_id, purpose='digest' if category == 'digest' else 'research'
+    )
     return ResponseUtil.success(
         data=await PipelineTemplateService.list_templates(
             query_db, category=category, published_only=True, user_id=current_user.user.user_id
@@ -235,7 +237,9 @@ async def templates(
     ),
     status: Literal['all', 'enabled', 'disabled', 'deleted'] = 'all',
 ) -> Response:
-    await PipelineTemplateService.install_builtins(query_db, user_id=current_user.user.user_id)
+    await PipelineTemplateService.install_builtins(
+        query_db, user_id=current_user.user.user_id, purpose='digest' if category == 'digest' else 'research'
+    )
     paging = (
         {'page': page, 'page_size': page_size, 'keyword': keyword, 'report_type': report_type, 'status': status}
         if page is not None

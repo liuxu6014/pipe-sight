@@ -1,7 +1,7 @@
 const clone = value => JSON.parse(JSON.stringify(value || {}))
 const terms = values => [...new Set(values.map(value => value.trim()).filter(Boolean))]
 export function newScheduleForm() {
-  return { name: '', frequency: 'weekly', time: '08:00', weekday: 0, monthDay: 1,
+  return { name: '', templateId: '', frequency: 'weekly', time: '08:00', weekday: 0, monthDay: 1,
     enabled: false, keywords: [], categories: [], sources: ['新闻网站', '微信公众号'],
     holidayPolicy: 'run', holidayDates: [], itemCount: 8, summaryLength: 'normal', hotAnalysis: true,
     duplicateMerge: true, requirements: '', generation: {}, selection: {} }
@@ -9,7 +9,7 @@ export function newScheduleForm() {
 export function readScheduleForm(row) {
   const config = clone(row.config), generation = clone(row.generationConfig)
   const options = { ...(config.options || {}), ...(generation.options || {}) }
-  return { ...newScheduleForm(), name: row.name, frequency: row.reportType,
+  return { ...newScheduleForm(), name: row.name, templateId: row.templateId || '', frequency: row.reportType,
     time: String(row.scheduleTime || '').slice(0, 5),
     weekday: row.scheduleWeekday ?? 0, monthDay: row.scheduleMonthDay ?? 1, enabled: Boolean(row.enabled),
     keywords: config.keywords ?? generation.keywords ?? [], categories: config.category_names ?? options.directions ?? [],
@@ -49,6 +49,7 @@ export function schedulePayload(form) {
   // Old plans may carry a mutable template outline; fixed-format briefs never reuse it.
   for (const key of ['outline', 'template_prompt', 'templatePrompt', 'template_id', 'templateId', 'template_version', 'templateVersion']) delete generation[key]
   return { name: form.name.trim(), reportType: form.frequency,
+    ...(form.templateId ? { templateId: form.templateId } : {}),
     scheduleTime: form.time, scheduleWeekday: form.weekday, scheduleMonthDay: form.monthDay,
     enabled: form.enabled, timezone: 'Asia/Shanghai', holidayPolicy: form.holidayPolicy,
     holidayDates: [...(form.holidayDates || [])], selectionConfig: selection, generationConfig: generation }

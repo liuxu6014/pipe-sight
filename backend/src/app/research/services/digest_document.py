@@ -5,6 +5,7 @@ import re
 from urllib.parse import urlparse
 
 from app.business_time import format_business_time
+from exceptions.exception import ServiceException
 
 MAX_DIGEST_ITEMS = 50
 MAX_DIGEST_TEXT = 20000
@@ -12,6 +13,28 @@ PERIOD_ENDPOINTS = 2
 SUMMARY_LIMITS = {'short': 120, 'normal': 200, 'long': 300}
 
 DIGEST_FORMAT = 'digest-reference-v1'
+DEFAULT_DIGEST_SCREENING = (
+    '保留与本期主题有关、有明确事实或技术进展的报道。排除无关内容、广告、只有标题或空泛观点的文章。'
+    '正文只是转述历史、没有报告期内新增事实的文章不保留。'
+)
+
+
+class DigestScreeningError(ServiceException):
+    """A user-facing failure before any brief is drafted."""
+
+
+def digest_material_key(item) -> str:
+    return f'{item["type"]}:{item["id"]}'
+
+
+def digest_result_materials(snapshot, materials) -> list[dict]:
+    retained = (snapshot.get('digest_screening') or {}).get('retained_ids')
+    if retained is None:
+        return materials
+    keys = set(retained)
+    return [item for item in materials if digest_material_key(item) in keys]
+
+
 DIGEST_GENERATION_RULES = """
 以下简报成品规范优先于模板中的旧大纲、栏目字数和篇幅要求。
 按内容主题分组，只写有真实资料支撑的事件，不写综合导语、论文式综述或全局参考文献。
@@ -60,7 +83,7 @@ def digest_limits(options) -> tuple[int, int]:
     return per_group, SUMMARY_LIMITS.get(length, 200) if isinstance(length, str) else 200
 
 
-def normalize_digest_document(content, materials, *, generation_options=None) -> dict:
+def normalize_digest_document(content, materials, *, generation_options=None, screening=None) -> dict:
     """Fail closed on missing fields, unknown typed sources or unsupported layout."""
     try:
         data = json.loads(content)
@@ -73,22 +96,25 @@ def normalize_digest_document(content, materials, *, generation_options=None) ->
         raise ValueError('简报须包含有效的分类和事件')
     evidence = {f'{item["type"]}:{item["id"]}': item for item in materials or []}
     ordinals = {key: index for index, key in enumerate(evidence, 1)}
-    sections, count, categories = [], 0, set()
+    screening = screening or {}
+    labels = screening.get('labels') or {}
+    configured = [rule['name'] for rule in screening.get('categories') or []]
+    # The primary source owns the event's category. Drafting cannot silently rename or merge the user's columns.
+    by_category = {name: {'blocks': [], 'citations': []} for name in configured}
+    count = 0
     primary_sources, source_sets = set(), set()
     per_group, summary_limit = digest_limits(generation_options or {})
     for group in groups:
         if not isinstance(group, dict):
             raise ValueError('简报分类格式无效')
-        category = _text(group.get('category'), '类别')
-        if category in categories:
-            raise ValueError('简报同一类别须合并展示')
-        categories.add(category)
+        draft_category = _text(group.get('category'), '类别')
+        if not configured:
+            if draft_category in by_category:
+                raise ValueError('简报同一类别须合并展示')
+            by_category[draft_category] = {'blocks': [], 'citations': []}
         items = group.get('items')
         if not isinstance(items, list) or not items:
             raise ValueError('简报分类不能包含空事件')
-        if generation_options is not None and len(items) > per_group:
-            raise ValueError('分类内事件数量超过生成设置')
-        blocks, citation_ids = [], []
         for item in items:
             count += 1
             if count > MAX_DIGEST_ITEMS or not isinstance(item, dict):
@@ -104,7 +130,17 @@ def normalize_digest_document(content, materials, *, generation_options=None) ->
             ):
                 raise ValueError('简报事件引用了未选中的资料')
             sources = [evidence[key] for key in dict.fromkeys(ids)]
+            category = draft_category
+            if configured:
+                primary_label = labels.get(ids[0]) or {}
+                category = primary_label.get('category')
+                if not primary_label.get('keep') or category not in by_category:
+                    raise ValueError('简报事件缺少主来源通过筛选的类别')
+            blocks = by_category[category]['blocks']
+            citation_ids = by_category[category]['citations']
             if generation_options is not None:
+                if len(blocks) >= per_group:
+                    raise ValueError('分类内事件数量超过生成设置')
                 source_set = frozenset(ids)
                 if ids[0] in primary_sources or source_set in source_sets:
                     raise ValueError('同一报道被重复拆条，请合并为同一事件')
@@ -144,12 +180,19 @@ def normalize_digest_document(content, materials, *, generation_options=None) ->
                 parts.append(f'发布时间：{max(dates)}')
             parts.extend([f'行业洞察：{insight}', '数据源：', '\n\n'.join(references)])
             blocks.append('\n\n'.join(parts))
+    sections = []
+    used_categories = {labels[key]['category'] for key in evidence if key in labels and labels[key]['keep']}
+    for category, entries in by_category.items():
+        if not entries['blocks']:
+            if category in used_categories:
+                raise ValueError(f'简报缺少有通过资料的类别“{category}”')
+            continue
         sections.append(
             {
                 'id': len(sections) + 1,
                 'title': category,
-                'content': '\n\n'.join(blocks),
-                'citationIds': list(dict.fromkeys(citation_ids)),
+                'content': '\n\n'.join(entries['blocks']),
+                'citationIds': list(dict.fromkeys(entries['citations'])),
             }
         )
     return {'content': '\n\n'.join(f'**{s["title"]}**\n\n{s["content"]}' for s in sections), 'sections': sections}
@@ -189,9 +232,10 @@ def digest_masthead(title: str, metadata) -> str:
     if not isinstance(period, (list, tuple)) or len(period) != PERIOD_ENDPOINTS or not digest_period(metadata):
         return title
     start, end = map(str, period)
-    if title == f'管网科技情报周报 {start} 至 {end}':
-        return '管网科技情报周报'
+    default_title = title.removeprefix('管网')
+    if default_title == f'科技情报周报 {start} 至 {end}':
+        return '科技情报周报'
     match = re.fullmatch(r'(\d{4})-(\d{2})-01', start)
-    if match and title == f'管网科技情报月报 {match[1]}年{int(match[2])}月':
-        return '管网科技情报月报'
+    if match and default_title == f'科技情报月报 {match[1]}年{int(match[2])}月':
+        return '科技情报月报'
     return title

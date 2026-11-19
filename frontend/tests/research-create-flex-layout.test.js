@@ -5,7 +5,7 @@ import { parse } from '@vue/compiler-sfc'
 const source = readFileSync(new URL('../src/views/portal/pages/ResearchCreateView.vue', import.meta.url), 'utf8')
 const styles = readFileSync(new URL('../src/assets/styles/workspace.scss', import.meta.url), 'utf8')
 test('research wizard fills the viewport with independent content and material scrolling', () => {
-  assert.match(styles, /\.ps-portal-main:has\(> \.ps-research-create-page\) \{[\s\S]*?height: 100dvh/)
+  assert.match(styles, /\.ps-portal-main:has\(> :is\(\.ps-research-create-page, \.ps-digest-create-page\)\) \{[\s\S]*?height: 100dvh/)
   assert.match(styles, /display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; min-height: 0; gap: 12px/)
   assert.match(styles, /> \.ps-step-card \{ display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; min-height: 0/)
   assert.match(styles, /\.ps-step-content \{ flex: 1 1 0; min-height: 0; min-width: 0; overflow-y: auto/)

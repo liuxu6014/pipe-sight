@@ -1,5 +1,6 @@
 import { createWebHistory, createRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { trackWizardVisit } from '@/utils/portal/wizardHistory'
 import { legacyDetailGuard } from '@/utils/portal/legacyRoute'
 /* Layout */
 import Layout from '@/layout'
@@ -256,6 +257,7 @@ const router = createRouter({
   },
 });
 
+trackWizardVisit(router)
 router.beforeEach(legacyDetailGuard(message => ElMessage.warning(message)))
 
 export default router;

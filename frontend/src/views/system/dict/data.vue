@@ -273,8 +273,7 @@ function handleQuery() {
 }
 /** 返回按钮操作 */
 function handleClose() {
-  const obj = { path: "/system/dict" };
-  proxy.$tab.closeOpenPage(obj);
+  proxy.$tab.returnFromPage("/system/dict");
 }
 /** 重置按钮操作 */
 function resetQuery() {

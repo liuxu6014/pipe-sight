@@ -489,7 +489,7 @@ async def test_request_id_race_recomputes_fingerprint_with_winners_frozen_materi
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('valid', [True, False])
+@pytest.mark.parametrize('valid', [True, False, None], ids=['retained-source', 'excluded-source', 'no-matches'])
 @pytest.mark.parametrize('cadence', ['weekly', 'monthly'])
 async def test_reference_digest_queue_execution_and_serializer_keep_per_event_sources(
     env, db, monkeypatch, valid, cadence
@@ -499,6 +499,7 @@ async def test_reference_digest_queue_execution_and_serializer_keep_per_event_so
     template, _ = seed(env, db)
     template.name, template.purpose = ('月报' if cadence == 'monthly' else '周报'), 'digest'
     template.digest_cadence = cadence
+    template.screening_prompt = '只保留有明确检测事实的资料'
     digest_article = NS(
         id=102,
         title='采集资讯',
@@ -511,14 +512,25 @@ async def test_reference_digest_queue_execution_and_serializer_keep_per_event_so
     monkeypatch.setattr(
         env.repo.ResearchDao,
         'load_content',
-        AsyncMock(side_effect=lambda db, kind, ident: digest_article if kind == 'article' and ident == 102 else None),
+        AsyncMock(
+            side_effect=lambda db, kind, ident: (
+                NS(**{**vars(digest_article), 'id': 103, 'title': '应排除的文章'})
+                if kind == 'article' and ident == 103
+                else digest_article
+                if kind == 'article' and ident == 102
+                else None
+            )
+        ),
     )
     await db.commit()
     result = await queue(
-        env, db, payload(selected_item_ids=['102'], report_type=cadence, period=['2026-10-19', '2026-10-25'])
+        env, db, payload(selected_item_ids=['102', '103'], report_type=cadence, period=['2026-10-19', '2026-10-25'])
     )
     job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
     assert job.config_snapshot['document_format'] == 'digest-reference-v1'
+    assert job.config_snapshot['fixed_digest_format'] is False
+    assert job.config_snapshot['template']['id'] == str(template.id)
+    template.screening_prompt = '入队之后的新版本'
     # Live templates retain old research-like chapter plans, which are not the
     # event-group structure used by reference digests. Both execution and the
     # task serializer must ignore those plans for this format.
@@ -539,7 +551,7 @@ async def test_reference_digest_queue_execution_and_serializer_keep_per_event_so
                             'title': '检测技术进展',
                             'summary': '资料记载的事实。',
                             'insight': '适用条件仍需核实。',
-                            'sourceIds': ['article:102' if valid else 'file:102'],
+                            'sourceIds': ['article:102' if valid else 'article:103'],
                         }
                     ],
                 }
@@ -547,12 +559,24 @@ async def test_reference_digest_queue_execution_and_serializer_keep_per_event_so
         },
         ensure_ascii=False,
     )
-    monkeypatch.setattr(execution.ResearchModelGenerationService, 'generate_content', AsyncMock(return_value=raw))
+    gateway = AsyncMock(side_effect=['{"retainedIds":[]}' if valid is None else '{"retainedIds":["article:102"]}', raw])
+    monkeypatch.setattr(env.gateway.ModelGateway, 'call', gateway)
     await execution.ResearchExecutionService.process(job_id=result['jobId'], user_id=7)
     db.s.expire_all()
     job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
     report = await env.repo.ResearchDao.get_report(db, result['reportId'], 7)
+    if valid is None:
+        gateway.assert_awaited_once()
+        assert job.status == 'failed' and '没有符合模板规则的文章' in job.error
+        assert report.content == ''
+        assert env.app.ResearchApplicationService.job_dict(job)['screenedArticleCount'] == 0
+        return
     assert job.result_content == raw
+    screening, writing = gateway.await_args_list
+    assert '只保留有明确检测事实的资料' in screening.kwargs['system_prompt']
+    assert 'article:103' in screening.kwargs['prompt']
+    assert '应排除的文章' not in writing.kwargs['prompt']
+    assert env.app.ResearchApplicationService.job_dict(job)['screenedArticleCount'] == 1
     if valid:
         assert job.status == 'completed'
         assert '### 1. 检测技术进展' in report.content and '数据源：' in report.content
@@ -677,3 +701,297 @@ async def test_digest_retry_cannot_reintroduce_historical_uploaded_material(env,
     with raises(env, '不支持上传资料'):
         await env.app.ResearchApplicationService.queue_retry(db, user_id=7, job_id=job.id)
     assert len(db.s.scalars(select(env.models.PipelineResearchJob)).all()) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'categories',
+    [None, [{'name': '检测技术', 'prompt': '关注检测方法'}, {'name': '工程应用', 'prompt': '关注工程投运'}]],
+)
+async def test_digest_screening_labels_all_batches_and_queue_requires_approved_evidence(
+    env, db, monkeypatch, categories
+):
+    import json
+    from contextlib import asynccontextmanager
+    from datetime import datetime, timezone
+
+    from pydantic import ValidationError
+
+    from app.intelligence.schemas.pipeline import PipelineDigestScreeningModel, PipelineResearchJobCreateModel
+    from app.research.services.digest_screening import DigestScreeningService
+
+    class Cache:
+        def __init__(self):
+            self.values = {}
+
+        async def get(self, key):
+            return self.values.get(key)
+
+        async def set(self, key, value, *, ex):
+            assert ex > 0
+            self.values[key] = value
+
+        @asynccontextmanager
+        async def lock(self, key, **kwargs):
+            yield
+
+    seed(env, db)
+    articles = {
+        i: NS(
+            id=i,
+            title=f'候选 {i}',
+            content='有具体项目数据的资讯' if i != 105 else '',
+            content_zh=None,
+            url=f'https://example.test/{i}',
+            source_id=1,
+            published_at=datetime(2026, 11, 15, tzinfo=timezone.utc),
+        )
+        for i in range(102, 106)
+    }
+    module = importlib.import_module('app.research.services.digest_screening')
+    monkeypatch.setattr(module, 'BATCH_SIZE', 2)
+    monkeypatch.setattr(
+        env.repo.ResearchDao, 'search_digest_candidates', AsyncMock(return_value=(list(articles.values()), 4))
+    )
+    monkeypatch.setattr(
+        env.repo.ResearchDao,
+        'load_content',
+        AsyncMock(side_effect=lambda db, kind, ident: articles.get(int(ident)) if kind == 'article' else None),
+    )
+    seen = []
+
+    def model_decisions(db, model, *, prompt, **kwargs):
+        request = json.loads(prompt)
+        if categories:
+            assert '1. 检测技术\n关注检测方法\n\n2. 工程应用\n关注工程投运' in request['screeningRule']
+            assert request['screeningRule'].startswith('通用要求\n仅纳入披露具体项目数据的资讯')
+        else:
+            assert request['screeningRule'] == '仅纳入披露具体项目数据的资讯'
+        items = request['candidates']
+        seen.extend(item['id'] for item in items)
+        return json.dumps(
+            {
+                'results': [
+                    {
+                        'id': item['id'],
+                        'keep': item['id'] in {'article:102', 'article:104'},
+                        'category': '工程应用' if categories and item['id'] == 'article:104' else '检测技术',
+                        'tags': ['完整性检测'],
+                        'reason': '复筛理由',
+                    }
+                    for item in items
+                ]
+            }
+        )
+
+    gateway = AsyncMock(side_effect=model_decisions)
+    monkeypatch.setattr(env.gateway.ModelGateway, 'call', gateway)
+    store = Cache()
+    period = ['2026-11-01', '2026-11-30']
+    started = await DigestScreeningService.begin(
+        db,
+        store,
+        7,
+        PipelineDigestScreeningModel(
+            reportType='monthly',
+            period=period,
+            screeningPrompt=' 仅纳入披露具体项目数据的资讯 ',
+            screeningCategories=categories,
+        ),
+    )
+    token = started['screeningId']
+    assert started['total'] == 4 and started['processed'] == 0
+    with raises(env, '已失效'):
+        await DigestScreeningService.advance(db, store, 8, token)
+    batch = await DigestScreeningService.advance(db, store, 7, token)
+    assert batch['processed'] == 2 and 'rows' not in batch
+    request = {
+        'title': '月报',
+        'reportType': 'monthly',
+        'requestId': 'screened-digest',
+        'period': period,
+        'screeningId': token,
+    }
+
+    async def enqueue(**overrides):
+        data = PipelineResearchJobCreateModel.model_validate({**request, **overrides})
+        return await env.app.ResearchApplicationService.queue_job(
+            db, user_id=7, owner_name='测试', payload=data, screening_cache=store
+        )
+
+    with raises(env, '不匹配'):
+        await enqueue()
+    completed = await DigestScreeningService.advance(db, store, 7, token)
+    assert [(row['id'], row['keep'], row['tags']) for row in completed['rows']] == [
+        ('102', True, ['完整性检测']),
+        ('103', False, ['完整性检测']),
+        ('104', True, ['完整性检测']),
+        ('105', False, ['缺少正文']),
+    ]
+    assert seen == ['article:102', 'article:103', 'article:104']
+    for options in ({'materials': [{'type': 'article', 'id': '102'}]}, {'selectedItemIds': ['103']}):
+        with pytest.raises(ValidationError, match='由系统筛选结果确定'):
+            await enqueue(**options)
+    with raises(env, '不匹配'):
+        await enqueue(keywords=['变更范围'])
+    articles[102].content = '更新过的正文'
+    with raises(env, '正文已更新'):
+        await enqueue()
+    articles[102].content = '有具体项目数据的资讯'
+
+    response = await enqueue()
+    job = await env.repo.ResearchDao.get_research_job(db, response['jobId'], 7)
+    assert response['screenedCandidateCount'] == 4 and response['screeningPassedCount'] == 2
+    assert response['selectedItems'][0]['screening']['tags'] == ['完整性检测']
+    assert [item['id'] for item in response['selectedItems']] == ['102', '104']
+    assert response['screeningPrompt'] == '仅纳入披露具体项目数据的资讯'
+    assert response['screeningCategories'] == (categories or [])
+    assert response['combinedScreeningPrompt'] == job.config_snapshot['digest_screening']['prompt']
+    if categories:
+        assert job.config_snapshot['digest_screening']['labels']['article:104']['category'] == '工程应用'
+    assert job.config_snapshot['digest_screening']['retained_ids'] == ['article:102', 'article:104']
+    assert job.config_snapshot['digest_screening']['labels']['article:102']['category'] == '检测技术'
+    assert job.config_snapshot['digest_screening']['labels']['article:103']['keep'] is False
+    assert job.config_snapshot['digest_screening']['labels']['article:105']['tags'] == ['缺少正文']
+    assert (await enqueue())['reused'] is True
+
+
+@pytest.mark.asyncio
+async def test_digest_screening_rejects_model_result_that_omits_a_candidate(env, monkeypatch):
+    gateway = AsyncMock(return_value='{"results":[]}')
+    monkeypatch.setattr(env.gateway.ModelGateway, 'call', gateway)
+    with raises(env, '没有返回完整的筛选与标签结果'):
+        await env.gateway.ResearchModelGenerationService.classify_digest(
+            None,
+            {'id': '1'},
+            {},
+            [{'id': '102', 'type': 'article', 'title': '候选文章', 'content': '正文'}],
+            prompt='规则',
+            request_id='screening-test',
+        )
+
+
+@pytest.mark.asyncio
+async def test_digest_screening_rejects_a_passed_article_with_an_unconfigured_category(env, monkeypatch):
+    import json
+
+    row = {'id': 'article:102', 'keep': True, 'category': '自创类别', 'tags': ['原型'], 'reason': '报道公开测试'}
+    monkeypatch.setattr(env.gateway.ModelGateway, 'call', AsyncMock(return_value=json.dumps({'results': [row]})))
+    with raises(env, '没有返回完整的筛选与标签结果'):
+        await env.gateway.ResearchModelGenerationService.classify_digest(
+            None,
+            {'id': '1'},
+            {'screening_categories': [{'name': '工程试验', 'prompt': '保留完成试验的文章'}]},
+            [{'id': '102', 'type': 'article', 'title': '候选文章', 'content': '正文'}],
+            prompt='总规则',
+            request_id='category-test',
+        )
+
+
+@pytest.mark.asyncio
+async def test_digest_worker_classifies_across_all_configured_categories_before_writing(env, db, monkeypatch):
+    import json
+
+    template, _ = seed(env, db)
+    template.name, template.purpose, template.digest_cadence = '专题周报', 'digest', 'weekly'
+    articles = {
+        i: NS(
+            id=i,
+            title=f'资讯{i}',
+            content='来源正文',
+            content_zh=None,
+            source_id=1,
+            published_at=None,
+            url=f'https://example.test/{i}',
+        )
+        for i in (102, 103, 104, 105)
+    }
+    monkeypatch.setattr(
+        env.repo.ResearchDao,
+        'load_content',
+        AsyncMock(side_effect=lambda db, kind, item_id: articles[int(item_id)] if kind == 'article' else None),
+    )
+    await db.commit()
+    result = await queue(
+        env,
+        db,
+        payload(
+            selected_item_ids=[str(i) for i in articles], report_type='weekly', period=['2026-10-19', '2026-10-25']
+        ),
+    )
+    job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
+    rules = [{'name': n, 'prompt': f'仅保留与{n}直接相关的资讯'} for n in ['技术进展', '工程应用', '行业动态']]
+    combined = '\n'.join(f'{rule["name"]}：{rule["prompt"]}' for rule in rules)
+    job.config_snapshot = {**job.config_snapshot, 'digest_screening': {'prompt': combined, 'categories': rules}}
+    await db.commit()
+    execution, _ = execution_context(env, db, monkeypatch)
+    monkeypatch.setattr(env.gateway, 'DIGEST_SCREENING_BATCH_SIZE', 2)
+    classified = []
+    names = {'article:102': '技术进展', 'article:103': '未命中', 'article:104': '工程应用', 'article:105': '未命中'}
+
+    def model_call(db, model, *, prompt, request_id, **kwargs):
+        if ':screen:' in str(request_id):
+            data = json.loads(prompt)
+            assert data['screeningRule'] == combined
+            assert data['allowedCategories'] == [rule['name'] for rule in rules]
+            assert 'screening_categories' not in data
+            ids = [candidate['id'] for candidate in data['candidates']]
+            classified.append(ids)
+            return json.dumps(
+                {
+                    'results': [
+                        {
+                            'id': key,
+                            'keep': names[key] != '未命中',
+                            'category': names[key],
+                            'tags': ['标签'],
+                            'reason': '判断依据',
+                        }
+                        for key in ids
+                    ]
+                }
+            )
+        assert '资讯102' in prompt and '资讯104' in prompt and '资讯103' not in prompt and '资讯105' not in prompt
+        assert '"digestCategory": "技术进展"' in prompt and '"digestTags": ["标签"]' in prompt
+        assert '"categoryOrder": ["技术进展", "工程应用", "行业动态"]' in prompt
+        return json.dumps(
+            {
+                'format': 'digest-reference-v1',
+                'groups': [
+                    {
+                        'category': '模型重命名了栏目',
+                        'items': [
+                            {
+                                'title': f'进展{i}',
+                                'summary': '本期技术事实。',
+                                'insight': '仍需核实。',
+                                'sourceIds': [f'article:{i}'],
+                            }
+                            for i in (104, 102)
+                        ],
+                    }
+                ],
+            }
+        )
+
+    gateway = AsyncMock(side_effect=model_call)
+    monkeypatch.setattr(env.gateway.ModelGateway, 'call', gateway)
+    await execution.ResearchExecutionService.process(job_id=result['jobId'], user_id=7)
+    db.s.expire_all()
+    job = await env.repo.ResearchDao.get_research_job(db, result['jobId'], 7)
+    report = await env.repo.ResearchDao.get_report(db, result['reportId'], 7)
+    assert job.status == 'completed', job.error
+    assert classified == [['article:102', 'article:103'], ['article:104', 'article:105']]
+    assert gateway.await_count == 3
+    screened = job.config_snapshot['digest_screening']
+    assert screened['labels']['article:103']['keep'] is False
+    assert screened['retained_ids'] == ['article:102', 'article:104']
+    assert screened['candidate_count'] == 4 and screened['passed_count'] == 2
+    assert (
+        report.content.index('**技术进展**')
+        < report.content.index('### 1. 进展102')
+        < report.content.index('**工程应用**')
+    )
+    assert (
+        '### 1. 进展104' in report.content and '模型重命名' not in report.content and '行业动态' not in report.content
+    )

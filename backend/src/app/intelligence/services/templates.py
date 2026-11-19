@@ -9,24 +9,33 @@ from sqlalchemy.orm import load_only
 from app.business_ids import parse_business_id, wire_id
 from app.business_time import audit_now, format_business_time
 from app.intelligence.models.configuration import PipelineTemplateVersion
+from app.intelligence.services.template_presets import (
+    default_digest_categories,
+    effective_digest_categories,
+    fixed_digest_template,
+)
 from app.research.models.research_models import PipelineDigestSchedule
 from app.research.repositories.research_repository import ResearchDao
+from app.research.services.digest_document import DEFAULT_DIGEST_SCREENING
 from app.research.services.model_generation import ModelGateway
-from app.research.services.report_labels import display_template_name
+from app.research.services.report_labels import display_template_name, display_template_prompt
 from exceptions.exception import ServiceException
 
 
 class PipelineTemplateService:
     @classmethod
-    async def install_builtins(cls, db, *, user_id: int) -> dict:
-        from app.intelligence.services.template_presets import builtin_templates  # noqa: PLC0415
+    async def install_builtins(cls, db, *, user_id: int, purpose='research') -> dict:
+        from app.intelligence.services.template_presets import (  # noqa: PLC0415
+            builtin_templates,
+            personal_digest_presets,
+        )
 
         # Prevent duplicate installation in simultaneous tabs, without blocking other users.
         if db.get_bind().dialect.name == 'postgresql':
             await db.execute(
                 text('SELECT pg_advisory_xact_lock(hashtext(:key))'), {'key': f'template-presets:{user_id}'}
             )
-        presets = builtin_templates()
+        presets = personal_digest_presets() if purpose == 'digest' else builtin_templates()
         rows = list(
             await db.scalars(
                 select(PipelineTemplateVersion)
@@ -82,8 +91,6 @@ class PipelineTemplateService:
         Historical user templates remain untouched. The caller owns the transaction,
         so failed admission rolls back creation of this internal reference too.
         """
-        from app.intelligence.services.template_presets import fixed_digest_template  # noqa: PLC0415
-
         if frequency not in {'weekly', 'monthly'}:
             raise ServiceException(message='仅支持周报和月报固定格式')
         if user_id is None:
@@ -112,9 +119,37 @@ class PipelineTemplateService:
         return row
 
     @staticmethod
-    def _require_editable(row) -> None:
-        if row.purpose == 'digest':
-            raise ServiceException(message='情报简报使用系统固定格式，无需编辑个人模板')
+    def is_fixed_digest(row) -> bool:
+        return row.purpose == 'digest' and (getattr(row, 'preset_key', None) or '').startswith('digest-fixed-v1-')
+
+    @classmethod
+    def _manageable(cls, row) -> bool:
+        return row.purpose != 'digest' or (
+            not cls.is_fixed_digest(row) and getattr(row, 'digest_cadence', None) in {'weekly', 'monthly', 'all'}
+        )
+
+    @classmethod
+    def _require_editable(cls, row) -> None:
+        if not cls._manageable(row):
+            raise ServiceException(message='系统默认模板和历史简报模板不可编辑')
+
+    @classmethod
+    async def get_digest_for_run(
+        cls, db, frequency, user_id, template_id=None, *, legacy_schedule=False
+    ) -> PipelineTemplateVersion:
+        if template_id is None:
+            return await cls.get_fixed_digest(db, frequency, user_id)
+        row = await ResearchDao.get_template(db, template_id, user_id)
+        if not row or row.purpose != 'digest':
+            raise ServiceException(message='简报模板不存在或无权访问')
+        if legacy_schedule and not cls._manageable(row) and not cls.is_fixed_digest(row):
+            return await cls.get_fixed_digest(db, frequency, user_id)
+        cls.validate_digest_cadence(row, frequency)
+        if cls.is_fixed_digest(row):
+            return await cls.get_fixed_digest(db, frequency, user_id)
+        if not row.is_enabled or row.deleted_at is not None:
+            raise ServiceException(message='请选择已启用的简报模板')
+        return row
 
     @staticmethod
     def digest_cadence(row) -> str | None:
@@ -166,8 +201,17 @@ class PipelineTemplateService:
             'category': row.purpose,
             'reportType': getattr(row, 'report_type', None),
             'digestCadence': PipelineTemplateService.digest_cadence(row),
+            **({'isSystemDefault': PipelineTemplateService.is_fixed_digest(row)} if row.purpose == 'digest' else {}),
             'description': row.description or '',
-            **({'prompt': row.prompt} if include_prompt else {}),
+            **({'prompt': display_template_prompt(row.name, row.prompt)} if include_prompt else {}),
+            **(
+                {
+                    'screeningPrompt': getattr(row, 'screening_prompt', None) or '',
+                    'screeningCategories': effective_digest_categories(row),
+                }
+                if include_prompt and row.purpose == 'digest'
+                else {}
+            ),
             'modelId': wire_id(row.model_id),
             'imageModelId': wire_id(row.image_model_id),
             'sections': deepcopy(row.sections),
@@ -218,11 +262,10 @@ class PipelineTemplateService:
             )
         else:
             rows = await ResearchDao.list_templates(db, purpose, user_id)
-        # Preserve historical references, but never expose brief rows as personal templates.
         rows = [
             row
             for row in rows
-            if row.purpose != 'digest'
+            if cls._manageable(row)
             and (include_deleted or row.deleted_at is None)
             and (not published_only or (row.is_enabled and row.deleted_at is None))
         ]
@@ -253,7 +296,24 @@ class PipelineTemplateService:
         return {
             'rows': result,
             'total': total if page is not None else len(rows),
+            **(
+                {
+                    'defaultScreeningPrompt': DEFAULT_DIGEST_SCREENING,
+                    'defaultScreeningCategories': default_digest_categories(),
+                }
+                if purpose == 'digest'
+                else {}
+            ),
             **({'counts': counts} if counts is not None else {}),
+            **(
+                {
+                    'defaultWritingPrompts': {
+                        cadence: fixed_digest_template(cadence)['prompt'] for cadence in ('weekly', 'monthly')
+                    }
+                }
+                if purpose == 'digest' and published_only
+                else {}
+            ),
         }
 
     @staticmethod
@@ -310,9 +370,7 @@ class PipelineTemplateService:
         purpose = payload.get('purpose') or {'project': 'research'}.get(
             payload.get('category'), payload.get('category')
         )
-        if purpose == 'digest':
-            raise ServiceException(message='情报简报使用系统固定格式，无需创建个人模板')
-        if purpose not in {'article', 'research'}:
+        if purpose not in {'article', 'research', 'digest'}:
             raise ServiceException(message='模板用途不合法')
         prompt = str(payload.get('prompt') or '').strip()
         name = str(payload.get('name') or '').strip()
@@ -341,11 +399,18 @@ class PipelineTemplateService:
             raise ServiceException(message='模板不存在或无权操作')
         if row is not None:
             cls._require_editable(row)
+            if row.purpose != purpose:
+                raise ServiceException(message='已有模板不能更改所属类型')
         if row is not None and row.deleted_at is not None:
             raise ServiceException(message='模板已删除，请先恢复后再编辑')
-        if payload.get('digest_cadence') is not None:
-            raise ServiceException(message='简报适用周期由系统固定格式提供')
-        if row is not None and not bool(payload.get('is_enabled', True)):
+        cadence = payload.get('digest_cadence', cls.digest_cadence(row) if row is not None else None)
+        if purpose == 'digest' and cadence not in {'weekly', 'monthly', 'all'}:
+            raise ServiceException(message='请选择简报适用周期')
+        if purpose != 'digest' and (
+            cadence is not None or payload.get('screening_prompt') or payload.get('screening_categories') is not None
+        ):
+            raise ServiceException(message='选材筛选提示词、筛选类别和简报周期仅用于情报简报')
+        if row is not None and (not bool(payload.get('is_enabled', True)) or cadence != row.digest_cadence):
             await cls._check_active_schedules(db, row)
         if row is None:
             row = PipelineTemplateVersion(is_enabled=True, user_id=user_id)
@@ -355,10 +420,14 @@ class PipelineTemplateService:
         # Older clients may omit the binding; preserve it on content-only updates.
         if purpose != 'research' or 'report_type' in payload or row.id is None:
             row.report_type = selected_type
-        row.digest_cadence = None
+        row.digest_cadence = cadence
+        if 'screening_prompt' in payload:
+            row.screening_prompt = str(payload.get('screening_prompt') or '').strip() or None
+        if 'screening_categories' in payload:
+            row.screening_categories = deepcopy(payload['screening_categories'])
         row.purpose, row.prompt = purpose, prompt
-        row.sections = deepcopy(payload.get('sections') or [])
-        row.image_config = deepcopy(payload.get('image_config') or {})
+        row.sections = deepcopy(payload.get('sections') or []) if purpose != 'digest' else []
+        row.image_config = deepcopy(payload.get('image_config') or {}) if purpose != 'digest' else {'enabled': False}
         row.is_enabled = bool(payload.get('is_enabled', True))
         await db.commit()
         await db.refresh(row)

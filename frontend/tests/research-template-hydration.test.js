@@ -1,3 +1,5 @@
+import { useWizardHistory } from '../src/utils/portal/wizardHistory.js'
+import { createMemoryHistory } from 'vue-router'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -12,12 +14,12 @@ test('a preselected template receives its published version and outline after as
   const source = readFileSync(new URL('../src/views/portal/pages/ResearchCreateView.vue', import.meta.url), 'utf8')
     .split('<script setup>')[1].split('</script>')[0].replace(/^import .*\n/gm, '')
   const context = vm.createContext({
-    ...businessIds, ...businessTimes, computed, reactive, ref, watch, nextTick, onMounted() {}, onBeforeUnmount() {},
+    useWizardHistory, ...businessIds, ...businessTimes, computed, reactive, ref, watch, nextTick, onMounted() {}, onBeforeUnmount() {},
     researchEvidenceRow, selectionReferences, useEvidenceSelection, resolveBasketSelection,
     getPipelineIntelligenceDetail: async () => ({ data: {} }),
     getPipelineKnowledgeDocument: async () => ({ data: {} }),
     useRoute: () => ({ query: { template: '9007199254740993' } }),
-    useRouter: () => ({}),
+    useRouter: () => ({ currentRoute: ref({}), options: { history: createMemoryHistory() }, push() {}, replace: async () => {} }),
     usePortalStore: () => ({ newsItems: [], paperItems: [], knowledgeDocuments: [], basket: [] }),
     listPipelineTemplates: async () => ({ data: { rows: [{
       templateKey: '9007199254740993', name: '自定义报告', reportType: 'research-demand', version: 'V4.0',

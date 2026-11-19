@@ -166,12 +166,19 @@ class ResearchReportService:
             raise ServiceException(message='任务快照关联模板已不存在，不能应用')
         try:
             if job.config_snapshot.get('document_format') == 'digest-reference-v1':
-                from app.research.services.digest_document import normalize_digest_document  # noqa: PLC0415
+                from app.research.services.digest_document import (  # noqa: PLC0415
+                    digest_result_materials,
+                    normalize_digest_document,
+                )
 
-                normalized = normalize_digest_document(job.result_content, job.materials)
+                materials = digest_result_materials(job.config_snapshot, job.materials)
+                normalized = normalize_digest_document(
+                    job.result_content, materials, screening=job.config_snapshot.get('digest_screening')
+                )
             else:
+                materials = job.materials
                 normalized = normalize_task_report(job.result_content, job.materials, job.config_snapshot)
-            cited_materials = normalized.get('materials', job.materials)
+            cited_materials = normalized.get('materials', materials)
             # Older tasks may contain uncited prose; do not silently repair it,
             # but reject broken markers and incomplete structures on application.
             validate_generated_article(normalized['content'], cited_materials, require_citations=False)

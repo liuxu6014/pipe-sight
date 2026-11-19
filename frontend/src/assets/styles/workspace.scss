@@ -610,24 +610,6 @@
 // 已独立收紧的资讯工具栏保持原样，其他列表复用统一紧凑间距。
 .ps-portal:not([data-page="PortalNews"]) .ps-workspace-surface > .ps-page > .ps-toolbar { min-height: 56px; padding: 8px 12px; margin-bottom: 12px; }
 
-.ps-portal .ps-digest-create-page .ps-form-card { padding: 0; }
-.ps-portal .ps-digest-create-page .ps-digest-filters { padding: 16px 20px; }
-.ps-portal .ps-digest-create-page .ps-digest-config-body { padding: 16px 20px; }
-.ps-portal .ps-digest-create-page .ps-form-grid { gap: 14px 18px; }
-.ps-portal .ps-digest-create-page .ps-option-row { margin-top: 12px; padding: 0; background: transparent; flex-wrap: wrap; gap: 8px 24px; }
-.ps-portal .ps-digest-create-page .ps-form-footer { min-height: 60px; padding: 8px 20px; margin: 0; gap: 8px; }
-.ps-portal .ps-digest-create-page .ps-form-footer .el-button { margin: 0; }
-.ps-portal .ps-digest-create-page > .ps-digest-candidates { display: flex; flex-direction: column; min-height: 0; margin: 0; padding: 0; overflow: hidden; }
-.ps-portal .ps-digest-candidates > .ps-section-head { flex-shrink: 0; padding: 16px 16px 0; margin: 0; }
-.ps-portal .ps-digest-candidate-tools { flex-shrink: 0; padding: 4px 16px; }
-.ps-portal .ps-digest-candidate-tools .el-button { margin: 0; }
-.ps-portal .ps-digest-candidate-scroll { flex: 0 1 auto; min-height: 0; max-height: 420px; overflow-y: auto; scrollbar-gutter: stable; padding: 0 16px 16px; }
-.ps-portal .ps-digest-candidates > .ps-digest-candidate-pagination { flex-shrink: 0; margin: 0; padding: 12px 16px; border-top: 1px solid var(--ps-line); background: #fff; }
-@media (max-width: 760px) {
-  .ps-portal .ps-digest-create-page .ps-digest-config-body { padding: 16px; }
-  .ps-portal .ps-digest-create-page .ps-form-footer { padding-inline: 16px; }
-}
-
 .ps-paper-filter-popover.el-popover { max-width: calc(100vw - 32px); }
 .ps-paper-filter-popover .ps-paper-advanced { position: static; padding: 4px; border: 0; box-shadow: none; }
 .ps-paper-filter-popover .ps-paper-advanced > label { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; color: #24344d; font-size: 13px; }
@@ -652,12 +634,7 @@
   .ps-portal .ps-editor-title > span { min-width: 0; }
   .ps-portal .ps-editor-title strong { display: block; }
   .ps-portal .ps-editor-actions { gap: 6px; }
-  .ps-portal .ps-workspace-surface > .ps-digest-create-page { height: auto; max-height: calc(100dvh - 70px); padding-bottom: 12px; display: flex; flex-direction: column; }
-  .ps-portal .ps-digest-create-page > .ps-page-header { flex-shrink: 0; }
-  .ps-portal .ps-digest-create-page > :not(.ps-digest-candidates) { flex-shrink: 0; }
-  .ps-portal .ps-digest-create-page > .ps-digest-candidates { flex: 0 1 auto; }
-  .ps-portal .ps-digest-create-page:has(.ps-digest-settings-toggle[aria-expanded="true"]) { max-height: none; }
-  .ps-portal .ps-digest-create-page .ps-form-footer { flex-shrink: 0; min-height: 56px; padding: 6px 20px; margin: 0; }
+
 }
 
 @media (max-width: 1100px) {
@@ -946,39 +923,12 @@
   max-width: none;
 }
 
-// 简报编制页：筛选与提交区保留，候选列表填满剩余高度。
-.ps-portal .ps-portal-main:has(> .ps-digest-create-page) {
+// 报告与简报创建向导：步骤与操作区不参与内容滚动。
+.ps-portal .ps-portal-main:has(> :is(.ps-research-create-page, .ps-digest-create-page)) {
   height: 100vh; height: 100dvh; min-height: 0;
   box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden;
 }
-.ps-portal .ps-workspace-surface > .ps-digest-create-page {
-  width: 100%; max-width: none; max-height: none; margin: 0;
-  padding: 12px clamp(12px, 1.5vw, 24px); box-sizing: border-box;
-  flex: 1 1 0; min-width: 0; min-height: 0;
-  > .ps-digest-candidates { flex: 1 1 0; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
-  .ps-digest-candidate-scroll { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
-  .ps-digest-candidates > .ps-section-head, .ps-digest-candidate-tools, .ps-digest-candidate-pagination { flex-shrink: 0; }
-  .ps-digest-settings { display: flex; flex-direction: column; min-height: 0; max-height: min(38dvh, 320px); }
-  .ps-digest-config-body { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; }
-  .ps-digest-submit { flex-shrink: 0; position: static; }
-}
-@media (max-width: 760px), (max-height: 640px) {
-  .ps-portal .ps-portal-main:has(> .ps-digest-create-page) { overflow: auto; }
-  .ps-portal .ps-workspace-surface > .ps-digest-create-page {
-    flex: 1 0 auto;
-    > .ps-digest-candidates { flex: 1 0 280px; height: 280px; }
-    .ps-digest-settings { max-height: none; }
-    .ps-digest-config-body { overflow: visible; }
-    .ps-digest-candidate-pagination .el-pagination__jump { display: none; }
-  }
-}
-
-// 科研报告四步向导：步骤与操作区不参与内容滚动。
-.ps-portal .ps-portal-main:has(> .ps-research-create-page) {
-  height: 100vh; height: 100dvh; min-height: 0;
-  box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden;
-}
-.ps-portal .ps-workspace-surface > .ps-research-create-page {
+.ps-portal .ps-workspace-surface > :is(.ps-research-create-page, .ps-digest-create-page) {
   width: 100%; max-width: none; max-height: none; margin: 0;
   padding: 12px clamp(12px, 1.5vw, 24px); box-sizing: border-box;
   display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; min-height: 0; gap: 12px;
@@ -986,6 +936,8 @@
   .ps-create-steps { flex-shrink: 0; max-width: none; margin: 0; }
   > .ps-step-card { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; min-height: 0; margin: 0; overflow: hidden; }
   .ps-step-content { flex: 1 1 0; min-height: 0; min-width: 0; overflow-y: auto; overscroll-behavior: contain; }
+}
+.ps-portal .ps-workspace-surface > .ps-research-create-page {
   .ps-material-step { overflow: hidden; }
   .ps-material-picker, .ps-material-source { flex: 1 1 0; min-height: 0; min-width: 0; }
   .ps-research-material-scroll { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
@@ -994,6 +946,10 @@
   .ps-step-card > .el-alert, > .el-alert, > .ps-inline-state { flex-shrink: 0; max-height: min(18dvh, 120px); overflow: auto; }
   .ps-form-grid > label { min-width: 0; }
   .ps-form-grid .el-date-editor { min-width: 0; max-width: 100%; }
+}
+@media (max-width: 760px), (max-height: 640px) {
+  .ps-portal .ps-portal-main:has(> .ps-digest-create-page) { overflow: auto; }
+  .ps-portal .ps-workspace-surface > .ps-digest-create-page { flex: 1 0 auto; }
 }
 @media (max-width: 760px) {
   .ps-portal .ps-workspace-surface > .ps-research-create-page {

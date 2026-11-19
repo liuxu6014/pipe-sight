@@ -1,12 +1,13 @@
 <template>
   <div class="ps-diagram-page">
     <header class="ps-diagram-topbar">
-      <div class="ps-editor-title"><el-button :icon="ArrowLeft" circle class="ps-ui-action" aria-label="返回报告" @click="router.back()" /><span><strong>报告配图</strong><small>图片由后台配置的生图模型生成</small></span></div>
+      <div class="ps-editor-title"><el-button :icon="ArrowLeft" circle class="ps-ui-action" aria-label="返回上一页" title="返回上一页" @click="returnToPreviousPage(router, `/portal/research/reports/${route.params.id}`)" /><span><strong>报告配图</strong><small>图片由后台配置的生图模型生成</small></span></div>
     </header>
     <main class="ps-image-assets-page"><ReportImageAssets :report-id="String(route.params.id)" /></main>
   </div>
 </template>
 <script setup>
+import { returnToPreviousPage } from '@/utils/portal/openContent'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import ReportImageAssets from '../components/ReportImageAssets.vue'

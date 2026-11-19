@@ -1,143 +1,149 @@
 <template>
-  <div class="ps-page ps-create-page ps-digest-create-page">
+  <div class="ps-page ps-create-page ps-digest-create-page" :class="{ 'is-configuring': activeStep === 0 }">
     <header class="ps-create-context">
-      <el-button :icon="Back" circle class="ps-ui-action ps-create-back" aria-label="返回情报简报" title="返回情报简报" @click="router.push('/portal/digests')" />
+      <el-button :icon="Back" circle class="ps-ui-action ps-create-back" :disabled="submitting" :title="activeStep ? '返回上一步' : '返回上一页'" :aria-label="activeStep ? '返回上一步' : '返回上一页'" @click="goBack" />
       <div class="ps-create-heading"><h1>新建简报</h1></div>
+      <el-steps :active="activeStep" finish-status="success" simple class="ps-create-steps" aria-label="新建简报步骤">
+        <el-step title="简报配置" :aria-current="activeStep === 0 ? 'step' : undefined"><template #icon>1</template></el-step>
+        <el-step title="确认生成" :aria-current="activeStep === 1 ? 'step' : undefined"><template #icon>2</template></el-step>
+      </el-steps>
     </header>
-    <section class="ps-panel ps-digest-filters" aria-label="筛选简报资料">
-        <div class="ps-form-grid ps-digest-filter-grid">
-          <label>报告类型
-            <el-radio-group v-model="form.type">
+
+    <section class="ps-step-card">
+      <div v-if="activeStep === 0" class="ps-step-content">
+        <div v-if="sourceTaskLoading || sourceTaskError" class="ps-inline-state is-warning" role="status">
+          <span>{{ sourceTaskLoading ? '正在载入原简报配置…' : sourceTaskError }}</span>
+          <el-button v-if="sourceTaskError" plain @click="loadSourceTask">重试载入</el-button>
+        </div>
+        <div class="ps-form-grid ps-digest-config-fields">
+          <div class="ps-digest-type-field"><span>简报类型</span>
+            <el-radio-group v-model="form.type" aria-label="简报类型">
               <el-radio-button value="周报">周报</el-radio-button>
               <el-radio-button value="月报">月报</el-radio-button>
             </el-radio-group>
-          </label>
+          </div>
           <label>{{ periodFieldLabel }}
-            <el-date-picker v-if="form.type === '周报'" v-model="form.period" type="daterange" start-placeholder="开始日期" end-placeholder="结束日期" />
+            <el-date-picker v-if="form.type === '周报'" v-model="form.period" type="daterange" popper-class="ps-digest-period-popper" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" />
             <el-date-picker v-else v-model="form.month" type="month" placeholder="选择报告月份" />
           </label>
-          <label>来源范围<el-select v-model="form.sources" multiple collapse-tags collapse-tags-tooltip :max-collapse-tags="2"><el-option label="新闻网站" value="新闻网站" /><el-option label="微信公众号" value="微信公众号" /></el-select></label>
-          <label class="ps-digest-direction-field">文章类别<el-select v-model="form.directions" multiple filterable clearable collapse-tags collapse-tags-tooltip :max-collapse-tags="2" :multiple-limit="10" placeholder="全部类别" aria-label="文章类别"><el-option v-for="item in categoryOptions" :key="item" :label="item" :value="item" /></el-select><small v-if="categoryError" role="alert">{{ categoryError }} <el-button size="small" @click="loadCategories">重试</el-button></small></label>
-          <label class="ps-digest-keyword-field">
-            <span>关键词</span>
-            <div class="ps-keyword-editor" role="group" aria-label="关键词编辑器">
-              <div v-if="form.keywords.length" class="ps-keyword-tags">
-                <el-tag
-                  v-for="keyword in form.keywords"
-                  :key="keyword"
-                  closable
-                  @close="removeKeyword(keyword)"
-                >
-                  {{ keyword }}
-                </el-tag>
-              </div>
-              <div class="ps-keyword-entry">
-                <input
-                  v-model.trim="keywordDraft"
-                  maxlength="200"
-                  placeholder="输入后点击右侧按钮"
-                  aria-label="待添加关键词"
-                  @keydown.enter.prevent="addKeyword"
-                />
-                <el-button
-                  type="primary"
-                  plain
-                  :disabled="!keywordDraft || form.keywords.length >= 20"
-                  @click="addKeyword"
-                >
-                  确认添加
-                </el-button>
-              </div>
-            </div>
+          <label>简报模板
+            <el-select v-model="form.templateId" aria-label="简报模板" placeholder="系统默认模板" :loading="templatesLoading">
+              <el-option label="系统默认模板" value="" />
+              <el-option v-for="item in availableTemplates" :key="item.id" :label="item.name" :value="item.id" />
+              <el-option v-if="templateUnavailable" label="原模板已不可用" :value="form.templateId" disabled />
+            </el-select>
           </label>
         </div>
-    </section>
-        <section class="ps-panel ps-digest-candidates" :aria-busy="refreshing">
-          <div class="ps-section-head" title="已按筛选条件检索，重复标题仅保留一篇"><h2>候选资料</h2><span role="status">已选 {{ selectedCandidateIds.length }} / {{ DIGEST_SELECTION_LIMIT }} 篇</span></div>
-          <div v-if="candidateItems.length" class="ps-digest-candidate-tools">
-            <el-button plain :disabled="submitting || refreshing || Boolean(previewError)" @click="selectCurrentPage">{{ currentCandidatePageSelected ? '取消当前页选择' : '全选当前页' }}</el-button>
-          </div>
-          <div class="ps-digest-candidate-scroll" tabindex="0" aria-label="简报候选资料滚动区">
-          <p v-if="selectionNotice" role="status">{{ selectionNotice }}</p>
-          <p v-if="sourceTaskLoading || sourceTaskError" role="status">{{ sourceTaskLoading ? '正在载入原简报配置…' : sourceTaskError }} <el-button v-if="sourceTaskError" plain @click="loadSourceTask">重试载入</el-button></p>
-          <p v-if="refreshing" role="status">加载中…</p>
-          <div v-else-if="previewError" class="ps-inline-state is-warning" role="alert"><span>{{ previewError }}</span><el-button plain @click="refreshPreview">重试</el-button></div>
-          <template v-if="!refreshing">
-            <p v-if="previewTruncated" role="status">结果较多，请缩小筛选范围。</p>
-            <div v-for="item in candidateItems" :key="item.id" class="ps-material-option"><el-checkbox :model-value="selectedCandidateIds.includes(item.id)" :aria-label="`选择简报资讯：${item.title}`" :disabled="submitting" @change="toggleCandidate(item.id, $event)" /><span><strong>{{ item.title }}</strong><small>{{ cleanResultMeta(item.meta) }}</small></span></div>
-            <p v-if="!candidateItems.length && !previewError" class="ps-inspector-empty">{{ buildReportPeriod().period.length !== 2 ? '请先选择报告周期，再筛选候选资料' : '暂无匹配资料，请调整日期或筛选条件' }}</p>
+        <DigestScreeningRules v-model:categories="screeningCategories" v-model:prompt="screeningPrompt"
+          class="ps-digest-screening-rule" :default-prompt="templateGeneralPrompt">
+          <template #actions>
+            <el-button v-if="categoryOverride !== null || screeningPromptOverride !== null" @click="resetRules">恢复模板规则</el-button>
           </template>
-          </div>
-          <div v-if="previewTotal > 0" class="ps-pagination ps-digest-candidate-pagination" aria-label="简报资料列表分页">
-            <el-pagination v-model:current-page="previewPage" v-model:page-size="previewPageSize" :page-sizes="[10, 20, 50]" :total="previewTotal" layout="total, sizes, ->, prev, pager, next, jumper" :pager-count="5" :disabled="submitting || refreshing" background aria-label="简报候选检索页" />
-          </div>
+        </DigestScreeningRules>
+        <div v-if="templateError || templateUnavailable" class="ps-inline-state is-warning" role="alert">
+          <span>{{ templateUnavailable ? '请选择可用的简报模板。' : templateError }}</span>
+          <el-button v-if="templateError" size="small" @click="loadTemplates">重试加载模板</el-button>
+        </div>
+      </div>
+
+      <div v-else class="ps-step-content ps-digest-confirm" tabindex="0" aria-label="确认生成简报">
+        <section v-if="refreshing" class="ps-digest-screening-status" role="status" aria-live="polite">
+          <strong>系统正在按提示词自动筛选、分类并打标签</strong>
+          <el-progress v-if="screeningTotal" :percentage="Math.floor(screeningProcessed * 100 / screeningTotal)" :show-text="false" />
+          <span>{{ screeningTotal ? `已处理 ${screeningProcessed} / ${screeningTotal} 篇，完成后即可提交生成。` : '正在查询本期资讯…' }}</span>
         </section>
-    <section class="ps-form-card ps-digest-settings">
-        <div v-show="settingsExpanded" id="digest-generation-settings" class="ps-digest-config-body" role="region" aria-label="生成设置">
-          <div class="ps-form-grid ps-digest-output-grid">
+        <div v-else-if="previewError" class="ps-inline-state is-warning" role="alert">
+          <span>{{ previewError }}</span>
+          <el-button @click="refreshPreview">{{ screeningId ? '继续筛选' : '重试' }}</el-button>
+        </div>
+        <div v-else-if="capacityNotice" class="ps-inline-state is-warning" role="alert">{{ capacityNotice }}</div>
+        <div v-else-if="screeningRows && !passedRows.length" class="ps-inline-state is-warning" role="status">
+          <span>{{ screeningTotal ? '没有文章符合本次提示词，请返回调整筛选规则。' : '报告周期内没有资讯，请返回调整报告周期。' }}</span>
+        </div>
+        <el-descriptions title="生成信息" :column="2" border>
+          <el-descriptions-item label="简报类型">{{ form.type }}</el-descriptions-item>
+          <el-descriptions-item label="报告周期">{{ periodLabel }}</el-descriptions-item>
+          <el-descriptions-item label="简报模板">{{ templateName }}</el-descriptions-item>
+          <el-descriptions-item label="系统筛选">
+            <template v-if="screeningRows">本期 {{ screeningTotal }} 篇，自动纳入 {{ passedRows.length }} 篇</template>
+            <template v-else>{{ previewError ? '筛选未完成' : '正在自动筛选…' }}</template>
+          </el-descriptions-item>
+          <el-descriptions-item v-if="screeningRows && categoryCounts.length" label="分类结果" :span="2">
+            {{ categoryCounts.map(item => `${item.name} ${item.count} 篇`).join('、') }}
+          </el-descriptions-item>
+        </el-descriptions>
+        <section aria-labelledby="digest-generation-settings">
+          <h2 id="digest-generation-settings">生成设置</h2>
+          <div class="ps-form-grid ps-form-grid-wide">
             <label>每栏资讯数量<el-input-number v-model="form.itemCount" :min="3" :max="30" /></label>
-            <label>单条摘要长度<el-select v-model="form.summaryLength"><el-option label="精简（80-120字）" value="short" /><el-option label="标准（150-200字）" value="normal" /><el-option label="深度（250-300字）" value="long" /></el-select></label>
+            <label>单条摘要长度<el-select v-model="form.summaryLength" aria-label="单条摘要长度"><el-option label="精简（80–120 字）" value="short" /><el-option label="标准（150–200 字）" value="normal" /><el-option label="深度（250–300 字）" value="long" /></el-select></label>
           </div>
           <div class="ps-option-row"><el-checkbox v-model="form.hotAnalysis">包含热点分析</el-checkbox><el-checkbox v-model="form.duplicateMerge">合并重复事件</el-checkbox></div>
-        </div>
-      <p class="ps-digest-template-notice">周报、月报统一按分类、事件摘要、行业洞察和来源的固定格式生成。</p>
-      <footer class="ps-form-footer ps-digest-submit">
-        <el-button class="ps-ui-action ps-digest-settings-toggle" :aria-expanded="settingsExpanded" aria-controls="digest-generation-settings" @click="settingsExpanded = !settingsExpanded"><span aria-hidden="true">›</span>生成设置</el-button>
-        <div class="ps-digest-submit-actions"><el-button @click="router.push('/portal/digests')">取消</el-button><el-button type="primary" :loading="submitting" :disabled="refreshing || Boolean(previewError) || !selectedCandidateIds.length || sourceTaskLoading || Boolean(sourceTaskError)" @click="createDigest">开始生成</el-button></div>
+        </section>
+      </div>
+
+      <footer class="ps-step-footer">
+        <small v-if="activeStep === 0" class="ps-digest-rule-note">系统按本次规则筛选资讯。另存后可在以后的简报中复用。</small>
+        <el-button v-if="activeStep > 0" :disabled="submitting" @click="goBack">上一步</el-button>
+        <span class="ps-digest-footer-spacer" />
+        <el-button v-if="activeStep === 0" :disabled="!canSaveTemplate" @click="openSaveTemplate">另存为我的模板</el-button>
+        <el-button v-if="activeStep === 0" @click="goBack">取消</el-button>
+        <el-button v-if="activeStep === 0" type="primary" :disabled="!canStart" @click="confirmGeneration">下一步</el-button>
+        <el-button v-else type="primary" :loading="submitting" :disabled="!canGenerate" @click="createDigest">提交生成任务</el-button>
       </footer>
     </section>
+    <el-dialog v-model="saveDialogOpen" title="另存为我的模板" width="min(440px, calc(100vw - 32px))"
+      :close-on-click-modal="false" :close-on-press-escape="!savingTemplate" :show-close="!savingTemplate" append-to-body align-center>
+      <el-form label-position="top" @submit.prevent="saveAsTemplate">
+        <el-form-item label="模板名称" for="digest-new-template-name" :error="saveTemplateError">
+          <el-input id="digest-new-template-name" v-model="newTemplateName" :maxlength="255" :disabled="savingTemplate"
+            :placeholder="`例如：工程应用专题${form.type}`" @input="saveTemplateError = ''" />
+        </el-form-item>
+        <p class="ps-digest-rule-note">保存后，可在「我的模板 → 情报简报」中编辑和复用。</p>
+      </el-form>
+      <template #footer>
+        <el-button :disabled="savingTemplate" @click="saveDialogOpen = false">取消</el-button>
+        <el-button type="primary" :loading="savingTemplate" :disabled="!newTemplateName.trim() || !canSaveTemplate" @click="saveAsTemplate">保存模板</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { displayId, requireBusinessId } from '@/utils/portal/businessId'
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { cleanResultMeta } from '@/utils/portal/discovery'
+import { useWizardHistory } from '@/utils/portal/wizardHistory'
+import { decimalId, ID_UPGRADE_NOTICE, requireBusinessId } from '@/utils/portal/businessId'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { calendarDate, parseCalendarDate } from '@/utils/portal/businessTime'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Back } from '@element-plus/icons-vue'
+import DigestScreeningRules from '../components/DigestScreeningRules.vue'
+import { screeningRulesError } from '@/utils/portal/digestScreeningRules'
 import usePortalStore from '@/store/modules/portal'
-import { createPipelineResearchJob, getPipelineContentFilters, getPipelineIntelligenceDetail, getPipelineResearchJob, searchPipelineDigestCandidates } from '@/api/pipeline/intelligence'
-import { DIGEST_SELECTION_LIMIT, digestCandidate, fetchDigestPage, mapEvidence, preciseDate, verifyEvidence } from '@/utils/portal/evidenceInput'
+import { advancePipelineDigestScreening, createPipelineResearchJob, createPipelineTemplate, getPipelineResearchJob, listPipelineTemplates, startPipelineDigestScreening } from '@/api/pipeline/intelligence'
+import { DIGEST_SELECTION_LIMIT } from '@/utils/portal/evidenceInput'
+import { digestTemplatesFor } from '@/utils/pipeline/compactContract'
 
 const route = useRoute()
 const router = useRouter()
 const portalStore = usePortalStore()
 const refreshing = ref(false)
 const previewError = ref('')
-const settingsExpanded = ref(false)
-const previewPage = ref(1)
-const previewPageSize = ref(10)
-const previewPageKey = computed(() => `${previewPageSize.value}:${previewPage.value}`)
-const previewPages = ref({})
-const selectedCandidateIds = ref([])
-function acceptSelection(ids) {
-  if (ids.length > DIGEST_SELECTION_LIMIT) {
-    selectionNotice.value = `每份简报最多选择 ${DIGEST_SELECTION_LIMIT} 篇资料，本次未增加勾选，请减少选择后重试。`
-    ElMessage.warning(selectionNotice.value)
-    return
-  }
-  selectedCandidateIds.value = [...new Set(ids.map(displayId))]
-  selectionNotice.value = ''
-}
-function toggleCandidate(id, checked) {
-  id = displayId(id)
-  if (submitting.value) return
-  if (checked) acceptSelection([...new Set([...selectedCandidateIds.value, id])])
-  else removeCandidate(id)
-}
-const selectionNotice = ref('')
-const previewPageCount = ref(1)
-const previewTotal = ref(0)
-const previewTruncated = ref(false)
+const { activeStep, advanceStep, goBack, isCurrentVisit, draftQuery } = useWizardHistory(router, route, '/portal/digests', step => step === 1 && canStart.value)
+const screeningId = ref('')
+const screeningRows = ref(null)
+const screeningTotal = ref(0)
+const screeningProcessed = ref(0)
+const screeningPromptOverride = ref(null)
+const defaultScreeningPrompt = ref('')
+const defaultWritingPrompts = ref({})
+const defaultCategories = ref(null)
+const categoryOverride = ref(null)
 const sourceTaskLoading = ref(false)
 const sourceTaskError = ref('')
 let previewGeneration = 0
 let sourceTaskGeneration = 0
-let initialized = false
 let stopped = false
-let previewRefreshQueued = false
 onBeforeUnmount(() => { stopped = true; previewGeneration += 1; sourceTaskGeneration += 1 })
 const submitting = ref(false)
 const requestId = ref('')
@@ -146,42 +152,106 @@ const reportTypeConfigs = {
   周报: { reportType: 'weekly', periodLabel: '报告周期', itemCount: 10 },
   月报: { reportType: 'monthly', periodLabel: '报告月份', itemCount: 15 }
 }
-const categoryOptions = ref([])
-const categoryError = ref('')
-async function loadCategories() {
-  categoryError.value = ''
+const initialType = ({ weekly: '周报', monthly: '月报', 周报: '周报', 月报: '月报' })[String(route.query.type || '')] || '周报'
+const form = reactive({ type: initialType, templateId: '', period: [], month: new Date(), itemCount: reportTypeConfigs[initialType].itemCount, summaryLength: 'normal', hotAnalysis: true, duplicateMerge: true })
+const currentTypeConfig = computed(() => reportTypeConfigs[form.type])
+const templates = ref([]), templatesLoading = ref(false), templateError = ref('')
+const availableTemplates = computed(() => digestTemplatesFor(templates.value, currentTypeConfig.value?.reportType))
+const templateUnavailable = computed(() => Boolean(form.templateId && !availableTemplates.value.some(item => item.id === form.templateId)))
+async function loadTemplates() {
+  const session = portalStore.workspaceEpoch
+  templatesLoading.value = true
+  templateError.value = ''
   try {
-    const res = await getPipelineContentFilters()
-    if (!Array.isArray(res.data?.articleCategories)) throw new Error('类别数据暂时不可用')
-    categoryOptions.value = res.data.articleCategories
+    const { data } = await listPipelineTemplates({ category: 'digest', publishedOnly: true })
+    if (!stopped && session === portalStore.workspaceEpoch) {
+      templates.value = data.rows
+      defaultScreeningPrompt.value = data.defaultScreeningPrompt || ''
+      defaultWritingPrompts.value = data.defaultWritingPrompts || {}
+      defaultCategories.value = data.defaultScreeningCategories ?? null
+    }
   } catch (error) {
-    categoryError.value = error?.msg || error?.message || '类别加载失败'
+    if (!stopped && session === portalStore.workspaceEpoch) templateError.value = error?.msg || '模板加载失败'
+  } finally { templatesLoading.value = false }
+}
+const periodFieldLabel = computed(() => currentTypeConfig.value.periodLabel)
+const periodLabel = computed(() => buildReportPeriod().label)
+const activeTemplate = computed(() => availableTemplates.value.find(item => item.id === form.templateId))
+const templateName = computed(() => activeTemplate.value?.name || '系统默认模板')
+const templateGeneralPrompt = computed(() => activeTemplate.value?.screeningPrompt || defaultScreeningPrompt.value)
+const templateCategories = computed(() => activeTemplate.value?.screeningCategories ?? defaultCategories.value)
+const screeningCategories = computed({
+  get: () => categoryOverride.value ?? templateCategories.value ?? [],
+  set: value => { categoryOverride.value = value }
+})
+const screeningPrompt = computed({
+  get: () => screeningPromptOverride.value ?? templateGeneralPrompt.value,
+  set: value => { screeningPromptOverride.value = value }
+})
+const saveDialogOpen = ref(false)
+const newTemplateName = ref('')
+const saveTemplateError = ref('')
+const savingTemplate = ref(false)
+const writingPrompt = computed(() => activeTemplate.value?.prompt || defaultWritingPrompts.value[currentTypeConfig.value?.reportType])
+const canSaveTemplate = computed(() => Boolean(writingPrompt.value && !templatesLoading.value && !templateError.value
+  && !templateUnavailable.value && !sourceTaskLoading.value && !sourceTaskError.value && !screeningRulesError(screeningCategories.value)))
+function openSaveTemplate() {
+  if (!canSaveTemplate.value) return
+  newTemplateName.value = ''
+  saveTemplateError.value = ''
+  saveDialogOpen.value = true
+}
+async function saveAsTemplate() {
+  const name = newTemplateName.value.trim()
+  if (!saveDialogOpen.value || savingTemplate.value || !canSaveTemplate.value || !name) return
+  const session = portalStore.workspaceEpoch
+  savingTemplate.value = true
+  saveTemplateError.value = ''
+  try {
+    const { data } = await createPipelineTemplate({
+      name, purpose: 'digest', digestCadence: currentTypeConfig.value.reportType, isEnabled: true,
+      description: activeTemplate.value?.description || '', prompt: writingPrompt.value,
+      screeningPrompt: screeningPrompt.value.trim() || templateGeneralPrompt.value,
+      screeningCategories: screeningCategories.value.map(({ name, prompt }) => ({ name: name.trim(), prompt: prompt.trim() }))
+    })
+    if (stopped || session !== portalStore.workspaceEpoch) return
+    templates.value = [data, ...templates.value]
+    form.templateId = data.id
+    saveDialogOpen.value = false
+    ElMessage.success('已保存到我的模板')
+  } catch (error) {
+    if (!stopped && session === portalStore.workspaceEpoch) saveTemplateError.value = error?.msg || error?.message || '模板保存失败，请重试'
+  } finally {
+    savingTemplate.value = false
   }
 }
-const initialType = ({ weekly: '周报', monthly: '月报', 周报: '周报', 月报: '月报' })[String(route.query.type || '')] || '周报'
-const form = reactive({ type: initialType, period: [], month: new Date(), directions: [], sources: ['新闻网站', '微信公众号'], keywords: [], itemCount: reportTypeConfigs[initialType].itemCount, summaryLength: 'normal', hotAnalysis: true, duplicateMerge: true })
-const keywordDraft = ref('')
-function updateKeywords(values) {
-  form.keywords = [...new Set((values || []).map(value => value.trim()).filter(Boolean))]
+function resetRules() {
+  screeningPromptOverride.value = null
+  categoryOverride.value = null
 }
-function addKeyword() {
-  const value = keywordDraft.value.trim()
-  if (!value || form.keywords.length >= 20 || form.keywords.includes(value)) return
-  updateKeywords([...form.keywords, value])
-  keywordDraft.value = ''
-}
-function removeKeyword(value) {
-  updateKeywords(form.keywords.filter(keyword => keyword !== value))
-}
-const currentTypeConfig = computed(() => reportTypeConfigs[form.type])
-const periodFieldLabel = computed(() => currentTypeConfig.value.periodLabel)
-const previewScope = computed(() => ({ period: buildReportPeriod().period, directions: [...form.directions], keywords: [...form.keywords], sources: [...form.sources] }))
+watch(() => form.templateId, resetRules, { flush: 'sync' })
+const previewScope = computed(() => ({
+  reportType: currentTypeConfig.value?.reportType,
+  templateId: form.templateId ? requireBusinessId(form.templateId) : null,
+  period: buildReportPeriod().period,
+  screeningPrompt: screeningPromptOverride.value?.trim() || null,
+  screeningCategories: categoryOverride.value ?? templateCategories.value
+}))
 const scopeKey = computed(() => JSON.stringify(previewScope.value))
-const candidateItems = computed(() => previewPages.value[previewPageKey.value]?.rows || [])
-const currentCandidatePageSelected = computed(() => candidateItems.value.length > 0
-  && candidateItems.value.every(item => selectedCandidateIds.value.includes(item.id)))
-const checkedCandidates = computed(() => [...new Map(Object.values(previewPages.value).flatMap(page => page.rows).map(item => [item.id, item])).values()])
-const selectedCandidates = computed(() => selectedCandidateIds.value.map(id => checkedCandidates.value.find(item => item.id === id) || { id, title: `选材 ${id}（尚未通过当前候选核验）`, ready: false }))
+const canStart = computed(() => Boolean(currentTypeConfig.value && periodLabel.value
+  && !screeningRulesError(screeningCategories.value) && !templatesLoading.value
+  && !sourceTaskLoading.value && !sourceTaskError.value && !templateUnavailable.value))
+const passedRows = computed(() => (screeningRows.value || []).filter(item => item.keep))
+const categoryCounts = computed(() => {
+  const counts = new Map(screeningCategories.value.map(rule => [rule.name.trim(), 0]))
+  for (const row of passedRows.value) counts.set(row.category, (counts.get(row.category) || 0) + 1)
+  return Array.from(counts, ([name, count]) => ({ name, count }))
+})
+const capacityNotice = computed(() => passedRows.value.length > DIGEST_SELECTION_LIMIT
+  ? `通过筛选的资讯有 ${passedRows.value.length} 篇，每份简报最多纳入 ${DIGEST_SELECTION_LIMIT} 篇。请返回收紧筛选提示词。`
+  : '')
+const canGenerate = computed(() => Boolean(screeningId.value && passedRows.value.length
+  && !refreshing.value && !previewError.value && !capacityNotice.value && canStart.value))
 function ensureRequestId(payload) {
   const fingerprint = JSON.stringify(payload)
   if (!requestId.value || requestFingerprint !== fingerprint) {
@@ -192,73 +262,65 @@ function ensureRequestId(payload) {
 }
 watch(() => form.type, type => {
   if (reportTypeConfigs[type]) form.itemCount = reportTypeConfigs[type].itemCount
+  if (templateUnavailable.value) form.templateId = ''
 })
+function clearScreening() {
+  previewGeneration += 1
+  screeningRows.value = null
+  screeningId.value = ''
+  screeningTotal.value = 0
+  screeningProcessed.value = 0
+  previewError.value = ''
+  refreshing.value = false
+}
+watch(scopeKey, clearScreening, { flush: 'sync' })
+function confirmGeneration() {
+  if (!canStart.value) return
+  advanceStep()
+}
+watch(activeStep, step => {
+  if (step === 1 && !screeningRows.value && !refreshing.value && !previewError.value) void refreshPreview()
+}, { flush: 'sync' })
 async function refreshPreview() {
+  if (refreshing.value || !canStart.value) return
   const generation = ++previewGeneration
   const session = portalStore.workspaceEpoch
-  const key = scopeKey.value
-  const scope = JSON.parse(key)
-  if (!scope.period || scope.period.length !== 2 || scope.period.some(value => !value) || scope.period[0] > scope.period[1]) { previewError.value = ''; previewPages.value = {}; previewTotal.value = 0; refreshing.value = false; return }
-  const page = previewPage.value
-  const pageSize = previewPageSize.value
-  const pageKey = previewPageKey.value
+  const current = () => !stopped && generation === previewGeneration && session === portalStore.workspaceEpoch
   refreshing.value = true
   previewError.value = ''
-  const retained = { ...previewPages.value }; delete retained[pageKey]; previewPages.value = retained
   try {
-    const result = await fetchDigestPage(scope, { search: searchPipelineDigestCandidates, getIntelligence: getPipelineIntelligenceDetail }, page, pageSize)
-    if (stopped || generation !== previewGeneration || session !== portalStore.workspaceEpoch || key !== scopeKey.value) return
-    const next = { ...previewPages.value, [pageKey]: result }
-    previewPages.value = next
-    previewPageCount.value = result.pageCount
-    previewTotal.value = result.total
-    previewTruncated.value = result.truncated
-    const validIds = new Set(checkedCandidates.value.map(item => item.id))
-    const missing = selectedCandidateIds.value.filter(id => !validIds.has(id))
-    if (missing.length) previewError.value = `已选资料 ${missing.join('、')} 不再匹配或已失效，请移除或重新核验。`
+    let data
+    if (!screeningId.value) {
+      ;({ data } = await startPipelineDigestScreening(previewScope.value))
+      if (!current()) return
+      screeningId.value = data.screeningId || ''
+      screeningTotal.value = data.total
+      screeningProcessed.value = data.processed
+    }
+    while (!data?.rows) {
+      if (!screeningId.value) throw new Error('未收到复筛编号，请重试')
+      ;({ data } = await advancePipelineDigestScreening(screeningId.value))
+      if (!current()) return
+      screeningTotal.value = data.total
+      screeningProcessed.value = data.processed
+    }
+    if (data.rows.length !== screeningTotal.value) throw new Error('复筛结果不完整，请重试')
+    screeningRows.value = data.rows.map(item => ({ ...item, id: requireBusinessId(item.id) }))
   } catch (error) {
-    if (!stopped && generation === previewGeneration && session === portalStore.workspaceEpoch) previewError.value = error?.msg || error?.message || '候选核验失败，请重试'
+    if (current()) previewError.value = error?.msg || error?.message || '资料复筛失败，请重试'
   } finally {
-    if (!stopped && generation === previewGeneration) refreshing.value = false
+    if (current()) refreshing.value = false
   }
-}
-watch([scopeKey, previewPage, previewPageSize], ([key, , pageSize], previous) => {
-  previewGeneration += 1
-  if (key !== previous?.[0]) {
-    if (selectedCandidateIds.value.length) selectionNotice.value = '覆盖期或筛选条件已变化，原选择已清空，请按当前条件重新选材。'
-    previewPage.value = 1; previewPages.value = {}; selectedCandidateIds.value = []; previewError.value = ''; previewPageCount.value = 1; previewTruncated.value = false
-  } else if (pageSize !== previous?.[2]) {
-    previewPage.value = 1
-  }
-  if (initialized) refreshing.value = true
-  if (!previewRefreshQueued) {
-    previewRefreshQueued = true
-    void nextTick().then(() => {
-      previewRefreshQueued = false
-      if (!stopped && initialized && !sourceTaskLoading.value) void refreshPreview()
-    })
-  }
-}, { flush: 'sync' })
-function selectCurrentPage() {
-  if (submitting.value || refreshing.value || previewError.value) return
-  const pageIds = new Set(candidateItems.value.map(item => item.id))
-  acceptSelection(currentCandidatePageSelected.value
-    ? selectedCandidateIds.value.filter(id => !pageIds.has(id))
-    : [...new Set([...selectedCandidateIds.value, ...pageIds])])
-}
-function removeCandidate(id) {
-  selectedCandidateIds.value = selectedCandidateIds.value.filter(item => item !== id)
-  if (previewError.value.startsWith('已选资料') && selectedCandidates.value.every(item => item.ready)) previewError.value = ''
 }
 async function loadSourceTask() {
-  if (!route.query.sourceTask) return
-  if (!decimalId(route.query.sourceTask)) { sourceTaskError.value = ID_UPGRADE_NOTICE; return }
+  if (!draftQuery.value.sourceTask) return
+  if (!decimalId(draftQuery.value.sourceTask)) { sourceTaskError.value = ID_UPGRADE_NOTICE; return }
   const generation = ++sourceTaskGeneration
   const session = portalStore.workspaceEpoch
   sourceTaskLoading.value = true
   sourceTaskError.value = ''
   try {
-    const res = await getPipelineResearchJob(String(route.query.sourceTask))
+    const res = await getPipelineResearchJob(String(draftQuery.value.sourceTask))
     if (stopped || generation !== sourceTaskGeneration || session !== portalStore.workspaceEpoch) return
     const task = res.data || {}
     const config = task.config || {}
@@ -267,10 +329,10 @@ async function loadSourceTask() {
     const typeMap = { weekly: '周报', monthly: '月报' }
     if (typeMap[reportType]) form.type = typeMap[reportType]
     await Promise.resolve()
+    form.templateId = task.fixedDigestFormat ? '' : decimalId(config.template_id ?? config.templateId) || ''
     const options = config.options || {}
-    form.directions = String(config.direction || '').split('、').filter(Boolean)
-    form.keywords = Array.isArray(config.keywords) ? [...config.keywords] : []
-    form.sources = Array.isArray(options.sources) ? options.sources.filter(source => ['新闻网站', '微信公众号'].includes(source)) : ['新闻网站', '微信公众号']
+    screeningPromptOverride.value = typeof task.screeningPrompt === 'string' ? task.screeningPrompt : null
+    categoryOverride.value = task.screeningCategories ?? (screeningPromptOverride.value !== null ? [] : null)
     form.itemCount = Number(options.itemCount || form.itemCount)
     form.summaryLength = options.summaryLength || form.summaryLength
     form.hotAnalysis = options.hotAnalysis !== false
@@ -279,24 +341,27 @@ async function loadSourceTask() {
       if (form.type === '周报') form.period = config.period.map(parseCalendarDate)
       else form.month = parseCalendarDate(config.period[0])
     }
-    ElMessage.success('已载入原简报配置，请重新核对周期候选并明确选择资料')
+    ElMessage.success('已载入原简报配置，请按本期规则重新复筛')
   } catch (error) {
     if (!stopped && generation === sourceTaskGeneration) sourceTaskError.value = error?.msg || error?.message || '原简报配置加载失败，请重试后再确认候选范围'
   } finally {
     if (!stopped && generation === sourceTaskGeneration) {
       sourceTaskLoading.value = false
-      if (initialized && !sourceTaskError.value) void refreshPreview()
     }
   }
 }
-watch(() => route.query.sourceTask, () => { void loadSourceTask() })
+watch(() => draftQuery.value.sourceTask, () => {
+  activeStep.value = 0
+  clearScreening()
+  void loadSourceTask()
+})
 function formatDate(value) {
   return calendarDate(value)
 }
 function buildReportPeriod() {
   if (form.type === '周报') {
     const period = (form.period || []).map(formatDate).filter(Boolean)
-    return { period, label: period.length === 2 ? `${period[0]} 至 ${period[1]}` : '' }
+    return { period, label: period.length === 2 && period[0] <= period[1] ? `${period[0]} 至 ${period[1]}` : '' }
   }
   if (!form.month) return { period: [], label: '' }
   const month = new Date(form.month)
@@ -310,24 +375,19 @@ function buildReportPeriod() {
 }
 async function createDigest() {
   if (submitting.value) return
-  if (selectedCandidateIds.value.length > DIGEST_SELECTION_LIMIT) return ElMessage.warning(`每份简报最多选择 ${DIGEST_SELECTION_LIMIT} 篇资料，请减少勾选`)
-  if (refreshing.value || previewError.value || sourceTaskLoading.value || sourceTaskError.value) return ElMessage.warning('请先完成候选核验并处理加载失败')
-  if (!selectedCandidateIds.value.length) return ElMessage.warning('请明确选择用于生成的候选资料')
+  if (!canGenerate.value) return
   submitting.value = true
+  const session = portalStore.workspaceEpoch
   try {
-    const key = scopeKey.value
-    const ids = [...selectedCandidateIds.value]
-    const session = portalStore.workspaceEpoch
-    const checked = await mapEvidence(ids, id => verifyEvidence({ id, type: 'article' }, { getIntelligence: getPipelineIntelligenceDetail }))
-    if (stopped || key !== scopeKey.value || session !== portalStore.workspaceEpoch || JSON.stringify(ids) !== JSON.stringify(selectedCandidateIds.value)) return ElMessage.warning('周期、账号或选材已变化，请重新确认')
-    const failed = checked.filter(item => !item.ready || !digestCandidate(item.detail, previewScope.value))
-    if (failed.length) { previewError.value = `已选资料核验失败或已不匹配：${failed.map(item => `${item.id}（${item.reason || '日期或来源不匹配'}）`).join('；')}`; return }
     const payload = buildDigestPayload()
     const requestId = ensureRequestId(payload)
     const res = await createPipelineResearchJob({ ...payload, requestId })
+    if (stopped || session !== portalStore.workspaceEpoch) return
+    portalStore.registerGenerationTask(res.data)
     await portalStore.hydrate(true)
-    ElMessage.success(`${form.type}任务已进入后台生成队列`)
-    router.push(`/portal/research/tasks/${res.data.jobId || res.data.id}`)
+    if (stopped || session !== portalStore.workspaceEpoch) return
+    ElMessage.success(`${form.type}任务已进入后台生成队列，切换页面后会继续生成，完成后将提醒查看`)
+    if (isCurrentVisit()) router.push(`/portal/research/tasks/${res.data.jobId || res.data.id}`)
   } catch (error) {
     ElMessage.error(error?.msg || error?.message || `${form.type}创建失败，请确认后端和数据库已启动`)
   } finally {
@@ -336,79 +396,108 @@ async function createDigest() {
 }
 function buildDigestPayload() {
   if (!['周报', '月报'].includes(form.type)) throw new Error('仅支持新建周报或月报')
-  if (selectedCandidateIds.value.length > DIGEST_SELECTION_LIMIT) throw new Error(`每份简报最多选择 ${DIGEST_SELECTION_LIMIT} 篇资料，请减少勾选`)
-  if (refreshing.value || previewError.value || sourceTaskLoading.value || sourceTaskError.value) throw new Error('候选核验尚未完成或加载失败')
-  if (!selectedCandidateIds.value.length || selectedCandidates.value.some(item => !item.ready)) throw new Error('存在未核验的已选资料')
+  if (!canGenerate.value) throw new Error(capacityNotice.value || '请先完成系统筛选')
+  if (form.templateId && templateUnavailable.value) throw new Error('请选择可用的简报模板')
   const reportType = currentTypeConfig.value.reportType
   const { period, label } = buildReportPeriod()
   if (!period.length || period.length !== 2 || period[0] > period.at(-1)) throw new Error(`请选择完整且有效的${periodFieldLabel.value}`)
   return {
-      title: `管网科技情报${form.type} ${label}`.trim(),
+      title: `科技情报${form.type} ${label}`.trim(),
       reportType,
-      direction: form.directions.join('、'),
+      screeningId: screeningId.value,
+      ...(form.templateId ? { templateId: requireBusinessId(form.templateId) } : {}),
       period,
-      keywords: form.keywords,
-      requirements: `报告周期：${label}；来源范围：${form.sources.join('、')}；每栏 ${form.itemCount} 条；摘要长度：${form.summaryLength}`,
+      requirements: `报告周期：${label}；每栏 ${form.itemCount} 条；摘要长度：${form.summaryLength}`,
       citationCheck: true,
-      selectedItemIds: selectedCandidateIds.value.map(requireBusinessId),
-      options: { cadence: reportType, summaryLength: form.summaryLength, itemCount: form.itemCount, directions: [...form.directions], sources: [...form.sources], hotAnalysis: form.hotAnalysis, duplicateMerge: form.duplicateMerge }
+      options: { cadence: reportType, summaryLength: form.summaryLength, itemCount: form.itemCount, hotAnalysis: form.hotAnalysis, duplicateMerge: form.duplicateMerge }
   }
 }
 onMounted(async () => {
-  await loadCategories()
+  await loadTemplates()
   await loadSourceTask()
-  if (stopped) return
-  await nextTick()
-  initialized = true
-  await refreshPreview()
 })
 </script>
 
 <style scoped>
-.ps-create-context { width: 100%; max-width: none; flex-shrink: 0; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; align-items: center; margin-bottom: 0; padding-bottom: 12px; }
-.ps-create-back { grid-column: auto; width: 44px; height: 44px; padding: 0; justify-content: center; border: 1px solid var(--ps-line); border-radius: 8px; background: #fff; }
-.ps-create-back svg { width: 18px; height: 18px; }
-.ps-create-back:hover { border-color: var(--ps-blue); background: var(--ps-blue-soft); }
-.ps-create-back:hover svg { transform: none; }
-.ps-create-heading h1 { font-size: 26px; }
-.ps-digest-create-page { display: flex; flex-direction: column; gap: 12px; }
-.ps-digest-create-page .ps-digest-filter-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-.ps-digest-filter-grid > label { grid-column: span 2; min-width: 0; gap: 6px; }
-.ps-digest-filter-grid > .ps-digest-direction-field, .ps-digest-filter-grid > .ps-digest-keyword-field { grid-column: span 3; }
-.ps-digest-create-page .ps-digest-output-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.ps-digest-create-page .ps-form-grid :deep(.el-date-editor), .ps-digest-create-page .ps-form-grid :deep(.el-input-number) { width: 100%; }
-.ps-digest-filter-grid :deep(.el-range-input:focus-visible) { outline: none; }
-.ps-digest-filter-grid :deep(.el-range-editor:has(.el-range-input:focus-visible)) {
-  box-shadow: 0 0 0 1px var(--el-input-focus-border-color) inset;
+.ps-digest-create-page.is-configuring { overflow-y: auto; }
+.ps-digest-create-page .ps-create-context {
+  width: 100%;
+  max-width: none;
+  grid-template-columns: auto minmax(0, 1fr) minmax(300px, 380px);
+  gap: 10px;
+  border-bottom: 0;
+  padding-block: 4px;
 }
-.ps-keyword-editor { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; padding: 6px 8px; border: 1px solid var(--ps-line); border-radius: 6px; background: #fff; transition: border-color .18s ease, box-shadow .18s ease; }
-.ps-keyword-editor:focus-within { border-color: color-mix(in srgb, var(--ps-blue), #fff 38%); box-shadow: 0 0 0 2px #409eff12; }
-.ps-keyword-tags { display: flex; flex: 0 1 auto; flex-wrap: wrap; gap: 6px; min-width: 0; max-width: 100%; }
-.ps-keyword-tags :deep(.el-tag) { max-width: 100%; }
-.ps-keyword-tags :deep(.el-tag__content) { overflow: hidden; text-overflow: ellipsis; }
-.ps-keyword-entry { display: flex; align-items: center; flex: 1 1 auto; min-width: 0; gap: 8px; }
-.ps-keyword-entry input { min-width: 0; flex: 1; height: 30px; padding: 0 8px; border: 0; outline: 0; background: transparent; color: var(--ps-ink); font: inherit; }
-.ps-keyword-entry input::placeholder { color: var(--ps-muted); }
-.ps-keyword-entry .el-button { flex-shrink: 0; }
-.ps-digest-candidate-scroll > .ps-inspector-empty { margin: 0; padding: 36px 16px; text-align: center; }
-.ps-digest-settings-toggle { display: flex; align-items: center; flex-shrink: 0; gap: 8px; min-height: 44px; padding: 0; border: 0; background: transparent; color: var(--ps-ink); font: inherit; cursor: pointer; }
-.ps-digest-settings-toggle > span { font-size: 22px; line-height: 1; }
-.ps-digest-settings-toggle[aria-expanded="true"] > span { transform: rotate(90deg); }
-.ps-digest-submit-actions { display: flex; align-items: center; flex-shrink: 0; gap: 8px; margin-left: auto; }
-.ps-digest-template-notice { margin: 0; padding: 10px 20px; color: var(--ps-muted); }
-.ps-digest-create-page .ps-digest-submit { position: sticky; bottom: 0; z-index: 10; display: flex; align-items: center; flex-wrap: nowrap; justify-content: space-between; gap: 16px; background: #fff; border: 0; border-radius: 10px; }
-.ps-digest-settings:has(.ps-digest-settings-toggle[aria-expanded="true"]) .ps-digest-submit { border-top: 1px solid var(--ps-line); border-top-left-radius: 0; border-top-right-radius: 0; }
-@media (max-width: 1050px) {
-  .ps-digest-create-page .ps-digest-filter-grid, .ps-digest-create-page .ps-digest-output-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .ps-digest-filter-grid > label, .ps-digest-filter-grid > .ps-digest-direction-field { grid-column: auto; }
-  .ps-digest-filter-grid > .ps-digest-keyword-field { grid-column: 1 / -1; }
+.ps-create-context h1 { font-size: 24px; }
+.ps-create-context .ps-create-back { grid-column: auto; }
+.ps-create-context .ps-create-steps { width: 100%; padding: 0; background: transparent; }
+.ps-create-steps :deep(.el-step.is-simple .el-step__title) { max-width: none; white-space: nowrap; font-size: 14px; line-height: 24px; }
+.ps-create-steps :deep(.el-step.is-simple .el-step__head) { padding-right: 6px; }
+.ps-create-steps :deep(.el-step__title.is-process), .ps-create-steps :deep(.el-step__head.is-process) { color: var(--ps-blue); border-color: currentColor; }
+.ps-create-steps :deep(.el-step__icon.is-icon) { width: 20px; height: 20px; border: 1px solid currentColor; border-radius: 50%; font-size: 12px; font-weight: 600; }
+.ps-create-steps :deep(.is-process .el-step__icon.is-icon) { background: var(--ps-blue); color: #fff; border-color: var(--ps-blue); }
+.ps-create-steps :deep(.el-step__arrow::before) { width: 16px; height: 1px; transform: none; }
+.ps-create-steps :deep(.el-step__arrow::after) { display: none; }
+.ps-digest-create-page > .ps-step-card { width: 100%; max-width: none; }
+.ps-digest-create-page .ps-step-content { padding: 18px 20px; }
+.ps-digest-create-page > .ps-step-card > .ps-step-content.ps-digest-confirm { flex: 0 1 auto; }
+.ps-digest-create-page .ps-step-footer {
+  display: flex;
+  min-height: 54px;
+  gap: 8px;
+  padding: 8px 16px;
+  flex-shrink: 0;
 }
-@media (max-width: 760px) {
-  .ps-create-heading h1 { font-size: 22px; line-height: 1.4; }
-  .ps-digest-create-page .ps-digest-submit { gap: 8px; padding-inline: 12px; }
+.ps-step-footer :deep(.el-button) { margin: 0; }
+.ps-digest-footer-spacer { flex: 1; }
+.ps-digest-create-page .ps-form-grid { gap: 14px 18px; }
+.ps-digest-create-page .ps-digest-config-fields { grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr); align-items: end; }
+.ps-digest-type-field { display: grid; gap: 8px; align-self: stretch; align-content: space-between; font-size: 13px; font-weight: 650; color: var(--ps-ink-2); }
+.ps-digest-type-field :deep(.el-radio-button__inner) { min-height: 40px; display: inline-flex; align-items: center; padding-inline: 19px; }
+.ps-digest-create-page .ps-form-grid > label { min-width: 0; }
+.ps-digest-create-page .ps-form-grid :deep(.el-date-editor) { min-width: 0; max-width: 100%; }
+.ps-digest-config-fields :deep(.el-date-editor--month) { height: auto; }
+.ps-digest-rule-note { font-size: 13px; color: var(--ps-muted); }
+.ps-digest-confirm h2 { margin: 0 0 10px; font-size: 15px; color: var(--ps-ink); }
+.ps-digest-screening-status {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  background: var(--ps-blue-soft);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--ps-muted);
 }
-@media (max-width: 600px) {
-  .ps-digest-create-page .ps-digest-filter-grid, .ps-digest-create-page .ps-digest-output-grid { grid-template-columns: minmax(0, 1fr); }
-  .ps-digest-filter-grid > label { grid-column: auto; }
+.ps-digest-confirm > section[aria-labelledby] { margin-top: 20px; }
+.ps-digest-screening-rule { margin-top: 18px; }
+.ps-digest-create-page.is-configuring > .ps-step-card { flex: 0 0 auto; }
+.ps-digest-create-page.is-configuring .ps-step-content { flex: 0 0 auto; overflow: visible; }
+.ps-digest-create-page .ps-option-row { margin-top: 10px; padding: 0; background: transparent; flex-wrap: wrap; }
+@media (min-width: 761px) and (min-height: 641px) {
+  .ps-digest-create-page:not(.is-configuring) > .ps-step-card { flex: 0 1 auto; }
+}
+@media (max-width: 920px) {
+  .ps-digest-create-page .ps-digest-config-fields { grid-template-columns: auto minmax(0, 1fr); }
+  .ps-digest-config-fields > label:last-child { grid-column: 1 / -1; }
+}
+@media (max-width: 760px), (max-height: 640px) {
+  .ps-digest-create-page > .ps-step-card { flex: 0 0 auto; }
+  .ps-digest-create-page .ps-step-content { flex: 0 0 auto; padding: 14px; }
+  .ps-digest-create-page .ps-create-steps :deep(.el-step__title) { font-size: 13px; }
+}
+@media (max-width: 540px) {
+  .ps-digest-create-page .ps-create-context { grid-template-columns: auto minmax(0, 1fr); }
+  .ps-create-context .ps-create-steps { grid-column: 1 / -1; padding: 6px 0; }
+  .ps-digest-create-page .ps-form-grid { grid-template-columns: 1fr; }
+  .ps-digest-create-page .ps-step-footer:has(.ps-digest-rule-note) { flex-wrap: wrap; }
+  .ps-digest-rule-note { width: 100%; line-height: 1.5; }
+  :global(.ps-digest-period-popper .el-date-range-picker) {
+    width: min(350px, calc(100vw - 24px));
+    max-height: 48dvh;
+    overflow-y: auto;
+  }
+  :global(.ps-digest-period-popper .el-picker-panel__body) { min-width: 0; }
+  :global(.ps-digest-period-popper .el-date-range-picker__content) { display: block; width: 100%; }
 }
 </style>

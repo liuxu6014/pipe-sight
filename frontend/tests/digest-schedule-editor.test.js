@@ -28,7 +28,7 @@ test('editing retains generation preferences, filters and name without alias col
   assert.equal(payload.scheduleMonthDay, 31)
   assert.equal(payload.selectionConfig.limit, 12)
   assert.equal(payload.generationConfig.outline, undefined)
-  assert.equal(payload.templateId, undefined)
+  assert.equal(payload.templateId, '31')
   assert.equal(payload.generationConfig.requirements, '保留要求')
   assert.deepEqual(payload.selectionConfig.source_types, ['wechat'])
   assert.equal(payload.selectionConfig.options, undefined)

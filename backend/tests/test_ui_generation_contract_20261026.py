@@ -250,7 +250,7 @@ async def test_schedule_resolves_fixed_cadence_and_honors_image_off(env):
     fixed.digest_cadence = 'monthly'
     service = NS(
         get_published=AsyncMock(return_value=row),
-        get_fixed_digest=AsyncMock(return_value=fixed),
+        get_digest_for_run=AsyncMock(return_value=fixed),
         validate_models=AsyncMock(),
     )
     validate = env.schedules.DigestScheduleService._validate_enabled_template
@@ -258,7 +258,7 @@ async def test_schedule_resolves_fixed_cadence_and_honors_image_off(env):
     assert service.validate_models.await_args.args[3]['enabled'] is False
     result = await validate(None, 201, {'diagram': False}, service, frequency='monthly', user_id=7)
     assert result is fixed
-    service.get_fixed_digest.assert_awaited_once_with(None, 'monthly', 7)
+    service.get_digest_for_run.assert_awaited_once_with(None, 'monthly', 7, 201, legacy_schedule=False)
     assert service.get_published.await_count == 1
     assert service.validate_models.await_args.args[3]['enabled'] is False
 

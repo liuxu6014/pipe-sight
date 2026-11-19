@@ -71,6 +71,8 @@ def generation_request_data(payload) -> dict:
         data.pop('project_description', None)
     if data.get('template_prompt') is None:
         data.pop('template_prompt', None)
+    if data.get('screening_id') is None:
+        data.pop('screening_id', None)
     return data
 
 
@@ -93,6 +95,8 @@ def generation_request_fingerprint(request, materials) -> str:
         kinds.setdefault(identity, set()).add(material['type'])
     references = canonical.pop('materials', None) or canonical.get('selected_item_ids') or []
     canonical.pop('selected_item_ids', None)
+    if canonical.get('screening_id'):
+        references = []
     selected = []
     for reference in references:
         if isinstance(reference, dict):

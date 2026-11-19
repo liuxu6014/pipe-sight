@@ -32,7 +32,7 @@ test('G01: fixed-format digest payload accepts weekly and monthly without any te
   const form = { type: '周报', directions: ['油气管网'], keywords: ['检测'], sources: ['新闻网站'],
     itemCount: 10, summaryLength: 'normal', hotAnalysis: true, duplicateMerge: true }
   const build = action('DigestCreateView', 'buildDigestPayload', { form,
-    DIGEST_SELECTION_LIMIT: 50, selectedCandidateIds: { value: ['101'] }, selectedCandidates: { value: [{ ready: true }] },
+    canGenerate: { value: true }, screeningId: { value: 'd'.repeat(32) },
     refreshing: { value: false }, previewError: { value: '' }, sourceTaskLoading: { value: false }, sourceTaskError: { value: '' },
     currentTypeConfig: { get value() { return { reportType: form.type === '周报' ? 'weekly' : 'monthly' } } },
     buildReportPeriod: () => ({ period: ['2026-10-01', '2026-10-31'], label: '测试周期' }),
@@ -42,7 +42,9 @@ test('G01: fixed-format digest payload accepts weekly and monthly without any te
     form.type = type
     const payload = build()
     assert.equal(payload.reportType, reportType)
-    assert.deepEqual(payload.selectedItemIds, ['101'])
+    assert.equal(Object.hasOwn(payload, 'materials'), false)
+    assert.equal(Object.hasOwn(payload, 'selectedItemIds'), false)
+    assert.equal(payload.screeningId, 'd'.repeat(32))
     for (const field of ['templateId', 'templateVersion', 'outline', 'templatePrompt']) assert.equal(Object.hasOwn(payload, field), false)
   }
   form.type = '日报'

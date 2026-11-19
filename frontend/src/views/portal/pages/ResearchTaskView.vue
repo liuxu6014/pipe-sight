@@ -5,15 +5,16 @@
     </div>
     <div v-else-if="loadError && !loaded" class="ps-inline-state is-warning" role="alert">
       <WarningFilled /><span>{{ loadError }}</span><el-button class="ps-ui-action" @click="loadTask">重新加载</el-button>
+      <el-button @click="returnToPreviousPage(router, taskHomePath)">返回上一页</el-button>
     </div>
     <template v-else-if="loaded">
-    <header class="ps-task-toolbar"><div><el-button @click="router.push(taskHomePath)">返回{{ taskHomeLabel }}</el-button><span>任务进度</span></div><el-button :loading="loading" :disabled="acting" @click="loadTask">刷新状态</el-button></header>
+    <header class="ps-task-toolbar"><div><el-button @click="returnToPreviousPage(router, taskHomePath)">返回上一页</el-button><span>任务进度</span></div><el-button :loading="loading" :disabled="acting" @click="loadTask">刷新状态</el-button></header>
     <div class="ps-task-scroll" tabindex="0" aria-label="任务详情">
     <div v-if="loadError" class="ps-inline-state is-warning" role="alert"><span>{{ loadError }}，当前显示最后一次读取的状态。</span><el-button class="ps-ui-action" @click="loadTask">重新加载</el-button></div>
     <section class="ps-panel ps-task-overview">
       <div class="ps-task-heading"><div><div class="ps-task-heading-label"><span>{{ reportTypeLabel }}</span><el-tag :type="task.status === 'completed' ? 'success' : ['failed', 'dead_letter'].includes(task.status) ? 'danger' : ['queued', 'running'].includes(task.status) ? 'primary' : 'info'" effect="light">{{ taskStateLabel }}</el-tag></div><h1>{{ task.title }}</h1><p>创建人：{{ task.owner || currentUserName }}<span>创建于 {{ formatBusinessTime(task.createdAt) || '创建时间未记录' }}</span></p></div><div class="ps-task-total"><strong>{{ progress }}<small>%</small></strong><span>{{ currentStageLabel }}</span></div></div>
       <el-progress :percentage="progress" :status="task.status === 'completed' ? 'success' : ['failed', 'dead_letter'].includes(task.status) ? 'exception' : undefined" :stroke-width="6" :show-text="false" />
-      <div class="ps-task-refresh" aria-live="polite"><span>{{ loadError ? '自动更新已暂停' : terminalTaskStatuses.includes(task.status) ? '任务已结束，不再自动更新' : ['queued', 'running'].includes(task.status) ? '每 2 秒自动更新，离开当前标签页时暂停' : '状态未记录，请刷新确认' }}</span><time v-if="lastReadAt">最近读取 {{ lastReadAt }}</time></div>
+      <div class="ps-task-refresh" aria-live="polite"><span>{{ loadError ? '自动更新已暂停' : terminalTaskStatuses.includes(task.status) ? '任务已结束，不再自动更新' : ['queued', 'running'].includes(task.status) ? '后台持续生成，可切换页面；本页进度每 2 秒更新' : '状态未记录，请刷新确认' }}</span><time v-if="lastReadAt">最近读取 {{ lastReadAt }}</time></div>
     </section>
     <section v-if="failureNotice" class="ps-task-failure" role="status"><WarningFilled /><div><h2>{{ taskStateLabel }}</h2><p>{{ failureNotice }}</p><small>{{ canRetry ? '重新生成会新建一次任务并调用模型，原任务记录保留。也可复制任务，调整资料和大纲后再提交。' : '请联系管理员核对执行记录与模型配置，不会自动再次生成。' }}</small></div></section>
     <el-alert v-if="task.cancelRequested" title="正在停止任务" description="取消请求已提交，系统会在当前执行阶段结束后安全停止任务。" type="warning" :closable="false" show-icon />
@@ -29,6 +30,8 @@
           <div v-if="task.fixedDigestFormat"><dt>输出格式</dt><dd>系统固定格式</dd></div>
           <div v-else><dt>使用模板</dt><dd>{{ templateName }}</dd></div>
           <div><dt>输入资料</dt><dd>{{ task.selectedItems?.length || 0 }} 条</dd></div>
+          <div v-if="task.screenedCandidateCount != null"><dt>资料复筛</dt><dd>{{ task.screeningPassedCount }} / {{ task.screenedCandidateCount }} 篇通过</dd></div>
+          <div v-else-if="task.screenedArticleCount != null"><dt>筛选通过</dt><dd>{{ task.screenedArticleCount }} 条</dd></div>
           <div v-if="!isDigest"><dt>目标字数</dt><dd>{{ targetWords.toLocaleString() }} 字</dd></div>
           <div><dt>生成方式</dt><dd>{{ generationModeLabel }}</dd></div>
           <div><dt>执行尝试</dt><dd>{{ task.attemptCount ? `第 ${task.attemptCount} 次` : '未记录' }}</dd></div>
@@ -38,12 +41,13 @@
     </div>
     </div>
     <footer class="ps-task-footer"><span>{{ taskStateLabel }}</span><div><el-button v-if="canCancel" :loading="acting" @click="cancelTask">取消任务</el-button><el-button v-else-if="canRetry" :loading="acting" @click="retryTask">重新生成</el-button><span v-else-if="task.cancelRequested" class="ps-task-action-note">取消请求处理中</span><el-button @click="copyTask">复制任务</el-button><el-button type="primary" :disabled="!canOpenReport" @click="openReport">{{ isDigest ? '打开简报' : '打开报告' }}</el-button></div></footer>
-    <el-dialog v-model="showMaterials" title="输入资料清单" width="min(680px, calc(100vw - 32px))"><p class="ps-material-note">以下为提交时的资料快照，不代表当前解析或访问状态。点击标题查看最新详情。</p><ol class="ps-task-materials"><li v-for="(item, index) in materialRows" :key="`${item.type}-${item.id}-${index}`"><span>{{ index + 1 }}</span><div><router-link v-if="item.path" :to="item.path">{{ item.title || '未命名资料' }}</router-link><strong v-else>{{ item.title || '未命名资料' }}</strong><small>{{ item.typeLabel }} · {{ item.sourceLabel }}</small></div></li></ol><PortalEmptyState v-if="!materialRows.length" title="没有输入资料" description="该任务没有记录输入资料清单。" /></el-dialog>
+    <el-dialog v-model="showMaterials" title="输入资料清单" width="min(680px, calc(100vw - 32px))"><p class="ps-material-note">以下为提交时的资料快照，不代表当前解析或访问状态。点击标题查看最新详情。</p><ol class="ps-task-materials"><li v-for="(item, index) in materialRows" :key="`${item.type}-${item.id}-${index}`"><span>{{ index + 1 }}</span><div><router-link v-if="item.path" :to="item.path">{{ item.title || '未命名资料' }}</router-link><strong v-else>{{ item.title || '未命名资料' }}</strong><small>{{ item.typeLabel }} · {{ item.sourceLabel }}</small><small v-if="item.screening">{{ [item.screening.category, ...item.screening.tags].join(' · ') }}</small></div></li></ol><PortalEmptyState v-if="!materialRows.length" title="没有输入资料" description="该任务没有记录输入资料清单。" /></el-dialog>
     </template>
   </div>
 </template>
 
 <script setup>
+import { returnToPreviousPage } from '@/utils/portal/openContent'
 import { formatBusinessTime } from '@/utils/portal/businessTime'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -75,7 +79,6 @@ const progress = computed(() => { const value = Number(task.value.progress); ret
 const reportTypeLabel = computed(() => ({ research: '科研报告', 'research-demand': '科研需求报告', 'technology-route': '技术路线报告', 'project-demand': '科技项目需求表', daily: '日报', weekly: '周报', monthly: '月报' })[task.value.type] || task.value.type || '科研报告')
 const isDigest = computed(() => ['daily', 'weekly', 'monthly', '日报', '周报', '月报'].includes(String(task.value.type || task.value.reportType || '')))
 const taskHomePath = computed(() => isDigest.value ? '/portal/digests' : '/portal/research')
-const taskHomeLabel = computed(() => isDigest.value ? '情报简报' : '科研工作台')
 const taskStateLabel = computed(() => ({ completed: '生成完成', failed: '生成失败', dead_letter: '待人工处理', cancelled: '已取消', queued: '等待生成', running: task.value.cancelRequested ? '取消中' : '正在生成' })[task.value.status] || '状态未记录')
 const failureNotice = computed(() => ['failed', 'dead_letter'].includes(task.value.status) ? task.value.errorMessage || '系统未记录具体失败原因，请联系管理员检查执行日志。' : '')
 const terminalTaskStatuses = ['completed', 'failed', 'dead_letter', 'cancelled']

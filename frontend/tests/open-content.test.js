@@ -3,17 +3,17 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { parse } from '@vue/compiler-sfc'
 import { baseParse } from '@vue/compiler-dom'
-import { openPortalContent, returnFromPaperDetail, returnFromNewsDetail, returnFromKnowledgeDetail } from '../src/utils/portal/openContent.js'
+import { openPortalContent, returnToPreviousPage, returnFromPaperDetail, returnFromNewsDetail, returnFromKnowledgeDetail } from '../src/utils/portal/openContent.js'
 
 test('uploaded document returns to the originating portal page and falls back to the basket', () => {
   for (const back of ['/portal/basket?page=2', '/portal/research/reports/33', '/portal/knowledge']) {
     const calls = []
-    returnFromKnowledgeDetail({ options: { history: { state: { back } } }, back: () => calls.push('back'), push: path => calls.push(path) })
+    returnFromKnowledgeDetail({ options: { history: { state: { back } } }, back: () => calls.push('back'), replace: path => calls.push(path) })
     assert.deepEqual(calls, ['back'])
   }
   for (const back of [null, '/login', 'https://example.com/portal/basket']) {
     const calls = []
-    returnFromKnowledgeDetail({ options: { history: { state: { back } } }, back: () => calls.push('back'), push: path => calls.push(path) })
+    returnFromKnowledgeDetail({ options: { history: { state: { back } } }, back: () => calls.push('back'), replace: path => calls.push(path) })
     assert.deepEqual(calls, ['/portal/basket'])
   }
 })
@@ -36,7 +36,7 @@ test('news, paper details and other navigation all stay in place', async () => {
 
 test('news return restores in-app history and falls back to news for a direct visit', async () => {
   const calls = []
-  const router = { options: { history: { state: { back: '/portal/news?q=管道&page=2&size=20&view=card' } } }, back: () => calls.push('back'), push: path => calls.push(path) }
+  const router = { options: { history: { state: { back: '/portal/news?q=管道&page=2&size=20&view=card' } } }, back: () => calls.push('back'), replace: path => calls.push(path) }
   await returnFromNewsDetail(router)
   assert.deepEqual(calls, ['back'])
   for (const back of [null, '/login', 'https://external.example/portal/news']) {
@@ -83,7 +83,7 @@ test('news places Back to the left of the title in the same row', () => {
 
 test('paper return preserves in-app list history and falls back for direct or external entry', async () => {
   const calls = []
-  const router = { options: { history: { state: { back: '/portal/papers?q=test&page=2&size=20' } } }, back: () => calls.push('back'), push: path => calls.push(path) }
+  const router = { options: { history: { state: { back: '/portal/papers?q=test&page=2&size=20' } } }, back: () => calls.push('back'), replace: path => calls.push(path) }
   await returnFromPaperDetail(router)
   assert.deepEqual(calls, ['back'])
   for (const back of [null, '/login', 'https://external.example/portal/papers', '//external.example/portal']) {
@@ -108,4 +108,16 @@ test('news detail places basket actions beside metadata in the same information 
   assert.ok(children[0].props.some(prop => prop.value?.content === 'ps-article-meta'))
   assert.ok(children[1].props.some(prop => prop.value?.content === 'ps-article-actions'))
   assert.equal(children[1].children.filter(child => child.type === 1)[0].tag, 'el-button')
+})
+
+test('management detail Back restores a previous management page and direct entry replaces the detail', () => {
+  const calls = []
+  const router = {
+    options: { history: { state: { back: '/pipeline/dashboard?tab=recent' } } },
+    back: () => calls.push('back'), replace: path => calls.push(path)
+  }
+  returnToPreviousPage(router, '/pipeline/intelligence')
+  router.options.history.state.back = '/login?redirect=/pipeline/intelligence'
+  returnToPreviousPage(router, '/pipeline/intelligence')
+  assert.deepEqual(calls, ['back', '/pipeline/intelligence'])
 })

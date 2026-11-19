@@ -19,8 +19,10 @@ export function readListQuery(query, defaults, { pageSizes = [10, 20, 50], maxPa
 
 // Store only list controls in the URL; returning from a detail restores the query.
 export function useListQuery(defaults, options = {}) {
-  const route = useRoute()
-  const router = useRouter()
+  return bindListQuery(useRoute(), useRouter(), defaults, options)
+}
+
+export function bindListQuery(route, router, defaults, options = {}) {
   const path = route.path
   const query = reactive(readListQuery(route.query, defaults, options))
   let restored = ''

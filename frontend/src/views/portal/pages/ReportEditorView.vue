@@ -5,10 +5,11 @@
     </div>
     <div v-else-if="loadError && !loaded" class="ps-inline-state is-warning" role="alert">
       <WarningFilled /><span>{{ loadError }}</span><el-button class="ps-ui-action" @click="loadReport">重新加载</el-button>
+      <el-button @click="returnToPreviousPage(router, isDigest ? '/portal/digests' : '/portal/research')">返回上一页</el-button>
     </div>
     <template v-else-if="loaded">
     <header class="ps-editor-topbar">
-      <div class="ps-editor-title"><el-button :icon="ArrowLeft" circle class="ps-ui-action" :aria-label="isDigest ? '返回情报简报' : '返回科研工作台'" @click="router.push(isDigest ? '/portal/digests' : '/portal/research')" /><span><strong>{{ report.title }}</strong><small>{{ reportTypeLabel }}</small></span></div>
+      <div class="ps-editor-title"><el-button :icon="ArrowLeft" circle class="ps-ui-action" aria-label="返回上一页" title="返回上一页" @click="returnToPreviousPage(router, isDigest ? '/portal/digests' : '/portal/research')" /><span><strong>{{ report.title }}</strong><small>{{ reportTypeLabel }}</small></span></div>
       <div class="ps-save-state"><span :class="{ 'is-saving': saving }"></span>{{ saveLabel }}<b>{{ wordCount.toLocaleString() }} 字</b></div>
       <div class="ps-editor-actions">
         <el-button :type="outlineVisible ? 'primary' : 'default'" :plain="outlineVisible" :aria-pressed="outlineVisible" @click="outlineVisible = !outlineVisible">目录</el-button>
@@ -122,6 +123,7 @@
 </template>
 
 <script setup>
+import { returnToPreviousPage } from '@/utils/portal/openContent'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'

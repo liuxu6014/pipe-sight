@@ -2,7 +2,7 @@
   <div class="ps-page ps-reading-page">
     <PortalEmptyState v-if="detailLoading" title="正在加载资讯" description="正在读取最新的权限和内容状态。" />
     <PortalEmptyState v-else-if="detailError" title="资讯暂时无法读取" :description="detailError" action-label="重新加载" @action="loadArticle" />
-    <PortalEmptyState v-else-if="!article" title="资讯不存在" description="该资讯可能已下线，或当前账号没有访问权限。" action-label="返回科技资讯" @action="router.push('/portal/news')" />
+    <PortalEmptyState v-else-if="!article" title="资讯不存在" description="该资讯可能已下线，或当前账号没有访问权限。" action-label="返回上一页" @action="returnFromNewsDetail(router)" />
     <div v-else class="ps-reading-layout">
       <article class="ps-article">
         <header class="ps-article-head ps-detail-header">

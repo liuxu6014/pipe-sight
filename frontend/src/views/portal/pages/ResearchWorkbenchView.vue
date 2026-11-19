@@ -16,7 +16,7 @@
         <el-skeleton v-if="pageLoading && !pagedReports.length" :rows="5" animated />
         <template v-else>
           <div ref="listRegion" class="ps-list-scroll ps-report-list-region" aria-label="科研报告列表">
-            <el-table :data="pagedReports" row-key="key" :max-height="listHeight" style="width: 100%" class="ps-report-records-table" :default-sort="{ prop: 'updatedAt', order: 'descending' }" @sort-change="changeReportSort">
+            <el-table :data="pagedReports" row-key="key" :max-height="listHeight" style="width: 100%" class="ps-report-records-table" :default-sort="tableSort" @sort-change="changeReportSort">
               <el-table-column prop="title" label="报告名称" min-width="320" sortable="custom" :sort-orders="['ascending', 'descending']">
                 <template #default="{ row: report }">
                   <div class="ps-report-identity">
@@ -50,13 +50,14 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { toRefs, computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Document, Plus, Search } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import usePortalStore from '@/store/modules/portal'
 import { buildPersonalReports } from '@/utils/portal/personalReports'
 import useUserStore from '@/store/modules/user'
+import { bindListQuery } from '@/utils/portal/listQuery'
 import { usePagedResults } from '@/utils/portal/usePagedResults'
 import { reportSummaryRow } from '@/utils/portal/reportSummary'
 import { isDigestType } from '../utils/routing'
@@ -128,13 +129,14 @@ async function deleteReport(report) {
     scheduleRefresh()
   }
 }
-const keyword = ref(String(route.query.q || ''))
+const controls = bindListQuery(route, router, { q: '', status: '', sort: 'updated-desc', page: 1, size: 10 })
+const { q: keyword, sort, page: currentPage, size: pageSize } = toRefs(controls)
 const normalizeStatus = value => value === 'completed' ? 'generated' : ['active', 'generated', 'failed', 'cancelled', 'unavailable'].includes(value) ? value : ''
-const status = ref(normalizeStatus(route.query.status))
-watch(() => route.query, query => { keyword.value = String(query.q || ''); status.value = normalizeStatus(query.status) })
-const currentPage = ref(1)
-const pageSize = ref(10)
-const sort = ref('updated-desc')
+const status = computed({ get: () => normalizeStatus(controls.status), set: value => { controls.status = value } })
+const tableSort = computed(() => ({
+  prop: sort.value.startsWith('title') ? 'title' : 'updatedAt',
+  order: sort.value === 'title' || sort.value === 'updated-asc' ? 'ascending' : 'descending'
+}))
 function changeReportSort({ prop, order }) {
   sort.value = prop === 'title' && order ? (order === 'descending' ? 'title-desc' : 'title')
     : order === 'ascending' ? 'updated-asc' : 'updated-desc'
@@ -144,7 +146,6 @@ const params = computed(() => ({ pageNum: currentPage.value, pageSize: pageSize.
 const { rows: pageRows, total, error: loadError, loading: pageLoading, refresh: loadReportPage, invalidate: invalidateReportPage } = usePagedResults(listPipelineResearchReports, params, computed(() => portalStore.workspaceEpoch), currentPage)
 const researchReports = computed(() => pageRows.value.map(reportSummaryRow))
 const pagedReports = researchReports
-watch([keyword, status, sort, pageSize], () => { currentPage.value = 1 }, { flush: 'sync' })
 
 function statusClass(value) { return ({ active: 'running', generated: 'success', failed: 'danger', cancelled: 'muted' })[value] || 'muted' }
 watch(() => researchReports.value.some(item => item.status === 'active'), scheduleRefresh)

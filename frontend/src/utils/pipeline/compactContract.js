@@ -48,3 +48,6 @@ export function categoryPayload(form) {
   return { name: form.name.trim(), prompt: form.prompt.trim(), modelId: form.modelId || null,
     appliesTo: form.appliesTo || 'all', sortOrder: form.sortOrder ?? 0, isEnabled: Boolean(form.isEnabled) }
 }
+export function digestTemplatesFor(templates, cadence) {
+  return templates.filter(item => item.purpose === 'digest' && [cadence, 'all'].includes(item.digestCadence))
+}

@@ -78,10 +78,11 @@ import PortalEmptyState from '../components/PortalEmptyState.vue'
 import usePortalStore from '@/store/modules/portal'
 import { getPipelineContentFilters, deletePipelineWorkspaceItem, savePipelineWorkspaceItem, searchPipelineIntelligence } from '@/api/pipeline/intelligence'
 import { useListQuery, useListRequest, useListWorkspace, validPage } from '@/utils/portal/listQuery'
+import { cleanResultMeta } from '@/utils/portal/discovery'
 import { openPortalContent } from '@/utils/portal/openContent'
 
-const props = defineProps({ inDialog: Boolean })
-const emit = defineEmits(['result-opened'])
+const props = defineProps({ inDialog: Boolean, initialFilters: Object })
+const emit = defineEmits(['result-opened', 'filters-changed'])
 const searchInput = ref(null)
 
 const router = useRouter()
@@ -90,7 +91,7 @@ const facets = props.inDialog ? null : useListRequest(() => ({}), getPipelineCon
 const directionOptions = computed(() => [...new Set([...(facets?.data.value?.categories || []), ...directions.value])])
 const maxPageNum = 100
 const defaults = { q: '', mode: 'keyword', type: 'all', date: 'all', source: 'all', directions: [], page: 1, size: 10 }
-const query = props.inDialog ? reactive(defaults) : useListQuery(defaults, { maxPage: maxPageNum })
+const query = props.inDialog ? reactive({ ...defaults, ...props.initialFilters }) : useListQuery(defaults, { maxPage: maxPageNum })
 function applySavedSearch(filters) { if (!applySavedSearchQuery(query, filters, 'search')) reload() }
 const { q: queryKeyword, type: activeType, date: dateRange, source, directions, page: currentPage, size: pageSize } = toRefs(query)
 const searchMode = computed({ get: () => query.mode === 'semantic' ? 'semantic' : 'keyword', set: value => { query.mode = value === 'semantic' ? 'semantic' : 'keyword' } })
@@ -105,8 +106,12 @@ const total = computed(() => Number(data.value?.total || 0))
 const counts = computed(() => data.value?.counts || {})
 const pageLimitExceeded = computed(() => total.value > pageSize.value * maxPageNum)
 
-if (props.inDialog) watch([queryKeyword, activeType, pageSize], () => { currentPage.value = 1 })
-else watch(queryKeyword, value => { draftKeyword.value = value })
+if (props.inDialog) {
+  watch([queryKeyword, activeType, pageSize], () => { currentPage.value = 1 })
+  watch([queryKeyword, activeType, pageSize, currentPage], ([q, type, size, page]) => {
+    emit('filters-changed', { q, type, size, page })
+  })
+} else watch(queryKeyword, value => { draftKeyword.value = value })
 function applyKeyword() {
   if (props.inDialog) return
   if (queryKeyword.value === draftKeyword.value) reload()

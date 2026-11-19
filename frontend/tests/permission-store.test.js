@@ -81,7 +81,7 @@ function projectDynamicRoutes() {
     .replace(/^import .*\n/gm, '')
     .replace(/^export const /gm, 'const ')
     .replace('export default router;', 'globalThis.result = dynamicRoutes')
-  const context = vm.createContext({ Layout: {}, createWebHistory: () => ({}), createRouter: () => ({ beforeEach() {} }), legacyDetailGuard: () => () => {}, ElMessage: { warning() {} } })
+  const context = vm.createContext({ Layout: {}, trackWizardVisit() {}, createWebHistory: () => ({}), createRouter: () => ({ beforeEach() {} }), legacyDetailGuard: () => () => {}, ElMessage: { warning() {} } })
   vm.runInContext(source, context)
   return context.result
 }

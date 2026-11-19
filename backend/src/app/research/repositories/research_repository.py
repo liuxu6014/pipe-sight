@@ -449,7 +449,7 @@ class ResearchDao:
         return list(await db.scalars(query.order_by(PipelineArticle.published_at.desc(), PipelineArticle.id)))
 
     @classmethod
-    async def search_digest_candidates(cls, db, filters) -> tuple[list[Any], int]:
+    async def search_digest_candidates(cls, db, filters, *, all_candidates=False) -> tuple[list[Any], int]:
         from datetime import datetime, timedelta  # noqa: PLC0415
         from zoneinfo import ZoneInfo  # noqa: PLC0415
 
@@ -474,16 +474,18 @@ class ResearchDao:
             .over(partition_by=title, order_by=(PipelineArticle.published_at.desc(), PipelineArticle.id))
             .label('rank'),
         ).subquery()
-        total = await db.scalar(select(func.count()).select_from(ranked).where(ranked.c.rank == 1))
         query = (
             select(PipelineArticle)
             .join(ranked, ranked.c.id == PipelineArticle.id)
             .where(ranked.c.rank == 1)
             .order_by(PipelineArticle.published_at.desc(), PipelineArticle.id)
             .options(load_only(PipelineArticle.id, PipelineArticle.title, PipelineArticle.published_at))
-            .limit(filters.page_size)
-            .offset((filters.page_num - 1) * filters.page_size)
         )
+        if all_candidates:
+            rows = list(await db.scalars(query))
+            return rows, len(rows)
+        total = await db.scalar(select(func.count()).select_from(ranked).where(ranked.c.rank == 1))
+        query = query.limit(filters.page_size).offset((filters.page_num - 1) * filters.page_size)
         return list(await db.scalars(query)), int(total or 0)
 
 

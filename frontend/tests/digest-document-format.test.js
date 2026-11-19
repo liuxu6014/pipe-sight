@@ -9,7 +9,9 @@ import { cleanSource } from '../src/utils/portal/discovery.js'
 
 test('the digest header shows a generated masthead and a single localized period, preserving custom titles', () => {
   const period = ['2025-04-01', '2025-04-30']
-  assert.equal(digestMasthead('管网科技情报月报 2025年4月', period), '管网科技情报月报')
+  assert.equal(digestMasthead('科技情报月报 2025年4月', period), '科技情报月报')
+  assert.equal(digestMasthead('管网科技情报月报 2025年4月', period), '科技情报月报')
+  assert.equal(digestMasthead('科技情报周报 2025-04-07 至 2025-04-13', ['2025-04-07', '2025-04-13']), '科技情报周报')
   assert.equal(digestMasthead('管网科技情报月报 2025年4月 · 检测专题', period), '管网科技情报月报 2025年4月 · 检测专题')
   assert.equal(digestPeriodLabel(period), '2025年4月1日到4月30日')
   assert.equal(digestPeriodLabel(['2025-12-29', '2026-01-04']), '2025年12月29日到2026年1月4日')

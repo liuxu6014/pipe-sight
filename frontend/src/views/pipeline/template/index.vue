@@ -1,5 +1,8 @@
 <template>
   <div class="app-container pipeline-page pipeline-template-page ws-list-page" :class="{ 'is-personal': personal }">
+    <nav class="template-purposes" aria-label="模板用途">
+      <el-segmented v-model="activePurpose" :options="templatePurposes" aria-label="模板用途" />
+    </nav>
     <section class="template-toolbar" aria-label="模板筛选与操作">
       <el-input v-model="keyword" :prefix-icon="Search" clearable aria-label="搜索模板" placeholder="搜索模板名称或说明" />
       <el-select v-model="status" aria-label="模板状态">
@@ -8,9 +11,9 @@
         <el-option label="已停用" value="disabled" />
         <el-option v-if="personal" label="已删除" value="deleted" />
       </el-select>
-      <el-button v-if="canSaveTemplate" type="primary" :icon="Plus" @click="createTemplate">新建模板</el-button>
+      <el-button v-if="canSaveTemplate" type="primary" :icon="Plus" :disabled="activePurpose === 'digest' && (loading || !!templateError)" @click="createTemplate">新建模板</el-button>
     </section>
-    <nav class="template-categories" aria-label="模板类别">
+    <nav v-if="activePurpose === 'research'" class="template-categories" aria-label="科研报告类型">
       <el-segmented v-model="activeCategory" :options="categories" :props="{ label: 'name', value: 'value' }">
         <template #default="{ item }"><span>{{ item.name }}</span><span class="template-category-count">{{ countCategory(item.value) }}</span></template>
       </el-segmented>
@@ -30,9 +33,9 @@
             </header>
             <p class="template-description">{{ item.description || '暂无模板说明' }}</p>
             <dl class="template-metadata">
-              <div><dt>报告类型</dt><dd>{{ reportTypeLabel(item) }}</dd></div>
+              <div><dt>{{ item.purpose === 'digest' ? '适用周期' : '报告类型' }}</dt><dd>{{ reportTypeLabel(item) }}</dd></div>
               <div><dt>文本模型</dt><dd>{{ modelLabel(item.modelId) }}</dd></div>
-              <div><dt>章节结构</dt><dd>{{ item.sections?.length ? `${item.sections.length} 个章节` : '未配置' }}</dd></div>
+              <div v-if="item.purpose === 'research'"><dt>章节结构</dt><dd>{{ item.sections?.length ? `${item.sections.length} 个章节` : '未配置' }}</dd></div>
               <div><dt>最近更新</dt><dd>{{ item.updatedAt || '—' }}</dd></div>
             </dl>
           </div>
@@ -50,14 +53,14 @@
     <div class="template-result-count"><el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :total="total" :page-sizes="[10, 20, 50]" layout="total, sizes, ->, prev, pager, next, jumper" background aria-label="模板列表分页" /></div>
     <el-dialog
       v-model="editorVisible"
-      :title="editingTemplate?.id ? '编辑模板' : '新建模板'"
+      :title="`${editingTemplate?.id ? '编辑' : '新建'}${form.purpose === 'digest' ? '简报' : '科研报告'}模板`"
       width="min(960px, calc(100vw - 32px))"
       class="ps-centered-dialog template-dialog"
       append-to-body
       align-center
       :close-on-click-modal="false"
     >
-      <el-form label-position="top" :model="form" class="template-editor-form">
+      <el-form label-position="top" :model="form" class="template-editor-form" :class="{ 'is-digest': form.purpose === 'digest' }">
         <section class="template-editor-section" aria-label="模板内容">
           <h3>模板内容</h3>
           <div class="template-form-grid">
@@ -69,18 +72,23 @@
                 <el-option v-for="category in categories.filter(item => item.value !== 'all')" :key="category.value" :label="category.name" :value="category.value" />
               </el-select>
             </el-form-item>
+            <el-form-item v-else label="适用周期" required>
+              <el-select v-model="form.digestCadence" aria-label="简报适用周期">
+                <el-option v-for="(label, value) in digestCadences" :key="value" :label="label" :value="value" />
+              </el-select>
+            </el-form-item>
           </div>
-          <p class="template-contract-note">模板按报告类型展示；同一类型可创建多个模板。</p>
           <el-form-item label="模板说明">
             <el-input v-model="form.description" type="textarea" :rows="2" />
           </el-form-item>
           <el-form-item label="正文生成提示词" required>
-            <el-input v-model="form.prompt" type="textarea" :rows="7" />
+            <el-input v-model="form.prompt" type="textarea" :rows="form.purpose === 'digest' ? 3 : 7" />
           </el-form-item>
         </section>
 
         <section class="template-editor-section" aria-label="生成设置">
-          <h3>生成设置</h3>
+          <DigestScreeningRules v-if="form.purpose === 'digest'" v-model:categories="form.screeningCategories" v-model:prompt="form.screeningPrompt" :default-prompt="defaultScreeningPrompt" />
+          <h3 v-else>生成设置</h3>
           <el-alert v-if="modelError" :title="modelError" type="warning" :closable="false" class="template-contract-note">
             <template #default><el-button plain @click="loadModels">重新加载模型</el-button></template>
           </el-alert>
@@ -89,21 +97,22 @@
               <el-option v-for="model in textModels" :key="model.modelId" :label="model.modelName || model.modelCode" :value="model.modelId" />
             </el-select>
           </el-form-item>
-          <p v-if="personal" class="template-contract-note">正文与图片模型由管理员统一配置。</p>
+          <p v-if="form.purpose === 'digest'" class="template-contract-note">筛选和写作使用管理员配置的简报生成模型。</p>
+          <p v-else-if="personal" class="template-contract-note">正文与图片模型由管理员统一配置。</p>
           <p v-else class="template-contract-note">正文与图片模型在<router-link to="/pipeline/model">模型管理 → 用途配置</router-link>中统一选择。</p>
           <div class="template-form-grid">
             <el-form-item label="启用模板"><el-switch v-model="form.isEnabled" aria-label="启用模板" /></el-form-item>
-            <el-form-item label="启用配图"><el-switch v-model="form.imageConfig.enabled" aria-label="启用配图" /></el-form-item>
+            <el-form-item v-if="form.purpose === 'research'" label="启用配图"><el-switch v-model="form.imageConfig.enabled" aria-label="启用配图" /></el-form-item>
           </div>
-          <el-form-item v-if="form.imageConfig.enabled" label="配图数量">
+          <el-form-item v-if="form.purpose === 'research' && form.imageConfig.enabled" label="配图数量">
             <el-input-number v-model="form.imageConfig.count" :min="1" :max="10" />
           </el-form-item>
-          <el-form-item v-if="form.imageConfig.enabled" label="图片生成提示词">
+          <el-form-item v-if="form.purpose === 'research' && form.imageConfig.enabled" label="图片生成提示词">
             <el-input v-model="form.imageConfig.prompt" type="textarea" :rows="3" placeholder="填写配图内容和风格要求" />
           </el-form-item>
         </section>
 
-        <section class="template-editor-section template-editor-sections" aria-label="章节结构">
+        <section v-if="form.purpose === 'research'" class="template-editor-section template-editor-sections" aria-label="章节结构">
           <h3>章节结构</h3>
           <div v-for="(section, index) in form.sections" :key="section.id" class="template-section-row">
             <span>{{ index + 1 }}</span>
@@ -118,11 +127,27 @@
       </el-form>
       <template #footer>
         <el-button @click="editorVisible = false">取消</el-button>
-        <el-button @click="previewTemplate({ ...form, status: form.isEnabled ? 'enabled' : 'disabled' })">预览草稿</el-button>
+        <el-button @click="previewTemplate(form)">预览草稿</el-button>
         <el-button v-if="canSaveTemplate" type="primary" :loading="saving" @click="saveTemplate">保存模板内容</el-button>
       </template>
     </el-dialog>
-    <el-dialog v-model="previewVisible" :title="previewingTemplate?.name || '模板预览'" width="min(720px, calc(100vw - 32px))" class="ps-centered-dialog template-dialog" append-to-body align-center><div v-if="previewingTemplate" class="template-preview-dialog"><div class="preview-meta"><el-tag :type="statusTag(previewingTemplate.status)" effect="plain">{{ statusLabel(previewingTemplate.status) }}</el-tag><span>{{ reportTypeLabel(previewingTemplate) }}</span></div><el-alert title="仅预览模板配置与提示词，不生成报告、不调用模型。" type="info" :closable="false" class="template-contract-note" /><el-form label-position="top"><el-form-item label="正文生成提示词（只读）"><el-input :model-value="previewingTemplate.prompt" type="textarea" :rows="8" readonly /></el-form-item></el-form><p class="preview-description">{{ previewingTemplate.description || '暂无模板说明' }}</p><div v-if="previewingTemplate.sections?.length" class="preview-sections"><div v-for="(section, index) in previewingTemplate.sections" :key="section.id || index" class="preview-section"><span>{{ index + 1 }}</span><div><strong>{{ section.title || '未命名章节' }}</strong><small>{{ section.required ? '必填' : '选填' }} · {{ section.words || '—' }} 字</small></div></div></div><el-empty v-else description="当前模板尚未配置章节结构" :image-size="72" /></div></el-dialog>
+    <el-dialog v-model="previewVisible" :title="previewingTemplate?.name || '模板预览'" width="min(720px, calc(100vw - 32px))" class="ps-centered-dialog template-dialog" append-to-body align-center>
+      <div v-if="previewingTemplate" class="template-preview-dialog">
+        <div class="preview-meta"><el-tag :type="statusTag(previewingTemplate.status)" effect="plain">{{ statusLabel(previewingTemplate.status) }}</el-tag><span>{{ reportTypeLabel(previewingTemplate) }}</span></div>
+        <el-alert title="仅预览模板配置与提示词，不生成报告、不调用模型。" type="info" :closable="false" class="template-contract-note" />
+        <el-form label-position="top">
+          <el-form-item label="正文生成提示词（只读）"><el-input :model-value="previewingTemplate.prompt" type="textarea" :rows="8" readonly /></el-form-item>
+          <DigestScreeningRules v-if="previewingTemplate.purpose === 'digest'" :categories="previewingTemplate.screeningCategories" :prompt="previewingTemplate.screeningPrompt" :default-prompt="defaultScreeningPrompt" readonly />
+        </el-form>
+        <p v-if="previewingTemplate.description" class="preview-description">{{ previewingTemplate.description }}</p>
+        <template v-if="previewingTemplate.purpose === 'research'">
+          <div v-if="previewingTemplate.sections?.length" class="preview-sections">
+            <div v-for="(section, index) in previewingTemplate.sections" :key="section.id || index" class="preview-section"><span>{{ index + 1 }}</span><div><strong>{{ section.title || '未命名章节' }}</strong><small>{{ section.required ? '必填' : '选填' }} · {{ section.words || '—' }} 字</small></div></div>
+          </div>
+          <el-empty v-else description="当前模板尚未配置章节结构" :image-size="72" />
+        </template>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -134,9 +159,14 @@ import { createPipelineTemplate, deletePipelineTemplate, restorePipelineTemplate
 import { listModelAll } from '@/api/ai/model'
 import { modelsFor } from '@/utils/pipeline/compactContract'
 import { checkPermi } from '@/utils/permission'
+import DigestScreeningRules from '@/views/portal/components/DigestScreeningRules.vue'
+import { screeningRulesError } from '@/utils/portal/digestScreeningRules'
 const { personal = false } = defineProps({ personal: Boolean })
 const emit = defineEmits(['changed'])
 const activeCategory = ref('all'), keyword = ref(''), status = ref('all')
+const activePurpose = ref('research')
+const templatePurposes = [{ label: '科研报告', value: 'research' }, { label: '情报简报', value: 'digest' }]
+const digestCadences = { all: '周报和月报', weekly: '周报', monthly: '月报' }
 const currentPage = ref(1), pageSize = ref(10), total = ref(0), categoryCounts = ref({})
 let listRequest = 0, searchTimer
 const editorVisible = ref(false), previewVisible = ref(false), previewingTemplate = ref(null), editingTemplate = ref(null)
@@ -145,12 +175,16 @@ const canSaveTemplate = computed(() => personal || checkPermi(['pipeline:templat
 // These are the portal report keys, not new values for the API's purpose enum.
 const categories = [{ name: '全部模板', value: 'all', icon: Files }, { name: '科研需求报告', value: 'research-demand', icon: Document }, { name: '技术路线报告', value: 'technology-route', icon: Document }, { name: '科技项目需求表', value: 'project-demand', icon: Document }]
 function reportTypeOf(item) { return ['research-demand', 'technology-route', 'project-demand'].find(key => key === item?.reportType || key === item?.purpose) || '' }
-function reportTypeLabel(item) { return ({ 'research-demand': '科研需求报告', 'technology-route': '技术路线报告', 'project-demand': '科技项目需求表' })[reportTypeOf(item)] || '报告类型待绑定' }
+function reportTypeLabel(item) {
+ if (item.purpose === 'digest') return digestCadences[item.digestCadence] || '周期待绑定'
+ return ({ 'research-demand': '科研需求报告', 'technology-route': '技术路线报告', 'project-demand': '科技项目需求表' })[reportTypeOf(item)] || '报告类型待绑定'
+}
 const templates = ref([]), models = ref([]), modelError = ref('')
+const defaultScreeningCategories = ref([]), defaultScreeningPrompt = ref('')
 const unassignedCount = computed(() => categoryCounts.value.unassigned || 0)
 const textModels = computed(() => modelsFor(models.value, 'text_generate'))
 const imageModels = computed(() => modelsFor(models.value, 'image_generate'))
-const form = reactive({ name: '', purpose: 'research', reportType: '', prompt: '', description: '', modelId: null, imageModelId: null, sections: [], imageConfig: { enabled: false }, isEnabled: true })
+const form = reactive({ name: '', purpose: 'research', reportType: '', digestCadence: 'all', screeningPrompt: '', screeningCategories: [], prompt: '', description: '', modelId: null, imageModelId: null, sections: [], imageConfig: { enabled: false }, isEnabled: true })
 const filteredTemplates = computed(() => templates.value)
 function countCategory(value) { return categoryCounts.value[value] || 0 }
 function modelLabel(id) {
@@ -159,28 +193,49 @@ function modelLabel(id) {
  return model?.modelName || model?.modelCode || '已配置模型'
 }
 function statusTag(value) { return value === 'enabled' ? 'success' : 'info' }
+function templateStatus(item) { return item.isDeleted ? 'deleted' : item.isEnabled ? 'enabled' : 'disabled' }
 function statusLabel(value) { return ({ enabled: '已启用', disabled: '已停用', deleted: '已删除' })[value] || '已停用' }
 function resetForm(item = null) {
- Object.assign(form, { name: item?.name || '', purpose: item?.purpose || 'research', reportType: reportTypeOf(item) || (activeCategory.value === 'all' ? '' : activeCategory.value), prompt: item?.prompt || '', description: item?.description || '', modelId: item?.modelId ?? null, imageModelId: item?.imageModelId ?? null, sections: (item?.sections || []).map(section => ({ ...section })), imageConfig: item ? JSON.parse(JSON.stringify(item.imageConfig || {})) : {}, isEnabled: item?.isEnabled ?? true })
+ Object.assign(form, {
+  name: item?.name || '', purpose: item?.purpose || activePurpose.value,
+  reportType: reportTypeOf(item) || (activeCategory.value === 'all' ? '' : activeCategory.value),
+  digestCadence: item?.digestCadence || 'all', screeningPrompt: item ? item.screeningPrompt || '' : defaultScreeningPrompt.value,
+  screeningCategories: (item ? item.screeningCategories || [] : defaultScreeningCategories.value).map(row => ({ ...row })),
+  prompt: item?.prompt || '', description: item?.description || '', modelId: item?.modelId ?? null, imageModelId: item?.imageModelId ?? null,
+  sections: (item?.sections || []).map(section => ({ ...section })), imageConfig: item ? JSON.parse(JSON.stringify(item.imageConfig || {})) : {}, isEnabled: item?.isEnabled ?? true
+ })
  form.imageConfig.enabled ??= false
  form.imageConfig.count ??= 1
  form.imageConfig.prompt ??= ''
 }
 function createTemplate() { if (!canSaveTemplate.value) return; editingTemplate.value = null; resetForm(); editorVisible.value = true }
 async function editTemplate(item) { if (!canSaveTemplate.value) return; try { const { data } = await getPipelineTemplate(item.id); editingTemplate.value = data; resetForm(data); editorVisible.value = true } catch (error) { ElMessage.error(error?.msg || error?.message || '模板详情加载失败') } }
-async function previewTemplate(item) { try { const detail = item.id ? (await getPipelineTemplate(item.id)).data : item; previewingTemplate.value = JSON.parse(JSON.stringify(detail)); previewVisible.value = true } catch (error) { ElMessage.error(error?.msg || error?.message || '模板详情加载失败') } }
+async function previewTemplate(item) {
+ try {
+  const detail = item.id ? (await getPipelineTemplate(item.id)).data : item
+  previewingTemplate.value = { ...JSON.parse(JSON.stringify(detail)), status: templateStatus(detail) }
+  previewVisible.value = true
+ } catch (error) { ElMessage.error(error?.msg || error?.message || '模板详情加载失败') }
+}
 async function loadTemplates() {
  const request = ++listRequest
  loading.value = true; templateError.value = ''
  try {
-  const res = await listPipelineTemplates({ page: currentPage.value, pageSize: pageSize.value, keyword: keyword.value.trim(), reportType: activeCategory.value === 'all' ? undefined : activeCategory.value, category: 'research', status: status.value })
+  const res = await listPipelineTemplates({
+   page: currentPage.value, pageSize: pageSize.value, keyword: keyword.value.trim(), category: activePurpose.value,
+   reportType: activePurpose.value === 'research' && activeCategory.value !== 'all' ? activeCategory.value : undefined, status: status.value
+  })
   if (request !== listRequest) return
+  if (activePurpose.value === 'digest') {
+    defaultScreeningCategories.value = res.data?.defaultScreeningCategories || []
+    defaultScreeningPrompt.value = res.data?.defaultScreeningPrompt || ''
+  }
   total.value = res.data?.total || 0; categoryCounts.value = res.data?.counts || {}
   const lastPage = Math.max(1, Math.ceil(total.value / pageSize.value))
   if (currentPage.value > lastPage) { currentPage.value = lastPage; return loadTemplates() }
   const rows = res.data?.rows || []
-  const reportRows = rows.filter(item => item.purpose === 'research')
-  templates.value = reportRows.map(item => ({ ...item, status: item.isDeleted ? 'deleted' : item.isEnabled ? 'enabled' : 'disabled' }))
+  templates.value = rows.filter(item => item.purpose === activePurpose.value)
+   .map(item => ({ ...item, status: templateStatus(item) }))
  }
  catch (error) { if (request === listRequest) templateError.value = error?.msg || error?.message || '模板加载失败，请重试' }
  finally { if (request === listRequest) loading.value = false }
@@ -192,17 +247,23 @@ async function loadModels() {
  catch (error) { models.value = []; modelError.value = error?.msg || error?.message || '模型列表加载失败；可稍后配置模型' }
 }
 function templatePayload(item = form) {
- return { name: item.name.trim(), purpose: item.purpose, reportType: item.purpose === 'research' ? item.reportType || null : null, prompt: item.prompt.trim(), description: item.description, modelId: item.modelId || null, imageModelId: item.imageModelId || null, sections: item.sections, imageConfig: item.imageConfig, isEnabled: item.isEnabled }
+ const base = { name: item.name.trim(), purpose: item.purpose, prompt: item.prompt.trim(), description: item.description, isEnabled: item.isEnabled }
+ if (item.purpose === 'digest') return { ...base, digestCadence: item.digestCadence, screeningPrompt: item.screeningPrompt, screeningCategories: item.screeningCategories }
+ return { ...base, reportType: item.reportType || null, modelId: item.modelId || null, imageModelId: item.imageModelId || null, sections: item.sections, imageConfig: item.imageConfig }
 }
 async function saveTemplate() {
  if (!canSaveTemplate.value || saving.value) return
  if (!form.name.trim() || !form.prompt.trim()) return ElMessage.warning('请填写模板名称和正文生成提示词')
  if (form.purpose === 'research' && !form.reportType) return ElMessage.warning('请选择模板所属的报告类型')
+ if (form.purpose === 'digest') {
+   const invalid = screeningRulesError(form.screeningCategories)
+   if (invalid) return ElMessage.warning(invalid)
+ }
  saving.value = true
  try {
   if (editingTemplate.value) await updatePipelineTemplate(editingTemplate.value.id, templatePayload())
   else await createPipelineTemplate(templatePayload())
-  editorVisible.value = false; ElMessage.success('模板内容及报告类型已保存'); await loadTemplates(); emit('changed')
+  editorVisible.value = false; ElMessage.success('模板已保存'); await loadTemplates(); emit('changed')
  } catch (error) { ElMessage.error(error?.msg || error?.message || '模板保存失败') }
  finally { saving.value = false }
 }
@@ -233,7 +294,7 @@ async function restoreTemplate(item) {
  catch (error) { ElMessage.error(error?.msg || error?.message || '恢复失败') }
  finally { saving.value = false }
 }
-watch([activeCategory, status, pageSize], () => { currentPage.value = 1; loadTemplates() })
+watch([activePurpose, activeCategory, status, pageSize], () => { currentPage.value = 1; loadTemplates() })
 watch(currentPage, loadTemplates)
 watch(keyword, () => { clearTimeout(searchTimer); listRequest++; searchTimer = setTimeout(() => { currentPage.value = 1; loadTemplates() }, 250) })
 onBeforeUnmount(() => { clearTimeout(searchTimer); listRequest++ })
@@ -245,6 +306,8 @@ onMounted(() => { loadTemplates(); loadModels() })
  text-align: center;
 }
 .template-contract-note { margin-bottom: 14px; }
+.template-purposes { flex-shrink: 0; padding: 10px 0 0; }
+.is-personal > .template-purposes { padding-inline: 20px; }
 .template-toolbar {
  display: flex; align-items: center; gap: 10px; padding: 12px 16px;
  background: var(--el-bg-color); border: 1px solid var(--el-border-color-light); border-radius: 8px;
@@ -325,6 +388,7 @@ onMounted(() => { loadTemplates(); loadModels() })
  .is-personal > .template-result-count { padding-inline: 12px; }
 }
 .template-editor-form { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; gap: 20px; }
+.template-editor-form.is-digest { grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .template-editor-section {
  min-width: 0;
  padding: 16px;

@@ -44,6 +44,10 @@ class PipelineTemplateVersion(Base):
         ),
         CheckConstraint('length(trim(name)) > 0 AND length(trim(prompt)) > 0', name='ck_templates_name_prompt'),
         CheckConstraint("jsonb_typeof(sections)='array'", name='ck_templates_sections').ddl_if(dialect='postgresql'),
+        CheckConstraint(
+            "screening_categories IS NULL OR (purpose='digest' AND jsonb_typeof(screening_categories)='array')",
+            name='ck_templates_screening_categories',
+        ).ddl_if(dialect='postgresql'),
         CheckConstraint("jsonb_typeof(image_config)='object'", name='ck_templates_image_config').ddl_if(
             dialect='postgresql'
         ),
@@ -58,6 +62,8 @@ class PipelineTemplateVersion(Base):
     digest_cadence = Column(String(16), nullable=True, comment='简报适用周期：weekly、monthly、all；daily仅兼容历史')
     description = Column(Text)
     prompt = Column(Text, nullable=False)
+    screening_prompt = Column(Text, nullable=True)
+    screening_categories = Column(JSON(none_as_null=True).with_variant(JSONB(none_as_null=True), 'postgresql'))
     model_id = Column(BigInteger, ForeignKey('ai_models.id', ondelete='RESTRICT'), nullable=True)
     image_model_id = Column(BigInteger, ForeignKey('ai_models.id', ondelete='RESTRICT'))
     sections = Column(

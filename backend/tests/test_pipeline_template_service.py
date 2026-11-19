@@ -14,6 +14,34 @@ db = refactor_db
 no_external_network = refactor_no_external_network
 
 
+def test_category_rules_have_the_same_validation_for_temporary_and_saved_screening() -> None:
+    from pydantic import ValidationError
+
+    from app.intelligence.schemas.pipeline import PipelineDigestScreeningModel, PipelineTemplateSaveModel
+
+    bad_rules = [
+        [{'name': '', 'prompt': '纳入'}],
+        [{'name': '规则', 'prompt': ' '}],
+        [{'name': 'a' * 81, 'prompt': '纳入'}],
+        [{'name': '规则', 'prompt': '字' * 2001}],
+        [{'name': 'AI', 'prompt': '论文'}, {'name': ' ai ', 'prompt': '案例'}],
+        [{'name': f'类别{i}', 'prompt': '纳入'} for i in range(31)],
+        [{'name': f'类别{i}', 'prompt': '字' * 2000} for i in range(11)],
+        *[[{'name': name, 'prompt': '纳入'}] for name in ('多\n行', '<标签>', '`代码`', '[标题]', '**标题**', '#标题')],
+    ]
+    for model, fields in (
+        (PipelineTemplateSaveModel, {'name': '测试模板', 'purpose': 'digest', 'prompt': '撰写简报'}),
+        (PipelineDigestScreeningModel, {'period': ['2026-01-01', '2026-01-07'], 'reportType': 'weekly'}),
+    ):
+        for rules in bad_rules:
+            with pytest.raises(ValidationError):
+                model.model_validate({**fields, 'screeningCategories': rules})
+        valid = model.model_validate(
+            {**fields, 'screeningCategories': [{'name': ' 新技术 ', 'prompt': ' 纳入新方法 '}]}
+        )
+        assert valid.model_dump()['screening_categories'] == [{'name': '新技术', 'prompt': '纳入新方法'}]
+
+
 @pytest.mark.asyncio
 async def test_save_template_can_remain_unconfigured(env, db) -> None:
     result = await env.template.PipelineTemplateService.save_draft(
@@ -95,7 +123,7 @@ async def test_template_model_references_are_int_before_persist_and_exact_string
     ).model_dump()
     assert payload['model_id'] == str(text_id) and payload['image_model_id'] == str(image_id)
     original = dict(payload)
-    stored = env.configuration.PipelineTemplateVersion(id=201, is_enabled=True)
+    stored = env.configuration.PipelineTemplateVersion(id=201, purpose='research', is_enabled=True)
     models = {
         text_id: NS(is_enabled=True, provider='compatible', capabilities=['text_generate']),
         image_id: NS(is_enabled=True, provider='compatible', capabilities=['image_generate']),

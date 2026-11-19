@@ -1,5 +1,6 @@
 import useTagsViewStore from '@/store/modules/tagsView'
 import router from '@/router'
+import { returnToPreviousPage } from '@/utils/portal/openContent'
 
 export default {
   // 刷新当前tab页签
@@ -28,6 +29,10 @@ export default {
     if (obj !== undefined) {
       return router.push(obj);
     }
+  },
+  returnFromPage(fallback) {
+    useTagsViewStore().delView(router.currentRoute.value);
+    return returnToPreviousPage(router, fallback);
   },
   // 关闭指定tab页签
   closePage(obj) {

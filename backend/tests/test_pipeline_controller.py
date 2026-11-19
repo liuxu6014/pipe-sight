@@ -17,6 +17,32 @@ def route_map():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('report_type', ['weekly', 'monthly'])
+async def test_manual_digest_requires_system_screening(monkeypatch, report_type) -> None:
+    from app.intelligence.schemas.pipeline import PipelineResearchJobCreateModel
+    from app.research.api.controller import ResearchApplicationService
+    from app.research.services.digest_document import DigestScreeningError
+
+    queue = AsyncMock(return_value={})
+    monkeypatch.setattr(ResearchApplicationService, 'queue_job', queue)
+    route = route_map()[('/pipeline/research/jobs', ('POST',))]
+    redis = object()
+    args = {
+        'request': SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(redis=redis))),
+        'query_db': object(),
+        'current_user': SimpleNamespace(user=SimpleNamespace(user_id=8, nick_name='用户')),
+    }
+    with pytest.raises(DigestScreeningError) as error:
+        await route.endpoint(body=PipelineResearchJobCreateModel(title='简报', reportType=report_type), **args)
+    assert '先按筛选提示词完成系统筛选' in error.value.message
+    queue.assert_not_awaited()
+    await route.endpoint(
+        body=PipelineResearchJobCreateModel(title='简报', reportType=report_type, screeningId='a' * 32), **args
+    )
+    assert queue.await_args.kwargs['screening_cache'] is redis
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('admin', [False, True])
 @pytest.mark.parametrize(
     'suffix,method',

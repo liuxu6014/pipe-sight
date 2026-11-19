@@ -1,3 +1,4 @@
+import { bindListQuery } from '../src/utils/portal/listQuery.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -32,8 +33,8 @@ test('clicking table headers requests server sorting before pagination and retur
   }
   const store = vue.reactive({ tasks: [], researchReports: [], workspaceEpoch: 0, sectionErrors: {} })
   const context = vm.createContext({
-    ...vue, usePagedResults, reportSummaryRow, onMounted() {}, onBeforeUnmount() {}, clearTimeout, setTimeout,
-    useRoute: () => ({ query: {} }), useRouter: () => ({}), usePortalStore: () => store, useUserStore: () => ({ id: '7' }),
+    ...vue, bindListQuery, usePagedResults, reportSummaryRow, onMounted() {}, onBeforeUnmount() {}, clearTimeout, setTimeout,
+    useRoute: () => ({ query: {} }), useRouter: () => ({ replace: async () => {} }), usePortalStore: () => store, useUserStore: () => ({ id: '7' }),
     buildPersonalReports: ({ reports }) => reports, isDigestType: () => false,
     createResearchRefresh: () => ({ invalidate() {}, run() {}, stop() {} }),
     listPipelineResearchJobs() {}, listPipelineResearchReports

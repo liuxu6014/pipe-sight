@@ -17,6 +17,10 @@ const dashboard = {
   collect_status: [{ name: '资料入库', status: 'success', value: 100 }, { name: '文本解析', status: 'success', value: 100 }, { name: '数据过滤', status: 'warning', value: 60 }]
 }
 
+// An explicit local scenario for cross-page queue notifications. No business API is called.
+const queueDemo = new URLSearchParams(window.location.search).get('queueDemo') === '1'
+const queueDemoStarted = Date.now()
+
 export async function fixtureRequest(name, args = []) {
   let data = { rows: [], total: 0 }
   if (name === 'listModelAll' || name === 'listModel') data = [
@@ -38,12 +42,20 @@ export async function fixtureRequest(name, args = []) {
   }
   else if (name === 'listPipelineResearchReports') data = { rows: [{ ...report, id: '900040', ownerId: '7',
     type: 'research', reportType: 'research', requiresReview: false, generationWarning: '',
-    content: sections.map(section => `## ${section.title}\n\n${section.content}`).join('\n\n') }] }
-  else if (name === 'listPipelineResearchJobs') data = { rows: [
-    { jobId: '900070', reportId: '900040', title: report.title, type: 'research', status: 'completed', progress: 100, updatedAt: '2026-10-27 09:00:00' },
-    { jobId: '900071', reportId: '900041', title: '检测方法对比研究（合成任务）', type: 'research', status: 'running', progress: 45, updatedAt: '2026-10-27 09:05:00' },
-    { jobId: '900072', reportId: '900042', title: '管网完整性研究（失败展示样本）', type: 'research', status: 'failed', progress: 20, updatedAt: '2026-10-27 09:03:00' },
-  ] }
+    content: sections.map(section => `## ${section.title}\n\n${section.content}`).join('\n\n') }], total: 1 }
+  else if (name === 'listPipelineResearchJobs') {
+    const elapsed = Date.now() - queueDemoStarted
+    const tasks = queueDemo ? [
+      { jobId: '900171', reportId: '900040', ownerId: '900017', title: '检测方法对比研究（合成排队验收）', type: 'research-demand', status: elapsed < 15000 ? 'running' : 'completed', progress: elapsed < 15000 ? 45 : 100, reportStatus: elapsed < 15000 ? 'draft' : 'completed', updatedAt: '2026-11-19 00:10:00' },
+      { jobId: '900173', reportId: '900051', ownerId: '900017', title: '科技情报月报（合成排队验收）', type: 'monthly', status: elapsed < 15000 ? 'queued' : elapsed < 25000 ? 'running' : 'completed', progress: elapsed < 15000 ? 0 : elapsed < 25000 ? 55 : 100, reportStatus: elapsed < 25000 ? 'draft' : 'completed', updatedAt: '2026-11-19 00:10:00' }
+    ] : [
+      { jobId: '900070', reportId: '900040', title: report.title, type: 'research', status: 'completed', progress: 100, updatedAt: '2026-10-27 09:00:00' },
+      { jobId: '900071', reportId: '900041', title: '检测方法对比研究（合成任务）', type: 'research', status: 'running', progress: 45, updatedAt: '2026-10-27 09:05:00' },
+      { jobId: '900072', reportId: '900042', title: '完整性研究（失败展示样本）', type: 'research', status: 'failed', progress: 20, updatedAt: '2026-10-27 09:03:00' }
+    ]
+    const rows = args[0]?.status === 'active' ? tasks.filter(task => ['queued', 'running'].includes(task.status)) : tasks
+    data = { rows, total: rows.length }
+  }
   else if (name === 'getPipelineWorkspace') data = { basket: [], favorites: [] }
   else if (name === 'listPipelineTemplates') data = { rows: (reportTemplates.length ? reportTemplates : [{ id: '900031', name: '项目需求报告（合成模板）', description: '仅用于预览章节结构，不执行生成。', modelConfigured: false }]).map((item, index) => ({ ...item, templateKey: item.id, category: 'research', purpose: 'research', code: `PREVIEW-${index + 1}`, version: 'V1.0（界面样本）', status: 'published', reportType: ['project-demand', 'research-demand', 'technology-route'][index], formats: ['docx'], usage: 0, updatedAt: '2026-10-06', sections: sections.map((section, sectionIndex) => ({ ...section, words: sectionIndex ? 500 : 800, description: '合成章节说明，不包含真实科研结论。' })) })) }
   else if (name === 'listPipelineSources') data = { rows: [{ id: 'preview-source', source_code: 'preview-only', name: '界面验收合成数据源（不执行采集）', type: 'news', status: 'enabled', enabled: true, frequency: '仅预览', last_run_time: '2026-10-06 10:00', success_rate: 100 }], total: 1 }

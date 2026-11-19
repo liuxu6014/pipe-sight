@@ -13,6 +13,27 @@ class ResearchEvidenceService:
     def effective_text(item) -> str:
         return item.edited_text if item.edited_text is not None else (item.extracted_text or '')
 
+    @staticmethod
+    def article_evidence(item) -> dict:
+        source = {
+            'url': item.url,
+            'source_id': wire_id(item.source_id),
+            'published_at': item.published_at.isoformat() if item.published_at else None,
+        }
+        publisher = getattr(getattr(item, 'source', None), 'name', None)
+        if publisher:
+            source['publisher'] = publisher
+        if getattr(item, 'author', None):
+            source['authors'] = item.author
+        return {
+            'type': 'article',
+            'id': wire_id(item.id),
+            'title': item.title,
+            'content': item.content_zh or item.content or '',
+            'source': source,
+            'category': getattr(getattr(item, 'category', None), 'name', None),
+        }
+
     @classmethod
     async def resolve(cls, db, user_id, selected_ids, payload=None, **_) -> list[dict]:
         if not selected_ids or len(selected_ids) > 50:  # noqa: PLR2004
@@ -59,18 +80,11 @@ class ResearchEvidenceService:
                         }
                         title = item.title_zh or item.title
                     else:
-                        content = item.content_zh or item.content or ''
-                        source = {
-                            'url': item.url,
-                            'source_id': wire_id(item.source_id),
-                            'published_at': item.published_at.isoformat() if item.published_at else None,
-                        }
-                        publisher = getattr(getattr(item, 'source', None), 'name', None)
-                        if publisher:
-                            source['publisher'] = publisher
-                        if getattr(item, 'author', None):
-                            source['authors'] = item.author
-                        title = item.title
+                        evidence = cls.article_evidence(item)
+                        if not evidence['content'].strip():
+                            raise ServiceException(message='所选内容没有可用正文或论文摘要')
+                        matches.append(evidence)
+                        continue
                     if not content.strip():
                         raise ServiceException(message='所选内容没有可用正文或论文摘要')
                     category = getattr(getattr(item, 'category', None), 'name', None)

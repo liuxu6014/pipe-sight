@@ -21,7 +21,7 @@ async def test_digest_format_has_fixed_cadence_and_rejects_personal_override(env
         service.validate_digest_cadence(row, 'weekly')
     row.name, row.prompt, row.sections = '旧客户端修改', '不可信的提示词', [{'title': '不应使用的章节'}]
     restored = await service.get_fixed_digest(db, 'monthly', 7)
-    assert restored.id == row.id and restored.name == '管网科技情报月报'
+    assert restored.id == row.id and restored.name == '科技情报月报'
     assert restored.prompt != '不可信的提示词' and restored.sections == []
 
 

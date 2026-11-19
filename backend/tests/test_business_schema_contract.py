@@ -85,6 +85,29 @@ def test_frozen_business_contract_matches_all_and_only_business_models() -> None
     assert set(frozen['model_ddl']) == set(frozen['catalog']) == set(BUSINESS_TABLES)
     assert model_ddl(Base.metadata) == frozen['model_ddl']
     assert str(CreateTable(Base.metadata.tables['papers']).compile(dialect=postgresql.dialect())) == before
-    assert sum(len(t['columns']) for t in frozen['catalog'].values()) == 213
+    assert sum(len(t['columns']) for t in frozen['catalog'].values()) == 215
     assert sum(len(t['foreign_keys']) for t in frozen['catalog'].values()) == 30
     assert not any(n.startswith('sys_') for n in frozen['model_ddl'])
+
+
+def test_digest_screening_snapshots_preserve_the_published_schedule_index() -> None:
+    from pathlib import Path
+
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    from app.schema_contract import load_contract
+
+    old = load_frozen('v17')
+    assert old['revision'] == '20261115_digest_schedule_user_index'
+    assert 'screening_prompt' not in {c['name'] for c in old['catalog']['templates']['columns']}
+    for version in ('v18', 'v19'):
+        frozen = load_frozen(version)
+        assert load_contract(version)['business_schema_snapshot'] == f'business-{version}.json'
+        assert frozen['catalog']['digest_schedules']['indexes'] == old['catalog']['digest_schedules']['indexes']
+        assert frozen['model_ddl']['digest_schedules']['indexes'] == old['model_ddl']['digest_schedules']['indexes']
+    config = Config()
+    config.set_main_option('script_location', str(Path(__file__).resolve().parents[1] / 'alembic'))
+    scripts = ScriptDirectory.from_config(config)
+    assert scripts.get_heads() == ['20261118_digest_categories']
+    assert scripts.get_revision('20261118_digest_screening').down_revision == old['revision']

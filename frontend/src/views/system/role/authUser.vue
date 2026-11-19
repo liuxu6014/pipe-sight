@@ -125,8 +125,7 @@ function getList() {
 }
 // 返回按钮
 function handleClose() {
-  const obj = { path: "/system/role" };
-  proxy.$tab.closeOpenPage(obj);
+  proxy.$tab.returnFromPage("/system/role");
 }
 /** 搜索按钮操作 */
 function handleQuery() {

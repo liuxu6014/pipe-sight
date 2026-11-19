@@ -6,7 +6,9 @@
     <main id="portal-main" class="ps-portal-main ps-workspace-surface" tabindex="-1">
       <router-view v-slot="{ Component, route: pageRoute }">
         <transition name="ps-page" mode="out-in">
-          <component :is="Component" :key="pageRoute.path" />
+          <KeepAlive :key="workspaceEpoch" :include="['DigestCreateView', 'ResearchCreateView']" :max="4">
+            <component :is="Component" :key="pageRoute.meta.wizardVisit || pageRoute.path" />
+          </KeepAlive>
         </transition>
       </router-view>
     </main>
@@ -15,6 +17,7 @@
 </template>
 
 <script setup>
+import usePortalStore from '@/store/modules/portal'
 import { computed, provide, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import PortalHeader from './components/PortalHeader.vue'
@@ -24,6 +27,8 @@ import PortalSidebar from './components/PortalSidebar.vue'
 defineOptions({ name: 'PipelineUserPortal' })
 
 const route = useRoute()
+const portalStore = usePortalStore()
+const workspaceEpoch = computed(() => portalStore.workspaceEpoch)
 const portalPage = computed(() => route.name || 'PortalHome')
 const navigationCollapsed = ref(false)
 try { navigationCollapsed.value = localStorage.getItem('ps-portal-navigation-collapsed') === 'true' } catch { /* 存储不可用时仍可切换 */ }

@@ -10,8 +10,11 @@ from app.business_ids import generation_request_data, generation_request_fingerp
 from app.intelligence.services.templates import PipelineTemplateService
 from app.research.models.research_models import PipelineReport, PipelineResearchJob, utcnow
 from app.research.repositories.research_repository import ResearchDao
+from app.research.services.digest_rules import screening_rule_snapshot
+from app.research.services.digest_screening import DigestScreeningService
 from app.research.services.evidence import ResearchEvidenceService
 from app.research.services.project_demand_document import PROJECT_DEMAND_FORMAT, PROJECT_DEMAND_TEMPLATE_NAMES
+from app.research.services.report_labels import display_template_prompt
 from exceptions.exception import ServiceException
 
 
@@ -71,6 +74,7 @@ class ResearchJobService:
         template_service,
         schedule_id=None,
         commit=True,
+        screening_cache=None,
     ) -> dict:
         data = payload_data(payload)
         for field in ('template_id', 'report_id'):
@@ -80,7 +84,10 @@ class ResearchJobService:
             schedule_id = parse_business_id(schedule_id)
         cls._validate_options(data.get('options') or {})
         selections = data.get('materials') or data.get('selected_item_ids') or []
-        if not 1 <= len(selections) <= 50:  # noqa: PLR2004
+        screening_id = data.get('screening_id')
+        if screening_id and selections:
+            raise ServiceException(message='简报资料由系统筛选结果确定，无需提交资料编号')
+        if not screening_id and not 1 <= len(selections) <= 50:  # noqa: PLR2004
             raise ServiceException(message='请选择 1 至 50 条资料，超限不会截断')
         kind = report_type(data.get('report_type', data.get('type')))
         if kind not in {'article', 'research', 'daily', 'weekly', 'monthly'}:
@@ -99,15 +106,9 @@ class ResearchJobService:
             fingerprint = generation_request_fingerprint(clean_request, existing.materials)
             return await cls._reused(db, existing, user_id, fingerprint, job_serializer)
         purpose = 'digest' if kind in {'daily', 'weekly', 'monthly'} else kind
-        fixed_digest = kind in {'weekly', 'monthly'}
-        if fixed_digest:
-            # A legacy template ID is only an ownership assertion. Its mutable
-            # prompt/outline must never change the system brief format.
-            if data.get('template_id') is not None:
-                legacy = await ResearchDao.get_template(db, parse_business_id(data['template_id']), user_id)
-                if not legacy or legacy.purpose != 'digest':
-                    raise ServiceException(message='简报模板不存在或无权访问')
-            template = await PipelineTemplateService.get_fixed_digest(db, kind, user_id)
+        structured_digest = kind in {'weekly', 'monthly'}
+        if structured_digest:
+            template = await template_service.get_digest_for_run(db, kind, user_id, data.get('template_id'))
         else:
             template = await template_service.get_published(db, data.get('template_id'), user_id)
             if not template:
@@ -121,7 +122,7 @@ class ResearchJobService:
             and getattr(template, 'report_type', None) != requested_type
         ):
             raise ServiceException(message='模板尚未绑定当前报告类型，请选择该类型下的模板')
-        if purpose == 'digest' and not fixed_digest:
+        if purpose == 'digest' and not structured_digest:
             PipelineTemplateService.validate_digest_cadence(template, kind)
         image_config = PipelineTemplateService.effective_image_config(template.image_config, data)
         model_id, image_model_id = await PipelineTemplateService.generation_model_ids(
@@ -133,18 +134,28 @@ class ResearchJobService:
             image_model = await ResearchDao.get_model(db, image_model_id)
             if not 1 <= int(image_config.get('count', 1)) <= 10:  # noqa: PLR2004
                 raise ServiceException(message='配图数量须在 1 至 10 之间')
-        materials = await ResearchEvidenceService.resolve(db, user_id, selections, payload)
+        screened = {}
+        if screening_id:
+            if not structured_digest:
+                raise ServiceException(message='只有周报和月报可以使用简报复筛结果')
+            materials, screened = await DigestScreeningService.approved(
+                db, screening_cache, user_id, data, template, model
+            )
+        else:
+            materials = await ResearchEvidenceService.resolve(db, user_id, selections, payload)
         cls._validate_digest_materials(kind, materials)
         fingerprint = generation_request_fingerprint(clean_request, materials)
         params = deepcopy(model.parameters or {})
         budget = int(params.get('context_chars', 100000))
-        prompt = template.prompt
+        prompt = display_template_prompt(template.name, template.prompt)
         if (
             sum(len(i['content']) + len(i['title']) for i in materials)
             + len(prompt)
             + len(json.dumps(clean_request, ensure_ascii=False, default=str))
             > budget
         ):
+            if screening_id:
+                raise ServiceException(message='通过筛选的文章正文超过模型容量，请收紧筛选提示词后重新筛选')
             raise ServiceException(message='所选正文超过模型上下文预算，请减少资料或分批提炼')
         now = utcnow()
         existing_report_id = data.get('report_id')
@@ -196,9 +207,10 @@ class ResearchJobService:
                 'parameters': params,
             },
         }
-        if fixed_digest:
+        if structured_digest:
             snapshot['document_format'] = 'digest-reference-v1'
-            snapshot['fixed_digest_format'] = True
+            snapshot['fixed_digest_format'] = PipelineTemplateService.is_fixed_digest(template)
+            snapshot['digest_screening'] = screened or screening_rule_snapshot(template)
             for field in ('outline', 'template_prompt', 'templatePrompt', 'template_version'):
                 snapshot['request'].pop(field, None)
         elif (
@@ -276,6 +288,8 @@ class ResearchJobService:
         )
         report = await ResearchDao.get_report(db, job.report_id, user_id, lock=True)
         new.config_snapshot['report_start_version'] = report.version
+        if new.config_snapshot.get('digest_screening') and 'labels' not in new.config_snapshot['digest_screening']:
+            new.config_snapshot['digest_screening'].pop('retained_ids', None)
         await ResearchDao.add_research_job(db, new)
         await db.commit()
         return job_serializer(new, report=report)

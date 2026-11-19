@@ -1,10 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { computed, reactive, ref } from 'vue'
+import { computed, nextTick, reactive, ref, toRaw } from 'vue'
 import { parse, compileScript, compileTemplate, compileStyle } from '@vue/compiler-sfc'
 import * as prompts from '../src/utils/pipeline/processingPrompt.js'
 import * as contract from '../src/utils/pipeline/compactContract.js'
+import { buildDigestScreeningPrompt, screeningRulesError } from '../src/utils/portal/digestScreeningRules.js'
 
 const read = path => readFileSync(new URL('../src/' + path, import.meta.url), 'utf8')
 const copy = value => JSON.parse(JSON.stringify(value))
@@ -16,7 +17,7 @@ function page(name, names, mocks = {}) {
   const messages = [], writes = []
   const dependencies = {
     computed, reactive, ref, watch() {}, onBeforeUnmount() {}, onMounted() {}, defineProps: () => ({ section: 'models' }), defineEmits: () => () => {}, ...prompts, ...contract,
-    Files: {}, Document: {}, Plus: {},
+    Files: {}, Document: {}, Plus: {}, screeningRulesError,
     checkPermi: () => true, checkRole: () => true,
     ElMessage: Object.fromEntries(['success', 'warning', 'error', 'info'].map(level => [level, text => messages.push({ level, text })])),
     ElMessageBox: { confirm: async () => {} },
@@ -278,7 +279,7 @@ test('template save persists the selected report type independently of its resea
   const saved = h.writes[0][1]
   assert.equal(saved.purpose, 'research'); assert.equal(saved.name, '路线模板'); assert.equal(saved.reportType, 'technology-route')
   assert.equal(saved.modelId, null)
-  assert.match(h.messages.find(item => item.level === 'success').text, /模板内容及报告类型已保存/)
+  assert.match(h.messages.find(item => item.level === 'success').text, /模板已保存/)
 })
 
 test('template soft retirement tolerates invalid models; enabling validates full configuration', async () => {
@@ -489,19 +490,104 @@ test('template paging delegates filter and category totals to server and ignores
   assert.deepEqual(requests[1], { page: 2, pageSize: 20, keyword: '腐蚀', reportType: 'technology-route', category: 'research', status: 'all' })
 })
 
-test('personal template list requests research only and excludes legacy brief rows', async () => {
+test('personal template tabs load separate catalogs and save digest screening independently of writing', async () => {
   const calls = []
-  const h = page('template', 'loadTemplates, templates, categories', {
+  const rules = [{ name: '技术进展', prompt: '新公布的试验结果' }, { name: '工程应用', prompt: '现场部署及新增成效' }]
+  const h = page('template', 'loadTemplates, templates, categories, activePurpose, createTemplate, form, saveTemplate', {
     defineProps: () => ({ personal: true }),
     listPipelineTemplates: async params => { calls.push(params); return { data: { rows: [
       { id: '701', name: '科研模板', purpose: 'research', reportType: 'research-demand' },
       { id: '702', name: '旧周报模板', purpose: 'digest', digestCadence: 'weekly' }
-    ], total: 1, counts: { all: 1, 'research-demand': 1 } } } }
+    ], total: 1, counts: { all: 1, 'research-demand': 1 }, defaultScreeningCategories: rules, defaultScreeningPrompt: '当期有新增事实' } } }
   })
   await h.loadTemplates()
   assert.equal(calls[0].category, 'research')
   assert.deepEqual(h.templates.value.map(row => row.id), ['701'])
   assert.equal(h.categories.some(item => item.value === 'digest'), false)
+  h.activePurpose.value = 'digest'
+  await h.loadTemplates()
+  assert.equal(calls.at(-1).category, 'digest')
+  assert.deepEqual(h.templates.value.map(row => row.id), ['702'])
+  h.createTemplate()
+  assert.deepEqual(h.form.screeningCategories, rules)
+  assert.equal(h.form.screeningPrompt, '当期有新增事实')
+  h.form.screeningCategories[0].prompt = '须有试验对比'
+  assert.equal(rules[0].prompt, '新公布的试验结果')
+  Object.assign(h.form, { name: '检测专题周报', digestCadence: 'weekly', prompt: '围绕检测技术撰写', screeningPrompt: '只收录有验证数据的报道' })
+  await h.saveTemplate()
+  const saved = h.writes[0][1]
+  assert.equal(saved.purpose, 'digest')
+  assert.equal(saved.digestCadence, 'weekly')
+  assert.equal(saved.screeningPrompt, '只收录有验证数据的报道')
+  assert.deepEqual(saved.screeningCategories, [{ name: '技术进展', prompt: '须有试验对比' }, rules[1]])
+  assert.equal(saved.prompt, '围绕检测技术撰写')
+  assert.equal(saved.reportType, undefined)
+})
+
+test('digest rules preview follows the edited category order and supports existing prompt-only templates', () => {
+  const rows = [{ name: ' 现场 ', prompt: ' 投运 ' }, { name: '实验', prompt: ' 新方法\n且有数据 ' }]
+  assert.equal(buildDigestScreeningPrompt(' 通用规则 ', []), '通用规则')
+  assert.equal(buildDigestScreeningPrompt(' 当期新增 ', rows), '通用要求\n当期新增\n\n分类规则\n1. 现场\n投运\n\n2. 实验\n新方法\n且有数据\n\n逐篇判断。符合多个类别时选最符合的一个，匹配程度相同则取靠前的类别。没有匹配类别的文章排除。')
+  assert.match(buildDigestScreeningPrompt('', [...rows].reverse()), /^分类规则\n1\. 实验/)
+})
+
+test('editing, ordering and removing a draft category updates the combined prompt without mutating the template', async () => {
+  const saved = [{ name: '实验', prompt: '比较实测结果' }]
+  const props = reactive({ categories: saved, prompt: '', defaultPrompt: '有本期新增事实' })
+  const component = parse(read('views/portal/components/DigestScreeningRules.vue')).descriptor
+  const compiled = compileTemplate({ source: component.template.content, filename: component.filename, id: 'digest-rules' })
+  assert.deepEqual(compiled.errors, [])
+  const script = component.scriptSetup.content.replace(/^import .*\n/gm, '')
+  const emit = (event, value) => { props[event.slice('update:'.length)] = value }
+  const setup = new Function('defineProps', 'defineEmits', 'computed', 'nextTick', 'ref', 'toRaw', 'useId', 'screeningRulesError', 'buildDigestScreeningPrompt',
+    script + '\nreturn { addCategory, updateField, moveCategory, removeCategory, ruleKey, combinedPrompt, error }')
+  const editor = setup(() => props, () => emit, computed, nextTick, ref, toRaw, () => 'general-rule', screeningRulesError, buildDigestScreeningPrompt)
+  await editor.addCategory()
+  assert.match(editor.error.value, /第 2 个类别/)
+  const stableKey = editor.ruleKey(props.categories[1])
+  editor.updateField(1, 'name', '应用')
+  editor.updateField(1, 'prompt', '投运进展')
+  await editor.moveCategory(1, 0)
+  assert.equal(editor.ruleKey(props.categories[0]), stableKey)
+  assert.match(editor.combinedPrompt.value, /^通用要求\n有本期新增事实\n\n分类规则\n1\. 应用\n投运进展\n\n2\. 实验/)
+  await editor.addCategory()
+  editor.updateField(2, 'name', '政策')
+  editor.updateField(2, 'prompt', '更新的标准')
+  await editor.moveCategory(2, 0)
+  assert.match(editor.combinedPrompt.value, /1\. 政策\n更新的标准\n\n2\. 应用\n投运进展\n\n3\. 实验/)
+  await editor.moveCategory(0, -1)
+  await editor.moveCategory(2, 3)
+  assert.deepEqual(props.categories.map(row => row.name), ['政策', '应用', '实验'])
+  editor.removeCategory(0)
+  await editor.moveCategory(0, 1)
+  editor.removeCategory(0)
+  assert.deepEqual(props.categories, [{ name: '应用', prompt: '投运进展' }])
+  assert.deepEqual(saved, [{ name: '实验', prompt: '比较实测结果' }])
+})
+
+test('invalid digest categories cannot be saved and legacy free text remains editable without adding categories', async () => {
+  const h = page('template', 'editTemplate, saveTemplate, form', {
+    getPipelineTemplate: async id => ({ data: { id, name: '旧模板', purpose: 'digest', digestCadence: 'weekly', prompt: '撰写', screeningPrompt: '旧规则' } })
+  })
+  await h.editTemplate({ id: '701' })
+  assert.deepEqual(h.form.screeningCategories, [])
+  assert.equal(h.form.screeningPrompt, '旧规则')
+  h.form.screeningCategories = [{ name: ' ABC ', prompt: '旧项目' }, { name: 'abc', prompt: '新项目' }]
+  await h.saveTemplate()
+  assert.deepEqual(h.writes, [])
+  assert.match(h.messages.at(-1).text, /重复/)
+  assert.match(screeningRulesError([{ name: 'ABC', prompt: ' ' }]), /提示词/)
+  assert.match(screeningRulesError([{ name: 'A'.repeat(81), prompt: '内容' }]), /80/)
+  for (const name of ['上行\n下行', '<标题>', '[链接]', '**重点**', '# 分类']) {
+    assert.match(screeningRulesError([{ name, prompt: '内容' }]), /单行纯文本/)
+  }
+  assert.match(screeningRulesError([{ name: 'A', prompt: '内'.repeat(2001) }]), /2,000/)
+  assert.match(screeningRulesError(Array.from({ length: 31 }, (_, i) => ({ name: String(i), prompt: '内容' }))), /30/)
+  assert.match(screeningRulesError(Array.from({ length: 11 }, (_, i) => ({ name: String(i), prompt: '内'.repeat(2000) }))), /20,000/)
+  h.form.screeningCategories = []
+  await h.saveTemplate()
+  assert.equal(h.writes[0][2].screeningPrompt, '旧规则')
+  assert.deepEqual(h.writes[0][2].screeningCategories, [])
 })
 
 test('template edit fetches owner-scoped prompt detail rather than editing an incomplete list summary', async () => {

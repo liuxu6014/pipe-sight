@@ -51,7 +51,7 @@ async def test_published_templates_are_scoped_to_current_user(monkeypatch: pytes
         )
     assert response.status_code == HTTPStatus.OK
     assert listing.await_args.kwargs == {'category': 'research', 'published_only': True, 'user_id': 7}
-    assert initialize.await_args.kwargs == {'user_id': 7}
+    assert initialize.await_args.kwargs == {'user_id': 7, 'purpose': 'research'}
 
 
 @pytest.mark.asyncio
@@ -67,7 +67,7 @@ async def test_template_management_scopes_to_current_user(monkeypatch: pytest.Mo
         )
     assert response.status_code == HTTPStatus.OK
     assert listing.await_args.kwargs == {'category': None, 'user_id': 8, 'include_deleted': True}
-    assert initialize.await_args.kwargs == {'user_id': 8}
+    assert initialize.await_args.kwargs == {'user_id': 8, 'purpose': 'research'}
 
 
 @pytest.mark.asyncio

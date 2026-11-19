@@ -188,6 +188,28 @@ function normalizeDigestReport(item) {
   }
 }
 
+function normalizeGenerationTask(item) {
+  const reportType = item.reportType || item.type
+  return {
+    id: item.jobId || item.id,
+    title: item.title,
+    reportType,
+    type: ['daily', 'weekly', 'monthly'].includes(reportType) ? '情报简报' : '科研生成',
+    status: item.status || 'queued',
+    statusLabel: item.statusLabel || ({ completed: '生成完成', failed: '生成失败', cancelled: '已取消', queued: '排队中', running: '生成中' })[item.status] || '状态待确认',
+    progress: Number(item.progress || 0),
+    updatedAt: item.updatedAt || item.updated_at || '更新时间待补充',
+    reportId: item.reportId,
+    reportStatus: item.reportStatus || '',
+    requiresReview: Boolean(item.requiresReview),
+    generationMode: item.generationMode || '',
+    generationWarning: item.generationWarning || '',
+    ownerId: item.ownerId,
+    createdAt: item.createdAt || item.created_at || '',
+    finishedAt: item.finishedAt || item.finished_at || ''
+  }
+}
+
 const usePortalStore = defineStore('portal-workspace', {
   state: () => ({
     workspaceEpoch: 0,
@@ -196,6 +218,7 @@ const usePortalStore = defineStore('portal-workspace', {
     favoriteItems: [],
     tasks: demoDataEnabled ? recentTasks.map(item => ({ ...item })) : [],
     taskPanelVisible: false,
+    submittedTaskIds: [],
     dashboard: null,
     liveIntelligence: [],
     liveDocuments: [],
@@ -225,6 +248,28 @@ const usePortalStore = defineStore('portal-workspace', {
     hasLiveData: state => state.liveIntelligence.length > 0 || state.liveDocuments.length > 0 || state.liveReports.length > 0
   },
   actions: {
+    setGenerationTasks(rows) {
+      const merged = new Map(this.tasks.map(task => [String(task.id), task]))
+      for (const item of rows) {
+        const task = normalizeGenerationTask(item)
+        if (!task.id) continue
+        const previous = merged.get(String(task.id))
+        // A slower hydration response must not turn a finished task back into an active one.
+        if (previous && ['completed', 'failed', 'cancelled'].includes(previous.status) && ['queued', 'running'].includes(task.status)) continue
+        merged.set(String(task.id), task)
+      }
+      const tasks = [...merged.values()]
+      const active = tasks.filter(task => ['queued', 'running'].includes(task.status))
+      const recent = tasks.filter(task => !['queued', 'running'].includes(task.status))
+        .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))).slice(0, 20)
+      this.tasks = [...active, ...recent]
+    },
+    registerGenerationTask(task) {
+      const id = displayId(task.jobId || task.id)
+      if (!id) return
+      this.submittedTaskIds = [...new Set([...this.submittedTaskIds, id])]
+      this.setGenerationTasks([task])
+    },
     async hydrate(force = false) {
       if (this.dataLoading) return hydratePromise
       if (this.dataLoaded && !force) return
@@ -262,22 +307,7 @@ const usePortalStore = defineStore('portal-workspace', {
           this.favoriteItems = normalizeBusinessData(workspaceResult.value?.data?.favoriteItems || [])
         }
         if (jobResult.status === 'fulfilled') {
-          const liveTasks = (jobResult.value?.data?.rows || []).map(item => ({
-            id: item.jobId || item.id,
-            title: item.title,
-            reportType: item.type,
-            type: ['daily', 'weekly', 'monthly'].includes(item.type) ? '情报简报' : '科研生成',
-            status: item.status || 'queued',
-            statusLabel: item.statusLabel || ({ completed: '生成完成', failed: '生成失败', cancelled: '已取消', queued: '排队中', running: '生成中' })[item.status] || '状态待确认',
-            progress: Number(item.progress || 0),
-            updatedAt: item.updatedAt || item.updated_at || '更新时间待补充',
-            reportId: item.reportId,
-            reportStatus: item.reportStatus || '',
-            requiresReview: Boolean(item.requiresReview),
-            generationMode: item.generationMode || '',
-            generationWarning: item.generationWarning || ''
-          }))
-          this.tasks = demoDataEnabled ? mergeById(recentTasks, liveTasks) : liveTasks
+          this.setGenerationTasks(jobResult.value?.data?.rows || [])
         }
         const failedCount = results.filter(item => item.status === 'rejected').length
         if (failedCount && !sessionExpired) {
@@ -297,6 +327,8 @@ const usePortalStore = defineStore('portal-workspace', {
     },
     reset() {
       this.workspaceEpoch += 1
+      this.submittedTaskIds = []
+      this.taskPanelVisible = false
       hydratePromise = null
       this.basket = []
       this.favorites = []

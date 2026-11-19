@@ -1,7 +1,7 @@
--- compact-v17中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；自动计划累计执行结果。
+-- compact-v19中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；自动计划累计执行结果。
 -- 27个业务created_at/updated_at为北京时间timestamp(0)无时区；其他运行时间字段保持原类型。
 -- 普通不透明令牌保留；系统幂等键内嵌ID、显式JSON引用及语义指纹按实体映射核验。
--- 28张基线表352字段，2张保留功能表23字段；共30张物理表375字段。
+-- 28张基线表354字段，2张保留功能表23字段；共30张物理表377字段。
 -- 仅COMMENT及存在性保护块；调用方管理事务，不修改字段、约束或业务数据。
 
 COMMENT ON TABLE public."news_articles" IS '网站与公众号新闻原文及中文译文；每篇最多关联一个类别，无人工审核流程';
@@ -95,6 +95,8 @@ COMMENT ON COLUMN public."templates"."name" IS '用户选择模板时显示的�
 COMMENT ON COLUMN public."templates"."purpose" IS '模板用途：article生成文章、research科研报告、digest周期简报';
 COMMENT ON COLUMN public."templates"."description" IS '模板用途及适用范围说明；可空，不冒充正文生成结果';
 COMMENT ON COLUMN public."templates"."prompt" IS '正文生成提示词；无独立旧提示词时明确保留原模板名称、说明及章节结构';
+COMMENT ON COLUMN public."templates"."screening_prompt" IS '情报简报写作前的文章筛选提示词；为空时使用系统默认筛选规则';
+COMMENT ON COLUMN public."templates"."screening_categories" IS '简报筛选类别及逐类提示词的JSON数组；空数组表示自由分类，NULL兼容历史模板';
 COMMENT ON COLUMN public."templates"."model_id" IS '正文模型ID，关联ai_models.id；迁移后允许NULL，提交生成时必须配置真实文本模型';
 COMMENT ON COLUMN public."templates"."image_model_id" IS '配图模型ID，关联ai_models.id；可空，请求配图时须具备image_generate能力';
 COMMENT ON COLUMN public."templates"."sections" IS '章节顺序及必填要求的JSON数组；保留章节标题和结构约束；明确的平台业务引用按实体映射，章节正文与普通外部参数不改写';

@@ -87,8 +87,7 @@ function checkSelectable(row) {
 
 /** 关闭按钮 */
 function close() {
-  const obj = { path: "/system/user" };
-  proxy.$tab.closeOpenPage(obj);
+  proxy.$tab.returnFromPage("/system/user");
 };
 
 /** 提交按钮 */

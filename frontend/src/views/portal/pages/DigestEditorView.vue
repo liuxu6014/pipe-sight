@@ -5,11 +5,12 @@
     </div>
     <div v-else-if="loadError && !loaded" class="ps-inline-state is-warning" role="alert">
       <WarningFilled /><span>{{ loadError }}</span><el-button class="ps-ui-action" @click="loadDigest">重新加载</el-button>
+      <el-button @click="returnToPreviousPage(router, '/portal/digests')">返回上一页</el-button>
     </div>
     <template v-else-if="loaded">
     <header class="ps-editor-topbar">
       <div class="ps-editor-title">
-        <el-button :icon="ArrowLeft" circle class="ps-ui-action" aria-label="返回情报简报" @click="router.push('/portal/digests')" />
+        <el-button :icon="ArrowLeft" circle class="ps-ui-action" aria-label="返回上一页" title="返回上一页" @click="returnToPreviousPage(router, '/portal/digests')" />
         <span><strong>{{ digest.title }}</strong><small>{{ digestPeriod }} · {{ reportTypeLabel }}</small></span>
       </div>
       <div class="ps-save-state"><span :class="{ 'is-saving': saving }"></span>{{ saveLabel }}</div>
@@ -89,6 +90,7 @@
 </template>
 
 <script setup>
+import { returnToPreviousPage } from '@/utils/portal/openContent'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'

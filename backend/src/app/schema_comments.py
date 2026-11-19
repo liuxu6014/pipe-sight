@@ -131,6 +131,8 @@ COLUMN_COMMENTS = {
         'purpose': '模板用途：article生成文章、research科研报告、digest周期简报',
         'description': '模板用途及适用范围说明；可空，不冒充正文生成结果',
         'prompt': '正文生成提示词；无独立旧提示词时明确保留原模板名称、说明及章节结构',
+        'screening_prompt': '情报简报写作前的文章筛选提示词；为空时使用系统默认筛选规则',
+        'screening_categories': '简报筛选类别及逐类提示词的JSON数组；空数组表示自由分类，NULL兼容历史模板',
         'model_id': '正文模型ID，关联ai_models.id；迁移后允许NULL，提交生成时必须配置真实文本模型',
         'image_model_id': '配图模型ID，关联ai_models.id；可空，请求配图时须具备image_generate能力',
         'sections': '章节顺序及必填要求的JSON数组；保留章节标题和结构约束；明确的平台业务引用按实体映射，章节正文与普通外部参数不改写',

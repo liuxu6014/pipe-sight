@@ -1,13 +1,50 @@
+import re
 from datetime import date
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, PlainSerializer, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    PlainSerializer,
+    field_validator,
+    model_validator,
+)
 from pydantic.alias_generators import to_camel
 
 from app.business_ids import parse_business_id, wire_id
 from app.research.digest_policy import DIGEST_SELECTION_LIMIT
 
 BusinessId = Annotated[int, BeforeValidator(parse_business_id), PlainSerializer(wire_id, return_type=str)]
+
+
+class PipelineDigestCategoryRule(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra='forbid')
+
+    name: str = Field(min_length=1, max_length=80)
+    prompt: str = Field(min_length=1, max_length=2000)
+
+    @field_validator('name')
+    @classmethod
+    def plain_heading(cls, value: str) -> str:
+        if re.search(r'[\r\n<>`]|\[[^\]]*\]|\*\*|^#', value):
+            raise ValueError('筛选类别名称须为单行纯文本')
+        return value
+
+
+def _validate_category_rules(rules: list[PipelineDigestCategoryRule]) -> list[PipelineDigestCategoryRule]:
+    if len({rule.name.lower() for rule in rules}) != len(rules):
+        raise ValueError('筛选类别名称不能重复')
+    if sum(len(rule.prompt) for rule in rules) > 20000:  # noqa: PLR2004
+        raise ValueError('各类别筛选提示词合计不能超过 20000 字')
+    return rules
+
+
+DigestCategoryRules = Annotated[
+    list[PipelineDigestCategoryRule], Field(max_length=30), AfterValidator(_validate_category_rules)
+]
 
 
 class PipelineListModel(BaseModel):
@@ -27,6 +64,8 @@ class PipelineTemplateSaveModel(BaseModel):
     report_type: Literal['research-demand', 'technology-route', 'project-demand'] | None = None
     digest_cadence: Literal['weekly', 'monthly', 'all'] | None = None
     prompt: str = Field(min_length=1, max_length=100000)
+    screening_prompt: str | None = Field(default=None, max_length=5000)
+    screening_categories: DigestCategoryRules | None = None
     description: str = Field(default='', max_length=1000)
     model_id: BusinessId | None = None
     image_model_id: BusinessId | None = None
@@ -58,6 +97,7 @@ class PipelineResearchJobCreateModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     request_id: str | None = Field(default=None, min_length=1, max_length=128, description='客户端幂等请求标识')
+    screening_id: str | None = Field(default=None, pattern=r'^[0-9a-f]{32}$', description='本人的简报资料复筛结果')
     report_id: BusinessId | None = Field(default=None, description='重生成的本人报告ID')
     type: Literal['article', 'research', 'daily', 'weekly', 'monthly'] | None = None
     title: str = Field(min_length=1, max_length=500, description='任务名称')
@@ -71,7 +111,9 @@ class PipelineResearchJobCreateModel(BaseModel):
     period: list[str] = Field(default_factory=list, description='起止时间')
     keywords: list[str] = Field(default_factory=list, description='关键词')
     requirements: str = Field(default='', max_length=5000, description='仅用于本次任务的生成提示词')
-    template_prompt: str | None = Field(default=None, max_length=100000, description='本次正文提示词，未提供时沿用模板配置')
+    template_prompt: str | None = Field(
+        default=None, max_length=100000, description='本次正文提示词，未提供时沿用模板配置'
+    )
     diagram: bool = Field(default=False, description='是否生成结构化图形')
     citation_check: bool = Field(default=True, description='是否检查引用')
     selected_item_ids: list[BusinessId] = Field(default_factory=list, description='选中资料ID')
@@ -85,6 +127,8 @@ class PipelineResearchJobCreateModel(BaseModel):
     def validate_digest_selection_limit(self) -> 'PipelineResearchJobCreateModel':
         if self.type is not None:
             self.report_type = self.type
+        if self.screening_id and (self.materials or self.selected_item_ids):
+            raise ValueError('简报资料由系统筛选结果确定，无需提交资料编号')
         if self.materials and self.selected_item_ids:
             raise ValueError('请使用一种选材方式，不要同时提交 materials 和 selectedItemIds')
         selections = self.materials or self.selected_item_ids
@@ -116,13 +160,24 @@ class PipelineDigestCandidatesModel(BaseModel):
         return self
 
 
+class PipelineDigestScreeningModel(PipelineDigestCandidatesModel):
+    period: list[date] = Field(min_length=2, max_length=2)
+    sources: list[Literal['新闻网站', '微信公众号']] = Field(
+        default_factory=lambda: ['新闻网站', '微信公众号'], min_length=1, max_length=2
+    )
+    report_type: Literal['weekly', 'monthly']
+    template_id: BusinessId | None = None
+    screening_prompt: str | None = Field(default=None, max_length=5000)
+    screening_categories: DigestCategoryRules | None = None
+
+
 class PipelineDigestScheduleCreateModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     request_id: str | None = Field(default=None, min_length=1, max_length=128, description='客户端幂等请求标识')
     name: str = Field(min_length=1, max_length=255, description='计划名称')
     report_type: Literal['daily', 'weekly', 'monthly'] = Field(description='日报、周报或月报')
-    template_id: BusinessId | None = Field(default=None, description='兼容旧客户端模板ID；周报和月报统一使用系统固定格式')
+    template_id: BusinessId | None = Field(default=None, description='本人启用的简报模板；留空使用系统默认模板')
     template_version: str | None = Field(default=None, max_length=32, description='模板版本快照')
     schedule_time: str = Field(
         default='08:00',

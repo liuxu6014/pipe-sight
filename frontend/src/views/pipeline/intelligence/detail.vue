@@ -5,7 +5,7 @@
 
         <h1>{{ detail.title || '情报详情' }}</h1>
       </div>
-      <el-button :icon="Back" @click="router.back()">返回</el-button>
+      <el-button :icon="Back" @click="returnToPreviousPage(router, '/pipeline/intelligence')">返回</el-button>
     </section>
 
     <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false">
@@ -20,7 +20,7 @@
               <el-tag :type="categoryType(detail.category)" effect="light">{{ categoryText(detail.category) }}</el-tag>
             </div>
           </template>
-          <el-tabs v-model="activeTab" aria-label="内容切换"><el-tab-pane label="摘要" name="summary"><p class="content-text">{{ detail.category === 'paper' ? detail.abstract || detail.summary || '摘要未提供' : detail.summary || '摘要未提供' }}</p></el-tab-pane><el-tab-pane v-if="detail.category !== 'paper'" label="全文" name="fulltext"><p class="content-text">{{ detail.content_original || detail.contentOriginal || detail.content || '当前记录未提供全文' }}</p></el-tab-pane><el-tab-pane v-if="savedTranslation" label="已保存中文" name="zh"><p class="content-text">{{ savedTranslation }}</p></el-tab-pane><el-tab-pane :label="detail.category === 'paper' ? 'AI 解读' : '管网洞察'" name="insight"><ContentInsights :item="detail" :kind="detail.category === 'paper' ? 'paper' : 'news'" /></el-tab-pane></el-tabs>
+          <el-tabs v-model="activeTab" aria-label="内容切换"><el-tab-pane label="摘要" name="summary"><p class="content-text">{{ detail.category === 'paper' ? detail.abstract || detail.summary || '摘要未提供' : detail.summary || '摘要未提供' }}</p></el-tab-pane><el-tab-pane v-if="detail.category !== 'paper'" label="全文" name="fulltext"><p class="content-text">{{ detail.content_original || detail.contentOriginal || detail.content || '当前记录未提供全文' }}</p></el-tab-pane><el-tab-pane v-if="savedTranslation" label="已保存中文" name="zh"><p class="content-text">{{ savedTranslation }}</p></el-tab-pane><el-tab-pane :label="detail.category === 'paper' ? 'AI 解读' : '行业洞察'" name="insight"><ContentInsights :item="detail" :kind="detail.category === 'paper' ? 'paper' : 'news'" /></el-tab-pane></el-tabs>
           <div class="tag-line">
             <el-tag v-for="tag in detail.tags" :key="tag" effect="plain">{{ tag }}</el-tag>
           </div>
@@ -48,6 +48,7 @@
 </template>
 
 <script setup>
+import { returnToPreviousPage } from '@/utils/portal/openContent'
 import { formatBusinessTime } from '@/utils/portal/businessTime'
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'

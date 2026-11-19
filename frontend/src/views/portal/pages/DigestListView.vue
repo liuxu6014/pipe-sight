@@ -95,7 +95,8 @@
 
 <script setup>
 import { formatBusinessTime } from '@/utils/portal/businessTime'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { toRefs, computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { bindListQuery } from '@/utils/portal/listQuery'
 import { usePagedResults } from '@/utils/portal/usePagedResults'
 import { reportSummaryRow } from '@/utils/portal/reportSummary'
 import { listPipelineResearchReports } from '@/api/pipeline/intelligence'
@@ -124,10 +125,14 @@ watch(listRegion, element => {
   })
   listResizeObserver.observe(element)
 }, { flush: 'post' })
-const keyword = ref('')
-const date = ref([])
-const status = ref('all')
-const activeTab = ref(route.query.tab === 'schedules' ? '自动任务' : '全部')
+const controls = bindListQuery(route, router, { q: '', dates: [], status: 'all', tab: '', page: 1, size: 10 })
+const { q: keyword, status, page: currentPage, size: pageSize } = toRefs(controls)
+const date = computed({ get: () => controls.dates, set: value => { controls.dates = value || [] } })
+const tabLabels = { '': '全部', weekly: '周报', monthly: '月报', schedules: '自动任务' }
+const activeTab = computed({
+  get: () => tabLabels[controls.tab] || '全部',
+  set: label => { controls.tab = Object.keys(tabLabels).find(key => tabLabels[key] === label) || '' }
+})
 const hasActiveFilters = computed(() => Boolean(keyword.value
   || (activeTab.value !== '自动任务' && (date.value?.length || status.value !== 'all'))))
 const scheduleDialog = ref(false), editingSchedule = ref(null)
@@ -144,11 +149,9 @@ const reportStatuses = computed(() => ['已完成', '生成中', '生成失败',
 const runningScheduleId = ref('')
 const changingScheduleId = ref('')
 const deletingScheduleId = ref('')
-const tabs = ['全部', '周报', '月报', '自动任务']
+const tabs = Object.values(tabLabels)
 function isDaily(row) { return ['daily', '日报'].includes(row?.reportType || row?.type) }
 const filteredSchedules = computed(() => schedules.value.filter(item => !keyword.value || item.name.includes(keyword.value)))
-const currentPage = ref(1)
-const pageSize = ref(10)
 const params = computed(() => ({ pageNum: currentPage.value, pageSize: pageSize.value, keyword: keyword.value, status: status.value, kind: ({ '周报': 'weekly', '月报': 'monthly' })[activeTab.value] || 'brief', start: date.value?.[0] || '', end: date.value?.[1] || '' }))
 const { rows: digestRows, total: reportsTotal, error: reportsError, loading: reportsLoading, refresh: loadReports } = usePagedResults(listPipelineResearchReports, params, computed(() => portalStore.workspaceEpoch), currentPage, computed(() => activeTab.value !== '自动任务'))
 const pagedReports = computed(() => digestRows.value.map(item => { const row = reportSummaryRow(item); return { ...row, status: row.hasOutput ? '已完成' : row.statusLabel } }))
@@ -161,7 +164,6 @@ function queueReportRefresh() {
 watch([pagedReports, reportsLoading, reportsError, activeTab], queueReportRefresh)
 const listTotal = computed(() => activeTab.value === '自动任务' ? filteredSchedules.value.length : reportsTotal.value)
 const pagedSchedules = computed(() => filteredSchedules.value.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value))
-watch([keyword, date, status, activeTab, pageSize], () => { currentPage.value = 1 }, { deep: true })
 watch(listTotal, count => { if (activeTab.value === '自动任务') currentPage.value = Math.min(currentPage.value, Math.max(1, Math.ceil(count / pageSize.value))) })
 function typeClass(value) { return ({ '日报': 'daily', '周报': 'weekly', '月报': 'monthly', '自动任务': 'auto' })[value] || 'daily' }
 function statusClass(value) { return ({ '已完成': 'success', '待审核': 'warning', '草稿': 'muted', '运行中': 'running' })[value] || 'muted' }

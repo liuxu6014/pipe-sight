@@ -11,6 +11,7 @@ from app.business_ids import wire_id
 from app.business_time import format_business_time
 from app.intelligence.services.templates import PipelineTemplateService
 from app.research.repositories.research_repository import ResearchDao as PipelineDao
+from app.research.services.digest_document import digest_material_key
 from app.research.services.digest_schedules import DigestScheduleService
 from app.research.services.execution import ResearchExecutionService
 from app.research.services.exports import ResearchReportExportService
@@ -138,12 +139,18 @@ class ResearchApplicationService:
         if job.result_content:
             try:
                 if snapshot.get('document_format') == 'digest-reference-v1':
-                    from app.research.services.digest_document import normalize_digest_document  # noqa: PLC0415
+                    from app.research.services.digest_document import (  # noqa: PLC0415
+                        digest_result_materials,
+                        normalize_digest_document,
+                    )
 
                     # Match the execution contract: digest event groups replace
                     # legacy template chapters and use the frozen item limits.
                     normalized_result = normalize_digest_document(
-                        job.result_content, job.materials, generation_options=request.get('options') or {}
+                        job.result_content,
+                        digest_result_materials(snapshot, job.materials),
+                        generation_options=request.get('options') or {},
+                        screening=snapshot.get('digest_screening'),
                     )['content']
                 else:
                     normalized_result = normalize_task_report(job.result_content, job.materials, snapshot)['content']
@@ -152,11 +159,7 @@ class ResearchApplicationService:
                 pass
         applied_content = getattr(job, '_applied_result_content', None)
         application = snapshot.get('result_application') or {}
-        applied_hash = (
-            application.get('content_sha256')
-            if str(application.get('job_id')) == str(job.id)
-            else None
-        )
+        applied_hash = application.get('content_sha256') if str(application.get('job_id')) == str(job.id) else None
         if applied_content is not None:
             normalized_result = applied_content
             applied_hash = hashlib.sha256(applied_content.encode('utf-8')).hexdigest()
@@ -168,6 +171,8 @@ class ResearchApplicationService:
                 normalized_result = report.content
         else:
             apply_conflict = bool(job.status == 'completed' and report and report.content != normalized_result)
+        screening = snapshot.get('digest_screening') or {}
+        material_labels = screening.get('labels', {})
         return {
             'id': wire_id(job.id),
             'jobId': wire_id(job.id),
@@ -176,6 +181,22 @@ class ResearchApplicationService:
             'title': snapshot.get('title', ''),
             'templateName': display_template_name((snapshot.get('template') or {}).get('name')),
             'fixedDigestFormat': bool(snapshot.get('fixed_digest_format')),
+            'screenedArticleCount': (
+                len(snapshot['digest_screening']['retained_ids'])
+                if 'retained_ids' in (snapshot.get('digest_screening') or {})
+                else None
+            ),
+            'screenedCandidateCount': screening.get('candidate_count'),
+            'screeningPassedCount': screening.get('passed_count'),
+            **(
+                {
+                    'screeningPrompt': screening.get('general_prompt', screening['prompt']),
+                    'screeningCategories': screening.get('categories', []),
+                    'combinedScreeningPrompt': screening['prompt'],
+                }
+                if screening.get('prompt')
+                else {}
+            ),
             'type': snapshot.get('type', ''),
             'status': job.status,
             'statusLabel': labels.get(job.status, job.status),
@@ -184,7 +205,11 @@ class ResearchApplicationService:
             'ownerId': report.user_id if report else None,
             'owner': '',
             'reportStatus': 'completed' if report and report.content else 'draft',
-            'selectedItems': job.materials,
+            'selectedItems': [
+                {**item, 'screening': material_labels.get(digest_material_key(item))} for item in job.materials
+            ]
+            if material_labels
+            else job.materials,
             'outline': deepcopy(outline),
             **cls._execution_display(job, apply_conflict),
             'config': request,
@@ -312,6 +337,7 @@ class ResearchApplicationService:
         user_id: int,
         owner_name: str,
         payload: PipelineResearchJobCreateModel,
+        screening_cache=None,
     ) -> dict[str, Any]:
         return await ResearchJobService.queue(
             db,
@@ -321,6 +347,7 @@ class ResearchApplicationService:
             stage_labels=cls.stage_labels,
             job_serializer=cls.job_dict,
             template_service=PipelineTemplateService,
+            **({'screening_cache': screening_cache} if screening_cache is not None else {}),
         )
 
     @classmethod

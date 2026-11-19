@@ -1,14 +1,18 @@
+import { bindListQuery } from '../src/utils/portal/listQuery.js'
+import { useWizardHistory } from '../src/utils/portal/wizardHistory.js'
+import { createMemoryHistory } from 'vue-router'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import vm from 'node:vm'
 import { readFileSync } from 'node:fs'
-import { computed, effectScope, nextTick, reactive, ref, watch } from 'vue'
+import { computed, effectScope, nextTick, reactive, ref, toRefs, watch } from 'vue'
 import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 import * as ids from '../src/utils/portal/businessId.js'
 import * as times from '../src/utils/portal/businessTime.js'
 import { templatePreview } from '../src/utils/portal/researchWorkspace.js'
 import { allocateReportWords } from '../src/utils/portal/reportLength.js'
-import { templateGenerationError } from '../src/utils/pipeline/compactContract.js'
+import { screeningRulesError } from '../src/utils/portal/digestScreeningRules.js'
+import { digestTemplatesFor, templateGenerationError } from '../src/utils/pipeline/compactContract.js'
 import { cleanReportCitationNotes, reportCitationParts } from '../src/utils/portal/reportDocument.js'
 import { newScheduleForm, readScheduleForm, schedulePayload, scheduleSummary } from '../src/utils/portal/digestScheduleEditor.js'
 
@@ -18,12 +22,12 @@ function setup(name, expose, overrides = {}) {
   let writes = 0
   const write = () => { writes++; throw Error('unexpected write') }
   const selection = { selectedIds: ref([]), selectedMaterials: ref([]), verifying: ref(false), problems: ref([]), setHint() {}, setSelection() {}, verifySelected: async () => true, refreshEvidence() {} }
-  const store = { workspaceEpoch: 1, digestReports: [], tasks: [], sectionErrors: {}, basket: [], hydrate: async () => {} }
+  const store = { workspaceEpoch: 1, digestReports: [], tasks: [], sectionErrors: {}, basket: [], hydrate: async () => {}, registerGenerationTask() {} }
   const context = vm.createContext({
-    Date, computed, reactive, ref, watch, nextTick, ...ids, ...times, templatePreview, templateGenerationError, allocateReportWords,
+    Date, useWizardHistory, bindListQuery, toRefs, computed, reactive, ref, watch, nextTick, ...ids, ...times, templatePreview, templateGenerationError, digestTemplatesFor, allocateReportWords, screeningRulesError,
     cleanReportCitationNotes, reportCitationParts, newScheduleForm, readScheduleForm, schedulePayload, scheduleSummary,
     onMounted() {}, onBeforeUnmount(fn) { callbacks.push(fn) }, onBeforeRouteLeave() {}, onBeforeRouteUpdate() {},
-    useRoute: () => reactive({ query: {}, params: { id: '41' } }), useRouter: () => ({ push() {} }), usePortalStore: () => store,
+    useRoute: () => reactive({ query: {}, params: { id: '41' } }), useRouter: () => ({ currentRoute: ref({}), options: { history: createMemoryHistory() }, push() {}, replace: async () => {} }), usePortalStore: () => store,
     ElMessage: { warning() {}, success() {}, error() {}, info() {} }, ElMessageBox: { confirm: write },
     useEvidenceSelection: () => selection,
     usePagedResults: () => ({ rows: ref([]), total: ref(0), error: ref(''), loading: ref(false), refresh: async () => {} }),

@@ -131,6 +131,20 @@ def test_new_digest_rejects_splitting_one_source_into_multiple_events() -> None:
         normalize_digest_document(json.dumps(data), materials()[:1], generation_options={})
 
 
+def test_digest_rejects_omitting_a_category_with_matched_sources() -> None:
+    data = document()
+    data['groups'][0]['items'].pop()
+    screening = {
+        'categories': [{'name': '工程验证'}, {'name': '学术研究'}],
+        'labels': {
+            'article:20': {'keep': True, 'category': '工程验证'},
+            'paper:20': {'keep': True, 'category': '学术研究'},
+        },
+    }
+    with pytest.raises(ValueError, match='缺少有通过资料的类别“学术研究”'):
+        normalize_digest_document(json.dumps(data), materials(), screening=screening)
+
+
 def test_new_digest_enforces_the_selected_summary_and_category_limits() -> None:
     data = document()
     assert normalize_digest_document(json.dumps(data), materials(), generation_options={'itemCount': 2})
@@ -154,7 +168,7 @@ def test_generated_monthly_masthead_and_sources_fit_together() -> None:
     pdf = PdfReader(BytesIO(build_pdf(value, is_draft=False)[2]))
     assert len(pdf.pages) == 1
     text = pdf.pages[0].extract_text()
-    assert text.splitlines()[0].strip() == '管网科技情报月报'
+    assert text.splitlines()[0].strip() == '科技情报月报'
     assert '2026年10月1日到10月31日' in text
     assert '数据源：' in text
 
