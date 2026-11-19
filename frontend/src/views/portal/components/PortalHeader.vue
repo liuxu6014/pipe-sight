@@ -224,6 +224,7 @@ onMounted(() => store.hydrate())
 }
 @media (max-width: 1050px) {
   .ps-header-search.el-button { display: none; }
+  .ps-header-tools .ps-generation-queue.el-button { min-height: 44px; }
 }
 @media (max-width: 760px) {
   .ps-header-tools { flex: 0 0 auto; gap: 4px; }
