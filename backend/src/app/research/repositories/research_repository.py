@@ -107,6 +107,7 @@ class ResearchDao:
         cls, db, job_id, user_id, *, worker_id='', lease_seconds=900, max_attempts=3
     ) -> Job | None:
         from app.research.services.concurrency import (  # noqa: PLC0415
+            GENERATION_INTERRUPTED_MESSAGE,
             RESEARCH_CAPACITY_LOCK,
             RESEARCH_GLOBAL_LIMIT,
             RESEARCH_MODEL_LIMIT,
@@ -119,7 +120,15 @@ class ResearchDao:
         now = utcnow()
         if not job or job.status not in {'queued', 'running'}:
             return None
-        if job.status == 'running' and job.lease_expires_at and cls.aware(job.lease_expires_at) > now:
+        if job.status == 'running':
+            if job.lease_expires_at and cls.aware(job.lease_expires_at) > now:
+                return None
+            # A dead worker may already have sent a paid provider request.
+            # Recover its record, not the unknown external side effect.
+            job.status, job.error, job.finished_at = 'failed', GENERATION_INTERRUPTED_MESSAGE, now
+            job.execution_token = job.lease_expires_at = None
+            await cls.record_schedule_generation(db, job)
+            await db.commit()
             return None
         if job.attempts >= max_attempts:
             job.status, job.error, job.finished_at = 'failed', '执行次数已达上限', now

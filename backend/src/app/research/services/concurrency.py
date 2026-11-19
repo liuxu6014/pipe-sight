@@ -18,3 +18,4 @@ RESEARCH_DISPATCH_BATCH = _limit('RESEARCH_DISPATCH_BATCH', 40, 200)
 EXPORT_CONCURRENCY = _limit('REPORT_EXPORT_CONCURRENCY', 2, 16)
 # One transaction lock serializes the count-and-claim decision in PostgreSQL.
 RESEARCH_CAPACITY_LOCK = 720260115
+GENERATION_INTERRUPTED_MESSAGE = '执行中断，模型调用结果无法确认；为避免重复生成，系统未自动重发，请确认后手动重试'

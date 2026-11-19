@@ -11,6 +11,14 @@ const memory = () => {
   const values = new Map()
   return { getItem: key => values.get(key), setItem: (key, value) => values.set(key, value) }
 }
+const lockQueue = () => {
+  let tail = Promise.resolve()
+  return { request(_key, callback) {
+    const result = tail.then(callback)
+    tail = result.catch(() => {})
+    return result
+  } }
+}
 function setup(api = {}, storage = memory()) {
   const updates = [], completed = [], errors = []
   const monitor = createGenerationMonitor({
@@ -77,6 +85,72 @@ test('a stale tab saving a running queue cannot erase another tab completion rec
     first.monitor.observe([job(11, 'completed'), job(12, 'completed')])
     assert.deepEqual([...first.completed, ...second.completed].map(task => task.id).sort(), ['11', '12'])
   } finally { first.monitor.stop(); second.monitor.stop() }
+})
+
+test('a second tab cannot overwrite pending tracking for a task outside recent history after reload', async () => {
+  const storage = memory()
+  const first = setup({}, storage), second = setup({}, storage)
+  first.monitor.start('7')
+  second.monitor.start('7')
+  await Promise.all([first.monitor.refresh(), second.monitor.refresh()])
+  first.monitor.observe([job(11, 'queued')])
+  second.monitor.observe([job(12, 'queued')])
+  first.monitor.stop(); second.monitor.stop()
+  const requested = []
+  const reloaded = setup({ getJob: async id => { requested.push(id); return { data: job(id, 'completed') } } }, storage)
+  try {
+    reloaded.monitor.start('7')
+    await reloaded.monitor.refresh()
+    assert.deepEqual(requested.sort(), ['11', '12'])
+    assert.deepEqual(reloaded.completed.map(task => task.id).sort(), ['11', '12'])
+  } finally { reloaded.monitor.stop() }
+})
+
+test('simultaneous tab completions atomically claim one notification with shared browser locks', async () => {
+  const storage = memory(), locks = lockQueue()
+  const first = setup({ locks }, storage), second = setup({ locks }, storage)
+  try {
+    first.monitor.start('7'); second.monitor.start('7')
+    await Promise.all([first.monitor.refresh(), second.monitor.refresh()])
+    await Promise.all([first.monitor.observe([job(11, 'queued')]), second.monitor.observe([job(12, 'queued')])])
+    await Promise.all([
+      first.monitor.observe([job(11, 'completed'), job(12, 'completed')]),
+      second.monitor.observe([job(11, 'completed'), job(12, 'completed')])
+    ])
+    assert.deepEqual([...first.completed, ...second.completed].map(task => task.id).sort(), ['11', '12'])
+    const saved = JSON.parse(storage.getItem('ps-generation-notices-7'))
+    assert.deepEqual(saved.pending, [])
+    assert.deepEqual(saved.notified.sort(), ['11', '12'])
+  } finally { first.monitor.stop(); second.monitor.stop() }
+})
+
+test('stale running data cannot resurrect failed or cancelled tracking after another tab settles it', async () => {
+  const storage = memory(), locks = lockQueue()
+  const first = setup({ locks }, storage), second = setup({ locks }, storage)
+  try {
+    first.monitor.start('7'); second.monitor.start('7')
+    await Promise.all([first.monitor.refresh(), second.monitor.refresh()])
+    await first.monitor.observe([job(11, 'running'), job(12, 'queued')])
+    await second.monitor.observe([job(11, 'failed'), job(12, 'cancelled')], ['11', '12'])
+    await first.monitor.observe([job(11, 'running'), job(12, 'queued')])
+    assert.deepEqual(JSON.parse(storage.getItem('ps-generation-notices-7')).pending, [])
+    assert.equal(first.completed.length + second.completed.length, 0)
+  } finally { first.monitor.stop(); second.monitor.stop() }
+})
+
+test('a queued notification lock cannot announce for a previous account', async () => {
+  const locks = lockQueue()
+  let unblock
+  const blocker = locks.request('block', () => new Promise(resolve => { unblock = resolve }))
+  await Promise.resolve()
+  const ctx = setup({ locks })
+  ctx.monitor.start('7')
+  const pending = ctx.monitor.observe([job(11, 'completed')], ['11'])
+  ctx.monitor.start('8')
+  unblock(); await blocker; await pending; await ctx.monitor.refresh()
+  assert.equal(ctx.completed.length, 0)
+  assert.equal(ctx.storage.getItem('ps-generation-notices-7'), undefined)
+  ctx.monitor.stop()
 })
 
 test('fetches the full active queue and follows a completed job outside recent history', async () => {

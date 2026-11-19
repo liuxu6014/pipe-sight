@@ -8,6 +8,7 @@ from typing import Any
 from app.business_ids import parse_business_id, wire_id
 from app.research.models.research_models import PipelineReportVersion, utcnow
 from app.research.repositories.research_repository import ResearchDao
+from app.research.services.concurrency import GENERATION_INTERRUPTED_MESSAGE
 from app.research.services.digest_document import DigestScreeningError, digest_material_key, digest_result_materials
 from app.research.services.model_generation import ModelOutputLimitError, ResearchModelGenerationService
 from app.research.services.report_content import (
@@ -168,6 +169,15 @@ class ResearchExecutionService:
                 await ResearchDao.record_schedule_generation(result_db, job)
                 await result_db.commit()
         except asyncio.CancelledError:
+            # Graceful shutdown must not leave a paid, unknown request looking
+            # active for the entire lease or make a restart send it again.
+            async with AsyncSessionLocal() as interrupted_db:
+                job = await ResearchDao.lock_running_research_job(interrupted_db, job_id, user_id, token)
+                if job:
+                    job.status, job.error, job.finished_at = 'failed', GENERATION_INTERRUPTED_MESSAGE, utcnow()
+                    job.execution_token = job.lease_expires_at = None
+                    await ResearchDao.record_schedule_generation(interrupted_db, job)
+                    await interrupted_db.commit()
             raise
         except Exception as error:
             async with AsyncSessionLocal() as error_db:

@@ -4,13 +4,15 @@ const activeStatuses = new Set(['queued', 'running'])
 const terminalStatuses = new Set(['completed', 'failed', 'cancelled'])
 
 // Lives with the portal shell, so changing the current page never stops tracking.
-export function createGenerationMonitor({ listJobs, getJob, updateTasks, onCompleted, onError, storage, interval = 5000 }) {
+export function createGenerationMonitor({ listJobs, getJob, updateTasks, onCompleted, onError, storage, locks = globalThis.navigator?.locks, interval = 5000 }) {
   let owner = ''
   let epoch = 0
   let timer
   let inflight
   let pending = new Set()
   let notified = new Set()
+  let settled = new Set()
+  let announcing = new Set()
   let initialized = false
   let knownIds = new Set()
 
@@ -19,17 +21,62 @@ export function createGenerationMonitor({ listJobs, getJob, updateTasks, onCompl
       const state = JSON.parse(storage?.getItem(`ps-generation-notices-${owner}`) || '{}')
       return {
         pending: Array.isArray(state.pending) ? state.pending.filter(decimalId) : [],
-        notified: Array.isArray(state.notified) ? state.notified.filter(value => typeof value === 'string') : []
+        notified: Array.isArray(state.notified) ? state.notified.filter(value => typeof value === 'string') : [],
+        settled: Array.isArray(state.settled) ? state.settled.filter(decimalId) : []
       }
-    } catch { return { pending: [], notified: [] } }
+    } catch { return { pending: [], notified: [], settled: [] } }
   }
-  function persist() {
+  function writeState() {
     try {
       // A still-running tab must not erase notices already claimed by another
       // tab when it saves its older pending queue after a refresh.
-      for (const key of read().notified) notified.add(key)
-      storage?.setItem(`ps-generation-notices-${owner}`, JSON.stringify({ pending: [...pending], notified: [...notified].slice(-200) }))
+      const saved = read()
+      for (const key of saved.notified) notified.add(key)
+      for (const key of [...saved.settled, ...notified]) settled.add(key)
+      for (const key of saved.pending) pending.add(key)
+      for (const key of settled) pending.delete(key)
+      storage?.setItem(`ps-generation-notices-${owner}`, JSON.stringify({ pending: [...pending], notified: [...notified].slice(-200), settled: [...settled].slice(-200) }))
     } catch { /* Tracking still works for the current session when storage is unavailable. */ }
+  }
+  function persist() {
+    if (!locks?.request) return writeState()
+    const currentEpoch = epoch, currentOwner = owner
+    return (async () => {
+      try {
+        await locks.request(`ps-generation-notices-${currentOwner}`, () => {
+          if (owner === currentOwner && epoch === currentEpoch) writeState()
+        })
+      } catch { if (owner === currentOwner && epoch === currentEpoch) onError('任务跟踪暂时无法同步，请在生成队列查看结果') }
+    })()
+  }
+  function announce(task, id) {
+    const currentEpoch = epoch, currentOwner = owner
+    const current = () => owner === currentOwner && epoch === currentEpoch
+    const claim = () => {
+      if (!current()) return
+      if (!notified.has(id) && !read().notified.includes(id)) {
+        notified.add(id)
+        settled.add(id)
+        pending.delete(id)
+        writeState()
+        onCompleted(task)
+      } else {
+        settled.add(id)
+        pending.delete(id)
+        writeState()
+      }
+    }
+    if (!locks?.request) return claim()
+    if (announcing.has(id)) return
+    const claims = announcing
+    claims.add(id)
+    // localStorage read/merge/write is not atomic across browser processes.
+    // Serialize receipt claims when Web Locks is available (including localhost).
+    void (async () => {
+      try { await locks.request(`ps-generation-notices-${currentOwner}`, claim) }
+      catch { if (current()) onError('完成提醒暂时无法同步，请在生成队列查看结果') }
+      finally { claims.delete(id) }
+    })()
   }
   function observe(tasks, submittedIds = []) {
     if (!owner) return
@@ -38,20 +85,17 @@ export function createGenerationMonitor({ listJobs, getJob, updateTasks, onCompl
       if (task.ownerId != null && String(task.ownerId) !== owner) continue
       const id = decimalId(task.jobId || task.id)
       if (!id) continue
-      if (activeStatuses.has(task.status)) pending.add(id)
+      if (activeStatuses.has(task.status) && !settled.has(id)) pending.add(id)
       if (!pending.has(id) || !terminalStatuses.has(task.status)) continue
       if (task.status === 'completed' && task.reportStatus !== 'completed' && !task.applyConflict) continue
-      pending.delete(id)
       if (task.status === 'completed' && (task.reportStatus === 'completed' || task.applyConflict) && decimalId(task.reportId)) {
-        const key = id
-        // Another open tab may already have shown this completion.
-        if (notified.has(key) || read().notified.includes(key)) continue
-        notified.add(key)
-        persist()
-        onCompleted(task)
+        announce(task, id)
+      } else if (task.status !== 'completed') {
+        settled.add(id)
+        pending.delete(id)
       }
     }
-    persist()
+    return persist()
   }
   async function page(params) {
     const { data } = await listJobs(params)
@@ -99,7 +143,8 @@ export function createGenerationMonitor({ listJobs, getJob, updateTasks, onCompl
         }
         initialized = true
         updateTasks(tasks)
-        observe(tasks)
+        await observe(tasks)
+        if (!current()) return
         onError('')
       } catch (error) {
         if (current()) onError(error?.msg || error?.message || '生成队列暂时无法更新，请重试')
@@ -115,6 +160,7 @@ export function createGenerationMonitor({ listJobs, getJob, updateTasks, onCompl
     owner = ''
     clearTimeout(timer)
     inflight = null
+    announcing = new Set()
   }
   function start(userId) {
     stop()
@@ -125,6 +171,7 @@ export function createGenerationMonitor({ listJobs, getJob, updateTasks, onCompl
     const state = read()
     pending = new Set(state.pending)
     notified = new Set(state.notified)
+    settled = new Set([...state.settled, ...state.notified])
     void refresh()
   }
   return { start, stop, observe, refresh }
