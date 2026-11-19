@@ -9,7 +9,7 @@
     </section>
 
     <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false">
-      <template #default><el-button plain type="primary" @click="loadDetail">重新加载</el-button></template>
+      <template #default><el-button v-if="detailId" plain type="primary" :disabled="loading" @click="loadDetail">重新加载</el-button></template>
     </el-alert>
     <el-row v-else :gutter="16">
       <el-col :xs="24" :lg="16">
@@ -50,8 +50,7 @@
 <script setup>
 import { returnToPreviousPage } from '@/utils/portal/openContent'
 import { formatBusinessTime } from '@/utils/portal/businessTime'
-import { computed, onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import { Back } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getPipelineIntelligenceDetail } from '@/api/pipeline/intelligence'
@@ -68,6 +67,26 @@ const loadError = ref('')
 const detail = ref({ tags: [] })
 const activeTab = ref('summary')
 const savedTranslation = computed(() => detail.value.category === 'paper' ? detail.value.abstractZh || detail.value.abstract_zh : detail.value.contentZh || detail.value.content_zh)
+const detailId = computed(() => typeof route.query.id === 'string' ? route.query.id.trim() : '')
+let active = false
+let disposed = false
+let requestVersion = 0
+
+function isDetailRoute() {
+  return route.path === '/pipeline/intelligence/detail'
+}
+
+function resetDetail() {
+  detail.value = { tags: [] }
+  activeTab.value = 'summary'
+  loadError.value = ''
+  loading.value = false
+}
+
+function invalidateDetail() {
+  requestVersion++
+  resetDetail()
+}
 
 function categoryText(category) {
   return { news: '新闻', wechat: '公众号', paper: '论文' }[category] || category
@@ -78,22 +97,45 @@ function categoryType(category) {
 }
 
 async function loadDetail() {
+  if (disposed || !active || !isDetailRoute()) return
+  const version = ++requestVersion
+  const id = detailId.value
+  resetDetail()
+  if (!id) {
+    loadError.value = '缺少情报编号，请返回列表重新选择'
+    return
+  }
   loading.value = true
-  loadError.value = ''
+  const isCurrent = () => !disposed && active && isDetailRoute()
+    && version === requestVersion && detailId.value === id
   try {
-    if (!route.query.id) throw new Error('缺少情报编号')
-    const res = await getPipelineIntelligenceDetail(route.query.id)
-    detail.value = res.data
-  } catch (error) {
-    detail.value = { tags: [] }
-    loadError.value = '暂时无法获取情报详情，请检查编号、权限或稍后重试'
-    ElMessage.warning('暂时无法获取情报详情')
+    const res = await getPipelineIntelligenceDetail(id)
+    if (!isCurrent()) return
+    if (!res?.data || String(res.data.id) !== id) throw new Error('情报编号不匹配')
+    detail.value = { ...res.data, tags: Array.isArray(res.data.tags) ? res.data.tags : [] }
+  } catch {
+    if (isCurrent()) loadError.value = '暂时无法获取情报详情，请检查编号、权限或稍后重试'
   } finally {
-    loading.value = false
+    if (isCurrent()) loading.value = false
   }
 }
 
-onMounted(loadDetail)
+function activateDetail() {
+  if (active || disposed) return
+  active = true
+  void loadDetail()
+}
+
+watch(() => [route.path, route.query.id], () => {
+  if (!active || disposed) return
+  if (isDetailRoute()) void loadDetail()
+  else invalidateDetail()
+}, { flush: 'sync' })
+
+onMounted(activateDetail)
+onActivated(activateDetail)
+onDeactivated(() => { active = false; invalidateDetail() })
+onBeforeUnmount(() => { active = false; disposed = true; invalidateDetail() })
 </script>
 
 <style scoped>
