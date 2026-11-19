@@ -34,6 +34,8 @@ PYTHONPATH=src .venv/bin/python -m app.entrypoints.task_worker --env=dev
 npm run dev -- --host 127.0.0.1 --port 12580 --strictPort
 ```
 
+维护时停止 Worker 不会删除持久队列。尚未开始的生成任务会在 Worker 恢复后自动调度；已经开始、但因进程停止或租约失效而无法确认模型结果的任务会标记为中断失败，需在任务页明确重试，系统不会自动重发可能已计费的模型请求。
+
 停止容器并保留数据：
 
 ```sh
