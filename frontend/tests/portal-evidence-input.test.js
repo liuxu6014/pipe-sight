@@ -228,16 +228,15 @@ test('digest submits all ordered categories together and discards stale results 
 })
 
 
-test('digest can use the system default when the personal template catalog cannot load', async () => {
-  let catalogCalls = 0, payload
+test('digest can use the system default without selecting a personal template', async () => {
+  let payload
   const ctx = await mount('DigestCreateView', { api: {
-    listPipelineTemplates: async () => { catalogCalls++; throw Error('template catalog is not a digest dependency') },
+    listPipelineTemplates: async () => ({ data: { rows: [], defaultScreeningPrompt: '保留本期进展', defaultScreeningCategories: [] } }),
     createPipelineResearchJob: async data => { payload = data; return { data: { jobId: '900' } } }
   } })
   try {
     await screenWeekly(ctx.page)
     await ctx.page.createDigest()
-    assert.equal(catalogCalls, 1)
     assert.equal(payload.reportType, 'weekly')
     assert.equal(payload.screeningId, screeningId)
     assert.equal(Object.hasOwn(payload, 'materials'), false)
@@ -1007,6 +1006,73 @@ test('digest batch failure is distinct from no matches and can resume', async ()
   await assert.rejects(() => evidence.fetchDigestPage({ period: ['2026-10-13'], sources: ['新闻网站'], directions: [], keywords: [] }, {
     search: async () => ({ data: { rows: [{ id: '108' }], total: 1 } }), getIntelligence: async () => { throw { msg: '已撤权' } }
   }, 1), /108.*已撤权/)
+})
+
+test('digest cannot advance with missing template rules after a catalog failure', async () => {
+  let failed = true, screenings = 0
+  const ctx = await mount('DigestCreateView', { api: {
+    listPipelineTemplates: async () => {
+      if (failed) throw { msg: '模板读取失败' }
+      return { data: { rows: [] } }
+    },
+    startPipelineDigestScreening: async () => { screenings++; return screeningStart() }
+  } })
+  try {
+    assert.equal(ctx.page.canStart.value, false)
+    ctx.page.confirmGeneration()
+    await settle()
+    assert.equal(ctx.page.activeStep.value, 0)
+    assert.equal(screenings, 0)
+    failed = false
+    await ctx.page.loadTemplates()
+    assert.equal(ctx.page.canStart.value, true)
+  } finally { ctx.close() }
+})
+
+test('an expired screening receipt can restart instead of retrying its invalid batch forever', async () => {
+  let starts = 0, expired = true
+  const ctx = await mount('DigestCreateView', { api: {
+    startPipelineDigestScreening: async () => { starts++; return screeningStart() },
+    advancePipelineDigestScreening: async () => {
+      if (expired) throw Object.assign(new Error('复筛结果已失效，请重新筛选'), { data: 'digest_screening_restart' })
+      return screeningResult([screenedArticle('111')])
+    }
+  } })
+  try {
+    ctx.page.confirmGeneration()
+    await settle()
+    assert.equal(ctx.page.screeningId.value, '')
+    assert.equal(ctx.page.canGenerate.value, false)
+    expired = false
+    await ctx.page.refreshPreview()
+    assert.equal(starts, 2)
+    assert.equal(ctx.page.canGenerate.value, true)
+  } finally { ctx.close() }
+})
+
+test('a stale receipt rejected at submission returns to automatic screening without losing authored rules', async () => {
+  let starts = 0, creates = 0
+  const ctx = await mount('DigestCreateView', { api: {
+    startPipelineDigestScreening: async () => { starts++; return screeningStart() },
+    createPipelineResearchJob: async () => {
+      creates++
+      throw Object.assign(new Error('通过筛选的资料正文已更新，请重新筛选'), { data: 'digest_screening_restart' })
+    }
+  } })
+  try {
+    ctx.page.screeningPrompt.value = '仅保留新的工程试验'
+    ctx.page.confirmGeneration()
+    await settle()
+    await ctx.page.createDigest()
+    assert.equal(creates, 1)
+    assert.equal(ctx.page.canGenerate.value, false)
+    assert.equal(ctx.page.screeningId.value, '')
+    assert.match(ctx.page.previewError.value, /正文已更新/)
+    assert.equal(ctx.page.screeningPrompt.value, '仅保留新的工程试验')
+    await ctx.page.refreshPreview()
+    assert.equal(starts, 2)
+    assert.equal(ctx.page.canGenerate.value, true)
+  } finally { ctx.close() }
 })
 
 

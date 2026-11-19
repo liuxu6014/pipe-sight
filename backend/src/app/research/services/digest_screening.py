@@ -47,7 +47,7 @@ def _template_signature(template, model) -> str:
 async def _read(redis, key) -> dict:
     raw = await redis.get(key) if redis is not None else None
     if not raw:
-        raise DigestScreeningError(message='复筛结果已失效，请返回筛选结果重新复筛')
+        raise DigestScreeningError(message='筛选结果已过期，请重新筛选后提交', restart_required=True)
     return json.loads(raw)
 
 
@@ -107,12 +107,14 @@ class DigestScreeningService:
                 if offset < total:
                     template, model = await cls._model(db, user_id, scope['report_type'], scope['template_id'])
                     if _template_signature(template, model) != state['signature']:
-                        raise DigestScreeningError(message='简报模板或模型配置已变化，请重新复筛')
+                        raise DigestScreeningError(
+                            message='简报模板或模型配置已变化，请重新筛选', restart_required=True
+                        )
                     materials = []
                     for item_id in state['ids'][offset : offset + BATCH_SIZE]:
                         article = await ResearchDao.load_content(db, 'article', item_id)
                         if article is None:
-                            raise DigestScreeningError(message='候选资料已变化，请重新复筛')
+                            raise DigestScreeningError(message='候选资料已变化，请重新筛选', restart_required=True)
                         materials.append(ResearchEvidenceService.article_evidence(article))
                     # Release the default template's transaction lock while the model runs.
                     await db.commit()
@@ -164,19 +166,20 @@ class DigestScreeningService:
             or (options.get('directions') or []) != scope['directions']
             or _template_signature(template, model) != state['signature']
         ):
-            raise DigestScreeningError(message='周期、模板或筛选条件不匹配，请重新复筛')
+            raise DigestScreeningError(message='周期、模板或筛选条件不匹配，请重新筛选', restart_required=True)
         passed = {row['id']: row for row in state['rows'] if row['keep']}
         if not passed:
-            raise DigestScreeningError(message='没有通过筛选的文章，请调整提示词后重新筛选')
+            raise DigestScreeningError(message='没有通过筛选的文章，请调整提示词后重新筛选', restart_required=True)
         if len(passed) > DIGEST_SELECTION_LIMIT:
             raise DigestScreeningError(
-                message=f'通过筛选的文章有 {len(passed)} 篇，超过每份简报的 {DIGEST_SELECTION_LIMIT} 篇上限，请收紧提示词后重新筛选'
+                message=f'通过筛选的文章有 {len(passed)} 篇，超过每份简报的 {DIGEST_SELECTION_LIMIT} 篇上限，请收紧提示词后重新筛选',
+                restart_required=True,
             )
         materials = await ResearchEvidenceService.resolve(
             db, user_id, [{'type': 'article', 'id': item_id} for item_id in passed]
         )
         if any(state['hashes'].get(item['id']) != _signature(item) for item in materials):
-            raise DigestScreeningError(message='通过筛选的资料正文已更新，请重新筛选')
+            raise DigestScreeningError(message='通过筛选的资料正文已更新，请重新筛选', restart_required=True)
         return materials, {
             'candidate_count': len(state['rows']),
             'passed_count': len(passed),

@@ -54,7 +54,7 @@
         </section>
         <div v-else-if="previewError" class="ps-inline-state is-warning" role="alert">
           <span>{{ previewError }}</span>
-          <el-button @click="refreshPreview">{{ screeningId ? '继续筛选' : '重试' }}</el-button>
+          <el-button :disabled="!canStart" @click="refreshPreview">{{ screeningId ? '继续筛选' : '重新筛选' }}</el-button>
         </div>
         <div v-else-if="capacityNotice" class="ps-inline-state is-warning" role="alert">{{ capacityNotice }}</div>
         <div v-else-if="screeningRows && !passedRows.length" class="ps-inline-state is-warning" role="status">
@@ -239,7 +239,7 @@ const previewScope = computed(() => ({
 }))
 const scopeKey = computed(() => JSON.stringify(previewScope.value))
 const canStart = computed(() => Boolean(currentTypeConfig.value && periodLabel.value
-  && !screeningRulesError(screeningCategories.value) && !templatesLoading.value
+  && !screeningRulesError(screeningCategories.value) && !templatesLoading.value && !templateError.value
   && !sourceTaskLoading.value && !sourceTaskError.value && !templateUnavailable.value))
 const passedRows = computed(() => (screeningRows.value || []).filter(item => item.keep))
 const categoryCounts = computed(() => {
@@ -272,6 +272,18 @@ function clearScreening() {
   screeningProcessed.value = 0
   previewError.value = ''
   refreshing.value = false
+}
+async function recoverScreeningError(error) {
+  if (error?.data !== 'digest_screening_restart') return false
+  const session = portalStore.workspaceEpoch
+  clearScreening()
+  await loadTemplates()
+  if (!stopped && session === portalStore.workspaceEpoch && activeStep.value === 1) {
+    previewError.value = templateError.value ? '模板加载失败，请返回配置重试加载模板。'
+      : templateUnavailable.value ? '原模板已不可用，请返回配置选择模板。'
+      : error.message || error.msg || '筛选结果已失效，请重新筛选。'
+  }
+  return true
 }
 watch(scopeKey, clearScreening, { flush: 'sync' })
 function confirmGeneration() {
@@ -307,7 +319,7 @@ async function refreshPreview() {
     if (data.rows.length !== screeningTotal.value) throw new Error('复筛结果不完整，请重试')
     screeningRows.value = data.rows.map(item => ({ ...item, id: requireBusinessId(item.id) }))
   } catch (error) {
-    if (current()) previewError.value = error?.msg || error?.message || '资料复筛失败，请重试'
+    if (current() && !await recoverScreeningError(error)) previewError.value = error?.msg || error?.message || '资料复筛失败，请重试'
   } finally {
     if (current()) refreshing.value = false
   }
@@ -389,7 +401,9 @@ async function createDigest() {
     ElMessage.success(`${form.type}任务已进入后台生成队列，切换页面后会继续生成，完成后将提醒查看`)
     if (isCurrentVisit()) router.push(`/portal/research/tasks/${res.data.jobId || res.data.id}`)
   } catch (error) {
-    ElMessage.error(error?.msg || error?.message || `${form.type}创建失败，请确认后端和数据库已启动`)
+    if (stopped || session !== portalStore.workspaceEpoch) return
+    const recovered = await recoverScreeningError(error)
+    if (!recovered && !stopped && session === portalStore.workspaceEpoch) ElMessage.error(error?.msg || error?.message || `${form.type}创建失败，请确认后端和数据库已启动`)
   } finally {
     submitting.value = false
   }

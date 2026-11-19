@@ -37,9 +37,9 @@ export function createGenerationMonitor({ listJobs, getJob, updateTasks, onCompl
       if (!id) continue
       if (activeStatuses.has(task.status)) pending.add(id)
       if (!pending.has(id) || !terminalStatuses.has(task.status)) continue
-      if (task.status === 'completed' && task.reportStatus !== 'completed') continue
+      if (task.status === 'completed' && task.reportStatus !== 'completed' && !task.applyConflict) continue
       pending.delete(id)
-      if (task.status === 'completed' && task.reportStatus === 'completed' && decimalId(task.reportId)) {
+      if (task.status === 'completed' && (task.reportStatus === 'completed' || task.applyConflict) && decimalId(task.reportId)) {
         const key = id
         // Another open tab may already have shown this completion.
         if (notified.has(key) || read().notified.includes(key)) continue

@@ -121,10 +121,10 @@ service.interceptors.response.use(async res => {
       return Promise.reject('无效的会话，或者会话已过期，请重新登录。')
     } else if (code === 500) {
       ElMessage({ message: msg, type: 'error' })
-      return Promise.reject(new Error(msg))
+      return Promise.reject(Object.assign(new Error(msg), { code, data: res.data.data }))
     } else if (code === 601) {
       ElMessage({ message: msg, type: 'warning' })
-      return Promise.reject(new Error(msg))
+      return Promise.reject(Object.assign(new Error(msg), { code, data: res.data.data }))
     } else if (code !== 200) {
       ElNotification.error({ title: msg })
       return Promise.reject('error')
@@ -153,7 +153,7 @@ service.interceptors.response.use(async res => {
     if (responseMsg) {
       const messageType = responseStatus === 429 || responseCode === 429 ? 'warning' : 'error'
       ElMessage({ message: responseMsg, type: messageType, duration: 5 * 1000 })
-      return Promise.reject(new Error(responseMsg))
+      return Promise.reject(Object.assign(new Error(responseMsg), { code: responseCode || responseStatus, data: response?.data?.data }))
     }
     let { message } = error;
     if (message == "Network Error") {

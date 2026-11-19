@@ -52,6 +52,12 @@ test('digest coverage uses the saved reporting period instead of the later gener
   assert.equal(store.digestReports[0].period, '未设置覆盖周期')
 })
 
+test('queue normalization retains the warning that a new result differs from the current report', () => {
+  const { store } = portalStore()
+  store.setGenerationTasks([{ id: '501', reportId: '500', type: 'research', status: 'completed', reportStatus: 'completed', applyConflict: true }])
+  assert.equal(store.tasks[0].applyConflict, true)
+})
+
 test('portal hydration fetches unified reports once and shares report failures with digest state', async () => {
   const { store, requests } = portalStore()
   const pending = store.hydrate()

@@ -23,6 +23,13 @@
     <div class="ps-task-layout">
       <div class="ps-task-main">
       <section class="ps-panel ps-task-timeline"><div class="ps-section-head"><h2>生成阶段</h2></div><div class="ps-stage-list"><div v-for="stage in stageRows" :key="stage.key || stage.label" :class="{ 'is-complete': stage.status === 'completed', 'is-active': stage.status === 'running' }"><span><Check v-if="stage.status === 'completed'" /><Loading v-else-if="stage.status === 'running'" /><WarningFilled v-else-if="stage.status === 'failed'" /><i v-else></i></span><div><strong>{{ stage.label }}</strong><small>{{ stage.description || '以实际任务记录为准' }}</small></div><time>{{ stageStatusLabel(stage.status) }}</time></div></div></section>
+      <section v-if="task.applyConflict && task.status === 'completed' && task.resultContent" class="ps-panel ps-task-result" aria-label="本次生成结果">
+        <div class="ps-section-head"><h2>本次生成结果</h2></div>
+        <p class="ps-material-note">以下为本次任务生成并保留的正文，现有报告中的修改继续保留。</p>
+        <article class="ps-task-result-content">
+          <template v-for="(block, index) in resultBlocks" :key="index"><h3 v-if="block.heading">{{ block.text }}</h3><p v-else>{{ block.text }}</p></template>
+        </article>
+      </section>
       <section class="ps-panel ps-task-log"><div class="ps-section-head"><h2>执行记录</h2><span>{{ logs.length }} 条记录</span></div><ol class="ps-task-event-list"><li v-for="(log, index) in logs" :key="`${log.time}-${log.message}-${index}`"><span class="ps-task-event-dot" :class="`is-${log.type}`"></span><div><p>{{ log.message }}</p><time>{{ formatBusinessTime(log.time) || '时间未记录' }}</time></div></li></ol></section>
       </div>
       <aside class="ps-task-side">
@@ -69,6 +76,10 @@ const loaded = ref(false)
 const loadError = ref('')
 const emptyTask = () => ({ title: '生成任务', status: '', progress: 0, stages: [], logs: [], selectedItems: [], config: {} })
 const task = ref(emptyTask())
+const resultBlocks = computed(() => String(task.value.resultContent || '').split(/\n\s*\n/).filter(Boolean).map(text => {
+  const heading = text.match(/^#{1,6}\s+([^\n]+)$/) || text.match(/^\*\*([^\n]+)\*\*$/)
+  return { heading: Boolean(heading), text: heading ? heading[1] : text }
+}))
 const lastReadAt = ref('')
 let refreshTimer
 let active = true
@@ -236,6 +247,9 @@ onUnmounted(() => { active = false; requestEpoch++; stopRouteWatch(); stopRefres
 .ps-task-refresh { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; margin-top: 10px; color: var(--ps-muted); font-size: 12px; line-height: 1.6; }
 .ps-task-layout { grid-template-columns: minmax(0, 1fr) minmax(260px, 320px); gap: 12px; }
 .ps-task-main, .ps-task-side { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.ps-task-result-content { font-size: 14px; line-height: 1.8; overflow-wrap: anywhere; }
+.ps-task-result-content p { margin: 12px 0; white-space: pre-wrap; }
+.ps-task-result-content h3 { margin-top: 18px; }
 .ps-task-timeline { grid-row: auto; }
 .ps-task-scroll .ps-section-head { margin-bottom: 18px; }
 .ps-task-scroll h2, .ps-task-scroll h3 { margin: 0; font-size: 15px; font-weight: 600; }

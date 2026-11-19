@@ -57,7 +57,7 @@ test('digest confirmation shows automatic progress and settings with no material
   assert.match(source, /系统正在按提示词自动筛选、分类并打标签/)
   assert.match(source, /screeningProcessed \* 100 \/ screeningTotal/)
   assert.match(source, /label="分类结果"/)
-  assert.doesNotMatch(source, /筛选结果|资料复筛结果|candidateItems|resultView|el-pagination/)
+  assert.doesNotMatch(source, /<el-step[^>]*title="筛选结果"|资料复筛结果|candidateItems|resultView|el-pagination/)
 })
 
 test('research material tools and tabs stay outside the scrolling rows', () => {

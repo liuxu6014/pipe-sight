@@ -149,7 +149,7 @@ test('G11: no pass claim is inferred from empty issues or citation-check configu
 })
 
 
-async function renderTaskMaterials(type) {
+async function renderTaskMaterials(type, overrides = {}) {
   const { descriptor } = parse(page('ResearchTaskView'))
   const script = compileScript(descriptor, { id: 'task-materials' })
   const compiled = compileTemplate({ source: descriptor.template.content, id: 'task-materials',
@@ -176,7 +176,7 @@ async function renderTaskMaterials(type) {
         { id: '18', type: 'article', title: '历史新闻', source: '新闻来源' },
         { id: '26', type: 'paper', title: '历史论文', source: '期刊' },
         { id: '54', type: 'file', title: '历史上传附件.docx', source: { filename: '历史上传附件.docx' } }
-      ] }
+      ], ...overrides }
     return state
   }
   component.render = new Function('Vue', compiled.code)(vue)
@@ -185,6 +185,18 @@ async function renderTaskMaterials(type) {
   for (const name of ['el-button', 'el-tag', 'el-progress', 'el-alert', 'el-dialog', 'router-link']) app.component(name, slot)
   return renderToString(app)
 }
+
+test('a report edit conflict exposes the retained new result without an editable or unsafe HTML surface', async () => {
+  const html = await renderTaskMaterials('research', { applyConflict: true,
+    resultContent: '## 本次新结果\n\n这是本次生成的正文。\n\n<img src=x onerror=alert(1)>' })
+  const result = html.match(/<article class="ps-task-result-content">([\s\S]*?)<\/article>/)?.[1]
+  assert.ok(result)
+  assert.match(result, /<h3>本次新结果<\/h3>/)
+  assert.match(result, /这是本次生成的正文/)
+  assert.match(result, /&lt;img/)
+  assert.doesNotMatch(result, /<img|contenteditable/)
+  assert.match(html, /现有报告中的修改继续保留/)
+})
 
 for (const type of ['weekly', 'monthly', 'research-demand']) {
   test(`task input summary respects ${type} scope while retaining historical uploaded evidence`, async () => {

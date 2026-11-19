@@ -22,6 +22,9 @@ DEFAULT_DIGEST_SCREENING = (
 class DigestScreeningError(ServiceException):
     """A user-facing failure before any brief is drafted."""
 
+    def __init__(self, *, message: str, restart_required: bool = False) -> None:
+        super().__init__(data='digest_screening_restart' if restart_required else None, message=message)
+
 
 def digest_material_key(item) -> str:
     return f'{item["type"]}:{item["id"]}'

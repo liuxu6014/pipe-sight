@@ -718,6 +718,7 @@ async def test_digest_screening_labels_all_batches_and_queue_requires_approved_e
     from pydantic import ValidationError
 
     from app.intelligence.schemas.pipeline import PipelineDigestScreeningModel, PipelineResearchJobCreateModel
+    from app.research.services.digest_document import DigestScreeningError
     from app.research.services.digest_screening import DigestScreeningService
 
     class Cache:
@@ -801,8 +802,10 @@ async def test_digest_screening_labels_all_batches_and_queue_requires_approved_e
     )
     token = started['screeningId']
     assert started['total'] == 4 and started['processed'] == 0
-    with raises(env, '已失效'):
+    with pytest.raises(DigestScreeningError) as expired:
         await DigestScreeningService.advance(db, store, 8, token)
+    assert '已过期' in expired.value.message
+    assert expired.value.data == 'digest_screening_restart'
     batch = await DigestScreeningService.advance(db, store, 7, token)
     assert batch['processed'] == 2 and 'rows' not in batch
     request = {
@@ -835,8 +838,10 @@ async def test_digest_screening_labels_all_batches_and_queue_requires_approved_e
     with raises(env, '不匹配'):
         await enqueue(keywords=['变更范围'])
     articles[102].content = '更新过的正文'
-    with raises(env, '正文已更新'):
+    with pytest.raises(DigestScreeningError) as changed:
         await enqueue()
+    assert '正文已更新' in changed.value.message
+    assert changed.value.data == 'digest_screening_restart'
     articles[102].content = '有具体项目数据的资讯'
 
     response = await enqueue()
@@ -854,6 +859,13 @@ async def test_digest_screening_labels_all_batches_and_queue_requires_approved_e
     assert job.config_snapshot['digest_screening']['labels']['article:103']['keep'] is False
     assert job.config_snapshot['digest_screening']['labels']['article:105']['tags'] == ['缺少正文']
     assert (await enqueue())['reused'] is True
+    store.values.clear()
+    # A lost submission response must remain safely replayable after the receipt expires.
+    replayed = await enqueue()
+    assert replayed['reused'] is True and replayed['jobId'] == response['jobId']
+    with pytest.raises(DigestScreeningError) as stale:
+        await enqueue(requestId='new-request-with-expired-receipt')
+    assert stale.value.data == 'digest_screening_restart'
 
 
 @pytest.mark.asyncio

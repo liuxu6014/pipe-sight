@@ -32,7 +32,7 @@ import usePortalStore from '@/store/modules/portal'
 import useUserStore from '@/store/modules/user'
 import { createGenerationMonitor } from '@/utils/portal/generationMonitor'
 import { getPipelineResearchJob, listPipelineResearchJobs } from '@/api/pipeline/intelligence'
-import { getPortalReportPath, getPortalTaskPath } from '../utils/routing'
+import { getPortalGenerationResultPath } from '../utils/routing'
 
 const router = useRouter()
 const store = usePortalStore()
@@ -78,9 +78,10 @@ function notifyCompleted(task) {
     title: '生成完成', type: 'success', duration: 0, position: 'bottom-right',
     message: h('div', { class: 'ps-generation-notice' }, [
       h('p', task.title),
+      ...(task.applyConflict ? [h('p', '现有报告已被修改，本次新结果保存在任务详情中。')] : []),
       h(ElButton, { type: 'primary', plain: true, onClick: async () => {
         if (String(user.id) !== owner) return
-        const failure = await router.push(getPortalReportPath({ id: task.reportId, reportType: task.reportType || task.type }))
+        const failure = await router.push(getPortalGenerationResultPath(task))
         if (!failure) notice.close()
       } }, () => '查看生成结果')
     ]),
@@ -94,9 +95,7 @@ function openAllTasks() {
 }
 function openTask(task) {
   store.taskPanelVisible = false
-  router.push(task.status === 'completed' && task.reportStatus === 'completed'
-    ? getPortalReportPath({ id: task.reportId, reportType: task.reportType })
-    : getPortalTaskPath(task))
+  router.push(getPortalGenerationResultPath(task))
 }
 function refreshVisibleQueue() {
   if (!document.hidden) void monitor.refresh()

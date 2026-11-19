@@ -152,3 +152,20 @@ test('a fast new task completed between polls still produces a completion notice
     assert.equal(ctx.completed.length, 1)
   } finally { ctx.monitor.stop() }
 })
+
+test('a completed result retained after a report edit still notifies even if the current report is empty', async () => {
+  let finished = false
+  const ctx = setup({ listJobs: async params => page(params.status === 'active' && finished ? [] : [
+    job(11, finished ? 'completed' : 'queued', { applyConflict: finished, reportStatus: 'draft' })
+  ]) })
+  try {
+    ctx.monitor.start('7')
+    await ctx.monitor.refresh()
+    finished = true
+    await ctx.monitor.refresh()
+    assert.equal(ctx.completed.length, 1)
+    assert.equal(ctx.completed[0].applyConflict, true)
+    await ctx.monitor.refresh()
+    assert.equal(ctx.completed.length, 1)
+  } finally { ctx.monitor.stop() }
+})

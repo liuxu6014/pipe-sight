@@ -201,6 +201,7 @@ function normalizeGenerationTask(item) {
     updatedAt: item.updatedAt || item.updated_at || '更新时间待补充',
     reportId: item.reportId,
     reportStatus: item.reportStatus || '',
+    applyConflict: Boolean(item.applyConflict),
     requiresReview: Boolean(item.requiresReview),
     generationMode: item.generationMode || '',
     generationWarning: item.generationWarning || '',

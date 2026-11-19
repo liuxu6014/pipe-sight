@@ -2,6 +2,7 @@ import { decimalId } from '../../../utils/portal/businessId.js'
 
 const digestTypes = new Set(['daily', 'weekly', 'monthly', '日报', '周报', '月报', '日报周报', '日报周月报', '情报简报', '日报生成', '周报生成', '月报生成'])
 const researchTaskTypes = new Set([
+  'research',
   'research-demand',
   'technology-route',
   'project-demand',
@@ -30,4 +31,10 @@ export function getPortalTaskPath(task) {
   return researchTaskTypes.has(String(type || '')) || isDigestType(type)
     ? `/portal/research/tasks/${task.id}`
     : '/portal/me/reports'
+}
+
+export function getPortalGenerationResultPath(task) {
+  return task?.status === 'completed' && task.reportStatus === 'completed' && decimalId(task.reportId) && !task.applyConflict
+    ? getPortalReportPath({ id: task.reportId, reportType: task.reportType || task.type })
+    : getPortalTaskPath(task)
 }
