@@ -62,6 +62,23 @@ test('recovers pending reports after refresh and remembers already shown complet
   } finally { third.monitor.stop() }
 })
 
+test('a stale tab saving a running queue cannot erase another tab completion receipt', async () => {
+  const storage = memory()
+  const first = setup({}, storage), second = setup({}, storage)
+  try {
+    first.monitor.start('7')
+    second.monitor.start('7')
+    await Promise.all([first.monitor.refresh(), second.monitor.refresh()])
+    first.monitor.observe([job(11, 'queued'), job(12, 'queued')])
+    second.monitor.observe([job(11, 'queued'), job(12, 'queued')])
+    first.monitor.observe([job(11, 'completed'), job(12, 'running')])
+    second.monitor.observe([job(11, 'running'), job(12, 'running')])
+    second.monitor.observe([job(11, 'completed'), job(12, 'completed')])
+    first.monitor.observe([job(11, 'completed'), job(12, 'completed')])
+    assert.deepEqual([...first.completed, ...second.completed].map(task => task.id).sort(), ['11', '12'])
+  } finally { first.monitor.stop(); second.monitor.stop() }
+})
+
 test('fetches the full active queue and follows a completed job outside recent history', async () => {
   let finished = false
   const calls = [], details = []

@@ -25,6 +25,9 @@ export function createGenerationMonitor({ listJobs, getJob, updateTasks, onCompl
   }
   function persist() {
     try {
+      // A still-running tab must not erase notices already claimed by another
+      // tab when it saves its older pending queue after a refresh.
+      for (const key of read().notified) notified.add(key)
       storage?.setItem(`ps-generation-notices-${owner}`, JSON.stringify({ pending: [...pending], notified: [...notified].slice(-200) }))
     } catch { /* Tracking still works for the current session when storage is unavailable. */ }
   }
