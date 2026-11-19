@@ -2,7 +2,8 @@ import { isDigestType } from '../src/views/portal/utils/routing.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, createRenderer, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, watch } from 'vue'
+import { setImmediate } from 'node:timers/promises'
 
 const source = page => readFileSync(new URL(`../src/views/pipeline/${page}.vue`, import.meta.url), 'utf8')
 // Execute the real setup handlers with transport/UI boundaries replaced; no server writes.
@@ -13,7 +14,7 @@ function setup(page, names, mocks = {}) {
     ElMessage: { warning() {}, error() {}, success() {}, info() {} },
     checkPermi: () => true, modelsFor: () => [],
     Calendar: {}, Collection: {}, Delete: {}, Document: {}, Files: {}, Plus: {}, Rank: {}, Search: {},
-    useRoute: () => ({ query: { id: '18' }, path: '/pipeline/report' }), useRouter: () => ({}),
+    useRoute: () => ({ query: { id: '18' }, path: `/pipeline/${page.replace(/\/index$/, '')}` }), useRouter: () => ({}),
     useUserStore: () => ({ id: 1 }),
     usePagedResults(load, params) {
       const rows = ref([]), total = ref(0), error = ref(''), loading = ref(false)
@@ -24,6 +25,26 @@ function setup(page, names, mocks = {}) {
     },
     ...mocks }
   return new Function(...Object.keys(dependencies), `${script}\nreturn { ${names.join(',')} }`)(...Object.values(dependencies))
+}
+
+// Readers start work in lifecycle hooks, rather than a manual handler call. Run
+// their real setup inside a mounted Vue instance so activation and cleanup guards
+// are exercised; the other handler-only legacy cases retain their narrow mocks.
+function mountSetup(page, names, mocks = {}) {
+  let bindings
+  const renderer = createRenderer({
+    createElement: () => ({}), createText: () => ({}), createComment: () => ({}),
+    insert() {}, remove() {}, setText() {}, setElementText() {}, patchProp() {},
+    parentNode: () => null, nextSibling: () => null
+  })
+  const app = renderer.createApp({
+    setup() {
+      bindings = setup(page, names, { onMounted, onActivated, onDeactivated, onBeforeUnmount, ...mocks })
+      return () => null
+    }
+  })
+  app.mount({})
+  return { ...bindings, close: () => app.unmount() }
 }
 
 test('A02 download delegates missing permission flags to the authenticated backend', async () => {
@@ -121,22 +142,24 @@ test('A07 history requests selected page/size/filters and uses the server total 
 
 test('A05 detail failures show retry state and the next success clears it', async () => {
   let failing = true
-  const page = setup('intelligence/detail', ['loadDetail', 'loadError', 'detail'], {
+  const page = mountSetup('intelligence/detail', ['loadDetail', 'loadError', 'detail'], {
     getPipelineIntelligenceDetail: async () => {
       if (failing) throw new Error('offline')
-      return { data: { title: '情报', category_name: '检测', tags: [] } }
+      return { data: { id: '18', title: '情报', category_name: '检测', tags: [] } }
     }
   })
-  await page.loadDetail()
-  assert.ok(page.loadError.value)
-  failing = false
-  await page.loadDetail()
-  assert.equal(page.loadError.value, '')
-  assert.equal(page.detail.value.category_name, '检测')
-  const markup = source('intelligence/detail').split('<script setup>')[0]
-  assert.match(markup, /detail.category_name/)
-  assert.match(markup, /ContentEntities :entities="detail.entities/)
-  assert.doesNotMatch(markup, /detail\.(timeline|related_topics|relevance|categoryName)/)
+  try {
+    await nextTick(); await setImmediate(); await nextTick()
+    assert.ok(page.loadError.value)
+    failing = false
+    await page.loadDetail()
+    assert.equal(page.loadError.value, '')
+    assert.equal(page.detail.value.category_name, '检测')
+    const markup = source('intelligence/detail').split('<script setup>')[0]
+    assert.match(markup, /detail.category_name/)
+    assert.match(markup, /ContentEntities :entities="detail.entities/)
+    assert.doesNotMatch(markup, /detail\.(timeline|related_topics|relevance|categoryName)/)
+  } finally { page.close() }
 })
 
 test('A04 dashboard shows source names and counts without a fabricated percentage', () => {
