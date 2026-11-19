@@ -1,13 +1,15 @@
-# 本地 Docker（仅 Redis）
+# 本地开发运行
 
-本地开发不再随 Docker 启动 PostgreSQL：数据库统一连 `172.16.4.183` 的 `pipesight` 库（在 `backend/.env.dev` 配置 `DB_*`）。`docker-compose.local.yml` 只负责本机 Redis。
+API、Worker 和前端应从同一 Git 提交的源码目录启动。当前本机使用 `/Users/liuxu/Documents/ChatGPT/管网` 的 `main`；开发 worktree 的修改通过合并、测试和同步后再切换运行，不能只复制个别页面。数据库和密钥以 Git 忽略的 `backend/.env.dev` 为准，不能从另一份 checkout 的示例环境覆盖。
+
+当前本机验收使用原有 PostgreSQL 快照与 Redis 容器，保留已有数据卷。`docker-compose.local.yml` 仅管理 Redis；已有 PostgreSQL 容器不随此文件重建。
 
 | 服务 | 地址 | 配置 |
 | --- | --- | --- |
 | 门户 | http://127.0.0.1:12580/portal | `frontend/.env.development.local` |
 | API | http://127.0.0.1:9099 | `backend/.env.dev` |
 | Redis | `127.0.0.1:26379`，API 使用 DB 3 | `backend/.env.dev` 中的 `REDIS_*` |
-| PostgreSQL | `172.16.4.183:5432`，库 `pipesight` | `backend/.env.dev` 中的 `DB_*` |
+| PostgreSQL | 当前本机为 `127.0.0.1:25432`，库 `pipesight` | `backend/.env.dev` 中的 `DB_*`；部署环境可使用独立数据库 |
 
 Redis 密码保存在 Git 忽略的本地环境文件中；Redis 仅绑定回环地址，数据保存在 `pipesight-local_redis-data` 命名卷。
 
@@ -19,7 +21,7 @@ Redis 密码保存在 Git 忽略的本地环境文件中；Redis 仅绑定回环
 docker compose --env-file backend/.env.dev -f docker-compose.local.yml up -d --wait
 ```
 
-API、Worker、前端分别在独立终端启动，数据库无需本地启动、直连 183；已有进程运行时不必重复启动：
+API、Worker、前端分别在同一源码目录的独立终端启动；已有进程运行时先核对进程工作目录与 Git 提交，不重复启动不同版本：
 
 ```sh
 # API，工作目录 backend
@@ -38,4 +40,4 @@ npm run dev -- --host 127.0.0.1 --port 12580 --strictPort
 docker compose --env-file backend/.env.dev -f docker-compose.local.yml stop
 ```
 
-需要保留当前 Redis 数据时不要使用 `down -v`。既有 `docker-compose.pg.yml` 保留部署用途（同样连 183）。
+保留原有 PostgreSQL 和 Redis 数据卷，不使用 `down -v`。切换版本前备份源码改动和数据库，执行适用迁移，再用当前版本的只读 schema 契约检查确认结构一致。既有 `docker-compose.pg.yml` 保留部署用途。

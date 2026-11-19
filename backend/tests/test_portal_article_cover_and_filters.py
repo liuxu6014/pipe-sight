@@ -1,6 +1,6 @@
 """Canonical article details omit retired covers; source/category filters persist."""
 
-from datetime import datetime
+from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock
 
 import pytest
@@ -136,6 +136,30 @@ async def test_multi_category_route_passes_filters_to_rows_and_count(monkeypatch
         assert call.kwargs['tags'] == ['智能巡检', '管道安全']
         assert call.kwargs['article_type'] == 'wechat'
     assert rows.await_args.kwargs['limit'] == CANDIDATE_LIMIT
+
+
+@pytest.mark.asyncio
+async def test_publication_day_bounds_apply_to_news_rows_and_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    rows, count = AsyncMock(return_value=[]), AsyncMock(return_value=0)
+    monkeypatch.setattr(ContentDao, 'list_articles', rows)
+    monkeypatch.setattr(ContentDao, 'count_articles', count)
+    await list_pipeline_intelligence(
+        None, None, category='article', published_from=date(2025, 12, 4), published_to=date(2025, 12, 4)
+    )
+    for call in (rows.await_args, count.await_args):
+        assert call.kwargs['published_from'].astimezone(timezone.utc) == datetime(2025, 12, 3, 16, tzinfo=timezone.utc)
+        assert call.kwargs['published_to'].astimezone(timezone.utc) == datetime(
+            2025, 12, 4, 15, 59, 59, 999999, tzinfo=timezone.utc
+        )
+
+
+@pytest.mark.asyncio
+async def test_publication_route_rejects_reversed_dates() -> None:
+    with pytest.raises(HTTPException) as error:
+        await list_pipeline_intelligence(
+            None, None, category='article', published_from=date(2025, 12, 5), published_to=date(2025, 12, 4)
+        )
+    assert error.value.status_code == UNPROCESSABLE
 
 
 @pytest.mark.asyncio

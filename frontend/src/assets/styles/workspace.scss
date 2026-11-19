@@ -734,11 +734,7 @@
     .el-input__inner, .el-textarea__inner { font-size: 16px; }
     .ps-mobile-nav button { min-height: 44px; }
     .ps-header-tools { gap: 4px; }
-    .ps-brand span { display: flex; }
-    .ps-brand { gap: 6px; }
-    .ps-brand small { display: none; }
-    .ps-brand img { width: 32px; }
-    .ps-brand strong { font-size: 14px; letter-spacing: 0; white-space: nowrap; }
+    .ps-brand strong { font-size: 14px; letter-spacing: 0; white-space: normal; text-align: left; }
     .ps-basket-button, .ps-user-button, .ps-mobile-menu, .ps-task-trigger { width: 40px; min-height: 44px; }
     .ps-workflow-strip { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); padding: 12px; gap: 8px; }
     .ps-workflow-strip > span { grid-column: 1 / -1; }

@@ -3,7 +3,7 @@
     <section class="page-heading">
       <div>
 
-        <h1>管网科研论文生成</h1>
+        <h1>科研论文生成</h1>
 
       </div>
       <div class="heading-actions">
@@ -316,7 +316,7 @@ function downloadMarkdown(fileName, content) {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = fileName || '管网科研论文.md'
+  link.download = fileName || '科研论文.md'
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)

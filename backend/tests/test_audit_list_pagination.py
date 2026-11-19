@@ -195,3 +195,62 @@ async def test_material_pages_filter_owner_status_keyword_and_only_send_short_su
     assert (await lists.material_page(db, user_id=7, keyword='资料022'))['total'] == 1
     assert (await lists.material_page(db, user_id=7, keyword='资料023'))['total'] == 0
     assert (await lists.material_page(db, user_id=7, keyword='禁止全量'))['total'] == 22
+
+
+@pytest.mark.asyncio
+async def test_material_duplicates_are_grouped_before_pagination_without_collapsing_edits_or_other_owners(env, db):
+    seed(env, db)
+    now = env.models.utcnow()
+
+    def add(index, file_hash, *, owner=7, state='ready', edited=None, name=None):
+        db.add(
+            env.material.PipelineMaterial(
+                id=index,
+                user_id=owner,
+                name=name or f'分组资料{index}',
+                filename=f'{index}.txt',
+                storage_key=f'private/{index}',
+                mime_type='text/plain',
+                size=100,
+                hash=file_hash,
+                extracted_text='安全摘要' * 100,
+                edited_text=edited,
+                status=state,
+                updated_at=now + timedelta(minutes=index),
+                created_at=now,
+            )
+        )
+
+    # These copies would previously fall on separate raw pages.
+    add(2001, 'd' * 64)
+    add(2050, 'd' * 64, state='failed', name='重命名副本')
+    add(2099, 'd' * 64)
+    for index in range(2010, 2022):
+        add(index, f'{index:064x}')
+    add(2101, 'd' * 64, edited='作者修订')
+    add(2102, 'd' * 64, edited='作者修订')
+    add(2103, 'd' * 64, owner=8)
+    add(2104, 'z' * 64)
+    add(2105, 'z' * 64)
+    await db.commit()
+    lists = importlib.import_module('app.research.services.list_queries')
+    pages = [await lists.material_page(db, user_id=7, page=n, page_size=5) for n in (1, 2, 3, 4)]
+    assert [len(p['rows']) for p in pages] == [5, 5, 5, 3]
+    assert all(p['total'] == 18 for p in pages)
+    rows = [r for p in pages for r in p['rows']]
+    assert len({r['id'] for r in rows}) == 18
+    original = next(r for r in rows if r['id'] == '2001')
+    assert original['duplicateIds'] == ['2001', '2050', '2099']
+    assert original['status'] == '已解析' and original['isEdited'] is False
+    assert {r['id'] for r in rows if r['isEdited']} == {'2101', '2102'}
+    assert all(r['ownerId'] == 7 and '2103' not in r['duplicateIds'] for r in rows)
+    assert all(len(r['summary']) <= 240 for r in rows)
+    assert all(not {'extracted_text', 'edited_text', 'storage_key'} & r.keys() for r in rows)
+    # Filtering matches any copy while deletion still names all owned copies.
+    matched = await lists.material_page(db, user_id=7, keyword='重命名副本')
+    assert matched['total'] == 1 and matched['rows'][0]['id'] == '2050'
+    assert matched['rows'][0]['duplicateIds'] == ['2001', '2050', '2099']
+    failed = await lists.material_page(db, user_id=7, status='异常')
+    assert failed['total'] == 1 and failed['rows'][0]['id'] == '2050'
+    other = await lists.material_page(db, user_id=8)
+    assert other['total'] == 1 and other['rows'][0]['duplicateIds'] == ['2103']

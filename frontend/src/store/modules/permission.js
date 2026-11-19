@@ -11,6 +11,10 @@ import { buildManagementNavigation, cloneNavigationRoutes, resolveNavigationPath
 const modules = import.meta.glob('./../../views/**/*.vue')
 const PIPELINE_VISIBLE_ROOTS = new Set(['', 'index', 'pipeline'])
 const BACKEND_ONLY_ROOTS = new Set(['system', 'monitor', 'tool', 'ai'])
+const LEGACY_MENU_TITLES = new Map([
+  ['管网情报', '科技情报'],
+  ['管网情报工作台', '情报工作台']
+])
 
 const usePermissionStore = defineStore(
   'permission',
@@ -90,6 +94,8 @@ function filterAsyncRouter(asyncRouterMap, lastRouter = false, type = false) {
   return asyncRouterMap.filter(route => {
     if (['pipeline/governance/index', 'pipeline/filter/index', 'pipeline/knowledge/index', 'ai/chat/index'].includes(route.component)
       || ['/pipeline/governance', '/pipeline/filter', '/pipeline/knowledge', '/ai/chat'].includes(route.path)) return false
+    const title = LEGACY_MENU_TITLES.get(route.meta?.title)
+    if (title) route.meta = { ...route.meta, title }
     if (type && route.children) {
       route.children = filterChildren(route.children)
     }

@@ -96,12 +96,6 @@ body:has(.ps-portal) {
   text-align: left;
 }
 
-.ps-brand img {
-  width: 48px;
-  height: 36px;
-  object-fit: contain;
-}
-
 .ps-brand span,
 .ps-user-button span,
 .ps-quick-card > span:nth-child(2),
@@ -3006,10 +3000,16 @@ body:has(.ps-portal) {
   .ps-knowledge-tabs button { min-height: 44px; padding-inline: 12px; }
   .ps-header-inner { height: 62px; padding: 0 12px; gap: 8px; }
   .ps-portal-main { padding-top: 62px; }
-  .ps-brand { min-width: 0; margin-right: auto; }
-  .ps-brand img { width: 42px; height: 31px; }
-  .ps-brand strong { font-size: 14px; }
-  .ps-brand span { display: none; }
+  .ps-brand { min-width: 0; margin-right: auto; flex: 1 1 0; }
+  .ps-brand strong {
+    min-width: 0;
+    font-size: 14px;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
   .ps-sync-status,.ps-basket-button,.ps-user-button,.ps-mobile-menu { min-width: 44px; height: 44px; }
   .ps-sync-status { width: 44px; }
   .ps-basket-button { width: 44px; padding: 0; }

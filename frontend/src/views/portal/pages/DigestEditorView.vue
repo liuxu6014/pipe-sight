@@ -45,7 +45,7 @@
       <main class="ps-digest-canvas">
         <article class="ps-digest-paper" :class="{ 'is-reference-digest': referenceDigest }">
           <header v-if="referenceDigest" class="ps-reference-digest-header"><h1>{{ referenceTitle }}</h1><p>{{ referencePeriod }}</p></header>
-          <header v-else><span>管网科技情报简报</span><h1>{{ digest.title }}</h1><p>{{ digest.readOnly ? '当前仅供查阅，修改和文件导出由简报所有者操作。' : isLegacyDaily ? '历史日报仅供查阅，来源查看与导出仍可使用。' : isReadOnly ? '正式发布后内容锁定，来源查看与导出仍可使用。' : '所有栏目均可编辑，引用可回到来源条目，保存后跨会话保留。' }}</p><div><span>{{ digestPeriod }}</span><span>{{ digest.owner || '编制人待补充' }}</span></div></header>
+          <header v-else><span>科技情报简报</span><h1>{{ digest.title }}</h1><p>{{ digest.readOnly ? '当前仅供查阅，修改和文件导出由简报所有者操作。' : isLegacyDaily ? '历史日报仅供查阅，来源查看与导出仍可使用。' : isReadOnly ? '正式发布后内容锁定，来源查看与导出仍可使用。' : '所有栏目均可编辑，引用可回到来源条目，保存后跨会话保留。' }}</p><div><span>{{ digestPeriod }}</span><span>{{ digest.owner || '编制人待补充' }}</span></div></header>
           <template v-if="referenceDigest">
             <section v-for="(section, index) in bodySections" :id="`digest-section-${section.id}`" :key="section.id">
               <h2>{{ categoryNumber(index + 1) }}、{{ section.title }}</h2>

@@ -90,7 +90,7 @@ async function loadDashboard() {
   } catch (error) {
     dashboard.value = { metrics: [], collect_status: [], hot_topics: [] }
     dashboardError.value = error?.msg || '工作台数据暂时无法加载，请检查服务后重试'
-    ElMessage.warning('暂时无法获取管网情报工作台数据')
+    ElMessage.warning('暂时无法获取情报工作台数据')
   } finally {
     loading.value = false
   }

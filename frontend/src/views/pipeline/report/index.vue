@@ -115,7 +115,7 @@ function downloadMarkdown(fileName, content) {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = fileName || '管网科技情报报告.md'
+  link.download = fileName || '科技情报报告.md'
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)

@@ -1,7 +1,7 @@
 {
   "name": "pipesight-admin",
   "version": "1.9.0",
-  "description": "国家管网科技情报与科研辅助平台",
+  "description": "科技情报与科研辅助平台",
   "author": "insistence",
   "license": "MIT",
   "type": "module",

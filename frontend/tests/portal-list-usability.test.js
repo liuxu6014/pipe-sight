@@ -4,7 +4,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { setTimeout as delay, setImmediate } from 'node:timers/promises'
-import { formatBusinessTime } from '../src/utils/portal/businessTime.js'
+import { calendarDate, formatBusinessTime } from '../src/utils/portal/businessTime.js'
 import { readScheduleForm, scheduleSummary } from '../src/utils/portal/digestScheduleEditor.js'
 import { normalizeBusinessData } from '../src/utils/portal/businessId.js'
 import { contentCategory, collectionTime, entityGroups } from '../src/utils/portal/contentPresentation.js'
@@ -111,7 +111,7 @@ async function mountPage(name, { query = {}, api = {}, documents = [], pageProps
   const injected = {
     ...vue, usePagedResults, reportSummaryRow, useRoute, useRouter, ...normalizers,
     openPortalContent: (router, path) => router.push(path),
-    bindListQuery, useListQuery, useListRequest, useListWorkspace, validPage, materialBasketReason, cleanSummary, cleanResultMeta, combineLatest, newsDate, resultPath,
+    bindListQuery, useListQuery, useListRequest, useListWorkspace, validPage, materialBasketReason, calendarDate, cleanSummary, cleanResultMeta, combineLatest, newsDate, resultPath,
     usePortalStore: () => store, periodOverlaps, isDigestType, useBasketSelection, useBasketParsing, buildLibraryItems, libraryItemPath, libraryItemReason, prepareLibrarySelection,
     basketItemLabel, basketItemPath, uploadBasketFile, validateBasketUpload, Tickets: {},
     useUserStore: () => ({ id: 7 }), ownedReports, unfinishedTasks, publicationDate, buildPersonalReports, hasReportOutput, sortResearchReports, createResearchRefresh, reportRowActions,
@@ -683,6 +683,49 @@ test('news migrates legacy links into removable multi-tags and restores query-on
   } finally { ctx.close() }
 })
 
+test('news publication dates persist in the URL, combine with other filters, and reset paging', async () => {
+  const calls = []
+  const initialRange = ['2025-11-01', '2025-11-30']
+  const ctx = await mountPage('NewsListView', {
+    query: { source: '新闻网站', q: '检测', tag: '巡检', page: '3', published: initialRange },
+    api: { listPipelineIntelligence: async params => { calls.push(params); return { data: { rows: [], total: 50 } } } }
+  })
+  try {
+    assert.deepEqual(ctx.page.publicationRange.value, initialRange)
+    assert.equal(ctx.page.publicationDateText.value, '2025-11-01 至 2025-11-30')
+    assert.equal(calls[0].publishedFrom, initialRange[0])
+    assert.equal(calls[0].publishedTo, initialRange[1])
+    assert.equal(calls[0].pageNum, 3)
+    const newRange = ['2025-12-04', '2025-12-04']
+    ctx.page.publicationPickerOpen.value = true
+    ctx.page.applyPublicationRange(newRange)
+    assert.equal(ctx.page.publicationPickerOpen.value, false)
+    assert.equal(ctx.page.publicationDateText.value, '2025-12-04')
+    await settle()
+    assert.equal(calls.length, 2)
+    assert.equal(calls.at(-1).publishedFrom, newRange[0])
+    assert.equal(calls.at(-1).publishedTo, newRange[1])
+    assert.equal(calls.at(-1).pageNum, 1)
+    assert.equal(calls.at(-1).source_type, 'news')
+    assert.equal(calls.at(-1).keyword, '检测')
+    assert.deepEqual(JSON.parse(calls.at(-1).tags), ['巡检'])
+    assert.deepEqual(ctx.router.currentRoute.value.query.published, newRange)
+    ctx.page.resetFilters()
+    await delay(280)
+    await settle()
+    assert.equal(ctx.page.publicationRange.value, null)
+    assert.equal(ctx.page.publicationDateText.value, '')
+    assert.equal(ctx.page.hasActiveFilters.value, false)
+    assert.equal(calls.at(-1).publishedFrom, undefined)
+    assert.equal(calls.at(-1).publishedTo, undefined)
+    assert.equal(ctx.router.currentRoute.value.query.published, undefined)
+    await ctx.router.replace({ path: '/portal/news', query: { published: ['2025-11-01', '2025-11-31'] } })
+    await settle()
+    assert.equal(ctx.page.publicationRange.value, null)
+    assert.equal(calls.at(-1).publishedTo, undefined)
+  } finally { ctx.close() }
+})
+
 test('typing debounces requests and invalidates an old response before debounce finishes', async () => {
   const calls = []
   const first = deferred()
@@ -1195,5 +1238,24 @@ test('paper legacy multiple journals normalize to one visible API filter', async
     assert.deepEqual(ctx.page.journals.value, ['期刊A'])
     assert.equal(ctx.page.journal.value, '期刊A')
     assert.equal(calls.at(-1).journal, '期刊A')
+  } finally { ctx.close() }
+})
+
+test('server-grouped library pages retain real totals and delete acknowledged copies beyond the current page', async () => {
+  const deleted = [], prompts = []
+  let rows = [{ id: '49', name: '同内容资料.txt', fileHash: 'a'.repeat(64), ownerId: 7, status: '已解析', canManage: true, duplicateIds: ['49', '50', '60'] }]
+  const ctx = await mountPage('KnowledgeView', { api: {
+    listPipelineKnowledgeDocuments: async () => ({ data: { rows, total: rows.length } }),
+    ElMessageBox: { confirm: async message => { prompts.push(message) } },
+    deletePipelineKnowledgeDocument: async id => { deleted.push(id); if (id === '60') rows = [] }
+  } })
+  try {
+    assert.equal(ctx.page.total.value, 1)
+    assert.equal(ctx.page.libraryItems.value.length, 1)
+    await ctx.page.deleteLibraryItem(ctx.page.libraryItems.value[0])
+    assert.match(prompts[0], /3 份内容相同/)
+    assert.deepEqual(deleted, ['49', '50', '60'])
+    assert.equal(ctx.page.total.value, 0)
+    assert.equal(ctx.page.libraryItems.value.length, 0)
   } finally { ctx.close() }
 })

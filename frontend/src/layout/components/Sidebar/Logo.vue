@@ -1,20 +1,14 @@
 <template>
-  <div class="sidebar-logo-container" :class="{ 'collapse': collapse }">
+  <div class="sidebar-logo-container">
     <transition name="sidebarLogoFade">
-      <router-link v-if="collapse" key="collapse" class="sidebar-logo-link" to="/">
-        <img v-if="logo" :src="logo" :alt="title" class="sidebar-logo" />
-        <h1 v-else class="sidebar-title">{{ title }}</h1>
-      </router-link>
-      <router-link v-else key="expand" class="sidebar-logo-link" to="/">
-        <img v-if="logo" :src="logo" :alt="title" class="sidebar-logo" />
-        <h1 class="sidebar-title">{{ title }}</h1>
+      <router-link :key="collapse ? 'collapse' : 'expand'" class="sidebar-logo-link" to="/" aria-label="管理首页">
+        <h1 class="sidebar-title">{{ collapse ? '管理' : '科技情报 · 管理端' }}</h1>
       </router-link>
     </transition>
   </div>
 </template>
 
 <script setup>
-import pipechinaEmblemUrl from '@/assets/logo/pipechina-emblem.png'
 import useSettingsStore from '@/store/modules/settings'
 import variables from '@/assets/styles/variables.module.scss'
 
@@ -25,8 +19,6 @@ defineProps({
   }
 })
 
-const title = '管网科技情报 · 管理端';
-const logo = pipechinaEmblemUrl;
 const settingsStore = useSettingsStore();
 const sideTheme = computed(() => settingsStore.sideTheme);
 
@@ -75,14 +67,6 @@ const getLogoTextColor = computed(() => {
     height: 100%;
     width: 100%;
 
-    & .sidebar-logo {
-      width: 32px;
-      height: 32px;
-      object-fit: contain;
-      vertical-align: middle;
-      margin-right: 8px;
-    }
-
     & .sidebar-title {
       display: inline-block;
       margin: 0;
@@ -92,12 +76,6 @@ const getLogoTextColor = computed(() => {
       font-size: 13px;
       font-family: Avenir, Helvetica Neue, Arial, Helvetica, sans-serif;
       vertical-align: middle;
-    }
-  }
-
-  &.collapse {
-    .sidebar-logo {
-      margin-right: 0px;
     }
   }
 }

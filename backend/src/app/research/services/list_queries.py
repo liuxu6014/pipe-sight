@@ -1,6 +1,7 @@
 """Bounded list read models. Article bodies and frozen prompts stay in detail APIs."""
 
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import String, case, cast, func, literal, or_, select
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.business_ids import wire_id
 from app.business_time import format_business_time
@@ -129,7 +130,22 @@ async def report_page(
     }
 
 
+_SHA256_HEX_LENGTH = 64
+
+
+def _material_content_key() -> ColumnElement[str]:
+    # Only untouched originals with a real SHA-256 may share a library entry.
+    # Edits remain independent records, even when their current text is equal.
+    normalized = func.lower(Material.hash)
+    invalid = normalized
+    for digit in '0123456789abcdef':
+        invalid = func.replace(invalid, digit, '')
+    original_hash = Material.edited_text.is_(None) & (func.length(normalized) == _SHA256_HEX_LENGTH) & (invalid == '')
+    return case((original_hash, literal('hash:') + normalized), else_=literal('id:') + cast(Material.id, String))
+
+
 async def material_page(db, *, user_id, page=1, page_size=20, keyword='', status='', classification='') -> dict:
+    content_key = _material_content_key()
     query = select(
         Material.id,
         Material.user_id,
@@ -142,6 +158,12 @@ async def material_page(db, *, user_id, page=1, page_size=20, keyword='', status
         Material.version,
         Material.updated_at,
         Material.created_at,
+        Material.edited_text.is_not(None).label('is_edited'),
+        content_key.label('content_key'),
+        func.row_number()
+        .over(partition_by=content_key, order_by=((Material.status == 'ready').desc(), Material.id.asc()))
+        .label('duplicate_rank'),
+        func.max(Material.updated_at).over(partition_by=content_key).label('last_updated'),
         func.substr(func.coalesce(Material.edited_text, Material.extracted_text, ''), 1, 240).label('summary'),
     ).where(Material.user_id == user_id)
     if keyword.strip():
@@ -158,11 +180,15 @@ async def material_page(db, *, user_id, page=1, page_size=20, keyword='', status
     if classification:
         # Materials currently have no classification field; never invent one from file type.
         query = query.where(False)
-    total = await db.scalar(select(func.count()).select_from(query.subquery()))
+    # Deduplicate the complete filtered set before counting or applying OFFSET.
+    # Doing this on a single browser page produced short pages and false totals.
+    ranked = query.subquery()
+    entries = select(ranked).where(ranked.c.duplicate_rank == 1)
+    total = await db.scalar(select(func.count()).select_from(entries.subquery()))
     rows = (
         (
             await db.execute(
-                query.order_by(Material.updated_at.desc(), Material.id.desc())
+                entries.order_by(ranked.c.last_updated.desc(), ranked.c.id.desc())
                 .offset((page - 1) * page_size)
                 .limit(page_size)
             )
@@ -170,6 +196,17 @@ async def material_page(db, *, user_id, page=1, page_size=20, keyword='', status
         .mappings()
         .all()
     )
+    duplicates = {}
+    if rows:
+        # Include copies outside this filter/page for the explicit duplicate-delete
+        # confirmation, but never look up another owner's IDs or return file bodies.
+        copies = await db.execute(
+            select(Material.id, content_key.label('content_key'))
+            .where(Material.user_id == user_id, content_key.in_([r['content_key'] for r in rows]))
+            .order_by(Material.id.asc())
+        )
+        for copy_id, key in copies:
+            duplicates.setdefault(key, []).append(wire_id(copy_id))
     return {
         'rows': [
             {
@@ -180,6 +217,8 @@ async def material_page(db, *, user_id, page=1, page_size=20, keyword='', status
                 'fileName': r['filename'],
                 'fileSize': r['size'],
                 'fileHash': r['hash'],
+                'isEdited': bool(r['is_edited']),
+                'duplicateIds': duplicates.get(r['content_key'], [wire_id(r['id'])]),
                 'format': r['filename'].rsplit('.', 1)[-1].upper(),
                 'type': '内部文献',
                 'permissionScope': 'private',
@@ -192,7 +231,7 @@ async def material_page(db, *, user_id, page=1, page_size=20, keyword='', status
                 'summary': r['summary'],
                 'versionNo': r['version'],
                 'version': f'V{r["version"]}.0',
-                'updatedAt': format_business_time(r['updated_at']),
+                'updatedAt': format_business_time(r['last_updated']),
                 'createdAt': format_business_time(r['created_at']),
             }
             for r in rows

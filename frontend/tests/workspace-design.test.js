@@ -8,12 +8,12 @@ const read = path => readFileSync(new URL(path, import.meta.url), 'utf8')
 const portal = read('../src/assets/styles/portal.scss')
 const workspace = read('../src/assets/styles/workspace.scss')
 
-test('news toolbar keeps desktop search and filters on one row while narrow screens retain wrapping', () => {
+test('news toolbar fits the date filter alongside other controls and wraps before overflow', () => {
   const { descriptor } = parse(read('../src/views/portal/pages/NewsListView.vue'))
   const css = compileString(descriptor.styles[0].content).css
-  assert.match(css, /@media \(min-width: 1051px\)[\s\S]*?\.ps-toolbar \{\s*flex-wrap: nowrap;/)
-  assert.match(css, /flex: 1 1 280px;\s*min-width: 180px;/)
-  assert.match(css, /flex: 0 0 160px;/)
+  assert.match(css, /\.ps-toolbar \{\s*flex-wrap: wrap;/)
+  assert.match(css, /@media \(min-width: 1051px\)[\s\S]*?\.ps-toolbar > \.ps-search-inline \{\s*flex: 1 1 180px;/)
+  assert.match(css, /\.ps-toolbar > \.ps-news-date-filter \{\s*height: 40px;\s*max-width: 100%;/)
   assert.match(css, /\.ps-toolbar > \.ps-search-inline \{\s*flex: 1 1 100%;/)
   assert.match(portal, /\.ps-news-list > \.ps-empty-state \{\s*grid-column: 1 \/ -1;\s*width: 100%;/)
 })

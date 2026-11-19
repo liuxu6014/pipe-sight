@@ -11,12 +11,13 @@ export function buildLibraryItems(basket = [], documents = [], papers = [], news
     const id = displayId(document.id)
     if (!id) continue
     const hash = document.fileHash || document.file_hash
-    const contentKey = /^[a-f0-9]{64}$/i.test(hash || '') ? `${document.ownerId ?? document.owner_id ?? ''}:${hash.toLowerCase()}:${document.editHash || document.edit_hash || 'original'}` : `id:${id}`
+    const edited = document.isEdited || document.editHash || document.edit_hash
+    const contentKey = !edited && /^[a-f0-9]{64}$/i.test(hash || '') ? `${document.ownerId ?? document.owner_id ?? ''}:${hash.toLowerCase()}:original` : `id:${id}`
     const key = contentKeys.get(contentKey) || `document:${id}`
-    const item = { ...document, id, kind: 'document', type: 'material', name: document.name || document.title || '未命名资料', duplicateIds: [id] }
+    const item = { ...document, id, kind: 'document', type: 'material', name: document.name || document.title || '未命名资料', duplicateIds: [...new Set([id, ...(Array.isArray(document.duplicateIds) ? document.duplicateIds.map(decimalId).filter(Boolean) : [])])]  }
     const previous = rows.get(key)
     if (previous) {
-      const ids = [...new Set([...previous.duplicateIds, id])].sort((a, b) => a.length - b.length || a.localeCompare(b))
+      const ids = [...new Set([...previous.duplicateIds, ...item.duplicateIds])].sort((a, b) => a.length - b.length || a.localeCompare(b))
       const ready = value => ['已解析', 'indexed'].includes(value.status)
       const preferNew = ready(item) !== ready(previous) ? ready(item) : ids[0] === id
       rows.set(key, { ...(preferNew ? item : previous), duplicateIds: ids })

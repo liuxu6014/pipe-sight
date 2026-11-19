@@ -171,6 +171,8 @@ def build_digest_docx(report) -> bytes:
         for attr in ('beforeLines', 'afterLines'):
             spacing.set(qn(f'w:{attr}'), '0')
         paragraph.paragraph_format.widow_control = True
+        if role in {'category', 'event', 'published', 'insight', 'source_label', 'source'}:
+            paragraph.paragraph_format.keep_together = True
         # Render numbers as text to avoid Word/LibreOffice list-state drift.
         if role in {'category', 'event'}:
             num = element.get_or_add_pPr().get_or_add_numPr()
@@ -186,7 +188,7 @@ def build_digest_docx(report) -> bytes:
             extra._r.insert(0, deepcopy(paragraph.runs[0]._r.rPr))
             extra.bold = False
             extra.underline = False
-        if role in {'insight', 'source_label'}:
+        if role in {'published', 'insight', 'source_label'}:
             paragraph.paragraph_format.keep_with_next = True
         if role == 'source_label':
             paragraph.runs[0].bold = True
@@ -209,8 +211,13 @@ def build_digest_docx(report) -> bytes:
         bottom.set(qn(f'w:{key}'), val)
     border.append(bottom)
     period_properties.append(border)
-    for role, text in digest_blocks(report.content):
-        add(role, text)
+    blocks = list(digest_blocks(report.content))
+    for index, (role, text) in enumerate(blocks):
+        paragraph = add(role, text)
+        if role == 'source':
+            # Keep all of this event's sources with its insight, not only the
+            # first link. Stop the chain before the next event/category.
+            paragraph.paragraph_format.keep_with_next = index + 1 < len(blocks) and blocks[index + 1][0] == 'source'
     output = BytesIO()
     document.save(output)
     return output.getvalue()
@@ -295,7 +302,7 @@ def build_digest_pdf(report, font_name) -> bytes:
             **base,
             backColor=HexColor(fill),
             borderPadding=5,
-            keepWithNext=role in {'insight', 'source_label'},
+            keepWithNext=role in {'published', 'insight', 'source_label'},
         )
     output = BytesIO()
     doc = SimpleDocTemplate(
@@ -315,7 +322,7 @@ def build_digest_pdf(report, font_name) -> bytes:
     from reportlab.platypus import HRFlowable  # noqa: PLC0415
 
     story.extend([HRFlowable(width='100%', thickness=3, color=HexColor('#FF0000')), Spacer(1, 12)])
-    for role, text in blocks:
+    for index, (role, text) in enumerate(blocks):
         markup = escape(text)
         if role == 'source' and (match := LINK.fullmatch(text)):
             number, label, url = match.groups()
@@ -326,6 +333,9 @@ def build_digest_pdf(report, font_name) -> bytes:
             label, value = markup.split('：', 1)
             markup = f'<b><u>{label}：</u></b>{value}' if role == 'insight' else f'<b>{label}：</b>{value}'
         paragraph_type = DigestHeadingParagraph if role in {'category', 'event', 'source_label'} else Paragraph
-        story.append(paragraph_type(markup, styles[role]))
+        paragraph = paragraph_type(markup, styles[role])
+        if role == 'source':
+            paragraph.keepWithNext = index + 1 < len(blocks) and blocks[index + 1][0] == 'source'
+        story.append(paragraph)
     doc.build(story)
     return output.getvalue()

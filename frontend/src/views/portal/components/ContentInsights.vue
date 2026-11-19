@@ -9,14 +9,14 @@
       <p class="insight-note">仅展示已保存的解读；缺少证据的机构、效果和场景不作推断。</p>
       <div class="insight-grid"><article v-for="section in sections" :key="section.label"><h3>{{ section.label }}</h3><p>{{ section.content }}</p></article></div>
     </template>
-    <p v-else class="insight-empty">暂无管网洞察</p>
+    <p v-else class="insight-empty">暂无行业洞察</p>
   </section>
 </template>
 <script setup>
 import { computed } from 'vue'
 import { insightSections, paperInsightParagraph } from '@/utils/portal/contentPresentation'
 const props = defineProps({ item: { type: Object, default: () => ({}) }, kind: { type: String, default: 'news' } })
-const title = computed(() => props.kind === 'paper' ? 'AI 解读' : '管网洞察')
+const title = computed(() => props.kind === 'paper' ? 'AI 解读' : '行业洞察')
 const sections = computed(() => insightSections(props.item, props.kind).filter(section => section.content))
 const paragraph = computed(() => props.kind === 'paper' ? paperInsightParagraph(props.item) : '')
 </script>

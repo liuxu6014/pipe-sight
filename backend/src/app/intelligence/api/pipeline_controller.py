@@ -9,7 +9,7 @@ from common.http.routing import APIRouterPro
 pipeline_controller = APIRouterPro(
     prefix='',
     order_num=30,
-    tags=['管网情报'],
+    tags=['科技情报'],
 )
 pipeline_controller.include_router(_intelligence_controller)
 pipeline_controller.include_router(_collection_controller)

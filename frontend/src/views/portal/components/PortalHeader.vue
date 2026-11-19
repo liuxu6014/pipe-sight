@@ -2,7 +2,6 @@
   <header class="ps-header">
     <div class="ps-header-inner">
       <el-button :auto-insert-space="false" class="ps-brand ps-ui-control" native-type="button" aria-label="返回首页" @click="router.push('/portal')">
-        <img :src="logoUrl" alt="国家管网标识" />
         <span>
           <strong>科技情报与科研辅助平台</strong>
         </span>
@@ -23,7 +22,7 @@
 
       <div class="ps-header-tools">
         <el-badge type="primary" :value="store.runningTaskCount" :hidden="!store.runningTaskCount" :max="99" class="ps-generation-queue-badge">
-          <el-button :icon="Clock" class="ps-generation-queue ps-ui-control" aria-label="生成队列" aria-haspopup="dialog" @click="store.taskPanelVisible = true">生成队列</el-button>
+          <el-button :icon="Clock" class="ps-generation-queue ps-ui-control" aria-label="生成队列" title="生成队列" aria-haspopup="dialog" @click="store.taskPanelVisible = true"><span class="ps-generation-queue-label">生成队列</span></el-button>
         </el-badge>
         <el-button
           class="ps-header-search ps-ui-control"
@@ -56,7 +55,7 @@
         >
 
           <span>资料库</span>
-          <b>{{ store.libraryCount }}</b>
+          <b>{{ store.libraryCount > 99 ? '99+' : store.libraryCount }}</b>
         </el-button>
 
         <div class="ps-user-account-actions">
@@ -135,7 +134,6 @@ import { Clock, Collection, Menu, Refresh, Search, Setting, SwitchButton, User }
 import { portalNavigation } from '../data'
 import usePortalStore from '@/store/modules/portal'
 import useUserStore from '@/store/modules/user'
-import logoUrl from '@/assets/logo/pipechina-emblem.png'
 import PortalUserAvatar from './PortalUserAvatar.vue'
 import SearchView from '../pages/SearchView.vue'
 import { isManagementIdentity } from '@/utils/portal/auth'
@@ -168,7 +166,7 @@ watch([() => router.currentRoute.value, () => userStore.id], () => {
   searchOpen.value = Boolean(entry && entry.owner === userStore.id)
   if (searchOpen.value) searchFilters.value = entry.filters || {}
 }, { immediate: true })
-const currentUserName = computed(() => userStore.nickName || userStore.name || '管网用户')
+const currentUserName = computed(() => userStore.nickName || userStore.name || '用户')
 const isAdministrator = computed(() => isManagementIdentity(userStore.roles, userStore.permissions))
 
 function handleCommand(command) {
@@ -226,5 +224,28 @@ onMounted(() => store.hydrate())
 }
 @media (max-width: 1050px) {
   .ps-header-search.el-button { display: none; }
+}
+@media (max-width: 760px) {
+  .ps-header-tools { flex: 0 0 auto; gap: 4px; }
+  .ps-header-tools > * { flex-shrink: 0; }
+  .ps-header-tools .el-button:is(.ps-generation-queue, .ps-basket-button, .ps-user-button, .ps-mobile-menu, .ps-sync-status) {
+    flex: 0 0 44px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0;
+  }
+  .ps-generation-queue-label { display: none; }
+  .ps-header-tools .ps-basket-button { position: relative; }
+  .ps-header-tools .ps-basket-button b {
+    position: absolute;
+    top: 1px;
+    right: 0;
+    min-width: 17px;
+    height: 17px;
+    padding-inline: 3px;
+    line-height: 1;
+  }
 }
 </style>

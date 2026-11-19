@@ -96,7 +96,7 @@ const metrics = computed(() => [
 }))
 const modules = [
   { title: '新闻资讯', description: '浏览行业动态、技术进展与公众号文章', path: '/portal/news', action: '浏览资讯', icon: Collection },
-  { title: '科研论文', description: '检索管网研究论文与可访问文献', path: '/portal/papers', action: '检索论文', icon: Document },
+  { title: '科研论文', description: '检索科研论文与可访问文献', path: '/portal/papers', action: '检索论文', icon: Document },
   { title: '科研报告', description: '选择模板与研究资料，开始编制报告', path: '/portal/research/create', action: '创建报告', icon: DocumentAdd },
   { title: '情报简报', description: '确定覆盖周期与选题，汇总情报动态', path: '/portal/digests/create', action: '生成简报', icon: Reading }
 ]

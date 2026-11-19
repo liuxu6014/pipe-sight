@@ -42,3 +42,16 @@ test('unusable uploads and failed persistence stop generation explicitly', async
   await assert.rejects(prepareLibrarySelection([{ id: '54', kind: 'document', status: '解析中' }], async () => 'saved'), /解析/)
   await assert.rejects(prepareLibrarySelection([{ id: '54', kind: 'paper' }], async () => 'stale'), /保存/)
 })
+
+test('server-canonical groups retain all duplicate IDs, while edited records remain independent', () => {
+  const hash = 'a'.repeat(64)
+  const rows = buildLibraryItems([], [
+    { id: '49', fileHash: hash, ownerId: 7, status: '已解析', duplicateIds: ['49', '50', '9007199254740993'] },
+    { id: '51', fileHash: hash, ownerId: 7, isEdited: true, status: '已解析', duplicateIds: ['51'] },
+    { id: '52', fileHash: hash, ownerId: 7, isEdited: true, status: '已解析', duplicateIds: ['52'] },
+    { id: '53', fileHash: hash, ownerId: 7, editHash: 'b'.repeat(64), status: '已解析' },
+    { id: '54', fileHash: hash, ownerId: 7, editHash: 'b'.repeat(64), status: '已解析' }
+  ])
+  assert.equal(rows.length, 5)
+  assert.deepEqual(rows[0].duplicateIds, ['49', '50', '9007199254740993'])
+})

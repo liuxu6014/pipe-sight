@@ -32,9 +32,6 @@
               <el-radio-button value="original">原文</el-radio-button>
               <el-radio-button value="zh">已保存中文</el-radio-button>
             </el-radio-group>
-            <el-tooltip v-else content="按需翻译与结果入库接口待接入；不会自动翻译或覆盖原文。">
-              <span><el-button disabled plain>翻译为中文 · 待接入</el-button></span>
-            </el-tooltip>
           </div>
           <div class="ps-article-body">
             <template v-if="language === 'original' && article.body_blocks?.length">
@@ -60,7 +57,7 @@
           <div class="ps-article-toc-links">
             <el-button plain @click="goToSection('article-summary')">内容摘要</el-button>
             <el-button plain @click="goToSection('article-fulltext')">文章全文</el-button>
-            <el-button plain @click="goToSection('article-insight')">管网洞察</el-button>
+            <el-button plain @click="goToSection('article-insight')">行业洞察</el-button>
           </div>
         </section>
         <section v-if="relatedNews.length" class="ps-panel"><h3>其他资讯</h3><el-link underline="never" :href="$router.resolve(`/portal/news/${item.id}` || '/portal').href" v-for="item in relatedNews" :key="item.id" class="ps-related-item ps-ui-title" @click.prevent="openPortalContent(router, `/portal/news/${item.id}`)"><strong>{{ item.title }}</strong><small>{{ item.source }}<template v-if="item.time"> · {{ newsDate(item.time) }}</template></small></el-link></section>

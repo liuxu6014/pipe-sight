@@ -375,7 +375,8 @@ test('keeps user portal headings in Chinese without decorative English labels', 
   for (const label of removedDecorativeLabels) {
     assert.doesNotMatch(portalPages, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   }
-  assert.match(portalPages, /管网科技情报简报/)
+  assert.match(portalPages, /科技情报简报/)
+  assert.doesNotMatch(portalPages, /管网科技情报简报/)
 })
 
 test('keeps primary portal pages concise without repeated explanatory lead text', () => {
@@ -412,8 +413,8 @@ test('keeps the Calm-style login modal closed until the user clicks an entry', (
   assert.match(loginPage, /@keydown="handleDialogKeydown"/)
   assert.match(loginPage, /document\.body\.style\.overflow/)
   assert.match(loginPage, /document\.getElementById\('login-username'\)\?\.focus\(\)/)
-  assert.match(loginPage, /pipechina-emblem\.png/)
-  assert.match(loginPage, /https:\/\/www\.pipechina\.com\.cn\/Uploads\/Picture\/2023\/09\/05\/s64f6d50827d73\.png/)
+  assert.match(loginPage, /pipechina-login-background\.jpg/)
+  assert.doesNotMatch(loginPage, /pipechina-emblem\.png/)
   for (const removed of ['演示账号', 'USER SIGN IN', '管网项目用户端', '统一入口', '新闻资讯、论文资料和日报周报专用工作台', '系统将根据账号权限进入用户端或管理端']) {
     assert.doesNotMatch(loginPage, new RegExp(removed))
   }

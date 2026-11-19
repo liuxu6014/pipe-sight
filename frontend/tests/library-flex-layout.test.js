@@ -26,3 +26,10 @@ test('list alone grows and scrolls, with usable controls on short and narrow scr
   assert.match(page, /\.ps-row-actions :deep\(\.el-button \+ \.el-button\) \{ margin-left: 0/)
   assert.match(page, /@media \(max-width: 760px\)[\s\S]*?\.ps-knowledge-toolbar > \.el-input \{ flex-basis: 100%/)
 })
+
+test('library reserves visible desktop actions and uses full-width touch cards on mobile', () => {
+  assert.match(page, /label="操作" width="250" fixed="right"/)
+  assert.match(page, /class="ps-library-cards" role="list" aria-label="资料卡片列表"/)
+  assert.match(page, /@media \(max-width: 760px\)[\s\S]*?\.ps-library-table \{ display: none/)
+  assert.match(page, /\.ps-library-card \.ps-row-actions > \.el-button \{ min-height: 44px/)
+})

@@ -253,3 +253,55 @@ def test_digest_exports_share_fixed_line_heights_and_pdf_headings_are_bold(monke
     assert streams.count(b'2 Tr') == 7  # masthead, period, category, two events, two source labels
     assert streams.count(b'0 Tr') >= 7
     assert sum(page.extract_text().count('检测技术验证进展') for page in pdf.pages) == 1
+
+
+def _pagination_report(filler=0, kind='weekly'):
+    value = report(kind)
+    value.content = (
+        '**跨页校验**\n\n### 1. 需与正文保持相邻的事件标题\n\n'
+        + '正文用于覆盖不同页尾位置。' * filler
+        + '\n\n发布时间：2026-10-21\n\n行业洞察：'
+        + '结论需要运行数据验证，不能由报道直接推断。' * 6
+        + '\n\n数据源：\n\n'
+        + '\n\n'.join(
+            f'[{i}] [第{i}条来源标题：' + '管道运行与试验记录' * 6 + f'](https://example.org/source/{i})'
+            for i in range(1, 5)
+        )
+    )
+    return value
+
+
+def test_word_keeps_headings_and_complete_event_metadata_together() -> None:
+    doc = Document(BytesIO(build_docx(_pagination_report(30), is_draft=False)[2]))
+    for _index, paragraph in enumerate(doc.paragraphs):
+        if paragraph.text.startswith(('一、', '1.', '发布时间：', '行业洞察：', '数据源：', '[')):
+            assert paragraph.paragraph_format.keep_together, paragraph.text
+        if paragraph.text.startswith(('发布时间：', '行业洞察：', '数据源：', '[1]', '[2]', '[3]')):
+            assert paragraph.paragraph_format.keep_with_next, paragraph.text
+    assert doc.paragraphs[-1].paragraph_format.keep_with_next is False
+
+
+@pytest.mark.parametrize('filler', [15, 20, 25, 30, 35, 40, 45, 50])
+@pytest.mark.parametrize('kind', ['weekly', 'monthly'])
+def test_pdf_keeps_insight_date_and_all_sources_on_one_page_at_page_boundaries(filler, kind) -> None:
+    import re
+
+    pdf = PdfReader(BytesIO(build_pdf(_pagination_report(filler, kind), is_draft=False)[2]))
+    pages = [re.sub(r'\s+', '', page.extract_text()) for page in pdf.pages]
+    targets = ['发布时间：2026-10-21', '行业洞察：', '数据源：'] + [f'[{i}]第{i}条来源标题：' for i in range(1, 5)]
+    locations = [next(i for i, text in enumerate(pages) if target in text) for target in targets]
+    assert len(set(locations)) == 1, (filler, locations)
+    links = [a.get_object()['/A']['/URI'] for page in pdf.pages for a in page.get('/Annots', [])]
+    assert set(links) == {f'https://example.org/source/{i}' for i in range(1, 5)}
+
+
+def test_oversized_digest_metadata_can_flow_without_losing_sources_or_failing_export() -> None:
+    value = _pagination_report(20)
+    value.content += '\n\n' + '\n\n'.join(
+        f'[{i}] [第{i}条较长的来源：' + '完整保留来源及其原始链接。' * 10 + f'](https://example.org/source/{i})'
+        for i in range(5, 25)
+    )
+    pdf = PdfReader(BytesIO(build_pdf(value, is_draft=False)[2]))
+    assert len(pdf.pages) > 1
+    links = [a.get_object()['/A']['/URI'] for page in pdf.pages for a in page.get('/Annots', [])]
+    assert set(links) == {f'https://example.org/source/{i}' for i in range(1, 25)}

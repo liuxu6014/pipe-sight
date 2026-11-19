@@ -21,7 +21,7 @@
     <section ref="listRegion" class="ps-material-list" :aria-busy="isInitialLoading" aria-label="资料列表">
       <el-skeleton v-if="isInitialLoading" :rows="4" animated />
       <el-table v-else :data="pagedDocuments" row-key="id" :max-height="listHeight" class="ps-library-table" style="width: 100%">
-        <el-table-column label="资料名称" min-width="360" header-align="center">
+        <el-table-column label="资料名称" min-width="280" header-align="center">
           <template #default="{ row: doc }">
             <div class="ps-library-identity">
               <span class="ps-doc-type" :class="`is-${String(doc.format || '').toLowerCase()}`">{{ doc.format }}</span>
@@ -33,16 +33,16 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="类别" width="130" header-align="center" align="center">
+        <el-table-column label="类别" width="100" header-align="center" align="center">
           <template #default="{ row: doc }"><el-tag class="ps-library-category" effect="plain" :type="contentCategory(doc) ? 'primary' : 'info'">{{ contentCategory(doc) || '待分类' }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="解析状态" width="130" header-align="center" align="center">
+        <el-table-column label="解析状态" width="110" header-align="center" align="center">
           <template #default="{ row: doc }"><b class="ps-parse-state" :class="statusClass(doc.status)"><i></i>{{ doc.status }}</b></template>
         </el-table-column>
-        <el-table-column label="更新时间" width="180" header-align="center" align="center">
+        <el-table-column label="更新时间" width="160" header-align="center" align="center">
           <template #default="{ row: doc }"><time>{{ doc.updatedAt || doc.publishedDate || doc.time || '—' }}</time></template>
         </el-table-column>
-        <el-table-column label="操作" width="320" header-align="center" align="right">
+        <el-table-column label="操作" width="250" fixed="right" header-align="center" align="right">
           <template #default="{ row: doc }"><div class="ps-row-actions">
           <el-button plain type="primary" @click="openDocument(doc)">查看</el-button>
           <el-button v-if="doc.canManage !== false" plain :loading="isReparsing(doc.id)" :disabled="Boolean(deletingId)" :aria-label="`${doc.status === '解析失败' ? '重试解析' : '重新解析'}：${doc.name}`" @click="reparse(doc)">{{ doc.status === '解析失败' ? '重试解析' : '重新解析' }}</el-button>
@@ -61,6 +61,29 @@
       <PortalEmptyState v-else-if="!isInitialLoading && !total && documentsError" title="暂时无法确认资料列表" description="资料获取失败，请重新获取后再检查筛选结果。" action-label="重新获取" @action="refreshDocuments" />
         </template>
       </el-table>
+      <div v-if="!isInitialLoading" class="ps-library-cards" role="list" aria-label="资料卡片列表">
+        <article v-for="doc in pagedDocuments" :key="doc.id" role="listitem" class="ps-library-card">
+          <div class="ps-library-identity">
+            <span class="ps-doc-type">{{ doc.format }}</span>
+            <div class="ps-doc-main">
+              <el-link underline="hover" :href="$router.resolve(libraryItemPath(doc) || '/portal').href" class="ps-ui-title" @click.prevent="openDocument(doc)">{{ doc.name }}</el-link>
+              <p v-if="doc.summary">{{ doc.summary }}</p>
+            </div>
+          </div>
+          <div class="ps-library-card-meta">
+            <el-tag effect="plain" :type="contentCategory(doc) ? 'primary' : 'info'">{{ contentCategory(doc) || '待分类' }}</el-tag>
+            <b class="ps-parse-state" :class="statusClass(doc.status)"><i></i>{{ doc.status }}</b>
+            <time>{{ doc.updatedAt || doc.publishedDate || doc.time || '—' }}</time>
+          </div>
+          <small v-if="doc.scanStatus && doc.scanStatus !== 'clean'" class="ps-doc-security-state">安全状态：{{ scanStatusLabel(doc.scanStatus) }}{{ doc.scanMessage ? ` · ${doc.scanMessage}` : '' }}</small>
+          <div class="ps-row-actions">
+            <el-button plain type="primary" @click="openDocument(doc)">查看</el-button>
+            <el-button v-if="doc.canManage !== false" plain :loading="isReparsing(doc.id)" :disabled="Boolean(deletingId)" :aria-label="`${doc.status === '解析失败' ? '重试解析' : '重新解析'}：${doc.name}`" @click="reparse(doc)">{{ doc.status === '解析失败' ? '重试解析' : '重新解析' }}</el-button>
+            <el-button v-if="doc.canManage === true" plain type="danger" :loading="deletingId === `${doc.kind}:${doc.id}`" :disabled="Boolean(deletingId)" @click="deleteLibraryItem(doc)">删除</el-button>
+          </div>
+        </article>
+        <PortalEmptyState v-if="!total" :title="documentsError ? '暂时无法确认资料列表' : hasFilters ? '没有匹配资料' : '还没有研究资料'" :description="documentsError || (hasFilters ? '请调整搜索词或筛选条件。' : '上传项目报告、标准或会议纪要，建立可检索的证据库。')" :action-label="documentsError ? '重新获取' : hasFilters ? '清除筛选' : '上传第一份资料'" @action="documentsError ? refreshDocuments() : hasFilters ? clearFilters() : openUpload()" />
+      </div>
     </section>
     <div v-if="total && !isInitialLoading" class="ps-pagination" aria-label="研究资料列表分页">
       <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :page-sizes="[10, 20, 50]" :total="total" :pager-count="5" layout="total, sizes, ->, prev, pager, next, jumper" background />
@@ -356,6 +379,7 @@ onMounted(() => {
 .ps-knowledge-toolbar > .el-select { flex: 0 0 170px; width: 170px; }
 .ps-knowledge-toolbar > .el-button { margin: 0; }
 .ps-material-list { border: 0; border-radius: 0; padding: 0; background: transparent; }
+.ps-library-cards { display: none; }
 .ps-library-table { border: 1px solid var(--ps-line); border-radius: 10px; }
 .ps-library-table :deep(.el-table__cell) { padding-block: 14px; }
 .ps-library-table :deep(th.el-table__cell) { padding-block: 10px; color: var(--ps-muted); font-size: 12px; font-weight: 500; }
@@ -383,6 +407,13 @@ onMounted(() => {
 :global(.el-message-box.ps-library-delete-confirm) { width: 480px; max-width: calc(100vw - 32px); box-sizing: border-box; }
 :global(.ps-library-delete-confirm .el-message-box__message) { overflow-wrap: anywhere; }
 @media (max-width: 760px) {
+  .ps-library-table { display: none; }
+  .ps-library-cards { display: grid; align-content: start; gap: 12px; height: 100%; overflow-y: auto; }
+  .ps-library-card { padding: 14px; border: 1px solid var(--ps-line); border-radius: 10px; background: #fff; min-width: 0; }
+  .ps-library-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; font-size: 13px; }
+  .ps-library-card-meta time { flex-basis: 100%; color: var(--ps-muted); }
+  .ps-library-card .ps-row-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 12px; }
+  .ps-library-card .ps-row-actions > .el-button { min-height: 44px; padding-inline: 8px; }
   .ps-knowledge-toolbar { flex-direction: row; }
   .ps-knowledge-toolbar > .el-input { flex-basis: 100%; }
   .ps-knowledge-toolbar > .el-select { flex: 1 1 140px; width: auto; }

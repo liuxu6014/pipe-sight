@@ -316,8 +316,10 @@ onMounted(() => { loadTemplates(); loadModels() })
 .template-toolbar .el-select { width: 140px; flex-shrink: 0; }
 .template-toolbar .el-button { margin: 0; }
 .template-categories { overflow-x: auto; padding: 0 0 2px; }
+.template-categories :deep(.el-segmented) { --el-segmented-item-selected-bg-color: #1f64a6; }
 .template-categories :deep(.el-segmented__item-label) { display: flex; align-items: center; gap: 8px; }
-.template-category-count { font-size: 12px; opacity: .8; font-variant-numeric: tabular-nums; }
+.template-category-count { color: var(--ps-muted, #526277); font-size: 13px; font-variant-numeric: tabular-nums; }
+.template-categories :deep(.el-segmented__item.is-selected) .template-category-count { color: #fff; }
 .template-results { min-width: 0; }
 .template-card-main { display: contents; }
 .template-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
@@ -328,15 +330,17 @@ onMounted(() => { loadTemplates(); loadModels() })
 .template-card-head { display: flex; align-items: center; gap: 10px; }
 .template-document-icon { display: flex; padding: 9px; border-radius: 6px; background: var(--el-color-primary-light-9); color: var(--el-color-primary); font-size: 20px; }
 .template-card h3 { flex: 1; min-width: 0; margin: 0; color: var(--el-text-color-primary); font-size: 16px; line-height: 1.5; overflow-wrap: anywhere; }
+.template-card :deep(.el-tag--success) { --el-tag-text-color: #196b3c; --el-tag-bg-color: #edf7ef; --el-tag-border-color: #c5e1cd; }
+.template-card :deep(.el-tag--info) { --el-tag-text-color: #526277; }
 .template-description { margin: 14px 0; color: var(--el-text-color-regular); font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
 .template-metadata { display: grid; gap: 10px; margin: auto 0 16px; font-size: 13px; }
 .template-metadata > div { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; }
-.template-metadata dt { color: var(--el-text-color-secondary); }
+.template-metadata dt { color: var(--ps-muted, #526277); }
 .template-metadata dd { margin: 0; color: var(--el-text-color-regular); overflow-wrap: anywhere; }
 .template-card-actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 14px; border-top: 1px solid var(--el-border-color-lighter); }
 .template-section-prompt { grid-column: 2 / -1; }
 .template-card-actions .el-button { margin: 0; }
-.template-result-count { color: var(--el-text-color-secondary); font-size: 13px; padding: 10px 16px; background: var(--el-bg-color); border: 1px solid var(--el-border-color-light); border-radius: 8px; }
+.template-result-count { color: var(--ps-muted, #526277); font-size: 13px; padding: 10px 16px; background: var(--el-bg-color); border: 1px solid var(--el-border-color-light); border-radius: 8px; }
 .is-personal {
  display: flex; flex-direction: column; overflow: hidden;
  border: 1px solid var(--ps-line); border-radius: 10px; background: var(--ps-paper);
@@ -363,7 +367,7 @@ onMounted(() => { loadTemplates(); loadModels() })
 .is-personal .template-card h3 { flex: 0 1 auto; padding-block: 3px; }
 .is-personal .template-card-head > .el-tag { flex-shrink: 0; margin-top: 4px; }
 .is-personal .template-description { margin: 8px 0 12px 42px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
-.is-personal .template-metadata { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0 0 0 42px; font-size: 12px; line-height: 1.6; }
+.is-personal .template-metadata { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0 0 0 42px; font-size: 13px; line-height: 1.6; }
 .is-personal .template-metadata > div { display: flex; gap: 8px; min-width: 0; }
 .is-personal .template-metadata dt { flex-shrink: 0; }
 .is-personal .template-card-actions { justify-content: flex-end; padding: 0; border: 0; }
@@ -377,7 +381,11 @@ onMounted(() => { loadTemplates(); loadModels() })
  .is-personal > .template-toolbar .el-input { flex-basis: 100%; min-width: 0; }
  .is-personal > .template-toolbar .el-select { flex: 1 1 100px; width: auto; }
  .is-personal .template-card { grid-template-columns: minmax(0, 1fr); gap: 14px; }
- .is-personal .template-card-actions { justify-content: flex-start; padding-left: 42px; }
+ .is-personal .template-card-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding-left: 42px; }
+ .is-personal .template-card-actions .el-button { min-height: 44px; }
+ .is-personal > .template-toolbar .el-button { min-height: 44px; }
+ .is-personal > .template-toolbar :deep(.el-input__wrapper),
+ .is-personal > .template-toolbar :deep(.el-select__wrapper) { min-height: 44px; }
 }
 @container workspace (max-width: 480px) {
  .is-personal > .template-toolbar { padding: 12px; gap: 8px; }

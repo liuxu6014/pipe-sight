@@ -13,7 +13,7 @@ import defaultAvatar from '@/assets/images/profile.jpg'
 const userStore = useUserStore()
 const failed = ref(false)
 const src = computed(() => userStore.avatar === defaultAvatar ? '' : userStore.avatar)
-const initial = computed(() => (userStore.nickName || userStore.name || '管网用户').slice(0, 1))
+const initial = computed(() => (userStore.nickName || userStore.name || '用户').slice(0, 1))
 watch(src, () => { failed.value = false })
 </script>
 

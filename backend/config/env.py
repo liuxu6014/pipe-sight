@@ -15,7 +15,7 @@ class AppSettings(BaseSettings):
     """
 
     app_env: str = 'dev'
-    app_name: str = '国家管网科技情报与科研辅助平台'
+    app_name: str = '科技情报与科研辅助平台'
     app_root_path: str = '/dev-api'
     app_host: str = '0.0.0.0'
     app_port: int = 9099

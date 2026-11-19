@@ -23,7 +23,7 @@ from common.http.schemas import DataResponseModel
 controller = APIRouterPro(
     prefix='/pipeline',
     order_num=30,
-    tags=['管网情报'],
+    tags=['科技情报'],
     dependencies=[PreAuthDependency()],
 )
 

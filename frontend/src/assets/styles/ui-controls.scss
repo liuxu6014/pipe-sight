@@ -4,7 +4,7 @@
   margin-left: 0;
 }
 
-:is(.ps-portal, .pipeline-page, .pipeline-user-login, .el-overlay) .el-button.ps-ui-control:where(.ps-brand, .calm-brand, .ps-user-button, .ps-sync-status, .ps-basket-button, .ps-sidebar-toggle, .ps-home-module, .ps-home-latest-item, .ps-outline-item, .ps-candidate-news, .ps-upload-drop, .ps-task-row, .ps-saved-search-apply),
+:is(.ps-portal, .pipeline-page, .pipeline-user-login, .el-overlay) .el-button.ps-ui-control:where(.ps-brand, .ps-user-button, .ps-sync-status, .ps-basket-button, .ps-sidebar-toggle, .ps-home-module, .ps-home-latest-item, .ps-outline-item, .ps-candidate-news, .ps-upload-drop, .ps-task-row, .ps-saved-search-apply),
 :is(.ps-template-choice, .management-entry-grid, .ps-my-report-table) > .el-button.ps-ui-control {
   height: auto;
   min-width: 0;
@@ -23,8 +23,8 @@
   color: inherit;
 }
 
-// Brand navigation keeps its logo appearance, including hover and active states.
-:is(.ps-portal, .pipeline-user-login) .el-button.ps-ui-control:is(.ps-brand, .calm-brand) {
+// Brand navigation stays visually quiet, including hover and active states.
+:is(.ps-portal, .pipeline-user-login) .el-button.ps-ui-control.ps-brand {
   border: 0;
   background: transparent;
   box-shadow: none;

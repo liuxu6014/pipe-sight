@@ -4,6 +4,43 @@
       <div class="ps-search-inline"><Search /><input v-model.trim="keyword" aria-label="搜索新闻资讯" placeholder="搜索标题、摘要或正文" @keydown.enter="reload" /><el-button class="ps-ui-action" v-if="keyword" aria-label="清空资讯关键词" @click="keyword = ''">清空</el-button></div>
       <el-select v-model="sourceType" aria-label="资讯来源" style="width: 150px"><el-option label="全部来源" value="全部" /><el-option label="新闻网站" value="新闻网站" /><el-option label="微信公众号" value="微信公众号" /></el-select>
       <el-select :model-value="activeTags[0] || ''" clearable filterable placeholder="全部类别" aria-label="资讯类别" style="width: 200px" @update:model-value="setCategory"><el-option v-for="tag in tags" :key="tag" :label="tag" :value="tag" /></el-select>
+      <el-popover
+        v-model:visible="publicationPickerOpen"
+        placement="bottom-end"
+        trigger="click"
+        role="dialog"
+        title="发布日期"
+        width="auto"
+        :popper-style="{ maxWidth: 'calc(100vw - 24px)' }"
+        :persistent="false"
+        @show="publicationDatePanel?.focus()"
+      >
+        <template #reference>
+          <el-button
+            ref="publicationDateButton"
+            class="ps-news-date-filter"
+            :icon="publicationRange ? undefined : Calendar"
+            :type="publicationRange ? 'primary' : 'default'"
+            :aria-label="publicationDateText ? `发布日期 ${publicationDateText}` : '发布日期'"
+            :aria-expanded="publicationPickerOpen"
+            aria-haspopup="dialog"
+            plain
+          >{{ publicationDateText || '发布日期' }}</el-button>
+        </template>
+        <div ref="publicationDatePanel" class="ps-news-date-panel" tabindex="-1" @keydown.esc.stop.prevent="closePublicationPicker">
+          <el-date-picker-panel
+            :model-value="publicationRange ?? undefined"
+            type="daterange"
+            value-format="YYYY-MM-DD"
+            :border="false"
+            @update:model-value="applyPublicationRange"
+          />
+          <div v-if="publicationRange" class="ps-news-date-selection">
+            <span>{{ publicationDateText }}</span>
+            <el-button size="small" aria-label="清除发布日期筛选" @click="applyPublicationRange(null)">清除</el-button>
+          </div>
+        </div>
+      </el-popover>
       <el-button v-if="hasActiveFilters" @click="resetFilters">重置筛选</el-button>
       <div class="ps-view-switch ps-segmented-row"><el-segmented v-model="viewMode" :options="[{ label: '列表', value: 'list' }, { label: '卡片', value: 'card' }]" aria-label="资讯展示方式"  /></div>
     </div>
@@ -23,7 +60,7 @@
           <div class="ps-news-card-main">
           <router-link v-if="item.cover_image || viewMode === 'card'" class="ps-news-cover" :aria-label="`阅读资讯：${item.title}`" :to="`/portal/news/${item.id}`">
             <img v-if="item.cover_image" :src="item.cover_image" alt="文章配图" loading="lazy" />
-            <div v-else class="ps-news-theme-cover" role="img" :aria-label="`${item.tags?.[0] || '管网科技'}主题示意，非新闻原图`">
+            <div v-else class="ps-news-theme-cover" role="img" :aria-label="`${item.tags?.[0] || '科技资讯'}主题示意，非新闻原图`">
               <svg viewBox="0 0 560 200" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
                 <path d="M0 40H560M0 80H560M0 120H560M0 160H560M40 0V200M80 0V200M120 0V200M160 0V200M200 0V200M240 0V200M280 0V200M320 0V200M360 0V200M400 0V200M440 0V200M480 0V200M520 0V200" stroke="#cbdfe9" fill="none" opacity=".5" />
                 <path d="M285 200V145Q285 125 305 125H380Q400 125 400 105V60Q400 40 420 40H560" stroke="#bdd5e2" stroke-width="20" fill="none" />
@@ -33,7 +70,7 @@
                 <circle cx="400" cy="82" r="24" fill="#e6f0f5" stroke="#236486" stroke-width="2" /><circle cx="400" cy="82" r="8" fill="#236486" />
                 <circle cx="285" cy="160" r="7" fill="#e6f0f5" stroke="#236486" stroke-width="3" /><circle cx="485" cy="156" r="7" fill="#e6f0f5" stroke="#26747d" stroke-width="3" />
               </svg>
-              <div class="ps-news-theme-copy"><small>管网科技资讯</small><strong>{{ item.tags?.[0] || '行业动态' }}</strong><span>主题示意 · 非新闻原图</span></div>
+              <div class="ps-news-theme-copy"><small>科技资讯</small><strong>{{ item.tags?.[0] || '行业动态' }}</strong><span>主题示意 · 非新闻原图</span></div>
             </div>
           </router-link>
           <div class="ps-news-card-copy">
@@ -45,7 +82,7 @@
           </div></div>
         </article>
         <PortalEmptyState v-if="loadError && !loading" title="资讯加载失败" :description="loadError" action-label="重新加载" @action="reload" />
-        <PortalEmptyState v-else-if="!newsItems.length && !loading" title="没有匹配的资讯" description="请调整标签、来源或搜索关键词。" :action-label="hasActiveFilters ? '重置筛选' : ''" @action="resetFilters" />
+        <PortalEmptyState v-else-if="!newsItems.length && !loading" title="没有匹配的资讯" description="请调整发布日期、分类、来源或搜索关键词。" :action-label="hasActiveFilters ? '重置筛选' : ''" @action="resetFilters" />
         </div>
         <div v-if="total > 0 && !loading && !loadError" class="ps-pagination" aria-label="资讯列表分页">
           <el-pagination
@@ -66,20 +103,48 @@
 <script setup>
 import ContentEntities from '../components/ContentEntities.vue'
 import ContentCategory from '../components/ContentCategory.vue'
-import { computed, toRefs, watch } from 'vue'
+import { computed, ref, toRefs, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search } from '@element-plus/icons-vue'
+import { Calendar, Search } from '@element-plus/icons-vue'
 import PortalEmptyState from '../components/PortalEmptyState.vue'
 import usePortalStore from '@/store/modules/portal'
 import { getPipelineContentFilters, deletePipelineWorkspaceItem, listPipelineIntelligence, savePipelineWorkspaceItem } from '@/api/pipeline/intelligence'
 import { normalizePortalIntelligence } from '@/store/modules/portal'
 import { useListQuery, useListRequest, useListWorkspace, validPage } from '@/utils/portal/listQuery'
+import { calendarDate } from '@/utils/portal/businessTime'
 import { cleanSummary, newsDate } from '@/utils/portal/discovery'
 
 const portalStore = usePortalStore()
-const query = useListQuery({ q: '', source: '全部', category: '全部', tag: [], view: 'list', page: 1, size: 10 })
+const query = useListQuery({ q: '', source: '全部', category: '全部', tag: [], published: [], view: 'list', page: 1, size: 10 })
 const { q: keyword, source: sourceType, tag: activeTags, view: viewMode, page: currentPage, size: pageSize } = toRefs(query)
-const hasActiveFilters = computed(() => Boolean(keyword.value || sourceType.value !== '全部' || activeTags.value.length))
+const publicationRange = computed({
+  get() {
+    const [start, end] = query.published
+    if (query.published.length !== 2 || start < '0001-01-01' || start > end) return null
+    return calendarDate(start) === start && calendarDate(end) === end ? [start, end] : null
+  },
+  set(value) { query.published = value ?? [] }
+})
+const publicationPickerOpen = ref(false)
+const publicationDateButton = ref(null)
+const publicationDatePanel = ref(null)
+const publicationDateText = computed(() => {
+  if (!publicationRange.value) return ''
+  const [start, end] = publicationRange.value
+  return start === end ? start : `${start} 至 ${end}`
+})
+
+function closePublicationPicker() {
+  publicationPickerOpen.value = false
+  publicationDateButton.value?.ref?.focus()
+}
+
+function applyPublicationRange(value) {
+  publicationRange.value = value
+  closePublicationPicker()
+}
+
+const hasActiveFilters = computed(() => Boolean(keyword.value || sourceType.value !== '全部' || activeTags.value.length || publicationRange.value))
 // Old category links referred to tags; migrate them into the single visible filter.
 watch(() => [query.category, query.tag], () => {
   const legacy = query.category
@@ -96,6 +161,8 @@ const { data, loading, loadError, reload } = useListRequest(() => ({
   keyword: keyword.value || undefined,
   tags: activeTags.value.length ? JSON.stringify(activeTags.value) : undefined,
   source_type: ({ 新闻网站: 'news', 微信公众号: 'wechat' })[sourceType.value],
+  publishedFrom: publicationRange.value?.[0],
+  publishedTo: publicationRange.value?.[1],
   pageNum: currentPage.value,
   pageSize: pageSize.value
 }), listPipelineIntelligence)
@@ -128,22 +195,33 @@ async function addToBasket(item) {
 }
 function resetFilters() {
   const unchanged = !hasActiveFilters.value && currentPage.value === 1
-  keyword.value = ''; sourceType.value = '全部'; query.category = '全部'; activeTags.value = []; currentPage.value = 1
+  keyword.value = ''; sourceType.value = '全部'; query.category = '全部'; activeTags.value = []; publicationRange.value = null; currentPage.value = 1
   if (unchanged) reload()
 }
 </script>
 
 <style scoped>
 .ps-page { --ws-page-space: 14px; }
-.ps-toolbar { min-height: 0; padding: 6px 12px; row-gap: 6px; margin-bottom: 10px; }
+.ps-toolbar { flex-wrap: wrap; min-height: 0; padding: 6px 12px; row-gap: 6px; margin-bottom: 10px; }
 .ps-toolbar > .ps-search-inline { flex: 1 1 100%; }
 .ps-toolbar > .el-select { flex: 1 1 150px; }
+.ps-toolbar > .el-button, .ps-toolbar > .ps-view-switch { flex-shrink: 0; }
+.ps-toolbar > .ps-news-date-filter { height: 40px; max-width: 100%; margin-left: 0; padding-inline: 12px; font-variant-numeric: tabular-nums; }
+.ps-news-date-panel { max-height: min(70dvh, 570px); overflow: auto; }
+.ps-news-date-panel :deep(.el-date-range-picker) { width: 536px; max-width: 100%; }
+.ps-news-date-selection { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px 0; border-top: 1px solid var(--el-border-color-lighter); }
 .ps-search-inline > button { flex-shrink: 0; white-space: nowrap; }
+@media (max-width: 580px) {
+  .ps-news-date-panel :deep(.el-date-range-picker) { width: 320px; }
+  .ps-news-date-panel :deep(.el-date-range-picker__content) { display: block; width: 100%; }
+  .ps-news-date-panel :deep(.el-date-range-picker__content.is-left) { border-right: 0; border-bottom: 1px solid var(--el-border-color-lighter); }
+}
+@media (max-width: 760px) {
+  .ps-toolbar > .ps-news-date-filter { height: 44px; }
+}
 @media (min-width: 1051px) {
-  .ps-toolbar { flex-wrap: nowrap; }
-  .ps-toolbar > .ps-search-inline { flex: 1 1 280px; min-width: 180px; }
-  .ps-toolbar > .el-select { flex: 0 0 160px; width: 160px; }
-  .ps-toolbar > .el-button, .ps-toolbar > .ps-view-switch { flex-shrink: 0; }
+  .ps-toolbar > .ps-search-inline { flex: 1 1 180px; min-width: 180px; }
+  .ps-toolbar > .el-select { flex: 0 1 132px; min-width: 112px; }
 }
 .ps-news-title, .ps-news-cover { text-decoration: none; }
 .ps-news-page .ps-news-list { gap: 10px; align-content: start; }

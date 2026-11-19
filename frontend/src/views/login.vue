@@ -1,25 +1,15 @@
 <template>
   <div class="pipeline-user-login calm-login-page calm-homepage-auth" :class="{ 'is-login-open': loginVisible }">
-    <section class="calm-photo-hero pipechina-photo-hero" aria-label="平台登录封面">
-      <img class="calm-hero-photo" :src="CALM_MOUNTAIN_LAKE_URL" alt="国家管网输气站场背景" />
+    <div class="calm-photo-hero" aria-hidden="true">
+      <img class="calm-hero-photo" :src="loginBackgroundUrl" alt="" />
       <div class="calm-hero-shade" aria-hidden="true"></div>
       <div class="calm-hero-fade" aria-hidden="true"></div>
-
-      <nav class="calm-login-nav" aria-label="平台登录导航">
-        <div class="calm-nav-left">
-          <el-button :auto-insert-space="false" class="calm-brand ps-ui-control" native-type="button" @click="selectDestination('/portal')">
-            <img class="calm-brand-logo" :src="PIPECHINA_LOGO_URL" :data-source="PIPECHINA_LOGO_SOURCE_URL" alt="国家管网标识" />
-          </el-button>
-
-        </div>
-
-      </nav>
-    </section>
+    </div>
 
     <main class="calm-start-panel">
       <section class="calm-start-copy" aria-labelledby="calm-login-title">
-        <h1 id="calm-login-title">连接信息，支撑科研决策。</h1>
-        <p>面向管网科技情报发现、证据沉淀与研究成果生成。</p>
+        <h1 id="calm-login-title">{{ PLATFORM_NAME }}</h1>
+        <p>检索科技资讯与论文，管理研究资料，生成科研报告和情报简报。</p>
 
         <div class="calm-start-actions">
           <el-button :auto-insert-space="false" class="calm-start-primary ps-ui-control" native-type="button" @click="startTrial">
@@ -60,10 +50,7 @@
 
             <div class="calm-compact-auth">
               <div class="calm-auth-brand-row">
-                <img class="calm-brand-logo compact" :src="PIPECHINA_LOGO_URL" :data-source="PIPECHINA_LOGO_SOURCE_URL" alt="国家管网标识" />
-                <span>
-                  <strong>{{ PLATFORM_NAME }}</strong>
-                </span>
+                <strong>{{ PLATFORM_NAME }}</strong>
               </div>
 
               <div class="login-card-head">
@@ -170,14 +157,10 @@ import useUserStore from '@/store/modules/user'
 import usePermissionStore from '@/store/modules/permission'
 import { resolvePostLoginPath } from '@/utils/portal/auth'
 import { isHttp } from '@/utils/validate'
-import pipechinaEmblemUrl from '@/assets/logo/pipechina-emblem.png'
-import pipechinaLoginBackgroundUrl from '@/assets/images/pipechina-login-background.jpg'
+import loginBackgroundUrl from '@/assets/images/pipechina-login-background.jpg'
 
 defineOptions({ name: 'UnifiedPlatformLogin' })
 
-const CALM_MOUNTAIN_LAKE_URL = pipechinaLoginBackgroundUrl
-const PIPECHINA_LOGO_SOURCE_URL = 'https://www.pipechina.com.cn/Uploads/Picture/2023/09/05/s64f6d50827d73.png'
-const PIPECHINA_LOGO_URL = pipechinaEmblemUrl
 const PLATFORM_NAME = import.meta.env.VITE_APP_TITLE || '科技情报与科研辅助平台'
 
 const route = useRoute()
@@ -457,85 +440,16 @@ onBeforeUnmount(() => {
 
 .calm-hero-fade {
   top: auto;
-  height: 260px;
-  background: linear-gradient(180deg, rgba(246, 246, 246, 0), #f6f6f6);
-}
-
-.pipechina-photo-hero .calm-hero-fade {
   height: 72px;
   background: linear-gradient(180deg, rgba(246, 246, 246, 0), rgba(246, 246, 246, 0.78) 82%, #f6f6f6);
 }
 
-.calm-login-nav {
-  position: absolute;
-  z-index: 5;
-  top: 22px;
-  left: 36px;
-  right: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 22px;
-}
-
-.calm-nav-left {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.calm-brand,
-.calm-nav-link,
 .calm-start-primary,
 .calm-start-secondary,
 .calm-code-img,
 .calm-submit,
 .calm-modal-close {
   cursor: pointer;
-}
-
-.calm-brand {
-  width: 86px;
-  height: 72px;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-  overflow: hidden;
-  padding: 0;
-}
-
-.calm-brand-logo {
-  width: 86px;
-  height: 72px;
-  display: block;
-  background: transparent;
-  object-fit: contain;
-  object-position: left center;
-
-  &.compact {
-    width: 62px;
-    height: 52px;
-    border: 0;
-    background: transparent;
-    object-fit: contain;
-  }
-}
-
-.calm-nav-link {
-  min-height: 38px;
-  border: 1px solid rgba(255, 255, 255, 0.36);
-  border-radius: 999px;
-  color: #fff;
-  background: rgba(7, 32, 52, 0.16);
-  backdrop-filter: blur(8px);
-  padding: 0 18px;
-  font-size: 14px;
-  transition: background 0.2s ease, border-color 0.2s ease;
-
-  &:hover {
-    border-color: rgba(255, 255, 255, 0.62);
-    background: rgba(7, 32, 52, 0.28);
-  }
 }
 
 .calm-start-primary,
@@ -711,25 +625,12 @@ onBeforeUnmount(() => {
 }
 
 .calm-auth-brand-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
   padding-right: 44px;
-
-  span {
-    display: grid;
-    gap: 4px;
-  }
 
   strong {
     color: #163047;
     font-size: 16px;
     line-height: 1.35;
-  }
-
-  small {
-    color: #718497;
-    font-size: 12px;
   }
 }
 
@@ -885,32 +786,11 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 760px) {
-  .calm-login-nav {
-    top: 14px;
-    left: 16px;
-    right: 16px;
-    gap: 12px;
-  }
-
-  .calm-nav-left {
-    gap: 8px;
-  }
-
-  .calm-nav-left .calm-nav-link {
-    display: none;
-  }
-
-  .calm-nav-link {
-    min-height: 34px;
-    padding: 0 13px;
-    font-size: 13px;
-  }
-
   .calm-photo-hero {
     height: 180px;
   }
 
-  .pipechina-photo-hero .calm-hero-fade {
+  .calm-hero-fade {
     height: 54px;
   }
 
@@ -999,7 +879,6 @@ onBeforeUnmount(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .calm-nav-link,
   .calm-start-primary,
   .calm-start-secondary,
   .calm-code-img,

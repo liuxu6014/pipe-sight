@@ -1,5 +1,6 @@
 """Public content, category-prompt and template APIs."""
 
+from datetime import date, datetime, time
 from typing import Annotated, Literal
 
 from fastapi import HTTPException, Query, Request, Response
@@ -8,6 +9,7 @@ from pydantic.alias_generators import to_camel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.business_ids import parse_business_id
+from app.business_time import BEIJING
 from app.intelligence.repositories.content_repository import ContentDao
 from app.intelligence.schemas.pipeline import PipelineListModel, PipelineTemplateSaveModel
 from app.intelligence.services.application import IntelligenceApplicationService
@@ -22,7 +24,7 @@ from common.http.responses import ResponseUtil
 from common.http.routing import APIRouterPro
 from common.http.schemas import DataResponseModel
 
-controller = APIRouterPro(prefix='/pipeline', order_num=30, tags=['管网情报'], dependencies=[PreAuthDependency()])
+controller = APIRouterPro(prefix='/pipeline', order_num=30, tags=['科技情报'], dependencies=[PreAuthDependency()])
 DB = Annotated[AsyncSession, DBSessionDependency()]
 ADMIN = [RoleInterfaceAuthDependency('admin')]
 BusinessId = Annotated[int, BeforeValidator(parse_business_id)]
@@ -57,6 +59,12 @@ async def list_pipeline_intelligence(  # noqa: PLR0913
     source_type: Annotated[str | None, Query(description='来源类型')] = None,
     tag: Annotated[str | None, Query(alias='tag', max_length=100, description='标签；与分类、来源、等级取交集')] = None,
     tags: Annotated[str | None, Query(max_length=13000, description='新闻标签 JSON 数组，多个标签取交集')] = None,
+    published_from: Annotated[
+        date | None, Query(alias='publishedFrom', description='发布日期起始日（北京时间）')
+    ] = None,
+    published_to: Annotated[
+        date | None, Query(alias='publishedTo', description='发布日期截止日（北京时间，含当天）')
+    ] = None,
     relevance_min: Annotated[int | None, Query(alias='relevanceMin', ge=0, le=100)] = None,
     relevance_max: Annotated[int | None, Query(alias='relevanceMax', ge=0, le=100)] = None,
     year_from: Annotated[int | None, Query(alias='yearFrom', ge=1600, le=2200)] = None,
@@ -67,6 +75,8 @@ async def list_pipeline_intelligence(  # noqa: PLR0913
     page_num: Annotated[int, Query(alias='pageNum', ge=1)] = 1,
     page_size: Annotated[int, Query(alias='pageSize', ge=1, le=100)] = 10,
 ) -> Response:
+    if published_from and published_to and published_from > published_to:
+        raise HTTPException(status_code=422, detail='发布日期起始日不能晚于截止日')
     try:
         selected_tags = catalog_tags_adapter.validate_json(tags) if tags else []
     except ValidationError as error:
@@ -78,6 +88,8 @@ async def list_pipeline_intelligence(  # noqa: PLR0913
         source_type=source_type,
         **({'tag': tag} if tag else {}),
         **({'tags': selected_tags} if selected_tags else {}),
+        published_from=datetime.combine(published_from, time.min, BEIJING) if published_from else None,
+        published_to=datetime.combine(published_to, time.max, BEIJING) if published_to else None,
         relevance_min=relevance_min,
         relevance_max=relevance_max,
         year_from=year_from,
