@@ -107,7 +107,7 @@ export const constantRoutes = [
     path: '/pipeline/intelligence',
     component: Layout,
     hidden: true,
-    children: [{ path: '', component: () => import('@/views/pipeline/intelligence/index.vue'), name: 'PipelineIntelligence', meta: { title: '情报内容审核', icon: 'documentation' } }]
+    children: [{ path: '', component: () => import('@/views/pipeline/intelligence/index.vue'), name: 'PipelineIntelligence', meta: { title: '情报查询', icon: 'documentation' } }]
   },
   {
     path: '/pipeline/intelligence/detail',

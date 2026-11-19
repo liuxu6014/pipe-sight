@@ -13,7 +13,10 @@ const PIPELINE_VISIBLE_ROOTS = new Set(['', 'index', 'pipeline'])
 const BACKEND_ONLY_ROOTS = new Set(['system', 'monitor', 'tool', 'ai'])
 const LEGACY_MENU_TITLES = new Map([
   ['管网情报', '科技情报'],
-  ['管网情报工作台', '情报工作台']
+  ['管网情报工作台', '情报工作台'],
+  ['日报周报', '报告管理'],
+  ['情报内容审核', '情报查询'],
+  ['情报检索', '情报详情']
 ])
 
 const usePermissionStore = defineStore(

@@ -4,6 +4,7 @@
       <span>全部来源 <strong>{{ rows.length }}</strong></span>
       <span>已启用 <strong>{{ enabledCount }}</strong></span>
       <div class="source-summary-actions">
+        <el-button v-hasPermi="['pipeline:task:list']" plain @click="$router.push('/pipeline/task')">采集任务</el-button>
         <el-button v-if="canSourceSave" type="primary" :icon="Plus" @click="openCreateDialog">新增数据源</el-button>
       </div>
     </div>
@@ -240,7 +241,7 @@ async function toggleSource(source) {
 async function runSource(source) {
   if (!canSourceRun.value || isExternalSource(source) || busy.value || runningId.value) return
   runningId.value = source.id
-  try { const result = await runPipelineTask(source.id); ElMessage.success(`试采已入队：${result.data?.id || result.data?.runId || ''}，可在采集管理查看执行结果`); await loadSources() }
+  try { const result = await runPipelineTask(source.id); ElMessage.success(`试采已入队：${result.data?.id || result.data?.runId || ''}，点击“采集任务”查看执行结果`); await loadSources() }
   catch (error) { ElMessage.error(error?.msg || error?.message || '试采未能启动') }
   finally { runningId.value = '' }
 }
@@ -251,7 +252,7 @@ onMounted(loadSources)
 .source-page { min-width: 0; gap: 12px; }
 .source-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 24px; padding: 12px 16px; border: 1px solid #e5ebf1; border-radius: 8px; color: #526277; font-size: 13px; background: #fff; }
 .source-summary strong { margin-left: 6px; color: #173d56; font-size: 18px; }
-.source-summary-actions { margin-left: auto; }
+.source-summary-actions { display: flex; gap: 8px; margin-left: auto; }
 .source-type-filter { align-self: flex-start; max-width: 100%; }
 .source-type-filter :deep(.el-segmented__group) { flex-wrap: wrap; }
 .source-list-card :deep(.el-card__body) { padding: 0; }
