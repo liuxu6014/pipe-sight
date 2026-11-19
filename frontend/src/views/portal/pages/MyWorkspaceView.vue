@@ -1,5 +1,9 @@
 <template>
   <div class="ps-page" :class="{ 'ps-basket-page': mode === 'basket', 'ps-list-page': mode !== 'basket' }">
+    <nav v-if="mode === 'basket'" class="ps-workspace-tabs" aria-label="资料库栏目">
+      <router-link to="/portal/basket" aria-current="page">收藏资料</router-link>
+      <router-link to="/portal/knowledge">上传资料</router-link>
+    </nav>
     <nav v-if="mode !== 'basket'" class="ps-workspace-tabs" aria-label="个人中心栏目">
       <router-link v-for="tab in workspaceTabs" :key="tab.mode" :to="'/portal/me/' + tab.mode" :aria-current="mode === tab.mode ? 'page' : undefined">{{ tab.label }}</router-link>
     </nav>

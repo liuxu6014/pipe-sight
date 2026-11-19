@@ -26,9 +26,9 @@ const router = createRouter({ history: createWebHistory(), routes: [
     { path: 'digests', component: page('DigestListView') },
     { path: 'digests/create', component: page('DigestCreateView') },
     { path: 'digests/:id', component: page('DigestEditorView') },
-    { path: 'knowledge', redirect: to => ({ path: '/portal/basket', query: to.query }) },
+    { path: 'knowledge', component: page('KnowledgeView') },
     { path: 'search', component: page('SearchView') },
-    { path: 'basket', component: page('KnowledgeView') },
+    { path: 'basket', component: page('MyWorkspaceView'), props: { mode: 'basket' } },
     { path: 'me/basket', redirect: '/portal/basket' },
     { path: 'me/:section', component: page('MyWorkspaceView'), props: route => ({ mode: route.params.section }) }
   ] },

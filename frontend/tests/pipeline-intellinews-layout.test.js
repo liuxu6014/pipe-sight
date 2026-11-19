@@ -55,6 +55,11 @@ test('separates business navigation including my reports from account and eviden
 test('basket has its own route and is no longer a personal center tab', () => {
   const workspace = read('../src/views/portal/pages/MyWorkspaceView.vue')
   assert.match(routerConfig, /path: 'basket', name: 'PortalBasket'/)
+  const basketRoute = routerConfig.split("path: 'basket', name: 'PortalBasket'")[1].split('\n')[0]
+  assert.match(basketRoute, /MyWorkspaceView\.vue.*props: \{ mode: 'basket' \}/)
+  const uploadsRoute = routerConfig.split("path: 'knowledge', name: 'PortalKnowledge'")[1].split('\n')[0]
+  assert.match(uploadsRoute, /KnowledgeView\.vue/)
+  assert.doesNotMatch(uploadsRoute, /redirect/)
   assert.match(routerConfig, /path: 'me\/basket', name: 'PortalMyBasket', redirect: '\/portal\/basket'/)
   assert.match(portalHeader, /router.push\('\/portal\/basket'\)/)
   assert.match(workspace, /<nav v-if="mode !== 'basket'"/)
