@@ -17,14 +17,13 @@
         <el-table-column header-align="center" align="center" label="类型" width="90"><template #default="{ row }"><el-tag effect="plain" :type="scheduleType(row.reportType || row.type) === '月报' ? 'success' : 'primary'">{{ scheduleType(row.reportType || row.type) }}</el-tag></template></el-table-column>
         <el-table-column header-align="center" prop="period" label="覆盖周期" width="220"><template #default="{ row }"><span class="ps-digest-period">{{ row.period }}</span></template></el-table-column>
         <el-table-column header-align="center" label="状态" width="104"><template #default="{ row }"><el-tag :type="({ success: 'success', warning: 'warning', running: 'primary' })[statusClass(row.status)] || 'info'">{{ row.status }}</el-tag></template></el-table-column>
-        <el-table-column header-align="center" prop="updatedAt" label="更新时间" width="180"><template #default="{ row }"><time>{{ row.updatedAt }}</time></template></el-table-column>
-        <el-table-column header-align="center" label="操作" width="232" align="right">
+        <el-table-column header-align="center" prop="generatedAt" label="生成时间" width="180"><template #default="{ row }"><time v-if="row.generatedAt">{{ row.generatedAt }}</time><span v-else>—</span></template></el-table-column>
+        <el-table-column header-align="center" label="操作" width="164" align="right">
           <template #default="{ row: report }">
             <div class="ps-digest-row-actions">
               <el-button type="primary" plain :disabled="!report.path" @click="router.push(report.path)">{{ report.hasOutput ? '查看' : '生成记录' }}</el-button>
               <template v-if="report.hasOutput">
                 <el-button plain :loading="exportingId === report.id" :disabled="Boolean(exportingId)" :title="report.requiresReview ? '导出草稿 Markdown' : '导出 Markdown'" @click="exportDigest(report)">导出</el-button>
-                <el-button plain @click="openSources(report)">来源</el-button>
               </template>
             </div>
           </template>
@@ -179,7 +178,6 @@ function digestReportState(report) {
 }
 function resetFilters() { keyword.value = ''; date.value = []; status.value = 'all' }
 function refreshCurrent() { return activeTab.value === '自动任务' ? loadSchedules() : loadReports() }
-function openSources(report) { router.push({ path: `/portal/digests/${report.id}`, query: { panel: 'sources' } }) }
 async function exportDigest(report) {
   if (!hasReportOutput(report)) return ElMessage.warning('当前简报暂无正文，请先查看生成记录')
   exportingId.value = report.id

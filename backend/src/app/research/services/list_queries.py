@@ -1,15 +1,24 @@
 """Bounded list read models. Article bodies and frozen prompts stay in detail APIs."""
 
+from datetime import datetime, timezone
+
 from sqlalchemy import String, case, cast, func, literal, or_, select
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.business_ids import wire_id
-from app.business_time import format_business_time
+from app.business_time import audit_as_utc, format_business_time
 from app.library.models.materials import PipelineMaterial as Material
 from app.research.models.research_models import PipelineReport as Report
 from app.research.models.research_models import PipelineReportVersion as Version
 from app.research.models.research_models import PipelineResearchJob as Job
 from app.system.models.user import SysUser
+
+
+def _format_generation_time(value: datetime | None) -> str:
+    # Both SQL branches return UTC instants; SQLite drops timezone metadata.
+    if value is not None and value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return format_business_time(value) or ''
 
 
 async def report_page(
@@ -23,6 +32,24 @@ async def report_page(
         func.row_number().over(partition_by=Job.report_id, order_by=(Job.created_at.desc(), Job.id.desc())).label('rn'),
     ).subquery()
     has_output = func.length(func.trim(Report.content)) > 0
+    # Editing a saved report must not change its generation timestamp. Prefer
+    # the latest successful execution, with original generated history for
+    # legacy reports whose task record is no longer available.
+    completed_at = (
+        select(func.max(Job.finished_at))
+        .where(Job.report_id == Report.id, Job.status == 'completed', func.length(func.trim(Job.result_content)) > 0)
+        .correlate(Report)
+        .scalar_subquery()
+    )
+    original_generated_at = (
+        select(func.min(audit_as_utc(Version.created_at)))
+        .where(
+            Version.report_id == Report.id, Version.source == 'generated', func.length(func.trim(Version.content)) > 0
+        )
+        .correlate(Report)
+        .scalar_subquery()
+    )
+    generated_at = func.coalesce(completed_at, original_generated_at)
     state = case(
         (has_output, 'generated'),
         (latest.c.job_status.in_(['queued', 'running']), 'active'),
@@ -40,6 +67,7 @@ async def report_page(
             Report.version,
             Report.created_at,
             Report.updated_at,
+            generated_at.label('generated_at'),
             has_output.label('has_output'),
             func.length(Report.content).label('words'),
             state.label('list_status'),
@@ -121,6 +149,7 @@ async def report_page(
                 'metadata': {'period': r['period'] or ''},
                 'updatedAt': format_business_time(r['updated_at']),
                 'createdAt': format_business_time(r['created_at']),
+                'generatedAt': _format_generation_time(r['generated_at']) if r['has_output'] else '',
             }
             for r in rows
         ],

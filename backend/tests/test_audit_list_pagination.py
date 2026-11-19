@@ -79,6 +79,61 @@ async def test_report_pages_have_correct_totals_stable_sort_and_no_cross_account
 
 
 @pytest.mark.asyncio
+async def test_generation_time_uses_successful_completion_and_survives_later_edits_or_failed_retries(env, db):
+    seed(env, db)
+    report = add_report(env, db, 1, report_type='weekly')
+    now = env.models.utcnow()
+    completed = now - timedelta(days=1)
+    for index, status, stamp, content in [
+        (1, 'completed', completed - timedelta(hours=1), '初次正文'),
+        (2, 'completed', completed, '生成正文'),
+        (3, 'failed', now, None),
+        (4, 'completed', now, ''),
+    ]:
+        db.add(
+            env.models.PipelineResearchJob(
+                id=2000 + index,
+                report_id=report.id,
+                request_id=f'generation-time:{index}',
+                status=status,
+                progress=100 if status == 'completed' else 0,
+                finished_at=stamp,
+                result_content=content,
+                config_snapshot={},
+                materials=[],
+            )
+        )
+    report.updated_at = now + timedelta(hours=1)
+    await db.commit()
+    lists = importlib.import_module('app.research.services.list_queries')
+    from app.business_time import format_business_time
+
+    row = (await lists.report_page(db, user_id=7, kind='weekly'))['rows'][0]
+    assert row['generatedAt'] == format_business_time(completed)
+    assert row['generatedAt'] != row['updatedAt']
+
+
+@pytest.mark.asyncio
+async def test_legacy_generation_time_uses_original_generated_version_and_empty_reports_have_no_time(env, db):
+    seed(env, db)
+    report = add_report(env, db, 1, report_type='weekly')
+    pending = add_report(env, db, 2, content='', report_type='weekly')
+    generated = env.models.utcnow() - timedelta(days=2)
+    original = await env.repo.ResearchDao.get_report_version(db, report.id, 1)
+    original.created_at = generated
+    edited = await env.repo.ResearchDao.get_report_version(db, report.id, 2)
+    edited.source = 'user'
+    edited.created_at = generated + timedelta(days=1)
+    await db.commit()
+    lists = importlib.import_module('app.research.services.list_queries')
+    from app.business_time import format_business_time
+
+    rows = {row['id']: row for row in (await lists.report_page(db, user_id=7, kind='weekly'))['rows']}
+    assert rows[str(report.id)]['generatedAt'] == format_business_time(generated)
+    assert rows[str(pending.id)]['generatedAt'] == ''
+
+
+@pytest.mark.asyncio
 async def test_latest_generation_status_filters_and_escaped_keyword_are_correct(env, db):
     seed(env, db)
     # A regeneration may queue behind an already usable report. It remains a

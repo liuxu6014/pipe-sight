@@ -59,6 +59,20 @@ paths.MyWorkspaceView = '/portal/basket'
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b }); return { promise, resolve, reject } }
 const settle = async () => { await vue.nextTick(); await setImmediate(); await vue.nextTick() }
 
+test('digest list displays generation time independently of later edits', async () => {
+  const ctx = await mountPage('DigestListView', { api: {
+    listPipelineResearchReports: async () => ({ data: { rows: [{
+      id: '77', title: '已编辑周报', reportType: 'weekly', hasOutput: true,
+      generatedAt: '2026-11-19 08:00:00', updatedAt: '2026-11-19 09:00:00'
+    }], total: 1 } })
+  } })
+  try {
+    assert.equal(ctx.page.pagedReports.value[0].generatedAt, '2026-11-19 08:00:00')
+    assert.match(sources.DigestListView, /prop="generatedAt" label="生成时间"/)
+    assert.match(sources.DigestListView, /<time v-if="row.generatedAt">\{\{ row.generatedAt \}\}<\/time><span v-else>—<\/span>/)
+  } finally { ctx.close() }
+})
+
 test('paper publication precision follows actual source date without inventing missing parts', () => {
   for (const date of ['2024', '2024-03', '2024-03-18']) {
     const paper = normalizers.normalizePortalPaper({ id: '26', title: '论文', publish_time: date })

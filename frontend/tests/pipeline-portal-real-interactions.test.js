@@ -69,7 +69,7 @@ test('uses real digest export and removes actions without backend support', () =
   assert.match(digestList, /await exportPipelineResearchReport\(report\.id,/)
   assert.match(digestList, /new Blob\(\[res\.data\.content\]/)
   assert.match(digestList, /URL\.createObjectURL\(blob\)/)
-  assert.match(digestList, /query: \{ panel: 'sources' \}/)
+  assert.doesNotMatch(digestList, /openSources|>来源<|panel: 'sources'/)
   assert.match(digestEditor, /sources: '来源清单', exports: '导出记录'/)
   for (const placeholder of ['已复制为新草稿', '导出任务已创建', '删除草稿']) {
     assert.doesNotMatch(digestList, new RegExp(placeholder))
