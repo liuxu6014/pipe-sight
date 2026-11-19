@@ -15,12 +15,12 @@ test('uploaded file basket references resolve directly as report materials, not 
   assert.equal(row.itemType, 'material')
 })
 
-function setup(list, retry = async () => {}) {
+function setup(list, retry = async () => {}, get) {
   const store = reactive({ workspaceEpoch: 1, basket: [{ id: '49', type: 'file' }], liveDocuments: [{ id: '49', parseStatus: 'queued' }] })
   const timers = new Map()
   let serial = 0
   const scope = effectScope()
-  const state = scope.run(() => useBasketParsing(store, () => true, { list, retry }, {
+  const state = scope.run(() => useBasketParsing(store, () => true, { list, retry, get }, {
     setTimeout: fn => { const id = ++serial; timers.set(id, fn); return id },
     clearTimeout: id => timers.delete(id)
   }))
@@ -111,5 +111,31 @@ test('a missing basket document is verified once and is not polled forever', asy
     assert.equal(env.state.label('49'), '资料不存在或无权访问')
     assert.equal(env.timers.size, 0)
     assert.equal(env.store.basket.length, 1)
+  } finally { env.scope.stop() }
+})
+
+test('a duplicate reference uses its canonical ready file instead of claiming it was deleted', async () => {
+  const env = setup(async () => { throw Error('must not poll a ready alias') })
+  try {
+    env.store.basket = [{ id: '50', type: 'file' }]
+    env.store.liveDocuments = [{ id: '49', duplicateIds: ['49', '50'], status: 'indexed' }]
+    await nextTick()
+    assert.equal(env.state.label('50'), '已解析，可用于生成')
+    assert.equal(env.timers.size, 0)
+  } finally { env.scope.stop() }
+})
+
+test('files beyond the first upload page are authorized by their own detail endpoint', async () => {
+  const requested = []
+  const env = setup(async () => { throw Error('first page is incomplete') }, undefined, async id => {
+    requested.push(id)
+    return { data: { id, status: 'indexed' } }
+  })
+  try {
+    env.store.liveDocuments = []
+    await nextTick(); await env.tick()
+    assert.deepEqual(requested, ['49'])
+    assert.equal(env.state.label('49'), '已解析，可用于生成')
+    assert.equal(env.timers.size, 0)
   } finally { env.scope.stop() }
 })

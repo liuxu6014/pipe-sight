@@ -69,7 +69,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, toRef, toRefs, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowRight, UploadFilled, Document, Reading, Tickets } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -81,14 +81,15 @@ import useUserStore from '@/store/modules/user'
 import { useBasketSelection } from '@/utils/portal/basketSelection'
 import { basketItemLabel, basketItemPath, uploadBasketFile, validateBasketUpload } from '@/utils/portal/basketItems'
 import { useBasketParsing } from '@/utils/portal/basketParsing'
-import { uploadPipelineKnowledgeDocument, savePipelineWorkspaceItem, listPipelineKnowledgeDocuments, reparsePipelineKnowledgeDocument } from '@/api/pipeline/intelligence'
+import { useListQuery } from '@/utils/portal/listQuery'
+import { uploadPipelineKnowledgeDocument, savePipelineWorkspaceItem, listPipelineKnowledgeDocuments, getPipelineKnowledgeDocument, reparsePipelineKnowledgeDocument } from '@/api/pipeline/intelligence'
 
 const props = defineProps({ mode: { type: String, default: 'tasks' } })
 const router = useRouter()
 const portalStore = usePortalStore()
 const userStore = useUserStore()
-const keyword = ref('')
-const statusFilter = ref('')
+const query = useListQuery({ q: '', status: '', page: 1, size: 10 })
+const { q: keyword, status: statusFilter, page: currentPage, size: pageSize } = toRefs(query)
 const uploadVisible = ref(false)
 const uploading = ref(false)
 const uploadError = ref('')
@@ -113,7 +114,7 @@ async function deleteBasketItem(item) {
     if (error !== 'cancel' && error !== 'close' && basketDeleteActive && epoch === portalStore.workspaceEpoch) ElMessage.error('删除失败，请稍后重试')
   } finally { deletingBasketId.value = '' }
 }
-const basketParsing = useBasketParsing(portalStore, () => props.mode === 'basket', { list: listPipelineKnowledgeDocuments, retry: reparsePipelineKnowledgeDocument })
+const basketParsing = useBasketParsing(portalStore, () => props.mode === 'basket', { list: listPipelineKnowledgeDocuments, get: getPipelineKnowledgeDocument, retry: reparsePipelineKnowledgeDocument })
 function itemPath(item) {
   if (item.type === 'report') return getPortalReportPath(allReports.value.find(report => report.id === item.id) || item)
   return basketItemPath(item)
@@ -157,9 +158,7 @@ const visibleItems = computed(() => {
     return matchesText && matchesStatus
   })
 })
-const basketSelection = useBasketSelection(() => portalStore.basket, () => props.mode === 'basket' ? visibleItems.value : [], () => portalStore.workspaceEpoch)
-const currentPage = ref(1)
-const pageSize = ref(10)
+const basketSelection = useBasketSelection(() => portalStore.basket, () => props.mode === 'basket' ? visibleItems.value : [], () => portalStore.workspaceEpoch, toRef(portalStore, 'basketSelectionIds', []))
 const pagedItems = computed(() => visibleItems.value.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value))
 watch([keyword, statusFilter, pageSize, () => props.mode], () => { currentPage.value = 1 })
 watch(() => visibleItems.value.length, count => { currentPage.value = Math.min(currentPage.value, Math.max(1, Math.ceil(count / pageSize.value))) })

@@ -8,8 +8,7 @@ export function resolveBasketSelection(basket, query) {
   return { items: ids.map(id => byId.get(id)).filter(Boolean), missing: ids.filter(id => !byId.has(id)).length, upgraded: ids.some(id => !decimalId(id)) }
 }
 
-export function useBasketSelection(getBasket, getVisible, getEpoch) {
-  const selectedIds = ref([])
+export function useBasketSelection(getBasket, getVisible, getEpoch, selectedIds = ref([])) {
   const selectedItems = computed(() => getBasket().filter(item => selectedIds.value.includes(displayId(item.id))))
   const visibleSelected = computed(() => getVisible().filter(item => selectedIds.value.includes(displayId(item.id))).length)
   const allVisible = computed(() => getVisible().length > 0 && visibleSelected.value === getVisible().length)

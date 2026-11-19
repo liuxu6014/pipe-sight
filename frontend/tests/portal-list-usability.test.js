@@ -126,6 +126,7 @@ async function mountPage(name, { query = {}, api = {}, documents = [], pageProps
     exportPipelineResearchReport: empty, deletePipelineDigestSchedule: empty, runPipelineDigestSchedule: empty, updatePipelineDigestSchedule: empty,
     savePipelineWorkspaceItem: empty, deletePipelineWorkspaceItem: empty,
     deletePipelineKnowledgeDocument: empty, reparsePipelineKnowledgeDocument: empty, uploadPipelineKnowledgeDocument: empty, listPipelineKnowledgeDocuments: listDocuments,
+    getPipelineKnowledgeDocument: async id => ({ data: store.liveDocuments.find(row => String(row.id) === String(id)) }),
     ...api, ...timers
   }
   const { descriptor } = parse(sources[name])
@@ -508,6 +509,23 @@ test('basket refuses an oversized generation without silently truncating selecte
     assert.equal(ctx.router.currentRoute.value.path, '/portal/basket')
     assert.ok(ctx.messages.some(item => /50.*不会被截断/.test(item.text)))
     assert.match(sources.MyWorkspaceView, /router.push\('\/portal\/knowledge'\)/)
+  } finally { ctx.close() }
+})
+
+test('basket detail return restores search and the current account selected references', async () => {
+  const ctx = await mountPage('MyWorkspaceView', { pageProps: { mode: 'basket' } })
+  try {
+    ctx.store.basket = [{ id: '294', type: 'article', title: '天津公开资讯' }, { id: '26', type: 'paper', title: '论文' }]
+    ctx.page.keyword.value = '天津'
+    ctx.page.basketSelection.toggle('294', true)
+    await settle()
+    assert.equal(ctx.router.currentRoute.value.query.q, '天津')
+    await ctx.router.push('/portal/news/294'); await settle()
+    ctx.router.back(); await settle()
+    assert.equal(ctx.page.keyword.value, '天津')
+    assert.deepEqual(ctx.page.basketSelection.selectedItems.value.map(item => item.id), ['294'])
+    ctx.store.workspaceEpoch++
+    assert.deepEqual(ctx.page.basketSelection.selectedItems.value, [])
   } finally { ctx.close() }
 })
 

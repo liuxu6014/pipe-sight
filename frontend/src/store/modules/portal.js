@@ -215,6 +215,7 @@ const usePortalStore = defineStore('portal-workspace', {
   state: () => ({
     workspaceEpoch: 0,
     basket: [],
+    basketSelectionIds: [],
     favorites: [],
     favoriteItems: [],
     tasks: demoDataEnabled ? recentTasks.map(item => ({ ...item })) : [],
@@ -332,6 +333,7 @@ const usePortalStore = defineStore('portal-workspace', {
       this.taskPanelVisible = false
       hydratePromise = null
       this.basket = []
+      this.basketSelectionIds = []
       this.favorites = []
       this.favoriteItems = []
       this.tasks = demoDataEnabled ? recentTasks.map(item => ({ ...item })) : []
