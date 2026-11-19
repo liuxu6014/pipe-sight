@@ -10,6 +10,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
@@ -219,13 +220,22 @@ def prepare(args) -> Path:
     return path
 
 
-def run(path) -> int:
+def run(path, *, comments_only=False) -> int:
     from alembic.config import Config
     from alembic.script import ScriptDirectory
 
     manifest = json.loads(path.read_text())
     info = manifest['connection']
+    for key, prefix in (('legacy_database', 'compact'), ('current_database', 'beijing')):
+        if not re.fullmatch(rf'pipesight_{prefix}_pgtest_[a-f0-9]{{12}}', manifest[key]):
+            raise ValueError(f'Invalid isolated rehearsal database: {key}')
     validate(info)
+    if comments_only:
+        backup(
+            info,
+            manifest['current_database'],
+            Path(manifest['evidence_root']) / ('comments-backup-' + uuid4().hex[:12]),
+        )
     env = environment(info, manifest['current_database'])
     config = Config(str(BACKEND / 'alembic.ini'))
     config.set_main_option('script_location', str(BACKEND / 'alembic'))
@@ -251,9 +261,14 @@ def run(path) -> int:
         PIPESIGHT_PG_EVIDENCE=manifest['evidence_root'],
         PIPESIGHT_PG_SNAPSHOT_ROOT=manifest['snapshot_root'],
     )
-    report = Path(manifest['evidence_root']) / 'pytest.xml'
+    report = Path(manifest['evidence_root']) / ('pytest-comments.xml' if comments_only else 'pytest.xml')
+    target = (
+        'tests/test_application_schema_comments.py::test_comment_only_pg18_updates_preserve_every_business_row'
+        if comments_only
+        else 'tests'
+    )
     result = subprocess.run(
-        [sys.executable, '-m', 'pytest', 'tests', '-q', '--tb=short', f'--junitxml={report}'],
+        [sys.executable, '-m', 'pytest', target, '-q', '--tb=short', f'--junitxml={report}'],
         cwd=BACKEND,
         env=env,
         check=False,
@@ -276,10 +291,14 @@ def main() -> int:
     parser.add_argument('--evidence-dir', type=Path, default=ROOT / '.runtime/pg-acceptance')
     parser.add_argument('--manifest', type=Path, help='Reuse an already prepared isolated environment')
     parser.add_argument('--prepare-only', action='store_true')
+    parser.add_argument(
+        '--comments-only', action='store_true', help='Run the comment-only PG18 rehearsal without PDF fixtures'
+    )
     args = parser.parse_args()
-    validate_pdf_fixtures()
+    if not args.comments_only:
+        validate_pdf_fixtures()
     path = args.manifest.resolve() if args.manifest else prepare(args)
-    return 0 if args.prepare_only else run(path)
+    return 0 if args.prepare_only else run(path, comments_only=args.comments_only)
 
 
 if __name__ == '__main__':

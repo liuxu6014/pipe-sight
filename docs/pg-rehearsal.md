@@ -58,3 +58,21 @@ backend/.venv/bin/python backend/scripts/run_pg_rehearsals.py \
 ```
 
 证据目录包含每步 Alembic 日志、迁移备份及全量 `pytest.xml`。凭证、原始快照和运行产物均不提交仓库。用 `--prepare-only` 可以只准备环境。
+
+## 单独运行数据库注释演练
+
+仅验证历史注释更新时，不需要 PDF 原件或 PDF 解析依赖：
+
+```sh
+backend/.venv/bin/python backend/scripts/run_pg_rehearsals.py \
+  --comments-only \
+  --snapshot-dir /private/path/legacy-snapshot \
+  --connection-file /private/path/rehearsal-connection.json \
+  --evidence-dir .runtime/pg-comment-acceptance
+```
+
+也可用 `--comments-only --manifest /private/path/run-xxxxxxxxxxxx/manifest.json` 复验已经准备好的隔离环境。复用的当前库必须已完成最新迁移；旧结构应从历史快照新建演练库后再测。
+
+该命令保留同一套容器、端口和随机数据库名称校验，不读取应用 `.env`。每次运行前另外保存 `comments-backup-*` 一致性备份，再实际执行 `test_comment_only_pg18_updates_preserve_every_business_row`，不会仅做静态检查或取消跳过条件。
+
+测试连续两次应用当前注释，核对每张表的全部行指纹、表与字段注释、目录视图注释；任何失败或跳过均视为验收失败。结果保存在 `pytest-comments.xml`，完整回归命令仍会校验两份原始 PDF 并要求零跳过。
