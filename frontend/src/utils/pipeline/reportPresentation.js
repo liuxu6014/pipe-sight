@@ -18,3 +18,7 @@ export function formatReportDate(value) {
 export function getReportStatusMeta(status) {
   return reportStatuses[status] || reportStatuses.draft
 }
+
+export function canExportReport(report) {
+  return report?.hasOutput === true
+}

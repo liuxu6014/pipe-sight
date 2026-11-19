@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { formatReportDate, getReportStatusMeta } from '../src/utils/pipeline/reportPresentation.js'
+import { canExportReport, formatReportDate, getReportStatusMeta } from '../src/utils/pipeline/reportPresentation.js'
 
 test('report editor keeps source and export records without user-facing versions', () => {
   const source = readFileSync(new URL('../src/views/portal/pages/ReportEditorView.vue', import.meta.url), 'utf8')
@@ -37,4 +37,21 @@ test('maps persisted report lifecycle statuses without falling back to draft', (
   assert.deepEqual(getReportStatusMeta('failed'), { label: '生成失败', type: 'danger' })
   assert.deepEqual(getReportStatusMeta('queued'), { label: '排队中', type: 'primary' })
   assert.deepEqual(getReportStatusMeta('running'), { label: '生成中', type: 'primary' })
+})
+
+test('management export requires saved output rather than a task status', () => {
+  for (const status of ['draft', 'queued', 'running', 'failed', 'completed']) {
+    assert.equal(canExportReport({ status, hasOutput: false }), false)
+  }
+  assert.equal(canExportReport(null), false)
+  assert.equal(canExportReport({ status: 'completed' }), false)
+  // A failed retry must not hide a previously saved result.
+  assert.equal(canExportReport({ status: 'failed', hasOutput: true }), true)
+  assert.equal(canExportReport({ status: 'completed', hasOutput: true }), true)
+})
+
+test('management export prevents empty output and duplicate concurrent downloads', () => {
+  const source = readFileSync(new URL('../src/views/pipeline/report/index.vue', import.meta.url), 'utf8')
+  assert.match(source, /:disabled="!canExportReport\(row\) \|\| Boolean\(downloadingReportId\)"/)
+  assert.match(source, /if \(!canExportReport\(row\) \|\| downloadingReportId.value\) return/)
 })

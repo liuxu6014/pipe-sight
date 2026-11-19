@@ -36,7 +36,7 @@
             </div>
             <div class="report-list-actions">
               <el-button plain type="primary" :icon="View" @click="openReport(row)">查看详情</el-button>
-              <el-button v-hasPermi="['pipeline:report:export']" plain type="primary" :icon="Download" :loading="downloadingReportId === row.id" @click="handleExportReport(row)">导出</el-button>
+              <el-button v-hasPermi="['pipeline:report:export']" plain type="primary" :icon="Download" :disabled="!canExportReport(row) || Boolean(downloadingReportId)" :loading="downloadingReportId === row.id" @click="handleExportReport(row)">导出</el-button>
             </div>
           </li>
         </ol>
@@ -63,8 +63,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Download, Refresh, View } from '@element-plus/icons-vue'
 import { exportPipelineReport, listPipelineAdminReports } from '@/api/pipeline/intelligence'
-import { getReportStatusMeta } from '@/utils/pipeline/reportPresentation'
-import { isDigestType } from '@/views/portal/utils/routing'
+import { canExportReport, getReportStatusMeta } from '@/utils/pipeline/reportPresentation'
 import ReportDetailDialog from './components/ReportDetailDialog.vue'
 
 defineOptions({ name: 'PipelineReport' })
@@ -123,7 +122,7 @@ function downloadMarkdown(fileName, content) {
 }
 
 async function handleExportReport(row) {
-  if (!row) return
+  if (!canExportReport(row) || downloadingReportId.value) return
   downloadingReportId.value = row.id
   try {
     const res = await exportPipelineReport(row.id, { allowDraft: row.requiresReview })
