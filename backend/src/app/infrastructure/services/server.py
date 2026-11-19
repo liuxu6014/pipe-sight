@@ -63,7 +63,8 @@ class ServerService:
         sys_files = []
         for partition in psutil.disk_partitions():
             try:
-                usage = psutil.disk_usage(partition.device)
+                # Query the mounted filesystem, not /dev (which has its own tiny filesystem on macOS).
+                usage = psutil.disk_usage(partition.mountpoint)
                 sys_files.append(
                     SysFiles(
                         dirName=partition.device,
