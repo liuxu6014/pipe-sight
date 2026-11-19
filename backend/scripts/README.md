@@ -4,7 +4,7 @@
 
 | 目录 | 脚本 | 用途 |
 | --- | --- | --- |
-| `bootstrap/` | `bootstrap_real_pipeline.py`、`bootstrap_deepseek_route.py`、`seed_dev_data.py` | 初始化来源、模型路由或开发种子数据 |
+| `bootstrap/` | `bootstrap_real_pipeline.py`、`bootstrap_deepseek_route.py`、`seed_dev_data.py`、`seed_research_templates.py` | 初始化来源、模型路由、开发种子数据或科研报告模板 |
 | `imports/` | `import_curated_content.py`、`import_wechat_feeds.py` | 导入受控内容和公众号数据 |
 | `backfills/` | `complete_authorized_articles.py`、`cleanup_low_quality_articles.py` | 补充授权文章、清理低质量文章 |
 | `backfills/` | `normalize_manuscript_templates.py`、`update_project_demand_template.py` | 修正已有模板数据 |
