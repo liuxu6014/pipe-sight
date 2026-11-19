@@ -9,14 +9,14 @@ import { compileString } from 'sass-embedded'
 
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8')
 
-async function renderHeader(libraryCount = 12) {
+async function renderHeader(basketCount = 12) {
   const { descriptor } = parse(read('../src/views/portal/components/PortalHeader.vue'))
   const compiled = compileScript(descriptor, { id: 'responsive-header', inlineTemplate: true })
   const code = compiled.content
     .replace(/^import \{ (.+) \} from ["']vue["'];?$/gm, (_, names) => `const { ${names.replaceAll(' as ', ': ')} } = Vue`)
     .replace(/^import[^\n]*\n/gm, '')
     .replace('export default', 'return')
-  const store = { runningTaskCount: 3, libraryCount, dataLoading: false, dataError: '', taskPanelVisible: false, hydrate() {} }
+  const store = { runningTaskCount: 3, basketCount, libraryCount: 3, dataLoading: false, dataError: '', taskPanelVisible: false, hydrate() {} }
   const route = { path: '/portal/templates', fullPath: '/portal/templates', query: {}, hash: '' }
   const destinations = []
   const router = { options: { history: { state: {} } }, currentRoute: Vue.ref(route), push: path => destinations.push(path) }

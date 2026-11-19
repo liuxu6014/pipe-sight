@@ -50,12 +50,12 @@
         <el-button :icon="Collection" :auto-insert-space="false"
           class="ps-basket-button ps-ui-control"
           native-type="button"
-          :aria-label="`资料库，${store.libraryCount} 条资料`"
+          :aria-label="`资料库，${store.basketCount} 条资料`"
           @click="router.push('/portal/basket')"
         >
 
           <span>资料库</span>
-          <b>{{ store.libraryCount > 99 ? '99+' : store.libraryCount }}</b>
+          <b>{{ store.basketCount > 99 ? '99+' : store.basketCount }}</b>
         </el-button>
 
         <div class="ps-user-account-actions">

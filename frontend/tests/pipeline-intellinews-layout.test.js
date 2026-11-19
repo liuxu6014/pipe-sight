@@ -116,7 +116,7 @@ test('provides working cross-page basket, favorites and task panel state', () =>
   assert.match(portalStore, /toggleFavorite\(id\)/)
   assert.match(portalStore, /favoriteItems = normalizeBusinessData\(workspaceResult\.value\?\.data\?\.favoriteItems \|\| \[\]\)/)
   assert.match(portalStore, /openTaskPanel\(\)/)
-  assert.match(portalHeader, /store\.libraryCount/)
+  assert.match(portalHeader, /store\.basketCount/)
   assert.match(portalHeader, /portalNavigation/)
   assert.match(portalHeader, /数据同步异常/)
 })
