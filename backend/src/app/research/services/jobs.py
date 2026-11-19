@@ -264,6 +264,16 @@ class ResearchJobService:
         job = await ResearchDao.get_research_job(db, job_id, user_id, lock=True)
         if not job or job.status not in {'failed', 'cancelled'}:
             raise ServiceException(message='只能重试失败或取消的任务')
+        # One failed attempt has one successor. The parent row lock serializes
+        # retries from stale pages/tabs, and the request key survives refreshes
+        # and lost responses. Retry a failed successor to create another attempt.
+        request_id = f'retry:{wire_id(job.id)}'
+        existing = await ResearchDao.get_research_job_by_request_id(db, request_id)
+        if existing:
+            report = await ResearchDao.get_report(db, existing.report_id, user_id)
+            if not report or existing.report_id != job.report_id:
+                raise ServiceException(message='重试任务记录不一致，请联系管理员')
+            return {**job_serializer(existing, report=report), 'reused': True}
         # 按原任务冻结的模型选择复核，不改用当前模板或生成无效的新尝试。
         snapshot = job.config_snapshot or {}
         cls._validate_digest_materials(snapshot.get('type'), job.materials or [])
@@ -277,7 +287,7 @@ class ResearchJobService:
         new = PipelineResearchJob(
             report_id=job.report_id,
             schedule_id=job.schedule_id,
-            request_id=f'manual:{uuid4()}',
+            request_id=request_id,
             status='queued',
             progress=0,
             attempts=0,
@@ -292,7 +302,7 @@ class ResearchJobService:
             new.config_snapshot['digest_screening'].pop('retained_ids', None)
         await ResearchDao.add_research_job(db, new)
         await db.commit()
-        return job_serializer(new, report=report)
+        return {**job_serializer(new, report=report), 'reused': False}
 
     @staticmethod
     async def cancel(db, *, user_id, job_id, job_serializer) -> dict:

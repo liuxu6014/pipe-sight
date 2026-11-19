@@ -11,6 +11,7 @@ function taskPage({ get, retry, cancel, confirm = async () => {} }) {
   let unmount
   const timers = new Set()
   const navigations = []
+  const messages = []
   let sequence = 0
   const route = reactive({ name: 'PortalResearchTask', params: { id: 'task-a' } })
   const listeners = new Map()
@@ -20,11 +21,11 @@ function taskPage({ get, retry, cancel, confirm = async () => {} }) {
     useRoute: () => route, useRouter: () => ({ replace: async path => { navigations.push(path); route.params.id = path.split('/').at(-1) } }), useUserStore: () => ({}), taskStages: [],
     getPipelineResearchJob: get || (async id => ({ data: { id, status: 'queued' } })), retryPipelineResearchJob: retry,
     cancelPipelineResearchJob: cancel, ElMessageBox: { confirm },
-    ElMessage: { warning() {}, success() {}, error() {} },
+    ElMessage: { warning() {}, success(message) { messages.push(message) }, error() {} },
     setInterval() { const id = ++sequence; timers.add(id); return id }, clearInterval(id) { timers.delete(id) }
   })
   vm.runInContext(`${source}\nglobalThis.page = { task, loadTask, retryTask, cancelTask, startRefresh, loadError, stageRows, currentStageLabel, generationModeLabel, logs, materialCounts, canRetry, templateName, progress, taskStateLabel, onVisibilityChange, materialRows }`, context)
-  return { state: context.page, timers, navigations, route, document, unmount: () => unmount() }
+  return { state: context.page, timers, navigations, messages, route, document, unmount: () => unmount() }
 }
 
 test('successful reload after a temporary error resumes automatic task refresh', async () => {
@@ -76,6 +77,24 @@ test('retry follows the newly created attempt rather than polling the old termin
   await view.state.retryTask()
   assert.equal(view.navigations[0], '/portal/research/tasks/78')
   assert.equal(view.timers.size, 1)
+  view.unmount()
+})
+
+test('retry replay opens the existing attempt and explains that it was not generated again', async () => {
+  const view = taskPage({ retry: async () => ({ data: { jobId: '78', status: 'queued', reused: true } }) })
+  view.state.task.value.status = 'failed'
+  await view.state.retryTask()
+  assert.equal(view.navigations[0], '/portal/research/tasks/78')
+  assert.deepEqual(view.messages, ['已打开已有重试任务，未重复生成'])
+  view.unmount()
+})
+
+test('completed retry replay does not claim to have queued or charged another generation', async () => {
+  const view = taskPage({ retry: async () => ({ data: { jobId: '78', status: 'completed', reused: true } }) })
+  view.state.task.value.status = 'failed'
+  await view.state.retryTask()
+  assert.equal(view.navigations[0], '/portal/research/tasks/78')
+  assert.deepEqual(view.messages, ['该次重试已完成，已打开任务记录'])
   view.unmount()
 })
 

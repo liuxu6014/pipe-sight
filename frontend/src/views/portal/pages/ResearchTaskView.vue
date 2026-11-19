@@ -204,7 +204,9 @@ async function retryTask() {
     else task.value = res.data
     if (!active) return
     startRefresh()
-    ElMessage.success('任务已按原配置重新加入生成队列')
+    ElMessage.success(res.data.reused
+      ? res.data.status === 'completed' ? '该次重试已完成，已打开任务记录' : '已打开已有重试任务，未重复生成'
+      : '任务已按原配置重新加入生成队列')
   } catch (error) {
     if (!active || commandEpoch !== requestEpoch || error === 'cancel' || error === 'close') return
     ElMessage.error(error?.msg || error?.message || '重新生成失败')
