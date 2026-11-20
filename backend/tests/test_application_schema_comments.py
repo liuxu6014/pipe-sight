@@ -70,10 +70,10 @@ def _expected(names: set[str]) -> dict:
 
 def test_comment_data_matches_current_contract_plus_optional_fields() -> None:
     baseline = {t['name']: {c['name'] for c in t['columns']} for t in load_contract()['tables']}
-    assert len(baseline) == 28 and sum(map(len, baseline.values())) == 354
+    assert len(baseline) == 28 and sum(map(len, baseline.values())) == 359
     assert set(baseline) | set(OPTIONAL_TABLE_NAMES) == PUBLIC_TABLES
     assert sum(len(COLUMN_COMMENTS[n]) for n in OPTIONAL_TABLE_NAMES) == 23
-    assert sum(map(len, COLUMN_COMMENTS.values())) == 377
+    assert sum(map(len, COLUMN_COMMENTS.values())) == 382
     for name, fields in baseline.items():
         assert set(COLUMN_COMMENTS[name]) == fields
     source = Path(__file__).parents[1] / 'src/app/schema_comments.py'
@@ -84,7 +84,7 @@ def test_comment_data_matches_current_contract_plus_optional_fields() -> None:
 def test_all_current_tables_and_columns_have_specific_chinese_comments() -> None:
     assert len(PUBLIC_TABLES) == 30
     assert set(Base.metadata.tables) == MODEL_TABLES and len(MODEL_TABLES) == 28
-    assert sum(len(t.c) for t in Base.metadata.tables.values()) == 373
+    assert sum(len(t.c) for t in Base.metadata.tables.values()) == 378
     placeholders = {'字段说明', '表说明', '待补充', 'TODO', 'TBD', '主键', '创建时间', '更新时间'}
     for name, table_comment in TABLE_COMMENTS.items():
         for label, comment in [(name, table_comment), *COLUMN_COMMENTS[name].items()]:
@@ -131,7 +131,7 @@ def test_generated_sql_exactly_matches_data_and_registered_orm_comments() -> Non
         expected.update({('COLUMN', name, c): text for c, text in view['columns'].items()})
     assert actual == expected
     assert len([key for key in actual if key[0] == 'TABLE']) == 30
-    assert len([key for key in actual if key[0] == 'COLUMN' and key[1] in PUBLIC_TABLES]) == 377
+    assert len([key for key in actual if key[0] == 'COLUMN' and key[1] in PUBLIC_TABLES]) == 382
     for table in Base.metadata.tables.values():
         assert actual['TABLE', table.name, None] == table.comment
         for col in table.c:
@@ -252,6 +252,13 @@ def test_v3_comment_snapshot_is_frozen_independently_of_v4_semantic_policy() -> 
         'screening_prompt',
         'screening_categories',
     }
+    expected['knowledge_files'] |= {
+        'category_id',
+        'classification_status',
+        'classification_error',
+        'classification_token',
+        'classification_updated_at',
+    }
     expected['sys_user'] |= {'dept_id'}
     expected['sys_dept'] = set(COLUMN_COMMENTS['sys_dept'])
     assert expected == {name: set(cols) for name, cols in COLUMN_COMMENTS.items()}
@@ -284,6 +291,12 @@ def test_v5_only_business_audit_comments_change_from_frozen_v4() -> None:
         for column in table['columns']:
             key = (name, column['name'])
             current = COLUMN_COMMENTS[name][column['name']]
+            if key == ('categories', 'applies_to'):
+                assert (
+                    current
+                    == '适用内容类型：news新闻、paper论文、document上传资料、all全部三者；默认all，不改变历史归类'
+                )
+                continue
             if current != column['comment']:
                 changed.add(key)
             if key in fields:
@@ -343,6 +356,7 @@ def test_status_password_units_dates_and_json_snapshot_semantics() -> None:
         ('generation_tasks', 'status', ('queued', 'running', 'completed', 'failed', 'cancelled')),
         ('collection_runs', 'status', ('queued', 'running', 'stopping', 'success', 'failed', 'cancelled')),
         ('knowledge_files', 'status', ('queued', 'parsing', 'ready', 'failed')),
+        ('knowledge_files', 'classification_status', ('queued', 'running', 'completed', 'failed', 'not_configured')),
         ('report_assets', 'status', ('queued', 'running', 'completed', 'failed')),
         ('model_calls', 'status', ('success', 'failed')),
     ]:
@@ -393,9 +407,9 @@ def test_comment_only_pg18_updates_preserve_every_business_row() -> None:
                 }
 
             before = rows()
-            assert apply_schema_comments(bind, allow_live=True) == {'tables': 30, 'columns': 377, 'views': 2}
+            assert apply_schema_comments(bind, allow_live=True) == {'tables': 30, 'columns': 382, 'views': 2}
             assert rows() == before
-            assert apply_schema_comments(bind, allow_live=True) == {'tables': 30, 'columns': 377, 'views': 2}
+            assert apply_schema_comments(bind, allow_live=True) == {'tables': 30, 'columns': 382, 'views': 2}
             assert rows() == before
     finally:
         engine.dispose()

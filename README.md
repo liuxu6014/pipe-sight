@@ -10,7 +10,7 @@
 |------|------|
 | **前端** | Vue 3.5 + Vite 6 + Element Plus 2 + Pinia + Vue Router 4 |
 | **后端** | FastAPI 0.128 + SQLAlchemy 2.0 (async) + Pydantic v2 |
-| **数据库** | PostgreSQL（统一使用 `172.16.4.183` 的 `pipesight` 库） |
+| **数据库** | PostgreSQL（目标地址由当前环境显式配置） |
 | **缓存** | Redis 7 |
 | **AI / LLM** | 多模型接入（OpenAI、Anthropic、Gemini、Groq、Ollama、LiteLLM 等） |
 | **容器化** | Docker + Docker Compose |
@@ -105,7 +105,7 @@ cd PipeSight
 脚本会依次完成以下工作：
 
 1. 检查 `uv`、Node.js 与 npm；首次运行时自动创建 `backend/.venv` 并安装 PostgreSQL 专用依赖 `requirements-pg.txt`，同时按需执行 `npm ci`。
-2. 数据库统一连 `172.16.4.183`；Redis 优先使用本机，未就绪时用根目录 `docker-compose.pg.yml` 启动 Redis。
+2. Windows 辅助脚本的基础设施行为以脚本为准；当前已保留数据的本地环境请优先使用 [本地运行说明](docs/local-docker.md)，按 `backend/.env.dev` 核对实际数据库和 Redis，不能把本地快照视为远程库的实时副本。
 3. 数据库不存在时自动创建；若缺少若依基础表则导入 `ruoyi-fastapi-pg.sql`，并幂等补齐 PostgreSQL 版管网业务表。
 4. 检查 `9099`/`5173` 端口。仅当监听进程能够明确识别为当前 PipeSight 项目时才会停止旧进程；不会直接终止无关程序。若端口被无法确认归属的旧服务占用，会自动为本次前端会话选择下一个可用端口。
 5. 使用 uv 启动后端、使用 Vite 启动前端，并等待健康检查通过后输出访问地址。
@@ -128,7 +128,7 @@ cd PipeSight
 # 强制使用 Docker 中的 Redis
 .\scripts\dev\start-dev.cmd -Infrastructure Docker
 
-# 使用本机 Redis（数据库统一连 183）
+# 使用本机 Redis（先核对脚本的实际数据库配置）
 .\scripts\dev\start-dev.cmd -Infrastructure Local
 
 # 禁止自动安装依赖（依赖缺失或过期时直接报错）
@@ -142,15 +142,15 @@ cd PipeSight
 
 #### 方式 A：使用本地安装的 Redis
 
-确保 Redis 已在本地运行；数据库统一连 `172.16.4.183`，在 `backend/.env.dev` 配置 `DB_*`。
+确保 Redis 已在本地运行，在 `backend/.env.dev` 配置实际 `REDIS_*`、`DB_*`。现有数据库先完成备份和适用迁移，不用初始化脚本覆盖。
 
 #### 方式 B：使用 Docker 启动 Redis
 
 ```bash
-docker compose -p pipesight-pg -f docker-compose.pg.yml up -d ruoyi-redis
+docker compose --env-file backend/.env.dev -f docker-compose.local.yml up -d --wait
 ```
 
-> Docker 启动后，Redis 端口映射为 `16379`；数据库统一连 `172.16.4.183`，不随 Docker 启动本地 PostgreSQL。
+> 本地 Redis 仅绑定 `127.0.0.1:26379`；数据库地址以本地环境文件为准。此文件不创建或重建 PostgreSQL；保留已有数据卷。
 
 ### 3. 手动启动后端
 
@@ -193,7 +193,7 @@ cd backend
 uv run --no-sync python scripts/bootstrap/bootstrap_deepseek_route.py --env=dockerpg
 ```
 
-数据库连接由 `--env=dockerpg` 对应的环境文件提供，统一指向 `172.16.4.183` 的 `pipesight` 库。
+数据库连接由 `--env=dockerpg` 对应的环境文件提供，指向当前部署明确配置的目标 PostgreSQL；本地验收使用独立回环实例。
 
 脚本只创建缺失的模型和路由，API Key 会按平台密钥格式加密保存且不会打印；已有管理端路由不会被脚本覆盖。执行后仍可在“模型与 Prompt → 场景路由”中查看和维护配置。
 
@@ -269,7 +269,7 @@ npm run check
 ```ini
 # 数据库（统一使用 PostgreSQL）
 DB_TYPE = 'postgresql'
-DB_HOST = '172.16.4.183'
+DB_HOST = '<目标 PostgreSQL 地址>'
 DB_PORT = 5432
 DB_USERNAME = 'postgres'
 DB_PASSWORD = '<数据库密码>'
@@ -285,7 +285,7 @@ JWT_SECRET_KEY = '<your-secret-key>'
 JWT_EXPIRE_MINUTES = 1440
 ```
 
-> 多环境配置文件：`.env.dev`（开发）、`.env.dockermy`（旧版 Docker+MySQL，仅迁移参考）、`.env.dockerpg`（连接 183 的 PostgreSQL 环境）、`.env.prod`（生产）。线上和本地默认运行链路均使用 PostgreSQL；MySQL 配置仅保留用于历史数据迁移。
+> 多环境配置文件：`.env.dev`（开发）、`.env.dockermy`（旧版 Docker+MySQL，仅迁移参考）、`.env.dockerpg`（PostgreSQL 环境，目标由配置指定）、`.env.prod`（生产）。线上和本地默认运行链路均使用 PostgreSQL；MySQL 配置仅保留用于历史数据迁移。
 
 ### 前端配置
 
@@ -302,17 +302,28 @@ JWT_EXPIRE_MINUTES = 1440
 
 ### 全栈 Docker 部署
 
+先备份数据库、上传目录与原密钥，并按 [安全迁移说明](docs/deployment-migrations.md) 在隔离副本演练。目标数据库必须显式配置；空库不能直接执行全部历史迁移链。
+
 ```bash
-docker compose -p pipesight-pg -f docker-compose.pg.yml up -d --build
+cp deploy/.env.pg.example .env.pg
+chmod 600 .env.pg
+# 填写目标 DB_*、数据库密码及原 JWT_SECRET_KEY；不要更换已加密模型凭据依赖的原密钥。
+# 按 deploy/fonts/README.md 准备已授权的 FangSong_GB2312.ttf 只读字体目录。
+docker compose --env-file .env.pg -p pipesight-pg -f docker-compose.pg.yml config --quiet
+docker compose --env-file .env.pg -p pipesight-pg -f docker-compose.pg.yml up -d --build
 ```
+
+API/Worker 启动前检查外部扫描器和字体；缺失时明确失败。扫描器使用私有网络 ClamAV 1.5，病毒库持久化；官方镜像为 amd64，本机 ARM 验收使用 Docker Desktop 的架构兼容。API、Worker 共用密钥、文件及心跳卷，Worker 故障可在管理工作台与 `/health/worker` 检查，数据库就绪由 `/health/ready` 单独报告。
+
+生产预检拒绝仓库公开的开发默认密钥和不足 32 字符的密钥。已有数据库若使用开发默认值，先在备份副本验证模型凭据重新加密及恢复方案，再统一变更数据库、API 与 Worker 配置；不能只改环境变量导致已保存的模型密钥无法解密。本轮本机开发环境的原密钥未改动。
 
 | 服务 | 端口 |
 |------|------|
 | 前端 (Nginx) | `12580` |
-| 后端 (FastAPI) | `19099` |
+| 后端 (FastAPI) | 容器网络 `9099`，宿主机不发布 |
 | Redis | `16379` |
 
-数据库统一使用 `172.16.4.183` 的 `pipesight` 库（不随 Compose 启动）。
+生产 Compose 不随服务启动或初始化数据库；目标由 `DATA_DB_*` 显式配置，外部请求仅通过 Nginx 进入 API。
 
 ## 生产构建
 
@@ -375,7 +386,7 @@ alembic revision --autogenerate -m "描述"
 alembic upgrade head
 
 # 回滚
-alembic downgrade -1
+# 部分历史迁移不可降级；停止写入后按已验证的备份恢复方案回滚，勿直接 downgrade。
 ```
 
 本项目已提供首个管网领域增强迁移：
@@ -385,15 +396,11 @@ cd backend
 uv run alembic upgrade head
 ```
 
-设计说明见 [PipeSight 全系统数据库设计](docs/plans/2026-08-14-full-system-database-design.md)。最终结构共 23 张表：平台 14 张、采集与内容 4 张、知识与报告 5 张。部门、岗位、通知公告、代码生成持久化及未落地的预建业务表均不进入新库；数据权限仅保留“全部数据 / 仅本人”。历史未知试验表不会被自动删除，曾预建的业务表只有在空表时才由迁移清理。
+设计历史见 [PipeSight 全系统数据库设计](docs/plans/2026-08-14-full-system-database-design.md)，当前结构以 `backend/data/schema/compact-v20.json`、`business-v20.json` 和严格 schema 检查为准。
 
-数据库统一使用 `172.16.4.183` 上的 `pipesight` 库（`public` schema），项目不再随 Compose 启动本地 PostgreSQL。根 Compose 只编排 `pipesight-db-migrate`（先执行 `alembic upgrade head`）、`ruoyi-backend-pg`、`ruoyi-frontend`、`pipesight-task-worker` 和 `ruoyi-redis`：
+部署 Compose 只编排安全迁移、API、前端、持久任务 Worker、Redis 和 ClamAV，不创建目标 PostgreSQL。迁移服务在版本化数据库上执行受控前向迁移；受保护历史阶段必须逐阶段提供已验证备份，不能绕过门槛。
 
-```bash
-docker compose -p pipesight-pg -f docker-compose.pg.yml up -d --build
-```
-
-其中 `pipesight-task-worker` 负责数据源采集、科研生成、报告导出和资料解析持久队列；API 通过 `PIPELINE_TASK_SCHEDULER_ENABLED=false` 不再重复调度。采集来源使用 PostgreSQL 数据库租约，多个 Worker 实例不会同时领取同一个来源。手工运行后端任务进程可使用 `cd backend && uv run pipesight-task-worker`。本地端口：PipeSight API `19099`、前端 `12580`、Redis `16379`。数据库连接凭据经 `DATA_DB_PASSWORD` 注入，生产环境必须覆盖示例密码并使用密钥注入。
+持久 Worker 负责采集、科研/简报生成、导出、资料解析与分类。未开始任务可在重启后继续；无法确认付费调用结果的中断任务需明确重试，不自动重复付费请求。手工开发入口及现有本机快照说明见 [本地运行](docs/local-docker.md)，部署配置见前面的 Docker 章节。
 
 ## CLI 命令行工具
 
@@ -415,7 +422,7 @@ ruoyi --help
 - **操作日志**：通过装饰器切面自动记录操作日志
 - **定时任务**：基于 APScheduler 的任务调度
 - **AI 集成**：支持 OpenAI、Anthropic、Gemini、Groq、Ollama、LiteLLM 等多种 LLM 后端
-- **数据库运行时**：统一使用 `172.16.4.183` 的 PostgreSQL；保留 MySQL 兼容配置用于历史数据迁移
+- **数据库运行时**：使用当前环境明确指定的 PostgreSQL；保留 MySQL 兼容配置用于历史数据迁移
 
 ## 开发约定
 

@@ -154,6 +154,7 @@ async def test_dashboard_returns_source_names_actual_counts_and_distinct_run_ids
                 result_rows([]),
                 result_rows([]),
                 result_rows([(run, '科技来源')]),
+                SimpleNamespace(one=lambda: (2, 1, 3, None)),
                 MagicMock(scalar_one=lambda: 2),
                 MagicMock(scalar_one=lambda: 3),
                 MagicMock(scalar_one=lambda: 4),

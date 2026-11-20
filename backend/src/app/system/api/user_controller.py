@@ -398,7 +398,7 @@ async def reset_system_user_password(
         updateBy=current_user.user.user_name,
         updateTime=datetime.now(),
     )
-    reset_user_result = await UserService.reset_user_services(query_db, reset_user)
+    reset_user_result = await UserService.change_password_services(query_db, reset_user)
     logger.info(reset_user_result.message)
 
     return ResponseUtil.success(msg=reset_user_result.message)

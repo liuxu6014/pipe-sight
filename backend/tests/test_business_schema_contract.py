@@ -85,8 +85,8 @@ def test_frozen_business_contract_matches_all_and_only_business_models() -> None
     assert set(frozen['model_ddl']) == set(frozen['catalog']) == set(BUSINESS_TABLES)
     assert model_ddl(Base.metadata) == frozen['model_ddl']
     assert str(CreateTable(Base.metadata.tables['papers']).compile(dialect=postgresql.dialect())) == before
-    assert sum(len(t['columns']) for t in frozen['catalog'].values()) == 215
-    assert sum(len(t['foreign_keys']) for t in frozen['catalog'].values()) == 30
+    assert sum(len(t['columns']) for t in frozen['catalog'].values()) == 220
+    assert sum(len(t['foreign_keys']) for t in frozen['catalog'].values()) == 31
     assert not any(n.startswith('sys_') for n in frozen['model_ddl'])
 
 
@@ -109,5 +109,7 @@ def test_digest_screening_snapshots_preserve_the_published_schedule_index() -> N
     config = Config()
     config.set_main_option('script_location', str(Path(__file__).resolve().parents[1] / 'alembic'))
     scripts = ScriptDirectory.from_config(config)
-    assert scripts.get_heads() == ['20261118_digest_categories']
+    assert scripts.get_heads() == ['20261120_material_comments']
+    assert scripts.get_revision('20261120_material_classification').down_revision == '20261118_digest_categories'
+    assert scripts.get_revision('20261120_material_comments').down_revision == '20261120_material_classification'
     assert scripts.get_revision('20261118_digest_screening').down_revision == old['revision']

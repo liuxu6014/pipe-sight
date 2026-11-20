@@ -110,7 +110,7 @@ test('does not present fabricated analysis or bypass published report templates'
   assert.match(reportEditor, /report\.requiresReview \? '导出草稿' : '导出报告'/)
   for (const format of ['markdown', 'docx', 'pdf']) assert.match(reportEditor, new RegExp(`command="${format}"`))
   assert.match(reportEditor, /ReportExportHistory/)
-  assert.match(reportEditor, /listPipelineResearchReportExports\(report\.value\.id\)/)
+  assert.match(reportEditor, /listPipelineResearchReportExports\(target\.id\)/)
   assert.match(reportEditor, /function formatText\(value, tool\)/)
   assert.match(reportEditor, /window\.open\(externalUrl, '_blank', 'noopener,noreferrer'\)/)
   assert.match(digestEditor, /digest\.requiresReview \? '导出草稿' : '导出简报'/)

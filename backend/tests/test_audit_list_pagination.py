@@ -134,6 +134,31 @@ async def test_legacy_generation_time_uses_original_generated_version_and_empty_
 
 
 @pytest.mark.asyncio
+async def test_digest_generation_sort_is_stable_across_pages_and_independent_of_edits(env, db):
+    seed(env, db)
+    lists = importlib.import_module('app.research.services.list_queries')
+    now = env.models.utcnow()
+    for index in range(1, 5):
+        row = add_report(env, db, index, report_type='weekly', content='' if index == 4 else '生成正文')
+        row.updated_at = now + timedelta(days=10 - index)
+        for version in (1, 2):
+            saved = await env.repo.ResearchDao.get_report_version(db, row.id, version)
+            saved.created_at = now - timedelta(days=2 if index == 1 else 1)
+    add_report(env, db, 9, owner=8, report_type='weekly')
+    await db.commit()
+    pages = [await lists.report_page(db, user_id=7, kind='weekly', page=n, page_size=2) for n in (1, 2)]
+    assert [row['id'] for page in pages for row in page['rows']] == ['1003', '1002', '1001', '1004']
+    assert all(page['total'] == 4 for page in pages)
+    ascending = await lists.report_page(db, user_id=7, kind='brief', sort='generated-asc')
+    assert [row['id'] for row in ascending['rows']] == ['1001', '1003', '1002', '1004']
+    by_title = await lists.report_page(db, user_id=7, kind='brief', sort='title-desc')
+    assert [row['id'] for row in by_title['rows']] == ['1004', '1003', '1002', '1001']
+    # The shared endpoint keeps its existing update-time default for research.
+    research = await lists.report_page(db, user_id=7)
+    assert [row['id'] for row in research['rows']] == ['1001', '1002', '1003', '1004']
+
+
+@pytest.mark.asyncio
 async def test_latest_generation_status_filters_and_escaped_keyword_are_correct(env, db):
     seed(env, db)
     # A regeneration may queue behind an already usable report. It remains a
@@ -250,6 +275,47 @@ async def test_material_pages_filter_owner_status_keyword_and_only_send_short_su
     assert (await lists.material_page(db, user_id=7, keyword='资料022'))['total'] == 1
     assert (await lists.material_page(db, user_id=7, keyword='资料023'))['total'] == 0
     assert (await lists.material_page(db, user_id=7, keyword='禁止全量'))['total'] == 22
+
+
+@pytest.mark.asyncio
+async def test_material_category_filter_returns_only_owner_results_without_private_classification_token(env, db):
+    seed(env, db)
+    categories = importlib.import_module('app.intelligence.models.categories')
+    db.add(
+        categories.PipelineCategory(
+            id=5001, name='关键技术', prompt='技术资料', applies_to='document', is_enabled=False
+        )
+    )
+    for index, owner in [(1001, 7), (1002, 8)]:
+        db.add(
+            env.material.PipelineMaterial(
+                id=index,
+                user_id=owner,
+                name='分类资料',
+                filename='资料.txt',
+                storage_key=f'private/{index}',
+                mime_type='text/plain',
+                size=30,
+                hash=f'{index:064x}',
+                extracted_text='技术正文',
+                status='ready',
+                category_id=5001,
+                classification_status='completed',
+                classification_error=None,
+                classification_token='private-lease-token',
+            )
+        )
+    await db.commit()
+    lists = importlib.import_module('app.research.services.list_queries')
+    selected = await lists.material_page(db, user_id=7, classification='关键技术')
+    assert selected['total'] == 1
+    row = selected['rows'][0]
+    assert row['id'] == '1001' and row['categoryId'] == '5001' and row['categoryName'] == '关键技术'
+    assert row['classificationStatus'] == 'completed' and row['classificationError'] == ''
+    assert not {'classificationToken', 'classification_token', 'storage_key', 'content'} & row.keys()
+    unclassified = await lists.material_page(db, user_id=7, classification='未分类')
+    assert unclassified['total'] == 1 and unclassified['rows'][0]['categoryId'] is None
+    assert (await lists.material_page(db, user_id=7, classification='不存在的分类'))['total'] == 0
 
 
 @pytest.mark.asyncio

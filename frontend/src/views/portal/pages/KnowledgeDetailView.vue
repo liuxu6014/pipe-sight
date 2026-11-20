@@ -24,7 +24,7 @@
           <h1 v-else>{{ document.name }}</h1>
           <div class="ps-document-meta">
             <span>{{ document.format }}</span>
-            <el-tag effect="plain" :type="contentCategory(document) ? 'primary' : 'info'">{{ contentCategory(document) || '待分类' }}</el-tag>
+            <el-tag effect="plain" :type="contentCategory(document) ? 'primary' : 'info'">{{ contentCategory(document) || materialClassificationLabel(document) }}</el-tag>
             <span class="ps-parse-state" :class="statusClass(document.status)">{{ document.status }}</span>
             <span v-if="document.updatedAt">更新于 {{ document.updatedAt }}</span>
           </div>
@@ -42,6 +42,7 @@
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item v-if="canManage" :disabled="reparsing" @click="reparse">{{ reparsing ? '正在提交…' : '重新解析' }}</el-dropdown-item>
+                <el-dropdown-item v-if="canManage && document.status === '已解析'" :disabled="classifying || ['queued', 'running'].includes(document.classificationStatus)" @click="classifyDocument">{{ classifying ? '正在提交…' : '提交模型分类' }}</el-dropdown-item>
                 <el-dropdown-item v-if="canManage" divided class="ps-danger-menu-item" @click="removeDocument">删除资料</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -50,7 +51,7 @@
         </div>
       </section>
 
-      <el-alert v-if="!contentCategory(document)" title="系统提示词分类待接入" description="当前资料尚无已保存的分类结果。接入统一处理后展示真实类别，正文编辑与下载不受影响。" type="info" show-icon :closable="false" class="ps-classification-notice" />
+      <el-alert v-if="!contentCategory(document) && document.status === '已解析'" :title="materialClassificationLabel(document)" :description="classificationDescription" :type="document.classificationStatus === 'failed' ? 'warning' : 'info'" show-icon :closable="false" class="ps-classification-notice" />
 
       <section v-if="editVisible" class="ps-material-inline-editor" aria-label="编辑资料正文" :aria-busy="editSaving">
         <p class="ps-material-edit-note">直接修改正文，保存后用于检索和新报告生成；原始文件保留不变。</p>
@@ -118,13 +119,15 @@ import { useMaterialEditor } from '@/utils/portal/materialEditor'
 import { returnFromKnowledgeDetail } from '@/utils/portal/openContent'
 import PortalEmptyState from '../components/PortalEmptyState.vue'
 import { contentCategory } from '@/utils/portal/contentPresentation'
+import { materialClassificationLabel } from '@/utils/portal/materialClassification'
 import usePortalStore from '@/store/modules/portal'
 import {
   deletePipelineKnowledgeDocument,
   downloadPipelineKnowledgeDocument,
   getPipelineKnowledgeDocument,
   updatePipelineKnowledgeDocument,
-  reparsePipelineKnowledgeDocument
+  reparsePipelineKnowledgeDocument,
+  classifyPipelineKnowledgeDocument
 } from '@/api/pipeline/intelligence'
 
 const route = useRoute()
@@ -137,6 +140,7 @@ const activeChapter = ref(0)
 const zoom = ref(100)
 const showInfo = ref(false)
 const reparsing = ref(false)
+const classifying = ref(false)
 let parseRefreshTimer
 let detailStopped = false
 let detailRequest = 0
@@ -145,6 +149,12 @@ const storeDocument = computed(() => portalStore.knowledgeDocuments.find(item =>
 const document = computed(() => liveDocument.value || storeDocument.value)
 const parsedText = computed(() => String(document.value?.editedText ?? document.value?.edited_text ?? document.value?.extractedText ?? document.value?.extracted_text ?? document.value?.parsedText ?? document.value?.content ?? '').trim())
 const canManage = computed(() => document.value?.canManage === true)
+const classificationDescription = computed(() => document.value?.classificationError || ({
+  queued: '已排队，系统将按管理员的类别提示词进行分类。正文阅读和下载不受影响。',
+  running: '正在按类别提示词分类，离开本页后仍会继续处理。',
+  completed: '正文未唯一命中已配置类别，系统保留为空，不会按文件类型猜测类别。',
+  not_configured: '尚未提交模型分类。可在“更多资料操作”中确认将资料标题和正文发送至配置的模型服务；不提交不影响阅读和下载。'
+})[document.value?.classificationStatus] || '资料分类状态尚未更新，请重新获取。')
 const { visible: editVisible, saving: editSaving, error: editError, draft: editDraft, dirty: editDirty, canLeave, open: startEditing, save: saveEdits } = useMaterialEditor({
   update: updatePipelineKnowledgeDocument,
   onSaved: saved => {
@@ -179,11 +189,11 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', protectReload))
 onBeforeUnmount(() => { detailStopped = true; detailRequest++; clearTimeout(parseRefreshTimer) })
 function scheduleDetailRefresh() {
   clearTimeout(parseRefreshTimer)
-  if (!detailStopped && !editVisible.value && ['解析中', '待解析', '等待解析', '待安全扫描'].includes(document.value?.status)) {
+  if (!detailStopped && !editVisible.value && (['解析中', '待解析', '等待解析', '待安全扫描'].includes(document.value?.status) || ['queued', 'running'].includes(document.value?.classificationStatus))) {
     parseRefreshTimer = setTimeout(() => { void loadDocument() }, 3000)
   }
 }
-watch([() => document.value?.status, editVisible], scheduleDetailRefresh)
+watch([() => document.value?.status, () => document.value?.classificationStatus, editVisible], scheduleDetailRefresh)
 const parsedCharacterCount = computed(() => parsedText.value.length)
 const chapters = computed(() => {
   const sections = document.value?.sections
@@ -279,6 +289,25 @@ async function reparse() {
   } finally {
     reparsing.value = false
   }
+}
+async function classifyDocument() {
+  if (!canManage.value || document.value?.status !== '已解析' || classifying.value) return
+  const identity = String(document.value.id)
+  const epoch = portalStore.workspaceEpoch
+  classifying.value = true
+  try {
+    try {
+      await ElMessageBox.confirm('资料标题和正文将发送至管理员配置的模型服务进行分类。请确认这份资料允许发送。', '提交模型分类', { type: 'warning', confirmButtonText: '同意并提交', cancelButtonText: '取消' })
+    } catch { return }
+    if (detailStopped || String(route.params.id) !== identity || epoch !== portalStore.workspaceEpoch) return
+    const res = await classifyPipelineKnowledgeDocument(identity)
+    if (detailStopped || String(route.params.id) !== identity || epoch !== portalStore.workspaceEpoch) return
+    liveDocument.value = normalizeDocument(res.data?.data || res.data || {})
+    ElMessage.success('已提交资料分类，正文和原始文件保留')
+    scheduleDetailRefresh()
+  } catch (error) {
+    if (!detailStopped && String(route.params.id) === identity && epoch === portalStore.workspaceEpoch) ElMessage.error(error?.msg || '分类提交失败，请重试')
+  } finally { classifying.value = false }
 }
 async function removeDocument() {
   if (!canManage.value) return ElMessage.warning('仅资料所有者可以删除')

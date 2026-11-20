@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from app.business_ids import parse_business_id, wire_id
 from app.business_time import format_business_time
 from app.intelligence.models.ai_models import AiModels
-from app.intelligence.models.content import PipelineCategory
+from app.intelligence.models.categories import PipelineCategory
 from exceptions.exception import ServiceException
 
 
@@ -76,7 +76,7 @@ class CategoryService:
             await db.commit()
         except IntegrityError:
             await db.rollback()
-            raise ServiceException(message='类别仍被文章引用，请停用或先调整文章类别') from None
+            raise ServiceException(message='类别仍被内容或资料引用，请停用或先调整类别') from None
 
     @staticmethod
     async def classify(db, *, title, content, kind, gateway=None) -> int | None:

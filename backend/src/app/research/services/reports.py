@@ -1,5 +1,6 @@
 """成果编辑、导出和历史恢复；不依赖审核/发布表。"""
 
+import asyncio
 from copy import deepcopy
 from types import SimpleNamespace
 from typing import Any, NoReturn
@@ -8,10 +9,12 @@ from sqlalchemy import delete, select
 
 from app.business_ids import parse_business_id, wire_id
 from app.business_time import format_business_time
+from app.infrastructure.services.logging_support import logger
 from app.intelligence.models.configuration import PipelineTemplateVersion
 from app.research.models.research_models import PipelineReportAsset, PipelineResearchJob, utcnow
 from app.research.repositories.research_repository import ResearchDao
 from app.research.services.execution import ResearchExecutionService
+from app.research.services.export_storage import ReportExportStorage
 from app.research.services.exporters import build_file, safe_file_stem
 from app.research.services.project_demand_document import project_demand_form
 from app.research.services.report_content import (
@@ -94,11 +97,27 @@ class ResearchReportService:
         if any(asset.status in {'queued', 'running'} for asset in assets):
             raise ServiceException(message='报告仍有导出或配图任务进行中，请等待任务结束后再删除')
         identity = wire_id(report.id)
+        # Durable markers precede the transaction commit. The sweeper locks live
+        # assets before discarding rolled-back markers, so it cannot delete a
+        # file while this deletion still holds the asset row lock.
+        storage_keys = set()
+        for key in {asset.storage_key for asset in assets if asset.storage_key}:
+            try:
+                await asyncio.to_thread(ReportExportStorage.schedule_cleanup, key)
+            except ValueError:  # noqa: PERF203 - legacy invalid keys are not safe to remove
+                logger.warning('跳过不属于受控目录的报告资源，报告编号 {}', identity)
+            else:
+                storage_keys.add(key)
         # Assets reference jobs with RESTRICT; remove them before the report's
         # existing FK cascades remove its jobs, saved entries and edit history.
         await db.execute(delete(PipelineReportAsset).where(PipelineReportAsset.report_id == report.id))
         await db.delete(report)
         await db.commit()
+        for key in storage_keys:
+            try:
+                await asyncio.to_thread(ReportExportStorage.finish_cleanup, key)
+            except OSError:  # noqa: PERF203 - failed assets are retried independently
+                logger.warning('报告资源待后台重新清理，报告编号 {}', identity)
         return {'id': identity}
 
     @staticmethod
@@ -142,8 +161,8 @@ class ResearchReportService:
         return report_serializer(report)
 
     @classmethod
-    async def _get_export_report(cls, db, user_id, report_id, *, allow_draft=False) -> tuple[Any, bool]:
-        row = await cls._owned(db, user_id, report_id)
+    async def _get_export_report(cls, db, user_id, report_id, *, allow_draft=False, lock=False) -> tuple[Any, bool]:
+        row = await cls._owned(db, user_id, report_id, lock=lock)
         if not row.content.strip():
             raise ServiceException(message='成果正文为空，不能导出')
         # Transient renderer context, not an ORM/table field. Both synchronous

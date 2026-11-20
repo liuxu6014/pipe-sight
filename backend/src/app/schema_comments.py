@@ -1,7 +1,7 @@
-"""compact-v9中文注释数据；数值引用语义映射与不透明字符串分别说明。
+"""compact-v20中文注释数据；资料分类与普通不透明执行令牌分别说明。
 
-27张基线表321字段，2张保留功能表23字段；共29表344字段。
-12张业务表共享BIGINT序列，若依基础表及其字段保持不变。
+28张基线表359字段，2张保留功能表23字段；共30表382字段。
+新增资料分类字段，不改变已冻结历史契约或若依基础表。
 """
 
 OPTIONAL_TABLE_NAMES = ('model_calls', 'report_versions')
@@ -82,7 +82,7 @@ COLUMN_COMMENTS = {
         'name': '管理员设置的唯一类别名称；必填且禁止空白文本',
         'prompt': '管理员编写的过滤分类标准；保留原提示语及变量，修改仅影响后续处理',
         'model_id': '分类文本模型ID，关联ai_models.id；暂未配置时为空，启用分类前必须配置',
-        'applies_to': '适用内容类型：news新闻、paper论文、all两者；默认all',
+        'applies_to': '适用内容类型：news新闻、paper论文、document上传资料、all全部三者；默认all，不改变历史归类',
         'is_enabled': '是否参加后续分类；true启用、false停用，停用不清除历史关联',
         'sort_order': '前台类别排序值；整数，默认0',
         'created_at': '类别创建时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss',
@@ -117,8 +117,13 @@ COLUMN_COMMENTS = {
         'version': '资料编辑并发控制版本；从1开始，每次编辑递增',
         'status': '解析状态：queued排队、parsing解析中、ready就绪、failed失败；非人工审核状态',
         'error': '解析失败的脱敏简短原因；不保存密钥或完整堆栈',
+        'category_id': '资料唯一类别ID，关联categories.id；未分类、未配置或未唯一命中为空；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串',
+        'classification_status': '资料分类状态：queued待分类、running分类中、completed已完成、failed失败、not_configured未配置；历史资料不自动发起模型调用',
+        'classification_error': '资料分类失败或未配置的脱敏说明；保留可重试原因，不保存密钥、原文或供应商响应',
+        'classification_token': '资料分类单次执行的普通不透明随机令牌；UUID不包含业务ID，只用于隔离旧结果回写，不向接口输出',
+        'classification_updated_at': '资料分类任务最近认领或结束时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；用于识别中断，不触发自动付费重试',
         'created_at': '上传资料保存时间，不表示解析已成功；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss',
-        'updated_at': '资料编辑或解析状态最近更新时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss',
+        'updated_at': '资料编辑、解析或分类状态最近更新时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss',
     },
     'templates': {
         'digest_cadence': '简报适用周期：weekly周报、monthly月报、all通用；daily仅兼容历史，与名称无关',

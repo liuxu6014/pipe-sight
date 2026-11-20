@@ -23,6 +23,7 @@ import { buildPersonalReports, hasReportOutput } from '../src/utils/portal/perso
 import { sortResearchReports } from '../src/views/portal/utils/reportList.js'
 import { createResearchRefresh, reportRowActions } from '../src/utils/portal/researchWorkspace.js'
 import { applySavedSearchQuery } from '../src/utils/portal/savedSearches.js'
+import { materialClassificationLabel, canRetryMaterialClassification } from '../src/utils/portal/materialClassification.js'
 
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8')
 const normalizerSource = read('../src/store/modules/portal.js')
@@ -70,6 +71,32 @@ test('digest list displays generation time independently of later edits', async 
     assert.equal(ctx.page.pagedReports.value[0].generatedAt, '2026-11-19 08:00:00')
     assert.match(sources.DigestListView, /prop="generatedAt" label="生成时间"/)
     assert.match(sources.DigestListView, /<time v-if="row.generatedAt">\{\{ row.generatedAt \}\}<\/time><span v-else>—<\/span>/)
+  } finally { ctx.close() }
+})
+
+test('digest header sorting is sent to the server and survives back navigation', async () => {
+  const calls = []
+  const ctx = await mountPage('DigestListView', { query: { page: '2' }, api: {
+    listPipelineResearchReports: async params => { calls.push({ ...params }); return { data: { rows: [], total: 30 } } }
+  } })
+  try {
+    assert.equal(calls.at(-1).sort, 'generated-desc')
+    assert.equal(ctx.page.tableSort.value.prop, 'generatedAt')
+    ctx.page.changeReportSort({ prop: 'generatedAt', order: 'ascending' })
+    await settle()
+    assert.equal(calls.at(-1).sort, 'generated-asc')
+    assert.equal(calls.at(-1).pageNum, 1)
+    assert.equal(ctx.router.currentRoute.value.query.sort, 'generated-asc')
+    ctx.page.changeReportSort({ prop: 'title', order: 'descending' })
+    await settle()
+    assert.equal(calls.at(-1).sort, 'title-desc')
+    await ctx.router.push('/portal/news')
+    ctx.router.back()
+    await settle()
+    assert.equal(ctx.page.tableSort.value.prop, 'title')
+    assert.equal(ctx.page.tableSort.value.order, 'descending')
+    assert.match(sources.DigestListView, /@sort-change="changeReportSort"/)
+    assert.match(sources.DigestListView, /prop="generatedAt"[^>]*sortable="custom"/)
   } finally { ctx.close() }
 })
 
@@ -123,7 +150,7 @@ async function mountPage(name, { query = {}, api = {}, documents = [], pageProps
     return serverPage(rows, params)
   }
   const injected = {
-    ...vue, usePagedResults, reportSummaryRow, useRoute, useRouter, ...normalizers,
+    ...vue, usePagedResults, reportSummaryRow, useRoute, useRouter, ...normalizers, materialClassificationLabel, canRetryMaterialClassification,
     openPortalContent: (router, path) => router.push(path),
     bindListQuery, useListQuery, useListRequest, useListWorkspace, validPage, materialBasketReason, calendarDate, cleanSummary, cleanResultMeta, combineLatest, newsDate, resultPath,
     usePortalStore: () => store, periodOverlaps, isDigestType, useBasketSelection, useBasketParsing, buildLibraryItems, libraryItemPath, libraryItemReason, prepareLibrarySelection,
@@ -139,7 +166,7 @@ async function mountPage(name, { query = {}, api = {}, documents = [], pageProps
     setTimeout: () => 0, clearTimeout() {},
     exportPipelineResearchReport: empty, deletePipelineDigestSchedule: empty, runPipelineDigestSchedule: empty, updatePipelineDigestSchedule: empty,
     savePipelineWorkspaceItem: empty, deletePipelineWorkspaceItem: empty,
-    deletePipelineKnowledgeDocument: empty, reparsePipelineKnowledgeDocument: empty, uploadPipelineKnowledgeDocument: empty, listPipelineKnowledgeDocuments: listDocuments,
+    deletePipelineKnowledgeDocument: empty, reparsePipelineKnowledgeDocument: empty, classifyPipelineKnowledgeDocument: empty, getPipelineKnowledgeCategories: empty, uploadPipelineKnowledgeDocument: empty, listPipelineKnowledgeDocuments: listDocuments,
     getPipelineKnowledgeDocument: async id => ({ data: store.liveDocuments.find(row => String(row.id) === String(id)) }),
     ...api, ...timers
   }
@@ -615,33 +642,67 @@ test('home metric failures stay unknown rather than becoming fabricated zeros', 
   finally { ctx.close() }
 })
 
-test('semantic placeholder never silently executes keyword search and preserves input when switching', async () => {
+test('legacy semantic link preserves input, announces keyword conversion and removes invalid mode', async () => {
   const calls = []
   const ctx = await mountPage('SearchView', { query: { mode: 'semantic', q: '如何识别管道腐蚀' }, api: { searchPipelineIntelligence: async params => { calls.push(params); return { data: { rows: [], total: 0 } } } } })
   try {
-    assert.equal(calls.length, 0)
-    assert.equal(ctx.page.searchMode.value, 'semantic')
-    ctx.page.draftKeyword.value = '管道早期腐蚀'
-    ctx.page.useKeywordSearch()
     await settle()
-    await delay(300)
-    assert.equal(calls.at(-1).keyword, '管道早期腐蚀')
+    assert.equal(ctx.page.legacySemanticNotice.value, true)
+    assert.equal(ctx.router.currentRoute.value.query.mode, undefined)
+    assert.equal(ctx.router.currentRoute.value.query.q, '如何识别管道腐蚀')
+    assert.equal(calls.at(-1).keyword, '如何识别管道腐蚀')
     assert.equal(calls.at(-1).mode, undefined)
-    assert.equal(ctx.page.searchMode.value, 'keyword')
-    assert.equal(ctx.router.currentRoute.value.query.q, '管道早期腐蚀')
+    assert.doesNotMatch(sources.SearchView, /语义搜索（待接入）|v-model="searchMode"/)
+    assert.match(sources.SearchView, /未执行语义检索/)
   } finally { ctx.close() }
 })
 
-test('changing to semantic state invalidates a pending keyword response', async () => {
-  const pending = deferred()
-  const ctx = await mountPage('SearchView', { api: { searchPipelineIntelligence: () => pending.promise } })
+test('keyword changes still invalidate the previous search response', async () => {
+  const old = deferred()
+  const fresh = deferred()
+  let calls = 0
+  const ctx = await mountPage('SearchView', { api: { searchPipelineIntelligence: () => ++calls === 1 ? old.promise : fresh.promise } })
   try {
-    ctx.page.searchMode.value = 'semantic'
+    ctx.page.draftKeyword.value = '新关键词'
+    ctx.page.applyKeyword()
     await settle()
-    pending.resolve({ data: { rows: [{ id: 'old-keyword-result', type: 'news', title: '旧结果' }], total: 1 } })
+    old.resolve({ data: { rows: [{ id: '100', type: 'news', title: '旧结果' }], total: 1 } })
     await settle()
     assert.equal(ctx.page.filteredResults.value.length, 0)
-    assert.equal(ctx.page.searchMode.value, 'semantic')
+    await delay(300)
+    fresh.resolve({ data: { rows: [{ id: '101', type: 'news', title: '新结果' }], total: 1 } })
+    await settle()
+    assert.equal(ctx.page.filteredResults.value[0].title, '新结果')
+  } finally { ctx.close() }
+})
+
+test('classification retry queues only classification and keeps parsed content available', async () => {
+  const doc = { id: '101', name: '资料.txt', status: '已解析', parseStatus: 'ready', canManage: true, classificationStatus: 'failed', classificationError: '模型暂不可用' }
+  let classifications = 0, reparses = 0
+  const ctx = await mountPage('KnowledgeView', { api: {
+    listPipelineKnowledgeDocuments: async () => ({ data: { rows: [doc], total: 1 } }),
+    classifyPipelineKnowledgeDocument: async () => { classifications++; return { data: { ...doc, classificationStatus: 'queued', classificationError: '' } } },
+    reparsePipelineKnowledgeDocument: async () => { reparses++; throw new Error('Should not reparse') }
+  } })
+  try {
+    await ctx.page.reparse(doc)
+    assert.equal(classifications, 1)
+    assert.equal(reparses, 0)
+    assert.equal(ctx.page.documents.value[0].status, '已解析')
+    assert.equal(ctx.page.documents.value[0].classificationStatus, 'queued')
+    assert.equal(ctx.page.hasParsingDocuments.value, true)
+  } finally { ctx.close() }
+})
+
+test('document category options include saved categories outside the current page', async () => {
+  const ctx = await mountPage('KnowledgeView', { api: {
+    listPipelineKnowledgeDocuments: async () => ({ data: { rows: [{ id: '101', name: '当前页资料', status: '已解析', categoryName: '技术进展' }], total: 20 } }),
+    getPipelineKnowledgeCategories: async () => ({ data: { rows: ['技术进展', '工程应用'], total: 2 } })
+  } })
+  try {
+    assert.deepEqual(ctx.page.libraryCategories.value, ['未分类', '技术进展', '工程应用'])
+    assert.equal(materialClassificationLabel({ status: '已解析', classificationStatus: 'completed' }), '未命中类别')
+    assert.equal(materialClassificationLabel({ status: '已解析', classificationStatus: 'failed' }), '分类失败')
   } finally { ctx.close() }
 })
 
@@ -1289,5 +1350,44 @@ test('server-grouped library pages retain real totals and delete acknowledged co
     assert.deepEqual(deleted, ['49', '50', '60'])
     assert.equal(ctx.page.total.value, 0)
     assert.equal(ctx.page.libraryItems.value.length, 0)
+  } finally { ctx.close() }
+})
+
+test('private document classification cancellation sends no request and preserves parsed document', async () => {
+  const doc = { id: '101', name: '私有资料.txt', status: '已解析', parseStatus: 'ready', canManage: true, classificationStatus: 'not_configured' }
+  let calls = 0
+  const prompts = []
+  const ctx = await mountPage('KnowledgeView', { api: {
+    listPipelineKnowledgeDocuments: async () => ({ data: { rows: [doc], total: 1 } }),
+    ElMessageBox: { confirm: async message => { prompts.push(message); throw 'cancel' } },
+    classifyPipelineKnowledgeDocument: async () => { calls++; throw new Error('Should never send private content without confirmation') },
+    reparsePipelineKnowledgeDocument: async () => { calls++; throw new Error('Should not reparse') }
+  } })
+  try {
+    await ctx.page.reparse(doc)
+    assert.equal(calls, 0)
+    assert.equal(prompts.length, 1)
+    assert.match(prompts[0], /标题和正文.*模型服务/)
+    assert.equal(ctx.page.documents.value[0].classificationStatus, 'not_configured')
+    assert.equal(ctx.page.documents.value[0].status, '已解析')
+    assert.equal(ctx.page.isReparsing(doc.id), false)
+  } finally { ctx.close() }
+})
+
+test('classification confirmation cannot submit a private document after account switching', async () => {
+  const doc = { id: '101', name: '私有资料.txt', status: '已解析', parseStatus: 'ready', canManage: true, classificationStatus: 'not_configured' }
+  const prompt = deferred()
+  let calls = 0
+  const ctx = await mountPage('KnowledgeView', { api: {
+    listPipelineKnowledgeDocuments: async () => ({ data: { rows: [doc], total: 1 } }),
+    ElMessageBox: { confirm: () => prompt.promise },
+    classifyPipelineKnowledgeDocument: async () => { calls++; return { data: doc } }
+  } })
+  try {
+    const attempt = ctx.page.reparse(doc)
+    ctx.store.workspaceEpoch++
+    prompt.resolve()
+    await attempt
+    assert.equal(calls, 0)
   } finally { ctx.close() }
 })

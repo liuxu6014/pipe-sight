@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from hashlib import sha256
 from pathlib import Path
 from uuid import uuid4
 
@@ -21,8 +22,13 @@ class ReportExportStorage:
     @classmethod
     def _resolve(cls, file_key: str) -> Path:
         root = Path(UploadConfig.UPLOAD_PATH).resolve()
+        export_root = (root / cls._prefix).resolve()
         candidate = (root / file_key).resolve()
-        if candidate == root or root not in candidate.parents or not file_key.startswith(f'{cls._prefix}/'):
+        if (
+            root not in export_root.parents
+            or export_root not in candidate.parents
+            or not file_key.startswith(f'{cls._prefix}/')
+        ):
             raise ValueError('导出文件存储键无效')
         return candidate
 
@@ -37,6 +43,29 @@ class ReportExportStorage:
         except Exception:
             temporary.unlink(missing_ok=True)
             raise
+
+    @classmethod
+    def cleanup_directory(cls) -> Path:
+        return cls._resolve(f'{cls._prefix}/.cleanup')
+
+    @classmethod
+    def schedule_cleanup(cls, file_key: str) -> None:
+        cls._resolve(file_key)
+        cls.write(cls.cleanup_marker(file_key), file_key.encode())
+
+    @classmethod
+    def cleanup_marker(cls, file_key: str) -> str:
+        marker = sha256(file_key.encode()).hexdigest()
+        return f'{cls._prefix}/.cleanup/{marker}'
+
+    @classmethod
+    def finish_cleanup(cls, file_key: str) -> None:
+        cls.remove(file_key)
+        cls.remove(cls.cleanup_marker(file_key))
+
+    @classmethod
+    def remove(cls, file_key: str) -> None:
+        cls._resolve(file_key).unlink(missing_ok=True)
 
     @classmethod
     def read(cls, file_key: str) -> bytes:

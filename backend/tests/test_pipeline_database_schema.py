@@ -289,9 +289,11 @@ def test_full_system_orm_registers_foundation_and_domain_tables() -> None:
     assert len(APPLICATION_TABLES | FRAMEWORK_TABLES) == FULL_TABLE_COUNT
     assert not FRAMEWORK_TABLES & set(Base.metadata.tables)
     for table_name, table in Base.metadata.tables.items():
-        expected = {'sys_dept': ('dept_id',), 'sys_user_role': ('user_id', 'role_id'), 'sys_role_menu': ('role_id', 'menu_id')}.get(
-            table_name, ('id',)
-        )
+        expected = {
+            'sys_dept': ('dept_id',),
+            'sys_user_role': ('user_id', 'role_id'),
+            'sys_role_menu': ('role_id', 'menu_id'),
+        }.get(table_name, ('id',))
         assert tuple(table.primary_key.columns.keys()) == expected
 
 
@@ -318,6 +320,7 @@ def test_critical_relations_and_unique_constraints_are_explicit() -> None:
     tables = Base.metadata.tables
     relations = {
         ('knowledge_files', 'user_id'): ('sys_user.id', 'RESTRICT'),
+        ('knowledge_files', 'category_id'): ('categories.id', 'RESTRICT'),
         ('reports', 'user_id'): ('sys_user.id', 'RESTRICT'),
         ('report_versions', 'report_id'): ('reports.id', 'CASCADE'),
         ('collection_runs', 'source_id'): ('data_sources.id', 'RESTRICT'),
@@ -379,6 +382,7 @@ def test_critical_relations_and_unique_constraints_are_explicit() -> None:
         'ck_roles_data_scope',
         'ck_knowledge_files_status',
         'ck_knowledge_files_version',
+        'ck_knowledge_files_classification_status',
         'ck_basket_items_target',
         'ck_basket_items_action',
         'ck_generation_tasks_progress',

@@ -184,6 +184,11 @@ def env(monkeypatch):
         | {'entities': JSON},
     )
     monkeypatch.setitem(sys.modules, content.__name__, content)
+    # The shared taxonomy now has its own module; keep both import paths on
+    # this fixture's isolated metadata instead of registering a second table.
+    category_module = ModuleType('app.intelligence.models.categories')
+    category_module.PipelineCategory = PipelineCategory
+    monkeypatch.setitem(sys.modules, category_module.__name__, category_module)
     repository = importlib.import_module('app.intelligence.repositories.collection_repository')
     collection = importlib.import_module('app.intelligence.services.collection')
     persistence = importlib.import_module('app.intelligence.services.collection_persistence')
@@ -281,7 +286,10 @@ def env(monkeypatch):
     engine.dispose()
     # Remove this fixture's imported modules; pytest monkeypatch restores originals.
     for key in list(sys.modules):
-        if key.startswith('app.intelligence.') and key not in ('app.intelligence.models.content',):
+        if key.startswith('app.intelligence.') and key not in (
+            'app.intelligence.models.content',
+            'app.intelligence.models.categories',
+        ):
             sys.modules.pop(key, None)
 
 

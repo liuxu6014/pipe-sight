@@ -72,6 +72,7 @@ async def login(
             'user_name': result[0].username,
             'session_id': session_id,
             'login_info': user.login_info,
+            'credential_version': LoginService.credential_version(result[0]),
         },
         expires_delta=access_token_expires,
     )
@@ -205,7 +206,7 @@ async def logout(request: Request, token: Annotated[str | None, Depends(oauth2_s
     else:
         token_id: str = payload.get('user_id')
     if token_id:
-        await LoginService.logout_services(request.app.state.redis, token_id)
+        await LoginService.logout_services(request.app.state.redis, token_id, expected_token=token)
     logger.info('退出成功')
 
     return ResponseUtil.success(msg='退出成功')

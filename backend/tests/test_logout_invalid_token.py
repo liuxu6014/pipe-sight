@@ -42,4 +42,6 @@ async def test_valid_logout_still_revokes_verified_session(monkeypatch: pytest.M
         SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(redis=redis))), token
     )
     assert json.loads(response.body)['code'] == SUCCESS_CODE
-    revoke.assert_awaited_once_with(redis, 'test-session' if AppConfig.app_same_time_login else '42')
+    revoke.assert_awaited_once_with(
+        redis, 'test-session' if AppConfig.app_same_time_login else '42', expected_token=token
+    )

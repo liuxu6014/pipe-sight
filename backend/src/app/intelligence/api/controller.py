@@ -194,7 +194,7 @@ class CategorySave(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     prompt: str = Field(min_length=1, max_length=100000)
     model_id: int | None = None
-    applies_to: Literal['news', 'paper', 'all'] = 'all'
+    applies_to: Literal['news', 'paper', 'document', 'all'] = 'all'
     is_enabled: bool = False
     sort_order: int = Field(default=0, ge=0)
 

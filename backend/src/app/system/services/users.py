@@ -343,6 +343,13 @@ class UserService:
         )
 
     @classmethod
+    async def change_password_services(cls, query_db: AsyncSession, page_object: ResetUserModel) -> CrudResponseModel:
+        """Self-service changes always require the current password."""
+        if not page_object.old_password or not page_object.old_password.strip():
+            raise ServiceException(message='旧密码不能为空')
+        return await cls.reset_user_services(query_db, page_object)
+
+    @classmethod
     async def reset_user_services(cls, query_db: AsyncSession, page_object: ResetUserModel) -> CrudResponseModel:
         """
         重置用户密码service
@@ -351,10 +358,12 @@ class UserService:
         :param page_object: 重置用户对象
         :return: 重置用户校验结果
         """
+        if not page_object.password or not page_object.password.strip():
+            raise ServiceException(message='新密码不能为空')
         reset_user = page_object.model_dump(exclude_unset=True, exclude={'admin'})
         if page_object.old_password:
             user = (await UserDao.get_user_detail_by_id(query_db, user_id=page_object.user_id)).get('user_basic_info')
-            if not PasswordService.verify_password(page_object.old_password, user.password_hash):
+            if not user or not PasswordService.verify_password(page_object.old_password, user.password_hash):
                 raise ServiceException(message='修改密码失败，旧密码错误')
             if PasswordService.verify_password(page_object.password, user.password_hash):
                 raise ServiceException(message='新密码不能与旧密码相同')
@@ -364,6 +373,7 @@ class UserService:
             del reset_user['session_id']
         try:
             reset_user['password'] = PasswordService.get_password_hash(page_object.password)
+            reset_user['pwd_update_date'] = datetime.now()
             await UserDao.edit_user_dao(query_db, reset_user)
             await query_db.commit()
             return CrudResponseModel(is_success=True, message='重置成功')

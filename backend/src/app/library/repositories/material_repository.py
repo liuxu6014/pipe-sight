@@ -4,9 +4,10 @@ import re
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import Integer, Text, cast, func, literal_column, select, text, update
+from sqlalchemy import Integer, Text, case, cast, func, literal_column, select, text, update
 
 from app.business_ids import parse_business_id
+from app.library.classification_state import SUPERSEDED_MESSAGE
 from app.library.models.materials import PipelineMaterial as Material
 from app.library.models.materials import utcnow
 
@@ -74,7 +75,14 @@ class MaterialDao:
 
     @staticmethod
     async def list_material_ids_for_dispatch(db, **_) -> list[int]:
-        return list(await db.scalars(select(Material.id).where(Material.status == 'queued')))
+        return list(
+            await db.scalars(
+                select(Material.id).where(
+                    Material.status == 'queued',
+                    Material.classification_status != 'running',
+                )
+            )
+        )
 
     @staticmethod
     async def claim_material_parse(db, material_id, **_) -> Material | None:
@@ -87,7 +95,7 @@ class MaterialDao:
         now = utcnow()
         statement = (
             update(Material)
-            .where(Material.id == material_id, Material.status == 'queued')
+            .where(Material.id == material_id, Material.status == 'queued', Material.classification_status != 'running')
             .values(status='parsing', error=None, updated_at=now)
             .execution_options(populate_existing=True)
         )
@@ -125,10 +133,29 @@ class MaterialDao:
             )
         else:
             return False
+        classifying = (Material.classification_status == 'running') & Material.classification_token.is_not(None)
+        classification_failed = Material.classification_status == 'failed'
         result = await db.execute(
             update(Material)
             .where(Material.id == material_id, Material.status == 'parsing', guard)
-            .values(status=status, extracted_text=extracted_text, error=error, updated_at=utcnow())
+            .values(
+                status=status,
+                extracted_text=extracted_text,
+                error=error,
+                updated_at=utcnow(),
+                category_id=None,
+                classification_status=case(
+                    (classifying, 'running'),
+                    (classification_failed, 'failed'),
+                    else_='not_configured',
+                ),
+                classification_error=case(
+                    (classifying, SUPERSEDED_MESSAGE),
+                    (classification_failed, Material.classification_error),
+                    else_=None,
+                ),
+                classification_token=case((classifying, Material.classification_token), else_=None),
+            )
             .execution_options(synchronize_session=False)
         )
         await db.commit()

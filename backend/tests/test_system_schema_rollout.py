@@ -287,7 +287,9 @@ async def test_current_user_permissions_profile_and_router_use_target_fields(mon
     from app.system.services.users import UserService
     from common.enums.cache import RedisInitKeyConfig
 
-    user = SysUser(id=42, username='reader', nickname='Reader', status='0', password_updated_at=None)
+    user = SysUser(
+        id=42, username='reader', nickname='Reader', status='0', password_hash='stored-hash', password_updated_at=None
+    )
     role = SysRole(id=7, name='Reader role', code='common', data_scope='5', status='0')
     menu = SysMenu(
         id=8,
@@ -306,12 +308,14 @@ async def test_current_user_permissions_profile_and_router_use_target_fields(mon
     result = {'user_basic_info': user, 'user_role_info': [role], 'user_menu_info': [menu]}
     monkeypatch.setattr(UserDao, 'get_user_by_id', AsyncMock(return_value=result))
     monkeypatch.setattr(UserDao, 'get_user_detail_by_id', AsyncMock(return_value=result))
-    token = await auth.LoginService.create_access_token({'user_id': '42', 'session_id': 'session'})
+    token = await auth.LoginService.create_access_token(
+        {'user_id': '42', 'session_id': 'session', 'credential_version': auth.LoginService.credential_version(user)}
+    )
 
     async def cached_value(key):
         return token if key.startswith(RedisInitKeyConfig.ACCESS_TOKEN.key + ':') else None
 
-    redis = SimpleNamespace(get=AsyncMock(side_effect=cached_value), set=AsyncMock())
+    redis = SimpleNamespace(get=AsyncMock(side_effect=cached_value), set=AsyncMock(), eval=AsyncMock(return_value=1))
     current = await auth.LoginService.get_current_user(redis, token, object())
     assert current.user.user_id == 42 and current.roles == ['common']
     assert current.permissions == ['news:read']

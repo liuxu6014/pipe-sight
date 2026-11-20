@@ -1,11 +1,16 @@
 """Compact administrator totals, using actual categories and collection status."""
 
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy import func, select
 
 from app.business_ids import wire_id
+from app.business_time import BEIJING
+from app.health.worker import worker_status
 from app.intelligence.models.collection import PipelineCrawlRun, PipelineSource
 from app.intelligence.models.content import PipelineArticle, PipelineCategory, PipelinePaper
 from app.library.models.materials import PipelineMaterial
+from app.research.models.research_models import PipelineResearchJob
 
 
 class IntelligenceDashboardService:
@@ -36,7 +41,31 @@ class IntelligenceDashboardService:
                 .limit(10)
             )
         ).all()
+        now = datetime.now(timezone.utc)
+        queued, running, failed, oldest = (
+            await db.execute(
+                select(
+                    func.count().filter(PipelineResearchJob.status == 'queued'),
+                    func.count().filter(PipelineResearchJob.status == 'running'),
+                    func.count().filter(
+                        (PipelineResearchJob.status == 'failed')
+                        & (PipelineResearchJob.finished_at >= now - timedelta(days=1))
+                    ),
+                    func.min(PipelineResearchJob.created_at).filter(PipelineResearchJob.status == 'queued'),
+                )
+            )
+        ).one()
+        if oldest is not None and oldest.tzinfo is None:
+            oldest = oldest.replace(tzinfo=BEIJING)
+        queue_health = {
+            **worker_status(),
+            'queued': queued,
+            'running': running,
+            'failed24h': failed,
+            'oldestWaitSeconds': max(0, int((now - oldest).total_seconds())) if oldest else 0,
+        }
         return {
+            'queue_health': queue_health,
             'metrics': [
                 {'label': '新闻资讯', 'value': await count(PipelineArticle), 'unit': '条'},
                 {'label': '论文资料', 'value': await count(PipelinePaper), 'unit': '篇'},

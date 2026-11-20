@@ -13,6 +13,7 @@ from app.research.repositories.research_repository import ResearchDao
 from app.research.services.export_storage import ReportExportStorage
 from app.research.services.exporters import build_file
 from app.research.services.model_generation import ModelGateway
+from app.research.services.report_revision import report_revision
 from app.research.services.reports import ResearchReportService
 from config.database import AsyncSessionLocal
 from exceptions.exception import ServiceException
@@ -55,13 +56,41 @@ class ResearchReportExportService:
     async def create(cls, db, *, user_id, report_id, file_format, allow_draft=False) -> dict:
         if file_format not in {'docx', 'pdf'}:
             raise ServiceException(message='仅支持 DOCX/PDF 导出')
-        report, _ = await ResearchReportService._get_export_report(db, user_id, report_id, allow_draft=allow_draft)
+        # Serialize create/reuse against this report's edits and other requests,
+        # including requests from another API process. The snapshot is read only
+        # after this database lock is acquired and committed before returning.
+        report, _ = await ResearchReportService._get_export_report(
+            db, user_id, report_id, allow_draft=allow_draft, lock=True
+        )
+        snapshot = {
+            'version': report.version,
+            'revision': report_revision(report),
+            'allowDraft': bool(allow_draft),
+            'report': ResearchReportService.export_snapshot(report),
+        }
+        pending = await db.scalars(
+            select(PipelineReportAsset)
+            .where(
+                PipelineReportAsset.report_id == report.id,
+                PipelineReportAsset.type == 'export',
+                PipelineReportAsset.mime_type == cls._media_types[file_format],
+                PipelineReportAsset.status.in_(['queued', 'running']),
+                PipelineReportAsset.config_snapshot['version'].as_integer() == report.version,
+                PipelineReportAsset.config_snapshot['revision'].as_string() == snapshot['revision'],
+                PipelineReportAsset.config_snapshot['allowDraft'].as_boolean() == bool(allow_draft),
+            )
+            .order_by(PipelineReportAsset.id.desc())
+        )
+        for existing in pending:
+            if existing.config_snapshot == snapshot:
+                await db.commit()
+                return cls._record_dict(existing)
         row = PipelineReportAsset(
             report_id=report.id,
             type='export',
             mime_type=cls._media_types[file_format],
             status='queued',
-            config_snapshot={'version': report.version, 'report': ResearchReportService.export_snapshot(report)},
+            config_snapshot=snapshot,
             created_at=utcnow(),
             updated_at=utcnow(),
         )

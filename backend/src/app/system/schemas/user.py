@@ -180,13 +180,17 @@ class ResetPasswordModel(BaseModel):
 
     model_config = ConfigDict(alias_generator=to_camel)
 
-    old_password: str | None = Field(default=None, description='旧密码')
-    new_password: str | None = Field(default=None, description='新密码')
+    old_password: str = Field(min_length=1, description='旧密码')
+    new_password: str = Field(min_length=6, max_length=20, description='新密码')
 
     @model_validator(mode='after')
     def check_new_password(self) -> 'ResetPasswordModel':
+        if not self.old_password.strip():
+            raise ModelValidatorException(message='旧密码不能为空')
+        if not self.new_password.strip():
+            raise ModelValidatorException(message='新密码不能为空')
         pattern = r"""^[^<>"'|\\]+$"""
-        if self.new_password is None or re.match(pattern, self.new_password):
+        if re.match(pattern, self.new_password):
             return self
         raise ModelValidatorException(message='密码不能包含非法字符：< > " \' \\ |')
 

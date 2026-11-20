@@ -5,6 +5,10 @@ WORKDIR /app
 COPY requirements-pg.txt pyproject.toml ./
 RUN pip install --no-cache-dir -r requirements-pg.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
+# Redistributable Chinese TrueType fallback; reference briefs use a supplied FangSong font.
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-arphic-gbsn00lp fonts-wqy-zenhei \
+    && rm -rf /var/lib/apt/lists/*
+
 # 复制源代码
 COPY . .
 

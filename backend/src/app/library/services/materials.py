@@ -18,9 +18,12 @@ from xml.etree import ElementTree as ET
 
 from pypdf import PdfReader
 from pypdf.errors import PyPdfError
+from sqlalchemy import select
 
 from app.business_ids import wire_id
 from app.business_time import format_business_time
+from app.intelligence.models.categories import PipelineCategory
+from app.library.classification_state import CLASSIFICATION_CONSENT, invalidate_classification
 from app.library.models.materials import PipelineMaterial, utcnow
 from app.library.repositories.material_repository import MaterialDao
 from app.system.services.file_scan import FileScanService
@@ -259,6 +262,10 @@ class MaterialService:
                 item.status, item.status
             ),
             'parseMessage': item.error or '',
+            'categoryId': wire_id(getattr(item, 'category_id', None)),
+            'categoryName': item.category.name if getattr(item, 'category_id', None) and item.category else None,
+            'classificationStatus': getattr(item, 'classification_status', None) or 'not_configured',
+            'classificationError': getattr(item, 'classification_error', None) or '',
             'summary': MaterialFileService.summarize(text),
             'version': f'V{item.version}.0',
             'versionNo': item.version,
@@ -283,6 +290,19 @@ class MaterialService:
     async def list_materials(cls, db, user_id, **kwargs) -> dict:
         rows = await MaterialDao.list_accessible_materials(db, user_id)
         return {'rows': [cls.material_dict(i, user_id, **kwargs) for i in rows], 'total': len(rows)}
+
+    @staticmethod
+    async def category_options(db, user_id) -> dict:
+        names = list(
+            await db.scalars(
+                select(PipelineCategory.name)
+                .join(PipelineMaterial, PipelineMaterial.category_id == PipelineCategory.id)
+                .where(PipelineMaterial.user_id == user_id)
+                .distinct()
+                .order_by(PipelineCategory.name)
+            )
+        )
+        return {'rows': names, 'total': len(names)}
 
     @classmethod
     async def get_material(cls, db, user_id, material_id, **kwargs) -> dict:
@@ -362,6 +382,7 @@ class MaterialService:
             if existing and existing_path and existing_path.is_file():
                 if existing.status == 'failed':
                     existing.status, existing.error, existing.updated_at = 'queued', None, utcnow()
+                data = {**(detail_serializer or cls.material_detail_dict)(existing, user_id), 'duplicate': True}
                 await db.commit()
                 # Only the new, redundant upload copy is disposable. Never unlink
                 # the original, even if a caller passed its path directly.
@@ -370,7 +391,7 @@ class MaterialService:
                         await asyncio.to_thread(path.unlink)
                     except OSError:
                         pass
-                return {**(detail_serializer or cls.material_detail_dict)(existing, user_id), 'duplicate': True}
+                return data
 
         row = PipelineMaterial(
             user_id=user_id,
@@ -385,12 +406,14 @@ class MaterialService:
             extracted_text=None,
             edited_text=None,
             version=1,
+            classification_status='not_configured',
             created_at=utcnow(),
             updated_at=utcnow(),
         )
         await MaterialDao.add_material(db, row)
+        data = (detail_serializer or cls.material_detail_dict)(row, user_id)
         await db.commit()
-        return (detail_serializer or cls.material_detail_dict)(row, user_id)
+        return data
 
     @classmethod
     async def retry_parse(cls, db, user_id, material_id, **kwargs) -> dict:
@@ -400,6 +423,7 @@ class MaterialService:
         if row.status in {'parsing', 'queued'}:
             return cls.material_detail_dict(row, user_id)
         row.status, row.error = 'queued', None
+        invalidate_classification(row)
         row.updated_at = utcnow()
         # 重解析不清空提取结果，更不修改 edited_text。
         await db.commit()
@@ -419,7 +443,22 @@ class MaterialService:
                 raise ServiceException(message='资料名不能为空')
             row.name = name.strip()
         row.version += 1
+        invalidate_classification(row)
         row.updated_at = utcnow()
+        await db.commit()
+        return cls.material_detail_dict(row, user_id)
+
+    @classmethod
+    async def retry_classification(cls, db, user_id, material_id) -> dict:
+        row = await MaterialDao.get_owned_material(db, material_id, user_id, lock=True)
+        if not row:
+            raise ServiceException(message='资料不存在或无权分类')
+        if row.status != 'ready':
+            raise ServiceException(message='资料尚未解析就绪，请先完成解析')
+        if row.classification_status == 'running' or row.classification_token == CLASSIFICATION_CONSENT:
+            return cls.material_detail_dict(row, user_id)
+        row.category_id, row.classification_token = None, CLASSIFICATION_CONSENT
+        row.classification_status, row.classification_error = 'queued', None
         await db.commit()
         return cls.material_detail_dict(row, user_id)
 
@@ -428,6 +467,8 @@ class MaterialService:
         row = await MaterialDao.get_owned_material(db, material_id, user_id, lock=True)
         if not row:
             raise ServiceException(message='资料不存在或无权删除')
+        if row.classification_status == 'running':
+            raise ServiceException(message='资料正在分类，请等待本次执行结束后再删除')
         # 普通删除仅删除原件/篮关系；历史生成快照仍保留，明确返回策略。
         path = MaterialFileService.safe_local_path(row.storage_key)
         await db.delete(row)
@@ -454,10 +495,12 @@ class MaterialApiService:
     _material_detail_dict = MaterialService.material_detail_dict
     _material_local_path = MaterialFileService.safe_local_path
     list_materials = MaterialService.list_materials
+    category_options = MaterialService.category_options
     get_material = MaterialService.get_material
     get_download = MaterialService.get_download
     create_material = MaterialService.create_material
     retry_parse = MaterialService.retry_parse
+    retry_classification = MaterialService.retry_classification
     delete_material = MaterialService.delete_material
     edit = MaterialService.edit
 

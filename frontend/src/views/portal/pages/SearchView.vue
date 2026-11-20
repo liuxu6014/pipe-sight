@@ -4,25 +4,24 @@
       <template v-if="hasActiveFilters" #actions><el-button @click="clearFilters">清除筛选</el-button></template>
     </PortalPageHeader>
 
-    <div v-if="!inDialog" class="ps-search-mode ps-segmented-row"><el-segmented v-model="searchMode" :options="[{ label: '关键词搜索', value: 'keyword' }, { label: '语义搜索（待接入）', value: 'semantic' }]" aria-label="检索方式"  /></div>
     <form class="ps-search-hero" role="search" aria-label="全局搜索" @submit.prevent="applyKeyword">
       <Search />
-      <input ref="searchInput" v-model.trim="draftKeyword" maxlength="200" aria-label="全站搜索关键词" :placeholder="inDialog ? '搜索资讯、论文、资料和报告' : searchMode === 'semantic' ? '用自然语言描述你想研究的问题' : '输入题名、作者、摘要或资料名称'" />
-      <el-button v-if="!inDialog" native-type="submit" type="primary">{{ searchMode === 'semantic' ? '语义搜索' : '搜索' }}</el-button>
+      <input ref="searchInput" v-model.trim="draftKeyword" maxlength="200" aria-label="全站搜索关键词" :placeholder="inDialog ? '搜索资讯、论文、资料和报告' : '输入题名、作者、摘要或资料名称'" />
+      <el-button v-if="!inDialog" native-type="submit" type="primary">搜索</el-button>
     </form>
 
-    <SavedSearchBar v-if="!inDialog && searchMode === 'keyword'" kind="search" :query="query" @apply="applySavedSearch" />
-    <section v-if="searchMode === 'semantic'" class="ps-semantic-pending ps-panel" role="status"><Search /><h2>语义搜索待接入</h2><p>你输入的问题已保留。接入向量模型并建立资料索引后，系统将按内容含义匹配研究线索，而不仅依赖字面关键词。</p><p>当前未执行语义检索，不展示模拟结果。你可以先切换到关键词搜索。</p><el-button type="primary" @click="useKeywordSearch">用当前输入进行关键词搜索</el-button></section>
-    <div v-else-if="!inDialog" class="ps-search-summary" role="status" aria-live="polite">{{ loading ? '正在搜索…' : loadError ? '搜索失败，请重新加载' : `找到 ${total} 条与“${queryKeyword || '全部内容'}”相关的结果 · 当前页 ${filteredResults.length} 条` }}<p>当前条件：{{ filterSummary }}</p><small v-if="draftKeyword !== queryKeyword">输入内容尚未搜索，请点击“搜索”或按回车。</small></div>
+    <SavedSearchBar v-if="!inDialog" kind="search" :query="query" @apply="applySavedSearch" />
+    <el-alert v-if="legacySemanticNotice && !inDialog" title="当前提供关键词搜索" description="已保留原输入并移除无效的检索模式参数，下面展示真实关键词匹配结果；未执行语义检索。" type="info" show-icon closable @close="legacySemanticNotice = false" />
+    <div v-if="!inDialog" class="ps-search-summary" role="status" aria-live="polite">{{ loading ? '正在搜索…' : loadError ? '搜索失败，请重新加载' : `找到 ${total} 条与“${queryKeyword || '全部内容'}”相关的结果 · 当前页 ${filteredResults.length} 条` }}<p>当前条件：{{ filterSummary }}</p><small v-if="draftKeyword !== queryKeyword">输入内容尚未搜索，请点击“搜索”或按回车。</small></div>
     <el-alert
-      v-if="searchMode !== 'semantic' && pageLimitExceeded"
+      v-if="pageLimitExceeded"
       title="结果较多，最多展示前 100 页，请增加关键词或筛选条件。"
       type="warning"
       :closable="false"
       show-icon
     />
 
-    <div v-if="searchMode !== 'semantic' && (!inDialog || queryKeyword)" class="ps-search-layout">
+    <div v-if="!inDialog || queryKeyword" class="ps-search-layout">
       <aside v-if="!inDialog" class="ps-filter-panel">
         <h3><Filter />筛选条件</h3>
         <label><span>时间范围 <el-tooltip content="资讯和论文按来源发表时间，内部资料和报告按更新时间过滤。" placement="top"><el-icon class="ps-filter-help" aria-label="时间筛选说明"><InfoFilled /></el-icon></el-tooltip></span><el-select v-model="dateRange"><el-option label="全部时间" value="all" /><el-option label="近一周" value="week" /><el-option label="近一年" value="year" /></el-select></label>
@@ -70,7 +69,7 @@
 import SavedSearchBar from '../components/SavedSearchBar.vue'
 import { applySavedSearchQuery } from '@/utils/portal/savedSearches'
 import { computed, reactive, ref, toRefs, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Filter, InfoFilled, Search } from '@element-plus/icons-vue'
 import PortalPageHeader from '../components/PortalPageHeader.vue'
@@ -86,17 +85,23 @@ const emit = defineEmits(['result-opened', 'filters-changed'])
 const searchInput = ref(null)
 
 const router = useRouter()
+const route = useRoute()
+const legacySemanticNotice = ref(false)
+watch(() => route.query.mode, mode => {
+  if (props.inDialog || mode == null) return
+  if (mode === 'semantic') legacySemanticNotice.value = true
+  const next = { ...route.query }; delete next.mode
+  router.replace({ path: route.path, query: next, hash: route.hash }).catch(() => {})
+}, { immediate: true })
 const portalStore = usePortalStore()
 const facets = props.inDialog ? null : useListRequest(() => ({}), getPipelineContentFilters)
 const directionOptions = computed(() => [...new Set([...(facets?.data.value?.categories || []), ...directions.value])])
 const maxPageNum = 100
-const defaults = { q: '', mode: 'keyword', type: 'all', date: 'all', source: 'all', directions: [], page: 1, size: 10 }
+const defaults = { q: '', type: 'all', date: 'all', source: 'all', directions: [], page: 1, size: 10 }
 const query = props.inDialog ? reactive({ ...defaults, ...props.initialFilters }) : useListQuery(defaults, { maxPage: maxPageNum })
 function applySavedSearch(filters) { if (!applySavedSearchQuery(query, filters, 'search')) reload() }
 const { q: queryKeyword, type: activeType, date: dateRange, source, directions, page: currentPage, size: pageSize } = toRefs(query)
-const searchMode = computed({ get: () => query.mode === 'semantic' ? 'semantic' : 'keyword', set: value => { query.mode = value === 'semantic' ? 'semantic' : 'keyword' } })
-const hasActiveFilters = computed(() => searchMode.value === 'keyword'
-  && Boolean(queryKeyword.value || activeType.value !== 'all' || dateRange.value !== 'all' || source.value !== 'all' || directions.value.length))
+const hasActiveFilters = computed(() => Boolean(queryKeyword.value || activeType.value !== 'all' || dateRange.value !== 'all' || source.value !== 'all' || directions.value.length))
 const draftKeyword = props.inDialog ? queryKeyword : ref(queryKeyword.value)
 const { inBasket, busy, toggleBasket } = useListWorkspace(portalStore, { save: savePipelineWorkspaceItem, remove: deletePipelineWorkspaceItem })
 let pageCursors = {}
@@ -117,10 +122,8 @@ function applyKeyword() {
   if (queryKeyword.value === draftKeyword.value) reload()
   else queryKeyword.value = draftKeyword.value
 }
-function useKeywordSearch() { queryKeyword.value = draftKeyword.value; searchMode.value = 'keyword' }
 const { data, loading, loadError, reload } = useListRequest(() => ({
       keyword: queryKeyword.value || undefined,
-      mode: searchMode.value,
       type: activeType.value,
       source: source.value,
       dateRange: dateRange.value,
@@ -128,12 +131,10 @@ const { data, loading, loadError, reload } = useListRequest(() => ({
       pageNum: currentPage.value,
       pageSize: pageSize.value
 }), params => {
-  // This UI-only semantic state must never secretly call keyword search.
-  if (params.mode === 'semantic' || (props.inDialog && !params.keyword)) return Promise.resolve({ data: null })
-  const { mode, ...requestParams } = params
+  if (props.inDialog && !params.keyword) return Promise.resolve({ data: null })
   const context = JSON.stringify({ ...params, pageNum: undefined })
   if (context !== cursorContext) { cursorContext = context; pageCursors = {} }
-  return searchPipelineIntelligence({ ...requestParams, cursor: pageCursors[params.pageNum - 1] || undefined })
+  return searchPipelineIntelligence({ ...params, cursor: pageCursors[params.pageNum - 1] || undefined })
 })
 const dialogStatus = computed(() => {
   if (!queryKeyword.value) return ''

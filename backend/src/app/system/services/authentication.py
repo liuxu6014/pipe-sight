@@ -1,6 +1,9 @@
 """Authentication service owned by the system bounded context."""
 
-import random
+import hashlib
+import hmac
+import json
+import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -35,9 +38,18 @@ AUDITOR_LOG_PERMISSIONS = frozenset({'monitor:operlog:list', 'monitor:operlog:qu
 
 
 class LoginService:
-    """
-    登录模块服务层
-    """
+    """登录模块服务层。"""
+
+    @staticmethod
+    def credential_version(user: SysUser) -> str:
+        """Bind a session to its password hash without exposing that hash in JWTs.
+
+        Comparing with the current database value revokes every device after a
+        password change, including concurrent resets within the same second.
+        The signing/encryption key itself is unchanged.
+        """
+        value = f'password-session-v1:{user.id}:{user.password_hash or ""}'
+        return hmac.new(JwtConfig.jwt_secret_key.encode(), value.encode(), hashlib.sha256).hexdigest()
 
     @classmethod
     async def authenticate_user(
@@ -175,8 +187,8 @@ class LoginService:
         #     logger.warning("用户token不合法")
         #     raise AuthException(data="", message="用户token不合法")
         try:
-            if token.startswith('Bearer'):
-                token = token.split(' ')[1]
+            if token.startswith('Bearer '):
+                token = token.split(' ', 1)[1].strip()
             payload = jwt.decode(token, JwtConfig.jwt_secret_key, algorithms=[JwtConfig.jwt_algorithm])
             user_id: str = payload.get('user_id')
             session_id: str = payload.get('session_id')
@@ -191,27 +203,25 @@ class LoginService:
         if query_user.get('user_basic_info') is None:
             logger.warning('用户token不合法')
             raise AuthException(data='', message='用户token不合法')
-        if AppConfig.app_same_time_login:
-            redis_token = await redis.get(f'{RedisInitKeyConfig.ACCESS_TOKEN.key}:{session_id}')
-        else:
-            # 此方法可实现同一账号同一时间只能登录一次
-            redis_token = await redis.get(
-                f'{RedisInitKeyConfig.ACCESS_TOKEN.key}:{query_user.get("user_basic_info").id}'
-            )
-        if token == redis_token:
-            if AppConfig.app_same_time_login:
-                await redis.set(
-                    f'{RedisInitKeyConfig.ACCESS_TOKEN.key}:{session_id}',
-                    redis_token,
-                    ex=timedelta(minutes=JwtConfig.jwt_redis_expire_minutes),
-                )
-            else:
-                await redis.set(
-                    f'{RedisInitKeyConfig.ACCESS_TOKEN.key}:{query_user.get("user_basic_info").id}',
-                    redis_token,
-                    ex=timedelta(minutes=JwtConfig.jwt_redis_expire_minutes),
-                )
-
+        credential = payload.get('credential_version')
+        if (
+            not isinstance(credential, str)
+            or not credential.isascii()
+            or not hmac.compare_digest(credential, cls.credential_version(query_user['user_basic_info']))
+        ):
+            # Sessions issued before credential binding must sign in once.
+            # Never refresh an obsolete token's Redis TTL on this path.
+            raise AuthException(data='', message='登录凭据已失效，请重新登录')
+        token_id = session_id if AppConfig.app_same_time_login else query_user['user_basic_info'].id
+        # Renew only the currently stored session. A separate GET/SET can restore
+        # a token deleted by logout or overwrite one issued by a concurrent login.
+        if await redis.eval(
+            "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('EXPIRE', KEYS[1], ARGV[2]) end return 0",
+            1,
+            f'{RedisInitKeyConfig.ACCESS_TOKEN.key}:{token_id}',
+            token,
+            JwtConfig.jwt_redis_expire_minutes * 60,
+        ):
             role_id_list = [item.id for item in query_user.get('user_role_info')]
             if 1 in role_id_list:
                 permissions = ['*:*:*']
@@ -438,13 +448,17 @@ class LoginService:
             return SmsCode(is_success=False, sms_code='', session_id='', message='短信验证码仍在有效期内')
         is_user = await UserDao.get_user_by_name(query_db, user.user_name)
         if is_user:
-            sms_code = str(random.randint(100000, 999999))
+            sms_code = str(secrets.randbelow(900000) + 100000)
             session_id = str(uuid.uuid4())
-            await redis.set(f'{RedisInitKeyConfig.SMS_CODE.key}:{session_id}', sms_code, ex=timedelta(minutes=2))
+            await redis.set(
+                f'{RedisInitKeyConfig.SMS_CODE.key}:{session_id}',
+                json.dumps({'code': sms_code, 'user_id': is_user.id}),
+                ex=timedelta(minutes=2),
+            )
             # 此处模拟调用短信服务
             SmsCodeNotifier.notify(sms_code)
 
-            return SmsCode(is_success=True, sms_code=sms_code, session_id=session_id, message='获取成功')
+            return SmsCode(is_success=True, sms_code='', session_id=session_id, message='获取成功')
 
         return SmsCode(is_success=False, sms_code='', session_id='', message='用户不存在')
 
@@ -460,32 +474,60 @@ class LoginService:
         :param forget_user: 重置用户对象
         :return: 重置结果
         """
-        redis_sms_result = await redis.get(f'{RedisInitKeyConfig.SMS_CODE.key}:{forget_user.session_id}')
-        if forget_user.sms_code == redis_sms_result:
-            forget_user.password = PasswordService.get_password_hash(forget_user.password)
-            forget_user.user_id = (await UserDao.get_user_by_name(query_db, forget_user.user_name)).id
-            edit_result = await UserService.reset_user_services(query_db, forget_user)
-            result = edit_result.dict()
-        elif not redis_sms_result:
+        if not forget_user.session_id or not forget_user.sms_code:
+            return CrudResponseModel(is_success=False, message='短信验证码不能为空')
+        key = f'{RedisInitKeyConfig.SMS_CODE.key}:{forget_user.session_id}'
+        redis_sms_result = await redis.get(key)
+        if not redis_sms_result:
             result = {'is_success': False, 'message': '短信验证码已过期'}
         else:
-            await redis.delete(f'{RedisInitKeyConfig.SMS_CODE.key}:{forget_user.session_id}')
-            result = {'is_success': False, 'message': '短信验证码不正确'}
+            try:
+                stored = json.loads(redis_sms_result)
+            except (ValueError, TypeError):
+                stored = None
+            user = await UserDao.get_user_by_name(query_db, forget_user.user_name)
+            if (
+                not isinstance(stored, dict)
+                or not isinstance(stored.get('code'), str)
+                or not user
+                or stored.get('user_id') != user.id
+                or not hmac.compare_digest(forget_user.sms_code.encode(), stored['code'].encode())
+            ):
+                return CrudResponseModel(is_success=False, message='短信验证码不正确')
+            # Consume atomically so concurrent attempts cannot reuse a code.
+            consumed = await redis.eval(
+                "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0",
+                1,
+                key,
+                redis_sms_result,
+            )
+            if not consumed:
+                return CrudResponseModel(is_success=False, message='短信验证码已过期')
+            forget_user.user_id = user.id
+            # The shared reset service hashes plaintext exactly once.
+            edit_result = await UserService.reset_user_services(query_db, forget_user)
+            result = edit_result.model_dump()
 
         return CrudResponseModel(**result)
 
     @classmethod
-    async def logout_services(cls, redis: aioredis.Redis, token_id: str) -> bool:
+    async def logout_services(cls, redis: aioredis.Redis, token_id: str, *, expected_token: str) -> bool:
         """
         退出登录services
 
         :param redis: redis对象
         :param token_id: 令牌编号
+        :param expected_token: 只撤销本次请求提供的令牌，不能撤销后续的新登录
         :return: 退出登录结果
         """
-        await redis.delete(f'{RedisInitKeyConfig.ACCESS_TOKEN.key}:{token_id}')
-
-        return True
+        return bool(
+            await redis.eval(
+                "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0",
+                1,
+                f'{RedisInitKeyConfig.ACCESS_TOKEN.key}:{token_id}',
+                expected_token,
+            )
+        )
 
 
 class RouterUtil:

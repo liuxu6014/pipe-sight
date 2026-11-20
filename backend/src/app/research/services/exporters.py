@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import os
 import re
 from io import BytesIO
 from pathlib import Path
@@ -20,12 +21,16 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.textsplit import ALL_CANNOT_START
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.cidfonts import UnicodeCIDFont
-from reportlab.pdfbase.ttfonts import TTFError, TTFont
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from reportlab.platypus.paragraph import ParaLines, cjkU, makeCJKParaLine
 
 from app.research.services.citation_format import REFERENCE_TITLES, clean_report_citations
+from app.research.services.pdf_fonts import (
+    CJK_REQUIRED_TEXT,
+    DEFAULT_CJK_CANDIDATES,
+    register_configured_font,
+    validated_ttf,
+)
 
 _HEADING_RE = re.compile(r'^(#{1,6})\s+(.+?)\s*$')
 _BOLD_HEADING_RE = re.compile(r'^\*\*(.+?)\*\*\s*$')
@@ -94,31 +99,27 @@ class CitationParagraph(Paragraph):
         return ParaLines(kind=1, lines=lines)
 
 
-def _pdf_font() -> str:
+def _pdf_font(text: str = '') -> str:
+    configured = os.getenv('PDF_CJK_FONT_PATH', '').strip()
+    if configured:
+        return register_configured_font(
+            configured, prefix='PipeSightCJKExplicit', label='PDF_CJK_FONT_PATH', required_text=CJK_REQUIRED_TEXT + text
+        )
     name = 'PipeSightCJK'
     if name in pdfmetrics.getRegisteredFontNames():
         return name
     # Embed a local Unicode font when available so exported Chinese text does
     # not depend on the reader installing an Adobe CJK language pack.
-    for filename, face_index in (
-        # Songti's first collection face is Black; use the regular SC face.
-        ('/System/Library/Fonts/Supplemental/Songti.ttc', 6),
-        ('C:/Windows/Fonts/simsun.ttc', 0),
-        ('/usr/local/share/fonts/simsun.ttf', 0),
-        ('/System/Library/Fonts/Supplemental/Arial Unicode.ttf', 0),
-        ('/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc', 0),
-        ('/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf', 0),
-    ):
+    for filename, face_index in DEFAULT_CJK_CANDIDATES:
         if not Path(filename).is_file():
             continue
         try:
-            pdfmetrics.registerFont(TTFont(name, filename, subfontIndex=face_index))
+            pdfmetrics.registerFont(validated_ttf(Path(filename), name=name, label='中文正文', face_index=face_index))
             pdfmetrics.registerFontFamily(name, normal=name, bold=name, italic=name, boldItalic=name)
             return name
-        except TTFError:
+        except ValueError:
             continue
-    pdfmetrics.registerFont(UnicodeCIDFont('STSong-Light'))
-    return 'STSong-Light'
+    raise ValueError('缺少可嵌入的中文字体，请配置 PDF_CJK_FONT_PATH 或安装部署文档指定字体')
 
 
 def _has_reference_section(content: str) -> bool:
@@ -443,8 +444,15 @@ def _pdf_project_budget(form: dict, heading_style: ParagraphStyle, width: float)
 
 
 def build_pdf(report: Any, *, is_draft: bool) -> tuple[str, str, bytes]:
-    """返回文件名、媒体类型和 PDF 二进制内容，使用内置 CJK 字体避免中文变方框。"""
-    font_name = _pdf_font()
+    """返回文件名、媒体类型和 PDF 二进制内容，使用嵌入 CJK 字体。"""
+    font_name = _pdf_font(
+        ''
+        if _reference_digest(report)
+        else str(getattr(report, 'title', ''))
+        + _report_body(report)
+        + _metadata_line(report)
+        + '\n'.join(_citation_lines(report))
+    )
     if _reference_digest(report):
         from app.research.services.digest_export import build_digest_pdf  # noqa: PLC0415
 

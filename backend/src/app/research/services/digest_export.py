@@ -1,5 +1,6 @@
 """从保留的简报样例模板排版；不把研究报告版式套到周报月报。"""
 
+import os
 import re
 from collections.abc import Iterator
 from copy import deepcopy
@@ -19,14 +20,109 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFError, TTFont
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+from reportlab.platypus import CondPageBreak, Flowable, Paragraph, SimpleDocTemplate, Spacer
 
 from app.research.services.digest_document import clean_source_display, digest_masthead, digest_period
+from app.research.services.pdf_fonts import CJK_REQUIRED_TEXT, register_configured_font
 
 TEMPLATE_PATH = Path(__file__).resolve().parents[4] / 'data/templates/digest-reference-v1.docx'
 LINK = re.compile(r'^\[(\d+)\] \[(.+)\]\((https?://[^\s]+)\)$')
 FONT_SIZES = {'title': 18, 'period': 16, 'category': 16, 'event': 14}
 LINE_HEIGHTS = {'title': 26, 'period': 23, 'category': 26, 'event': 22}
+FRAME_PADDING = 6
+
+
+def _paragraph_spacing(role: str) -> tuple[int, int]:
+    """The accepted compact Word sizing applies to both export engines."""
+    return (8 if role in {'category', 'event'} else 3), 4
+
+
+def _reference_block_layout() -> dict[str, dict[str, float]]:
+    """Resolve inherited reference styles instead of losing their block gutters."""
+    result = {}
+    for paragraph in Document(TEMPLATE_PATH).paragraphs:
+        role = paragraph.text.strip('{}')
+        if role not in {'published', 'insight', 'source_label', 'source'}:
+            continue
+        values = []
+        for attribute in ('left_indent', 'right_indent'):
+            value = getattr(paragraph.paragraph_format, attribute)
+            style = paragraph.style
+            while value is None and style is not None:
+                value = getattr(style.paragraph_format, attribute)
+                style = style.base_style
+            values.append(value.pt if value is not None else 0)
+        layout = dict(zip(('left_indent', 'right_indent'), values, strict=True))
+        property_sources = [paragraph._p.pPr]
+        style = paragraph.style
+        while style is not None:
+            property_sources.append(style._element.pPr)
+            style = style.base_style
+        for side in ('top', 'right', 'bottom', 'left'):
+            padding = 0
+            for properties in property_sources:
+                border = properties.find(qn('w:pBdr')) if properties is not None else None
+                edge = border.find(qn(f'w:{side}')) if border is not None else None
+                if edge is not None and edge.get(qn('w:space')) is not None:
+                    padding = float(edge.get(qn('w:space')))
+                    break
+            layout['padding_' + side] = padding
+        result[role] = layout
+    return result
+
+
+class DigestBlockParagraph(Flowable):
+    """Reserve Word border spacing; Paragraph borderPadding only paints it."""
+
+    def __init__(self, paragraph: Paragraph, *, top: float, bottom: float) -> None:
+        super().__init__()
+        self.paragraph, self.style = paragraph, paragraph.style
+        self.top, self.bottom = top, bottom
+
+    def wrap(self, available_width: float, available_height: float) -> tuple[float, float]:
+        width, height = self.paragraph.wrap(available_width, max(0, available_height - self.top - self.bottom))
+        self.width, self.height = width, height + self.top + self.bottom
+        return self.width, self.height
+
+    def draw(self) -> None:
+        self.paragraph.drawOn(self.canv, 0, self.bottom)
+
+    def split(self, available_width: float, available_height: float) -> list[Flowable]:
+        pieces = self.paragraph.split(available_width, max(0, available_height - self.top - self.bottom))
+        result = []
+        for index, paragraph in enumerate(pieces):
+            item = DigestBlockParagraph(
+                paragraph,
+                top=self.top if index == 0 else 0,
+                bottom=self.bottom if index == len(pieces) - 1 else 0,
+            )
+            item.keepWithNext = True if index < len(pieces) - 1 else self.getKeepWithNext()
+            result.append(item)
+        return result
+
+
+def _heading_start_height(blocks: list[tuple[str, str]], index: int, styles: dict, width: float) -> float | None:
+    """Keep wrapped headings with initial body lines, without pinning a long body."""
+    height = 0
+    while index < len(blocks) and blocks[index][0] in {'category', 'event'}:
+        role, text = blocks[index]
+        paragraph = Paragraph(escape(text), styles[role])
+        height += paragraph.wrap(width, 1e6)[1] + paragraph.getSpaceBefore() + paragraph.getSpaceAfter()
+        index += 1
+    required_lines = 2
+    found_body = False
+    while index < len(blocks) and blocks[index][0] == 'summary' and required_lines > 0:
+        paragraph = Paragraph(escape(blocks[index][1]), styles['summary'])
+        paragraph.wrap(width, 1e6)
+        lines = len(paragraph.blPara.lines)
+        # A three-line paragraph cannot split into two orphan/widow-free parts.
+        # Short initial paragraphs stay whole before considering the next one.
+        kept_lines = lines if lines <= 3 else 2  # noqa: PLR2004
+        height += kept_lines * paragraph.style.leading + paragraph.getSpaceBefore() + paragraph.getSpaceAfter()
+        required_lines -= kept_lines
+        found_body = found_body or bool(lines)
+        index += 1
+    return height if found_body else None
 
 
 class DigestHeadingParagraph(Paragraph):
@@ -165,8 +261,9 @@ def build_digest_docx(report) -> bytes:
         # Multiple spacing depends on the font's metrics and can inflate Word
         # output compared with PDF. Use the same point-based leading in both.
         paragraph.paragraph_format.line_spacing = Pt(LINE_HEIGHTS.get(role, 18))
-        paragraph.paragraph_format.space_before = Pt(8 if role in {'category', 'event'} else 3)
-        paragraph.paragraph_format.space_after = Pt(4)
+        before, after = _paragraph_spacing(role)
+        paragraph.paragraph_format.space_before = Pt(before)
+        paragraph.paragraph_format.space_after = Pt(after)
         spacing = properties.find(qn('w:spacing'))
         for attr in ('beforeLines', 'afterLines'):
             spacing.set(qn(f'w:{attr}'), '0')
@@ -224,6 +321,14 @@ def build_digest_docx(report) -> bytes:
 
 
 def _digest_pdf_font(text: str, fallback: str) -> str:
+    configured = os.getenv('PDF_DIGEST_FONT_PATH', '').strip()
+    if configured:
+        return register_configured_font(
+            configured,
+            prefix='PipeSightDigestExplicit',
+            label='PDF_DIGEST_FONT_PATH',
+            required_text=CJK_REQUIRED_TEXT + text,
+        )
     name = 'PipeSightDigestFangSong'
     if name not in pdfmetrics.getRegisteredFontNames():
         for path in (
@@ -257,8 +362,10 @@ def build_digest_pdf(report, font_name) -> bytes:
         'wordWrap': 'CJK',
         'fontSize': 12,
         'leading': 18,
-        'spaceBefore': 5,
-        'spaceAfter': 5,
+        'spaceBefore': _paragraph_spacing('summary')[0],
+        'spaceAfter': _paragraph_spacing('summary')[1],
+        'allowOrphans': False,
+        'allowWidows': False,
     }
     styles = {
         'title': ParagraphStyle(
@@ -278,28 +385,38 @@ def build_digest_pdf(report, font_name) -> bytes:
                 'fontSize': FONT_SIZES['period'],
                 'leading': LINE_HEIGHTS['period'],
                 'alignment': TA_CENTER,
-                'spaceAfter': 12,
             },
         ),
         'category': ParagraphStyle(
             'DigestCategory',
-            **{**base, 'fontSize': FONT_SIZES['category'], 'leading': LINE_HEIGHTS['category'], 'keepWithNext': True},
+            **{
+                **base,
+                'fontSize': FONT_SIZES['category'],
+                'leading': LINE_HEIGHTS['category'],
+                'spaceBefore': _paragraph_spacing('category')[0],
+                'keepWithNext': True,
+            },
         ),
         'event': ParagraphStyle(
             'DigestEvent',
-            **{**base, 'fontSize': FONT_SIZES['event'], 'leading': LINE_HEIGHTS['event'], 'keepWithNext': True},
+            **{
+                **base,
+                'fontSize': FONT_SIZES['event'],
+                'leading': LINE_HEIGHTS['event'],
+                'spaceBefore': _paragraph_spacing('event')[0],
+                'keepWithNext': True,
+            },
         ),
         'summary': ParagraphStyle('DigestSummary', **base, firstLineIndent=24),
     }
-    for role, fill in [
-        ('published', '#F8FBF6'),
-        ('insight', '#FEFCF2'),
-        ('source_label', '#F6F8FC'),
-        ('source', '#F6F8FC'),
-    ]:
+    reference_layout = _reference_block_layout()
+    fills = {'published': '#F8FBF6', 'insight': '#FEFCF2', 'source_label': '#F6F8FC', 'source': '#F6F8FC'}
+    for role, fill in fills.items():
         styles[role] = ParagraphStyle(
             f'Digest{role}',
             **base,
+            leftIndent=reference_layout[role]['left_indent'],
+            rightIndent=reference_layout[role]['right_indent'],
             backColor=HexColor(fill),
             borderPadding=5,
             keepWithNext=role in {'published', 'insight', 'source_label'},
@@ -309,8 +426,8 @@ def build_digest_pdf(report, font_name) -> bytes:
         output,
         pagesize=A4,
         # SimpleDocTemplate adds six points of frame padding on each side.
-        leftMargin=31.75 * mm - 6,
-        rightMargin=31.75 * mm - 6,
+        leftMargin=31.75 * mm - FRAME_PADDING,
+        rightMargin=31.75 * mm - FRAME_PADDING,
         topMargin=25.4 * mm,
         bottomMargin=25.4 * mm,
         title=str(report.title),
@@ -333,7 +450,30 @@ def build_digest_pdf(report, font_name) -> bytes:
             label, value = markup.split('：', 1)
             markup = f'<b><u>{label}：</u></b>{value}' if role == 'insight' else f'<b>{label}：</b>{value}'
         paragraph_type = DigestHeadingParagraph if role in {'category', 'event', 'source_label'} else Paragraph
-        paragraph = paragraph_type(markup, styles[role])
+        if role in fills:
+            layout = reference_layout[role]
+            previous_fill = fills.get(blocks[index - 1][0]) if index else None
+            next_fill = fills.get(blocks[index + 1][0]) if index + 1 < len(blocks) else None
+            # Adjacent blue source paragraphs form one Word border group. Its
+            # vertical inset belongs at the group's ends, not around every link.
+            top = layout['padding_top'] if previous_fill != fills[role] else 0
+            bottom = layout['padding_bottom'] if next_fill != fills[role] else 0
+            style = ParagraphStyle(
+                f'DigestBlock{index}',
+                parent=styles[role],
+                borderPadding=(top or 5, layout['padding_right'], bottom or 5, layout['padding_left']),
+            )
+            paragraph = DigestBlockParagraph(paragraph_type(markup, style), top=top, bottom=bottom)
+        else:
+            paragraph = paragraph_type(markup, styles[role])
+        if role in {'category', 'event'}:
+            height = _heading_start_height(blocks, index, styles, doc.width - 2 * FRAME_PADDING)
+            if height is not None and height <= doc.height - 2 * FRAME_PADDING:
+                story.append(CondPageBreak(height))
+                # Word keeps headings with the beginning of the next paragraph,
+                # not its entire long body. The measured guard preserves that
+                # minimum while allowing the body to use the remaining page.
+                paragraph.keepWithNext = False
         if role == 'source':
             paragraph.keepWithNext = index + 1 < len(blocks) and blocks[index + 1][0] == 'source'
         story.append(paragraph)

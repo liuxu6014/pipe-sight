@@ -11,6 +11,7 @@ import asyncio
 import signal
 
 from app.business_ids import parse_business_id
+from app.health.worker import run_worker_heartbeat
 from app.infrastructure.models.registry import register_sqlalchemy_models
 from app.infrastructure.services.logging_support import logger
 from app.intelligence.tasks.operational_scheduler import run_operational_scheduler
@@ -40,10 +41,25 @@ async def _run_worker(*, schedule_ids=None) -> None:
             logger.info(f'隔离任务 Worker 仅处理自动计划 {schedule_ids}，不运行采集、导出和资料解析队列。')
             await run_persistent_recovery_loop(stop_event, schedule_ids=schedule_ids)
         else:
-            await asyncio.gather(
-                run_persistent_recovery_loop(stop_event),
-                run_operational_scheduler(stop_event),
-            )
+            tasks = [
+                asyncio.create_task(operation)
+                for operation in (
+                    run_persistent_recovery_loop(stop_event),
+                    run_operational_scheduler(stop_event),
+                    run_worker_heartbeat(stop_event),
+                )
+            ]
+            try:
+                done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                for task in done:
+                    task.result()
+                if not stop_event.is_set():
+                    raise RuntimeError('Worker 子进程意外停止')
+            finally:
+                stop_event.set()
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
     finally:
         await close_async_engine()
         logger.info('PipeSight Task Worker 资源已释放。')

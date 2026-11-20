@@ -2,23 +2,29 @@ name: pipesight-pg
 
 services:
   # 数据库迁移：API 和持久任务 Worker 启动前必须完成 Alembic 迁移。
-  # 数据库统一使用 172.16.4.183 上的 pipesight 库；本项目不再随 docker 启动本地 PG。
+  # 数据库地址必须显式提供；本项目不随此部署文件启动或初始化 PostgreSQL。
   pipesight-db-migrate:
     build:
       context: ./backend
       dockerfile: ../deploy/docker/backend.pg.Dockerfile
     image: ruoyi-backend-pg:latest
-    command: ["alembic", "upgrade", "head"]
+    command: ["pipesight-safe-migrate"]
     environment:
       APP_ENV: dockerpg
+      APP_RELOAD: "false"
+      APP_ROOT_PATH: /docker-api
+      PIPESIGHT_MIGRATION_TARGET: ${PIPESIGHT_MIGRATION_TARGET:-head}
+      PIPESIGHT_MIGRATION_OPTIONS_FILE: ${PIPESIGHT_MIGRATION_OPTIONS_FILE:-}
       DB_TYPE: postgresql
       PYTHONPATH: /app/src:/app
-      DB_HOST: 172.16.4.183
-      DB_PORT: 5432
-      DB_USERNAME: postgres
-      DB_PASSWORD: ${DATA_DB_PASSWORD}
-      DB_DATABASE: pipesight
+      DB_HOST: ${DATA_DB_HOST:?Set the explicit target DATA_DB_HOST}
+      DB_PORT: ${DATA_DB_PORT:-5432}
+      DB_USERNAME: ${DATA_DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DATA_DB_PASSWORD:?Set DATA_DB_PASSWORD}
+      DB_DATABASE: ${DATA_DB_DATABASE:-pipesight}
       DB_ECHO: "false"
+    volumes:
+      - ${PIPESIGHT_MIGRATION_DIR:-./deploy/migrations}:/app/migration:ro
     networks:
       - ruoyi-network
 
@@ -28,6 +34,7 @@ services:
       context: ./frontend
       dockerfile: ../deploy/docker/frontend.Dockerfile
     image: ruoyi-frontend:latest
+    restart: unless-stopped
     ports:
       - "12580:80"
     volumes:
@@ -36,7 +43,7 @@ services:
       ruoyi-backend-pg:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1/"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/health"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -49,15 +56,19 @@ services:
       context: ./backend
       dockerfile: ../deploy/docker/backend.pg.Dockerfile
     image: ruoyi-backend-pg:latest
+    restart: unless-stopped
+    command: ["sh", "-c", "pipesight-runtime-check && exec ruoyi app run --env=dockerpg"]
     environment:
       APP_ENV: dockerpg
+      APP_RELOAD: "false"
+      APP_ROOT_PATH: /docker-api
       DB_TYPE: postgresql
       PYTHONPATH: /app/src:/app
-      DB_HOST: 172.16.4.183
-      DB_PORT: 5432
-      DB_USERNAME: postgres
-      DB_PASSWORD: ${DATA_DB_PASSWORD}
-      DB_DATABASE: pipesight
+      DB_HOST: ${DATA_DB_HOST:?Set the explicit target DATA_DB_HOST}
+      DB_PORT: ${DATA_DB_PORT:-5432}
+      DB_USERNAME: ${DATA_DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DATA_DB_PASSWORD:?Set DATA_DB_PASSWORD}
+      DB_DATABASE: ${DATA_DB_DATABASE:-pipesight}
       DB_ECHO: "false"
       REDIS_HOST: ruoyi-redis
       REDIS_PORT: 6379
@@ -66,15 +77,21 @@ services:
       PIPELINE_AUTO_BOOTSTRAP_SOURCES: "true"
       PIPELINE_TASK_SCHEDULER_ENABLED: "false"
       PIPELINE_INTERNAL_TOKEN: ${PIPELINE_INTERNAL_TOKEN:-pipesight-local-internal}
-      # 本地验收默认使用基础检查；生产必须改为 external 并配置 ClamAV 等专业扫描器。
-      FILE_SCAN_MODE: ${FILE_SCAN_MODE:-basic}
-      FILE_SCAN_COMMAND: ${FILE_SCAN_COMMAND:-}
+      # 开发使用 docker-compose.local.yml；正式部署使用私有网络 ClamAV。
+      FILE_SCAN_MODE: external
+      FILE_SCAN_COMMAND: ${FILE_SCAN_COMMAND:-pipesight-file-scan}
+      FILE_SCAN_HOST: pipesight-clamav
+      FILE_SCAN_PORT: 3310
+      PDF_DIGEST_FONT_PATH: /app/fonts/FangSong_GB2312.ttf
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Provide the original JWT_SECRET_KEY}
       FILE_SCAN_TIMEOUT_SECONDS: ${FILE_SCAN_TIMEOUT_SECONDS:-30}
-    ports:
-      - "19099:9099"
     volumes:
       - ruoyi-upload-data:/app/vf_admin/upload_path
+      - ruoyi-worker-health:/app/vf_admin/task-worker
+      - ${PIPESIGHT_FONT_DIR:-./deploy/fonts}:/app/fonts:ro
     depends_on:
+      pipesight-clamav:
+        condition: service_healthy
       ruoyi-redis:
         condition: service_healthy
       pipesight-db-migrate:
@@ -93,36 +110,71 @@ services:
       context: ./backend
       dockerfile: ../deploy/docker/backend.pg.Dockerfile
     image: ruoyi-backend-pg:latest
-    command: ["pipesight-task-worker", "--env", "dockerpg"]
+    command: ["sh", "-c", "pipesight-runtime-check && exec pipesight-task-worker --env dockerpg"]
     environment:
       APP_ENV: dockerpg
+      APP_RELOAD: "false"
+      APP_ROOT_PATH: /docker-api
       DB_TYPE: postgresql
       PYTHONPATH: /app/src:/app
-      DB_HOST: 172.16.4.183
-      DB_PORT: 5432
-      DB_USERNAME: postgres
-      DB_PASSWORD: ${DATA_DB_PASSWORD}
-      DB_DATABASE: pipesight
+      DB_HOST: ${DATA_DB_HOST:?Set the explicit target DATA_DB_HOST}
+      DB_PORT: ${DATA_DB_PORT:-5432}
+      DB_USERNAME: ${DATA_DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DATA_DB_PASSWORD:?Set DATA_DB_PASSWORD}
+      DB_DATABASE: ${DATA_DB_DATABASE:-pipesight}
       DB_ECHO: "false"
       PIPELINE_AUTO_BOOTSTRAP_SOURCES: "true"
       PIPELINE_TASK_SCHEDULER_ENABLED: "true"
-      FILE_SCAN_MODE: ${FILE_SCAN_MODE:-basic}
-      FILE_SCAN_COMMAND: ${FILE_SCAN_COMMAND:-}
+      REDIS_HOST: ruoyi-redis
+      REDIS_PORT: 6379
+      REDIS_DATABASE: 2
+      FILE_SCAN_MODE: external
+      FILE_SCAN_COMMAND: ${FILE_SCAN_COMMAND:-pipesight-file-scan}
+      FILE_SCAN_HOST: pipesight-clamav
+      FILE_SCAN_PORT: 3310
+      PDF_DIGEST_FONT_PATH: /app/fonts/FangSong_GB2312.ttf
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Provide the original JWT_SECRET_KEY}
       FILE_SCAN_TIMEOUT_SECONDS: ${FILE_SCAN_TIMEOUT_SECONDS:-30}
     volumes:
       - ruoyi-upload-data:/app/vf_admin/upload_path
+      - ruoyi-worker-health:/app/vf_admin/task-worker
+      - ${PIPESIGHT_FONT_DIR:-./deploy/fonts}:/app/fonts:ro
     depends_on:
+      pipesight-clamav:
+        condition: service_healthy
+      ruoyi-redis:
+        condition: service_healthy
       pipesight-db-migrate:
         condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "pipesight-worker-health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
     restart: unless-stopped
+    networks:
+      - ruoyi-network
+
+  # Private scanner; signatures persist across restarts and FreshClam keeps them updated.
+  pipesight-clamav:
+    image: clamav/clamav:1.5
+    platform: linux/amd64
+    restart: unless-stopped
+    volumes:
+      - clamav-signatures:/var/lib/clamav
     networks:
       - ruoyi-network
 
   # Redis服务
   ruoyi-redis:
-    image: redis:latest
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ruoyi-redis-data:/data
     ports:
-      - "16379:6379"
+      - "127.0.0.1:16379:6379"
     networks:
       - ruoyi-network
     healthcheck:
@@ -138,3 +190,6 @@ networks:
 
 volumes:
   ruoyi-upload-data:
+  ruoyi-worker-health:
+  ruoyi-redis-data:
+  clamav-signatures:

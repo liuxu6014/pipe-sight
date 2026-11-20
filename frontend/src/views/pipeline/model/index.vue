@@ -61,7 +61,7 @@
     <el-table v-else v-loading="categoryLoading" :data="filteredCategories" class="category-table" :empty-text="categoryKeyword || categoryStatus !== 'all' ? '没有匹配的类别' : '暂无类别，请新增类别'">
      <el-table-column prop="name" label="类别名称" width="180"><template #default="{ row }"><strong class="category-name">{{ row.name }}</strong></template></el-table-column>
      <el-table-column label="分类要求" min-width="360"><template #default="{ row }"><el-tooltip placement="top" :show-after="500" popper-class="category-prompt-tooltip"><template #content><div class="category-prompt-tooltip-content">{{ categoryPromptText(row.prompt || '') }}</div></template><p class="category-prompt-summary" tabindex="0">{{ categoryPromptText(row.prompt || '') || '尚未填写分类要求' }}</p></el-tooltip></template></el-table-column>
-     <el-table-column prop="appliesTo" label="适用内容" width="110"><template #default="{ row }">{{ ({ all: '全部', news: '新闻资讯', paper: '论文' })[row.appliesTo] || row.appliesTo || '—' }}</template></el-table-column>
+     <el-table-column prop="appliesTo" label="适用内容" width="110"><template #default="{ row }">{{ ({ all: '全部', news: '新闻资讯', paper: '论文', document: '上传资料' })[row.appliesTo] || row.appliesTo || '—' }}</template></el-table-column>
 
      <el-table-column label="状态" width="100" align="center"><template #default="{ row }"><el-tag :type="row.isEnabled ? 'success' : 'info'" effect="light">{{ row.isEnabled ? '已启用' : '已停用' }}</el-tag></template></el-table-column>
      <el-table-column label="操作" width="250" align="center"><template #default="{ row }"><el-button v-if="canCategorySave" plain type="primary" :disabled="categoryBusy" @click="openCategory(row)">编辑</el-button><el-button v-if="canCategorySave" plain :disabled="!row.isEnabled || categoryBusy" :loading="categoryDisabling === row.id" @click="disableCategory(row)">停用</el-button><el-button v-if="canCategorySave" plain type="danger" :disabled="categoryBusy" :loading="categoryDeleting === row.id" @click="deleteCategory(row)">删除</el-button></template></el-table-column>
@@ -144,7 +144,7 @@
     <div v-if="!editingCategory" class="category-examples"><span>使用示例</span><el-button v-for="preset in categoryPresets" :key="preset.name" plain :disabled="categoryBusy" @click="prefillCategory(preset)">{{ preset.name }}</el-button></div>
     <div class="category-basic-grid">
       <el-form-item label="类别名称"><el-input v-model="categoryForm.name" placeholder="例如：管网安全" /></el-form-item>
-      <el-form-item label="适用内容"><el-select v-model="categoryForm.appliesTo"><el-option label="全部" value="all" /><el-option label="新闻资讯" value="news" /><el-option label="论文" value="paper" /></el-select></el-form-item>
+      <el-form-item label="适用内容"><el-select v-model="categoryForm.appliesTo"><el-option label="全部" value="all" /><el-option label="新闻资讯" value="news" /><el-option label="论文" value="paper" /><el-option label="上传资料" value="document" /></el-select></el-form-item>
     </div>
     <el-form-item label="分类要求" class="category-prompt-field">
       <p class="category-prompt-help">用自己的话描述哪些内容属于这个类别，可补充关注重点和排除条件。</p>

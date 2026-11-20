@@ -7,6 +7,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.business_ids import wire_id
 from app.business_time import audit_as_utc, format_business_time
+from app.intelligence.models.categories import PipelineCategory as Category
 from app.library.models.materials import PipelineMaterial as Material
 from app.research.models.research_models import PipelineReport as Report
 from app.research.models.research_models import PipelineReportVersion as Version
@@ -22,7 +23,7 @@ def _format_generation_time(value: datetime | None) -> str:
 
 
 async def report_page(
-    db, *, user_id=None, page=1, page_size=20, keyword='', status='', kind='', sort='updated-desc', start='', end=''
+    db, *, user_id=None, page=1, page_size=20, keyword='', status='', kind='', sort='', start='', end=''
 ) -> dict:
     latest = select(
         Job.report_id,
@@ -117,11 +118,15 @@ async def report_page(
     if end:
         query = query.where(period[0].as_string() <= end)
     total = await db.scalar(select(func.count()).select_from(query.subquery()))
+    effective_sort = sort or ('generated-desc' if kind in {*digest_types, 'digest', 'brief'} else 'updated-desc')
+    visible_generation_time = case((has_output, generated_at), else_=None)
     order = {
         'updated-asc': Report.updated_at.asc(),
         'title': Report.title.asc(),
         'title-desc': Report.title.desc(),
-    }.get(sort, Report.updated_at.desc())
+        'generated-desc': visible_generation_time.desc().nullslast(),
+        'generated-asc': visible_generation_time.asc().nullslast(),
+    }.get(effective_sort, Report.updated_at.desc())
     rows = (
         (await db.execute(query.order_by(order, Report.id.desc()).offset((page - 1) * page_size).limit(page_size)))
         .mappings()
@@ -175,26 +180,34 @@ def _material_content_key() -> ColumnElement[str]:
 
 async def material_page(db, *, user_id, page=1, page_size=20, keyword='', status='', classification='') -> dict:
     content_key = _material_content_key()
-    query = select(
-        Material.id,
-        Material.user_id,
-        Material.name,
-        Material.filename,
-        Material.size,
-        Material.hash,
-        Material.status,
-        Material.error,
-        Material.version,
-        Material.updated_at,
-        Material.created_at,
-        Material.edited_text.is_not(None).label('is_edited'),
-        content_key.label('content_key'),
-        func.row_number()
-        .over(partition_by=content_key, order_by=((Material.status == 'ready').desc(), Material.id.asc()))
-        .label('duplicate_rank'),
-        func.max(Material.updated_at).over(partition_by=content_key).label('last_updated'),
-        func.substr(func.coalesce(Material.edited_text, Material.extracted_text, ''), 1, 240).label('summary'),
-    ).where(Material.user_id == user_id)
+    query = (
+        select(
+            Material.id,
+            Material.user_id,
+            Material.name,
+            Material.filename,
+            Material.size,
+            Material.hash,
+            Material.status,
+            Material.error,
+            Material.version,
+            Material.updated_at,
+            Material.created_at,
+            Material.category_id,
+            Category.name.label('category_name'),
+            Material.classification_status,
+            Material.classification_error,
+            Material.edited_text.is_not(None).label('is_edited'),
+            content_key.label('content_key'),
+            func.row_number()
+            .over(partition_by=content_key, order_by=((Material.status == 'ready').desc(), Material.id.asc()))
+            .label('duplicate_rank'),
+            func.max(Material.updated_at).over(partition_by=content_key).label('last_updated'),
+            func.substr(func.coalesce(Material.edited_text, Material.extracted_text, ''), 1, 240).label('summary'),
+        )
+        .outerjoin(Category, Category.id == Material.category_id)
+        .where(Material.user_id == user_id)
+    )
     if keyword.strip():
         term = '%' + keyword.strip().replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
         query = query.where(
@@ -207,8 +220,10 @@ async def material_page(db, *, user_id, page=1, page_size=20, keyword='', status
     if status and status != 'all':
         query = query.where(Material.status.in_(groups.get(status, [status])))
     if classification:
-        # Materials currently have no classification field; never invent one from file type.
-        query = query.where(False)
+        category_match = Category.name == classification
+        if classification == '未分类':
+            category_match = or_(Material.category_id.is_(None), category_match)
+        query = query.where(category_match)
     # Deduplicate the complete filtered set before counting or applying OFFSET.
     # Doing this on a single browser page produced short pages and false totals.
     ranked = query.subquery()
@@ -257,6 +272,10 @@ async def material_page(db, *, user_id, page=1, page_size=20, keyword='', status
                     r['status'], r['status']
                 ),
                 'parseMessage': r['error'] or '',
+                'categoryId': wire_id(r['category_id']) if r['category_id'] is not None else None,
+                'categoryName': r['category_name'] or '',
+                'classificationStatus': r['classification_status'],
+                'classificationError': r['classification_error'] or '',
                 'summary': r['summary'],
                 'versionNo': r['version'],
                 'version': f'V{r["version"]}.0',

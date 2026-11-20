@@ -1,7 +1,7 @@
--- compact-v19中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；自动计划累计执行结果。
+-- compact-v20中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；自动计划累计执行结果。
 -- 27个业务created_at/updated_at为北京时间timestamp(0)无时区；其他运行时间字段保持原类型。
 -- 普通不透明令牌保留；系统幂等键内嵌ID、显式JSON引用及语义指纹按实体映射核验。
--- 28张基线表354字段，2张保留功能表23字段；共30张物理表377字段。
+-- 28张基线表359字段，2张保留功能表23字段；共30张物理表382字段。
 -- 仅COMMENT及存在性保护块；调用方管理事务，不修改字段、约束或业务数据。
 
 COMMENT ON TABLE public."news_articles" IS '网站与公众号新闻原文及中文译文；每篇最多关联一个类别，无人工审核流程';
@@ -46,7 +46,7 @@ COMMENT ON COLUMN public."categories"."id" IS '类别数值主键；BIGINT正整
 COMMENT ON COLUMN public."categories"."name" IS '管理员设置的唯一类别名称；必填且禁止空白文本';
 COMMENT ON COLUMN public."categories"."prompt" IS '管理员编写的过滤分类标准；保留原提示语及变量，修改仅影响后续处理';
 COMMENT ON COLUMN public."categories"."model_id" IS '分类文本模型ID，关联ai_models.id；暂未配置时为空，启用分类前必须配置';
-COMMENT ON COLUMN public."categories"."applies_to" IS '适用内容类型：news新闻、paper论文、all两者；默认all';
+COMMENT ON COLUMN public."categories"."applies_to" IS '适用内容类型：news新闻、paper论文、document上传资料、all全部三者；默认all，不改变历史归类';
 COMMENT ON COLUMN public."categories"."is_enabled" IS '是否参加后续分类；true启用、false停用，停用不清除历史关联';
 COMMENT ON COLUMN public."categories"."sort_order" IS '前台类别排序值；整数，默认0';
 COMMENT ON COLUMN public."categories"."created_at" IS '类别创建时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss';
@@ -81,8 +81,13 @@ COMMENT ON COLUMN public."knowledge_files"."edited_text" IS '用户编辑正文�
 COMMENT ON COLUMN public."knowledge_files"."version" IS '资料编辑并发控制版本；从1开始，每次编辑递增';
 COMMENT ON COLUMN public."knowledge_files"."status" IS '解析状态：queued排队、parsing解析中、ready就绪、failed失败；非人工审核状态';
 COMMENT ON COLUMN public."knowledge_files"."error" IS '解析失败的脱敏简短原因；不保存密钥或完整堆栈';
+COMMENT ON COLUMN public."knowledge_files"."category_id" IS '资料唯一类别ID，关联categories.id；未分类、未配置或未唯一命中为空；BIGINT数值外键，引用业务表数值主键，API使用十进制字符串';
+COMMENT ON COLUMN public."knowledge_files"."classification_status" IS '资料分类状态：queued待分类、running分类中、completed已完成、failed失败、not_configured未配置；历史资料不自动发起模型调用';
+COMMENT ON COLUMN public."knowledge_files"."classification_error" IS '资料分类失败或未配置的脱敏说明；保留可重试原因，不保存密钥、原文或供应商响应';
+COMMENT ON COLUMN public."knowledge_files"."classification_token" IS '资料分类单次执行的普通不透明随机令牌；UUID不包含业务ID，只用于隔离旧结果回写，不向接口输出';
+COMMENT ON COLUMN public."knowledge_files"."classification_updated_at" IS '资料分类任务最近认领或结束时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；用于识别中断，不触发自动付费重试';
 COMMENT ON COLUMN public."knowledge_files"."created_at" IS '上传资料保存时间，不表示解析已成功；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss';
-COMMENT ON COLUMN public."knowledge_files"."updated_at" IS '资料编辑或解析状态最近更新时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss';
+COMMENT ON COLUMN public."knowledge_files"."updated_at" IS '资料编辑、解析或分类状态最近更新时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss';
 
 COMMENT ON TABLE public."templates" IS '文章、科研报告与简报生成模板；正文及图片模型由管理员配置，可暂未配置';
 COMMENT ON COLUMN public."templates"."digest_cadence" IS '简报适用周期：weekly周报、monthly月报、all通用；daily仅兼容历史，与名称无关';

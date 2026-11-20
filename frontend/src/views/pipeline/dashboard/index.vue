@@ -6,6 +6,12 @@
     </el-alert>
     <el-skeleton v-else-if="loading && !dashboard.metrics.length" :rows="8" animated />
     <template v-else>
+      <section v-if="dashboard.queue_health" class="queue-health" aria-label="后台生成服务状态">
+        <el-alert :type="dashboard.queue_health.status === 'ok' ? 'success' : 'error'" :closable="false" show-icon>
+          <template #title>{{ queueHealthTitle }}</template>
+          <template #default>排队 {{ dashboard.queue_health.queued }} 项 · 执行中 {{ dashboard.queue_health.running }} 项 · 最长等待 {{ Math.ceil(dashboard.queue_health.oldestWaitSeconds / 60) }} 分钟 · 近 24 小时失败 {{ dashboard.queue_health.failed24h }} 项 <el-button plain @click="loadDashboard">刷新状态</el-button></template>
+        </el-alert>
+      </section>
       <section class="metric-grid" aria-label="内容总览">
         <el-card v-for="item in dashboard.metrics" :key="item.label" shadow="never" class="metric-card">
           <el-icon class="metric-icon" aria-hidden="true"><component :is="metricIcon(item.label)" /></el-icon>
@@ -62,6 +68,15 @@ defineOptions({ name: 'PipelineDashboard' })
 const loading = ref(false)
 const dashboardError = ref('')
 const dashboard = ref({ metrics: [], collect_status: [], hot_topics: [] })
+const queueHealthTitle = computed(() => {
+  const health = dashboard.value.queue_health
+  if (health?.status === 'ok') return '后台任务服务运行中'
+  if (health?.reason === 'queue_scan_failed') {
+    const names = { research: '科研生成', digest: '简报计划', exports: '报告导出', materials: '资料处理', export_cleanup: '文件清理' }
+    return `后台任务扫描异常：${(health.queues || []).map(name => names[name] || name).join('、')}，请检查 Worker`
+  }
+  return '后台任务服务心跳异常，请检查 Worker'
+})
 const adminEntries = [
   { title: '数据源管理', description: '维护网站、公众号和论文来源', path: '/pipeline/source', permission: 'pipeline:source:list', icon: Connection },
   { title: '采集任务', description: '调度采集、清洗和解析任务', path: '/pipeline/task', permission: 'pipeline:task:list', icon: DataAnalysis },

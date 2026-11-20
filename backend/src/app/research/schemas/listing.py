@@ -10,7 +10,7 @@ class ReportListQuery(BaseModel):
     keyword: str = Field(default='', max_length=200)
     status: str = Field(default='', max_length=32)
     kind: Literal['', 'research', 'digest', 'brief', 'daily', 'weekly', 'monthly'] = ''
-    sort: Literal['updated-desc', 'updated-asc', 'title', 'title-desc'] = 'updated-desc'
+    sort: Literal['', 'updated-desc', 'updated-asc', 'generated-desc', 'generated-asc', 'title', 'title-desc'] = ''
     start: str = Field(default='', pattern=r'^(?:\d{4}-\d{2}-\d{2})?$')
     end: str = Field(default='', pattern=r'^(?:\d{4}-\d{2}-\d{2})?$')
 

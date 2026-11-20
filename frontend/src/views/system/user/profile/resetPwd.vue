@@ -10,7 +10,7 @@
          <el-input v-model="user.confirmPassword" placeholder="请确认新密码" type="password" show-password/>
       </el-form-item>
       <el-form-item>
-      <el-button type="primary" @click="submit">保存</el-button>
+      <el-button type="primary" :loading="saving" @click="submit">保存</el-button>
       <el-button type="danger" @click="close">关闭</el-button>
       </el-form-item>
    </el-form>
@@ -18,8 +18,13 @@
 
 <script setup>
 import { updateUserPwd } from "@/api/system/user";
+import useUserStore from "@/store/modules/user";
+import { useRouter } from "vue-router";
 
 const { proxy } = getCurrentInstance();
+const userStore = useUserStore();
+const router = useRouter();
+const saving = ref(false);
 
 const user = reactive({
   oldPassword: undefined,
@@ -41,14 +46,21 @@ const rules = ref({
 });
 
 /** 提交按钮 */
-function submit() {
-  proxy.$refs.pwdRef.validate(valid => {
-    if (valid) {
-      updateUserPwd(user.oldPassword, user.newPassword).then(response => {
-        proxy.$modal.msgSuccess("修改成功");
-      });
-    }
-  });
+async function submit() {
+  if (saving.value) return;
+  const valid = await proxy.$refs.pwdRef.validate().catch(() => false);
+  if (!valid || saving.value) return;
+  saving.value = true;
+  try {
+    await updateUserPwd(user.oldPassword, user.newPassword);
+    proxy.$modal.msgSuccess("密码修改成功，请重新登录");
+    await userStore.logOut();
+    await router.replace('/login');
+  } catch (error) {
+    proxy.$modal.msgError(error?.msg || error?.message || "密码修改失败，请重试");
+  } finally {
+    saving.value = false;
+  }
 };
 /** 关闭按钮 */
 function close() {

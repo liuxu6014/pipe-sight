@@ -38,6 +38,7 @@ async def test_dashboard_totals_merge_categories_and_preserve_collection_status(
                         )
                     ]
                 ),
+                SimpleNamespace(one=lambda: (2, 1, 3, None)),
                 count(12),
                 count(4),
                 count(8),
@@ -58,6 +59,9 @@ async def test_dashboard_totals_merge_categories_and_preserve_collection_status(
         }
     ]
     assert 'pending_reviews' not in result
+    assert result['queue_health']['queued'] == 2
+    assert result['queue_health']['running'] == 1
+    assert result['queue_health']['failed24h'] == 3
     for call in db.execute.await_args_list:
         sql = str(call.args[0].compile(compile_kwargs={'literal_binds': True}))
         assert 'review_status' not in sql and 'permission_scope' not in sql

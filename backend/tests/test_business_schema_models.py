@@ -16,7 +16,7 @@ from config.database import Base
 
 register_sqlalchemy_models()
 BUSINESS_TABLES = {*BUSINESS_ID_TABLES, 'ai_models', 'basket_items', 'report_versions'}
-BUSINESS_COLUMN_COUNT = 215
+BUSINESS_COLUMN_COUNT = 220
 MISSING_DEFAULT_COUNT = 33
 MISSING_DEFAULTS = {
     'ai_models': ('parameters', 'created_at', 'updated_at'),
@@ -58,7 +58,11 @@ CATALOG_INDEX_NAMES = {
         'uk_generation_tasks_request_id',
         'uk_generation_tasks_id_report_id',
     },
-    'knowledge_files': {'idx_knowledge_files_user_id', 'idx_knowledge_files_status_updated_at'},
+    'knowledge_files': {
+        'idx_knowledge_files_user_id',
+        'idx_knowledge_files_status_updated_at',
+        'idx_knowledge_files_classification_queue',
+    },
     'model_calls': {'idx_model_calls_model_id_created_at', 'idx_model_calls_task_id_created_at'},
     'news_articles': {
         'idx_news_articles_category_id',

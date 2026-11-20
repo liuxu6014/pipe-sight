@@ -20,7 +20,7 @@
         <el-button v-if="isDigest" :icon="View" @click="openCurrentPreview">预览</el-button>
         <el-button :icon="CircleCheck" v-if="report.requiresReview" :disabled="isReadOnly" type="success" @click="finalizeReport">确认复核并定稿</el-button>
         <el-dropdown trigger="click" @command="exportReport">
-          <el-button :icon="Download" type="primary" :disabled="report.readOnly">{{ report.requiresReview ? '导出草稿' : '导出报告' }}<ArrowDown /></el-button>
+          <el-button :icon="Download" type="primary" :disabled="report.readOnly || exporting" :loading="exporting">{{ exporting ? '正在导出' : report.requiresReview ? '导出草稿' : '导出报告' }}<ArrowDown /></el-button>
           <template #dropdown><el-dropdown-menu>
             <el-dropdown-item command="markdown">Markdown 文档</el-dropdown-item>
             <el-dropdown-item command="docx">Word 文档</el-dropdown-item>
@@ -153,6 +153,7 @@ const loaded = ref(false)
 const loadError = ref('')
 const saving = ref(false)
 const versionSaving = ref(false)
+const exporting = ref(false)
 const saveState = ref('saved')
 const isEditing = ref(false)
 const outlineVisible = ref(true)
@@ -541,29 +542,68 @@ async function finalizeReport() {
     ElMessage.error(error?.msg || '报告定稿失败，请刷新后重试')
   }
 }
-async function waitAndDownloadExport(format) {
-  const prefix = report.value.requiresReview ? '草稿_' : ''
-  const filename = `${prefix}${report.value.title}.${format}`.replace(/[\\/:*?"<>|]/g, '_')
-  const created = await createPipelineResearchReportExport(report.value.id, { format, allowDraft: report.value.requiresReview })
+async function waitAndDownloadExport(format, target, active) {
+  const prefix = target.requiresReview ? '草稿_' : ''
+  const filename = `${prefix}${target.title}.${format}`.replace(/[\\/:*?"<>|]/g, '_')
+  const created = await createPipelineResearchReportExport(target.id, { format, allowDraft: target.requiresReview })
+  if (!active()) return false
   const exportId = created.data?.exportId
   if (!exportId) throw new Error('导出任务创建失败')
+  const viewingTarget = () => String(report.value.id) === target.id && String(route.params.id) === target.id
+  if (viewingTarget()) {
+    inspectorVisible.value = true
+    activeRightTab.value = '导出记录'
+    loadExports()
+  }
   for (let attempt = 0; attempt < 60; attempt += 1) {
     await new Promise(resolve => setTimeout(resolve, 500))
-    const result = await listPipelineResearchReportExports(report.value.id)
-    const item = (result.data?.rows || []).find(row => row.exportId === exportId)
+    if (!active()) return false
+    let result
+    try { result = await listPipelineResearchReportExports(target.id) }
+    catch { throw new Error(`《${target.title}》导出任务已创建，状态暂时读取失败，可在该报告的导出记录中继续查看，无需重复提交。`) }
+    if (!active()) return false
+    const item = (result.data?.rows || []).find(row => String(row.exportId) === String(exportId))
     if (item?.status === 'completed') {
       await downloadPipelineResearchReportExport(exportId, filename)
-      await loadExports()
-      return
+      if (active() && viewingTarget()) loadExports()
+      return active()
     }
     if (item?.status === 'failed') throw new Error(item.errorMessage || '导出任务失败')
   }
-  throw new Error('导出任务处理超时，请稍后在导出记录中重试')
+  throw new Error(`《${target.title}》导出任务已创建，等待超时，请在该报告的导出记录中查看后续状态，无需重复提交。`)
 }
 
 function loadExports() { exportRefreshKey.value++ }
 
-async function exportReport(format = 'markdown') { try { await ensureSaved(); const params = { allowDraft: report.value.requiresReview }; if (format === 'markdown') { const res = await exportPipelineResearchReport(report.value.id, params); const blob = new Blob([res.data.content], { type: 'text/markdown;charset=utf-8' }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = res.data.fileName || `${report.value.title}.md`; link.click(); URL.revokeObjectURL(url); ElMessage.success(res.data.isDraft ? '草稿已导出' : 'Markdown 报告已导出') } else { await waitAndDownloadExport(format); ElMessage.success(`${format.toUpperCase()} 报告已导出`) } } catch (error) { ElMessage.error(error.message === 'report has unsaved changes' ? '当前修改未保存，请先重试保存' : error?.msg || '报告导出失败') } }
+async function exportReport(format = 'markdown') {
+  if (editorDisposed || report.value.readOnly || exporting.value || !['markdown', 'docx', 'pdf'].includes(format)) return
+  const id = String(report.value.id), account = portalStore.workspaceEpoch
+  const active = () => !editorDisposed && account === portalStore.workspaceEpoch && Boolean(getToken())
+  let target
+  exporting.value = true
+  try {
+    await ensureSaved()
+    if (!active() || String(report.value.id) !== id) return
+    // Keep the task's identity even when this component loads another report.
+    target = { id, title: report.value.title, requiresReview: Boolean(report.value.requiresReview) }
+    if (format === 'markdown') {
+      const res = await exportPipelineResearchReport(id, { allowDraft: target.requiresReview })
+      if (!active()) return
+      const blob = new Blob([res.data.content], { type: 'text/markdown;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      try {
+        const link = document.createElement('a')
+        link.href = url; link.download = res.data.fileName || `${target.title}.md`; link.click()
+      } finally { URL.revokeObjectURL(url) }
+      ElMessage.success(`《${target.title}》${res.data.isDraft ? '草稿' : 'Markdown 报告'}已导出`)
+    } else if (await waitAndDownloadExport(format, target, active)) ElMessage.success(`《${target.title}》${format.toUpperCase()} 报告已导出`)
+  } catch (error) {
+    if (active()) {
+      const message = error?.message === 'report has unsaved changes' ? '当前修改未保存，请先重试保存' : error?.msg || error?.message || '报告导出失败'
+      ElMessage.error(target && !message.includes(`《${target.title}》`) ? `《${target.title}》${message}` : message)
+    }
+  } finally { exporting.value = false }
+}
 function openCitation(source) {
   const path = getCitationPath(source)
   if (path) return openPortalContent(router, path)

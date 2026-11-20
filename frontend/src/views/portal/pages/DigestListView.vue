@@ -4,8 +4,8 @@
     <div v-if="currentError" class="ps-inline-state is-warning" role="alert"><span>{{ currentError }}</span><el-button plain @click="refreshCurrent">重试</el-button></div>
     <div class="ps-tabs-line ps-segmented-row"><el-segmented v-model="activeTab" :options="tabs" aria-label="简报与自动计划"  /></div>
     <section v-if="activeTab !== '自动任务'" ref="listRegion" class="ps-panel ps-digest-list ps-list-scroll" tabindex="0" aria-label="简报列表">
-      <el-table v-if="filteredReports.length" :data="pagedReports" row-key="id" :max-height="listHeight" style="width: 100%" class="ps-digest-records-table">
-        <el-table-column header-align="center" label="简报名称" min-width="320"><template #default="{ row }">
+      <el-table v-if="filteredReports.length" :data="pagedReports" row-key="id" :max-height="listHeight" :default-sort="tableSort" @sort-change="changeReportSort" style="width: 100%" class="ps-digest-records-table">
+        <el-table-column header-align="center" prop="title" label="简报名称" min-width="320" sortable="custom" :sort-orders="['ascending', 'descending']"><template #default="{ row }">
           <div class="ps-digest-identity">
             <el-icon class="ps-digest-file-icon" aria-hidden="true"><Document /></el-icon>
             <div class="ps-digest-title-copy">
@@ -17,7 +17,7 @@
         <el-table-column header-align="center" align="center" label="类型" width="90"><template #default="{ row }"><el-tag effect="plain" :type="scheduleType(row.reportType || row.type) === '月报' ? 'success' : 'primary'">{{ scheduleType(row.reportType || row.type) }}</el-tag></template></el-table-column>
         <el-table-column header-align="center" prop="period" label="覆盖周期" width="220"><template #default="{ row }"><span class="ps-digest-period">{{ row.period }}</span></template></el-table-column>
         <el-table-column header-align="center" label="状态" width="104"><template #default="{ row }"><el-tag :type="({ success: 'success', warning: 'warning', running: 'primary' })[statusClass(row.status)] || 'info'">{{ row.status }}</el-tag></template></el-table-column>
-        <el-table-column header-align="center" prop="generatedAt" label="生成时间" width="180"><template #default="{ row }"><time v-if="row.generatedAt">{{ row.generatedAt }}</time><span v-else>—</span></template></el-table-column>
+        <el-table-column header-align="center" prop="generatedAt" label="生成时间" width="180" sortable="custom" :sort-orders="['descending', 'ascending']"><template #default="{ row }"><time v-if="row.generatedAt">{{ row.generatedAt }}</time><span v-else>—</span></template></el-table-column>
         <el-table-column header-align="center" label="操作" width="164" align="right">
           <template #default="{ row: report }">
             <div class="ps-digest-row-actions">
@@ -124,9 +124,19 @@ watch(listRegion, element => {
   })
   listResizeObserver.observe(element)
 }, { flush: 'post' })
-const controls = bindListQuery(route, router, { q: '', dates: [], status: 'all', tab: '', page: 1, size: 10 })
+const controls = bindListQuery(route, router, { q: '', dates: [], status: 'all', tab: '', sort: 'generated-desc', page: 1, size: 10 })
 const { q: keyword, status, page: currentPage, size: pageSize } = toRefs(controls)
 const date = computed({ get: () => controls.dates, set: value => { controls.dates = value || [] } })
+const reportSorts = ['generated-desc', 'generated-asc', 'title', 'title-desc']
+const sort = computed({ get: () => reportSorts.includes(controls.sort) ? controls.sort : 'generated-desc', set: value => { controls.sort = value } })
+const tableSort = computed(() => ({
+  prop: sort.value.startsWith('title') ? 'title' : 'generatedAt',
+  order: ['title', 'generated-asc'].includes(sort.value) ? 'ascending' : 'descending'
+}))
+function changeReportSort({ prop, order }) {
+  sort.value = prop === 'title' && order ? (order === 'descending' ? 'title-desc' : 'title')
+    : order === 'ascending' ? 'generated-asc' : 'generated-desc'
+}
 const tabLabels = { '': '全部', weekly: '周报', monthly: '月报', schedules: '自动任务' }
 const activeTab = computed({
   get: () => tabLabels[controls.tab] || '全部',
@@ -151,7 +161,7 @@ const deletingScheduleId = ref('')
 const tabs = Object.values(tabLabels)
 function isDaily(row) { return ['daily', '日报'].includes(row?.reportType || row?.type) }
 const filteredSchedules = computed(() => schedules.value.filter(item => !keyword.value || item.name.includes(keyword.value)))
-const params = computed(() => ({ pageNum: currentPage.value, pageSize: pageSize.value, keyword: keyword.value, status: status.value, kind: ({ '周报': 'weekly', '月报': 'monthly' })[activeTab.value] || 'brief', start: date.value?.[0] || '', end: date.value?.[1] || '' }))
+const params = computed(() => ({ pageNum: currentPage.value, pageSize: pageSize.value, keyword: keyword.value, status: status.value, kind: ({ '周报': 'weekly', '月报': 'monthly' })[activeTab.value] || 'brief', sort: sort.value, start: date.value?.[0] || '', end: date.value?.[1] || '' }))
 const { rows: digestRows, total: reportsTotal, error: reportsError, loading: reportsLoading, refresh: loadReports } = usePagedResults(listPipelineResearchReports, params, computed(() => portalStore.workspaceEpoch), currentPage, computed(() => activeTab.value !== '自动任务'))
 const pagedReports = computed(() => digestRows.value.map(item => { const row = reportSummaryRow(item); return { ...row, status: row.hasOutput ? '已完成' : row.statusLabel } }))
 const filteredReports = pagedReports

@@ -250,6 +250,14 @@ export function reparsePipelineKnowledgeDocument(documentId) {
   })
 }
 
+export function classifyPipelineKnowledgeDocument(documentId) {
+  return request({ url: `/pipeline/knowledge/documents/${requireBusinessId(documentId)}/classify`, method: 'post', data: { consent: true } })
+}
+
+export function getPipelineKnowledgeCategories() {
+  return request({ url: '/pipeline/knowledge/categories', method: 'get' })
+}
+
 export function deletePipelineKnowledgeDocument(documentId) {
   return request({
     url: `/pipeline/knowledge/documents/${requireBusinessId(documentId)}`,

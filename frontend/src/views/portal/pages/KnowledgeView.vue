@@ -38,7 +38,7 @@
           </template>
         </el-table-column>
         <el-table-column label="类别" width="100" header-align="center" align="center">
-          <template #default="{ row: doc }"><el-tag class="ps-library-category" effect="plain" :type="contentCategory(doc) ? 'primary' : 'info'">{{ contentCategory(doc) || '待分类' }}</el-tag></template>
+          <template #default="{ row: doc }"><el-tag class="ps-library-category" effect="plain" :type="contentCategory(doc) ? 'primary' : 'info'" :title="doc.classificationError || ''">{{ contentCategory(doc) || materialClassificationLabel(doc) }}</el-tag></template>
         </el-table-column>
         <el-table-column label="解析状态" width="110" header-align="center" align="center">
           <template #default="{ row: doc }"><b class="ps-parse-state" :class="statusClass(doc.status)"><i></i>{{ doc.status }}</b></template>
@@ -49,7 +49,7 @@
         <el-table-column label="操作" width="250" fixed="right" header-align="center" align="right">
           <template #default="{ row: doc }"><div class="ps-row-actions">
           <el-button plain type="primary" @click="openDocument(doc)">查看</el-button>
-          <el-button v-if="doc.canManage !== false" plain :loading="isReparsing(doc.id)" :disabled="Boolean(deletingId)" :aria-label="`${doc.status === '解析失败' ? '重试解析' : '重新解析'}：${doc.name}`" @click="reparse(doc)">{{ doc.status === '解析失败' ? '重试解析' : '重新解析' }}</el-button>
+          <el-button v-if="doc.canManage !== false" plain :loading="isReparsing(doc.id)" :disabled="Boolean(deletingId)" :aria-label="`${canRetryMaterialClassification(doc) ? '重试分类' : doc.status === '解析失败' ? '重试解析' : '重新解析'}：${doc.name}`" @click="reparse(doc)">{{ canRetryMaterialClassification(doc) ? '重试分类' : doc.status === '解析失败' ? '重试解析' : '重新解析' }}</el-button>
           <el-button v-if="doc.canManage === true" plain type="danger" :loading="deletingId === `${doc.kind}:${doc.id}`" :disabled="Boolean(deletingId)" @click="deleteLibraryItem(doc)">删除</el-button>
 
           </div></template>
@@ -75,14 +75,14 @@
             </div>
           </div>
           <div class="ps-library-card-meta">
-            <el-tag effect="plain" :type="contentCategory(doc) ? 'primary' : 'info'">{{ contentCategory(doc) || '待分类' }}</el-tag>
+            <el-tag effect="plain" :type="contentCategory(doc) ? 'primary' : 'info'" :title="doc.classificationError || ''">{{ contentCategory(doc) || materialClassificationLabel(doc) }}</el-tag>
             <b class="ps-parse-state" :class="statusClass(doc.status)"><i></i>{{ doc.status }}</b>
             <time>{{ doc.updatedAt || doc.publishedDate || doc.time || '—' }}</time>
           </div>
           <small v-if="doc.scanStatus && doc.scanStatus !== 'clean'" class="ps-doc-security-state">安全状态：{{ scanStatusLabel(doc.scanStatus) }}{{ doc.scanMessage ? ` · ${doc.scanMessage}` : '' }}</small>
           <div class="ps-row-actions">
             <el-button plain type="primary" @click="openDocument(doc)">查看</el-button>
-            <el-button v-if="doc.canManage !== false" plain :loading="isReparsing(doc.id)" :disabled="Boolean(deletingId)" :aria-label="`${doc.status === '解析失败' ? '重试解析' : '重新解析'}：${doc.name}`" @click="reparse(doc)">{{ doc.status === '解析失败' ? '重试解析' : '重新解析' }}</el-button>
+            <el-button v-if="doc.canManage !== false" plain :loading="isReparsing(doc.id)" :disabled="Boolean(deletingId)" :aria-label="`${canRetryMaterialClassification(doc) ? '重试分类' : doc.status === '解析失败' ? '重试解析' : '重新解析'}：${doc.name}`" @click="reparse(doc)">{{ canRetryMaterialClassification(doc) ? '重试分类' : doc.status === '解析失败' ? '重试解析' : '重新解析' }}</el-button>
             <el-button v-if="doc.canManage === true" plain type="danger" :loading="deletingId === `${doc.kind}:${doc.id}`" :disabled="Boolean(deletingId)" @click="deleteLibraryItem(doc)">删除</el-button>
           </div>
         </article>
@@ -116,7 +116,7 @@
         已选择 {{ uploadFiles.length }} 份资料<span v-if="uploading">，正在上传第 {{ completedUploads + 1 }} 份</span>
       </div>
       <p class="ps-upload-private-note">上传后保存到个人资料库，仅自己可见。</p>
-      <el-alert title="分类方式：系统提示词" description="资料解析后将由统一提示词分类；当前自动分类接口待接入，暂显示为待分类，不会把文件类型或关键词当作类别。" type="info" show-icon :closable="false" />
+      <el-alert title="分类方式：系统提示词" description="上传后仅解析资料。需要分类时，先确认允许将标题和正文发送至管理员配置的模型服务。取消后不会提交，原文和解析结果保留。" type="info" show-icon :closable="false" />
       <template #footer>
         <el-button :disabled="uploading" @click="uploadVisible = false">取消</el-button>
         <el-button type="primary" :loading="uploading" :disabled="!uploadFiles.length" @click="finishUpload">开始上传</el-button>
@@ -138,12 +138,15 @@ import {
   deletePipelineKnowledgeDocument,
   listPipelineKnowledgeDocuments,
   reparsePipelineKnowledgeDocument,
+  classifyPipelineKnowledgeDocument,
+  getPipelineKnowledgeCategories,
   uploadPipelineKnowledgeDocument
 } from '@/api/pipeline/intelligence'
-import { useListQuery, validPage } from '@/utils/portal/listQuery'
+import { useListQuery, useListRequest, validPage } from '@/utils/portal/listQuery'
 import { usePagedResults } from '@/utils/portal/usePagedResults'
 import { buildLibraryItems, libraryItemPath } from '@/utils/portal/libraryItems'
 import { contentCategory } from '@/utils/portal/contentPresentation'
+import { materialClassificationLabel, canRetryMaterialClassification } from '@/utils/portal/materialClassification'
 
 const MAX_FILE_SIZE = 16 * 1024 * 1024
 const ALLOWED_EXTENSIONS = new Set(['pdf', 'docx', 'md', 'txt'])
@@ -178,9 +181,10 @@ const reparsingIds = ref(new Set())
 const params = computed(() => ({ pageNum: currentPage.value, pageSize: pageSize.value, keyword: keyword.value, status: parseStatus.value, classification: classification.value }))
 const { rows: documents, total, error: pageError, loading: pageLoading, refresh: loadDocumentPage } = usePagedResults(listPipelineKnowledgeDocuments, params, computed(() => portalStore.workspaceEpoch), currentPage)
 const libraryItems = computed(() => buildLibraryItems([], documents.value))
-const libraryCategories = computed(() => [...new Set(libraryItems.value.map(contentCategory).filter(Boolean))])
+const categoryOptions = useListRequest(() => ({ epoch: portalStore.workspaceEpoch }), () => getPipelineKnowledgeCategories())
+const libraryCategories = computed(() => [...new Set(['未分类', ...(categoryOptions.data.value?.rows || []), ...libraryItems.value.map(contentCategory).filter(Boolean), ...(classification.value ? [classification.value] : [])])])
 const parsingRefreshError = ref('')
-const hasParsingDocuments = computed(() => documents.value.some(doc => ['queued', 'planned', 'parsing', '解析中', '待解析', '等待解析', '待安全扫描'].includes(doc.parseStatus || doc.status)))
+const hasParsingDocuments = computed(() => documents.value.some(doc => ['queued', 'planned', 'parsing', '解析中', '待解析', '等待解析', '待安全扫描'].includes(doc.parseStatus || doc.status) || (['ready', '已解析'].includes(doc.parseStatus || doc.status) && ['queued', 'running'].includes(doc.classificationStatus))))
 let parsingTimer
 let parsingStopped = false
 let parsingRunning = false
@@ -218,6 +222,7 @@ async function refreshParsingDocuments() {
     total.value = response.data.total
     if (portalStore.sectionErrors) portalStore.sectionErrors = { ...portalStore.sectionErrors, documents: '' }
     parsingRefreshError.value = ''
+    void categoryOptions.reload()
   } catch {
     if (!parsingStopped && generation === parsingGeneration && epoch === portalStore.workspaceEpoch) parsingRefreshError.value = '状态更新暂时失败，正在自动重试'
   } finally { parsingRunning = false; scheduleParsingRefresh() }
@@ -288,11 +293,18 @@ async function reparse(doc) {
   const epoch = portalStore.workspaceEpoch
   reparsingIds.value = new Set([...reparsingIds.value, doc.id])
   try {
-    const response = await reparsePipelineKnowledgeDocument(doc.id)
+    const classificationOnly = canRetryMaterialClassification(doc)
+    if (classificationOnly) {
+      try {
+        await ElMessageBox.confirm('资料标题和正文将发送至管理员配置的模型服务进行分类。请确认这份资料允许发送。', '提交模型分类', { type: 'warning', confirmButtonText: '同意并提交', cancelButtonText: '取消' })
+      } catch { return }
+      if (parsingStopped || epoch !== portalStore.workspaceEpoch) return
+    }
+    const response = await (classificationOnly ? classifyPipelineKnowledgeDocument(doc.id) : reparsePipelineKnowledgeDocument(doc.id))
     if (parsingStopped || epoch !== portalStore.workspaceEpoch) return
     if (!response?.data || String(response.data.id) !== String(doc.id)) throw new Error('重试状态获取失败，请稍后刷新')
     documents.value = documents.value.map(row => String(row.id) === String(doc.id) ? { ...row, ...response.data } : row)
-    ElMessage.success('已提交重新解析')
+    ElMessage.success(classificationOnly ? '已提交资料分类，正文和解析结果保留' : '已提交重新解析')
   } catch (error) {
     if (!parsingStopped && epoch === portalStore.workspaceEpoch) ElMessage.error(error?.msg || error?.message || '重试失败，请稍后再试')
   } finally {

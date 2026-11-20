@@ -11,6 +11,7 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from app.infrastructure.services.migration_lock import migration_lock
 from config.database import ASYNC_SQLALCHEMY_DATABASE_URL, Base
 from config.model_discovery import DatabaseModelDiscovery
 
@@ -119,10 +120,15 @@ async def run_async_migrations() -> None:
         poolclass=pool.NullPool,
     )
 
-    async with connectable.connect() as connection:
-        await connection.run_sync(do_run_migrations)
+    def run_locked(connection: Connection) -> None:
+        with migration_lock(connection, expected_revision=os.getenv('PIPESIGHT_EXPECTED_SOURCE_REVISION')):
+            do_run_migrations(connection)
 
-    await connectable.dispose()
+    try:
+        async with connectable.connect() as connection:
+            await connection.run_sync(run_locked)
+    finally:
+        await connectable.dispose()
 
 
 def run_migrations_online() -> None:

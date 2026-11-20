@@ -6,10 +6,13 @@ import asyncio
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
+from sqlalchemy import select
+
+from app.health.worker import queue_scan_result
 from app.infrastructure.services.logging_support import logger
 from app.intelligence.services.templates import PipelineTemplateService
 from app.library.tasks.material_parse_scheduler import recover_material_parses, stop_material_parse_tasks
-from app.research.models.research_models import utcnow
+from app.research.models.research_models import PipelineReportAsset, utcnow
 from app.research.repositories.research_repository import ResearchDao as PipelineDao
 from app.research.services.application import ResearchApplicationService
 from app.research.services.concurrency import (
@@ -20,6 +23,7 @@ from app.research.services.concurrency import (
 )
 from app.research.services.digest_schedules import DigestScheduleService
 from app.research.services.execution import MAX_ATTEMPTS as RESEARCH_MAX_ATTEMPTS
+from app.research.services.export_storage import ReportExportStorage
 from app.research.services.exports import ResearchReportExportService
 from config.database import AsyncSessionLocal
 
@@ -187,24 +191,55 @@ async def stop_recovery_tasks() -> None:
     await stop_material_parse_tasks()
 
 
+async def clean_deleted_report_files() -> None:
+    directory = ReportExportStorage.cleanup_directory()
+    for marker in await asyncio.to_thread(lambda: list(directory.glob('[0-9a-f]' * 64))):
+        try:
+            key = await asyncio.to_thread(marker.read_text)
+            async with AsyncSessionLocal() as db:
+                exists = await db.scalar(
+                    select(PipelineReportAsset.id)
+                    .where(PipelineReportAsset.storage_key == key)
+                    .limit(1)
+                    .with_for_update()
+                )
+                if exists is not None:
+                    # A rolled-back deletion leaves a live asset. Remove its marker while holding its lock.
+                    await asyncio.to_thread(marker.unlink, missing_ok=True)
+                    continue
+            await asyncio.to_thread(ReportExportStorage.finish_cleanup, key)
+        except FileNotFoundError:
+            continue
+        except (OSError, ValueError):
+            logger.warning('报告资源后台清理失败，将在下一轮重试')
+
+
 async def run_persistent_recovery_loop(stop_event: asyncio.Event | None = None, *, schedule_ids=None) -> None:
     """在独立进程中持续恢复科研任务、报告导出和资料解析任务。"""
     stop_event = stop_event or asyncio.Event()
     logger.info('科研任务、报告导出与资料解析独立 Worker 已启动。')
     try:
         while not stop_event.is_set():
-            try:
-                scope = {'schedule_ids': schedule_ids} if schedule_ids is not None else {}
-                await recover_research_jobs(**scope)
-                if schedule_ids is None:
-                    await recover_report_exports()
-                await dispatch_digest_schedules(**scope)
-                if schedule_ids is None:
-                    await recover_material_parses()
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                logger.exception('独立任务 Worker 扫描持久队列失败，将在下一轮重试。')
+            scope = {'schedule_ids': schedule_ids} if schedule_ids is not None else {}
+            steps = [('research', recover_research_jobs, scope)]
+            if schedule_ids is None:
+                steps.append(('exports', recover_report_exports, {}))
+            steps.append(('digest', dispatch_digest_schedules, scope))
+            if schedule_ids is None:
+                steps.extend(
+                    [
+                        ('materials', recover_material_parses, {}),
+                        ('export_cleanup', clean_deleted_report_files, {}),
+                    ]
+                )
+            for name, operation, kwargs in steps:
+                try:
+                    await operation(**kwargs)
+                except Exception:  # noqa: PERF203 - isolate independent queue failures
+                    queue_scan_result(name, success=False)
+                    logger.exception('独立任务 Worker 扫描 {} 队列失败，将在下一轮重试。', name)
+                else:
+                    queue_scan_result(name, success=True)
 
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=RECOVERY_INTERVAL_SECONDS)

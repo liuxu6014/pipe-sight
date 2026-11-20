@@ -8,6 +8,7 @@ from fastapi import Request  # noqa: TC002
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
+from app.health.worker import worker_status
 from common.http.routing import APIRouterPro
 from config.database import AsyncSessionLocal
 from config.env import AppConfig
@@ -58,6 +59,13 @@ async def health_ready(request: Request) -> JSONResponse:
         'checks': checks,
     }
     return JSONResponse(status_code=200 if ready else 503, content=payload)
+
+
+@health_controller.get('/worker')
+async def health_worker() -> JSONResponse:
+    """Separate probe: database readiness must not hide a stopped queue worker."""
+    result = worker_status()
+    return JSONResponse(status_code=200 if result['status'] == 'ok' else 503, content=result)
 
 
 __all__ = ['health_controller']
