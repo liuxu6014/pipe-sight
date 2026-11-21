@@ -40,13 +40,8 @@ async function renderHeader(basketCount = 12) {
   return { html: await renderToString(app), buttons, store, destinations }
 }
 
-test('compact header keeps named queue, library and account actions functional without old branding', async () => {
+test('compact header keeps named library and account actions functional without old branding', async () => {
   const { html, buttons, store, destinations } = await renderHeader()
-  const queue = buttons.find(button => button['aria-label'] === '生成队列')
-  assert.ok(queue)
-  assert.equal(queue['aria-haspopup'], 'dialog')
-  queue.onClick()
-  assert.equal(store.taskPanelVisible, true)
   const library = buttons.find(button => button['aria-label'] === '资料库，12 条资料')
   assert.ok(library)
   library.onClick()

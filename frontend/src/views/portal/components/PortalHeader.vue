@@ -21,9 +21,6 @@
       </nav>
 
       <div class="ps-header-tools">
-        <el-badge type="primary" :value="store.runningTaskCount" :hidden="!store.runningTaskCount" :max="99" class="ps-generation-queue-badge">
-          <el-button :icon="Clock" class="ps-generation-queue ps-ui-control" aria-label="生成队列" title="生成队列" aria-haspopup="dialog" @click="store.taskPanelVisible = true"><span class="ps-generation-queue-label">生成队列</span></el-button>
-        </el-badge>
         <el-button
           class="ps-header-search ps-ui-control"
           :icon="Search"
@@ -130,7 +127,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Clock, Collection, Menu, Refresh, Search, Setting, SwitchButton, User } from '@element-plus/icons-vue'
+import { Collection, Menu, Refresh, Search, Setting, SwitchButton, User } from '@element-plus/icons-vue'
 import { portalNavigation } from '../data'
 import usePortalStore from '@/store/modules/portal'
 import useUserStore from '@/store/modules/user'
