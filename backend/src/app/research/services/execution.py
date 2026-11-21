@@ -6,6 +6,7 @@ from copy import deepcopy
 from typing import Any
 
 from app.business_ids import parse_business_id, wire_id
+from app.infrastructure.services.logging_support import logger
 from app.research.models.research_models import PipelineReportVersion, utcnow
 from app.research.repositories.research_repository import ResearchDao
 from app.research.services.concurrency import GENERATION_INTERRUPTED_MESSAGE
@@ -180,6 +181,7 @@ class ResearchExecutionService:
                     await interrupted_db.commit()
             raise
         except Exception as error:
+            logger.exception('科研生成任务 %s 失败，真实异常已记录', job_id)
             async with AsyncSessionLocal() as error_db:
                 job = await ResearchDao.lock_running_research_job(error_db, job_id, user_id, token)
                 if job:
