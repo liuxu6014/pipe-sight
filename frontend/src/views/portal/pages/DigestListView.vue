@@ -296,7 +296,7 @@ onMounted(() => { void loadSchedules() })
 .ps-digest-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; }
 .ps-digest-page .ps-digest-list { padding: 0; border: 0; border-radius: 0; background: transparent; overflow: hidden; }
 .ps-digest-page > .ps-pagination { margin: 0; padding: 12px 16px; border: 1px solid var(--ps-line); border-radius: 10px; background: #fff; }
-.ps-digest-records-table { border: 1px solid var(--ps-line); border-radius: 10px; }
+.ps-digest-records-table { border: 0; border-radius: 0; }
 .ps-digest-records-table :deep(th.el-table__cell) { padding-block: 10px; color: var(--ps-muted); font-size: 12px; font-weight: 500; }
 .ps-digest-records-table :deep(.cell) { padding-inline: 16px; }
 .ps-digest-records-table :deep(.el-table__inner-wrapper::before) { display: none; }
