@@ -69,7 +69,7 @@ function luminance(hex) {
 test('template secondary labels and counts have readable contrast on both workspace surfaces', () => {
   const { descriptor } = parse(read('../src/views/pipeline/template/index.vue'))
   const css = compileString(descriptor.styles[0].content).css
-  for (const selector of ['.template-metadata dt', '.template-category-count', '.template-result-count']) {
+  for (const selector of ['.template-metadata dt', '.template-result-count']) {
     const rule = css.slice(css.indexOf(`${selector} {`)).split('}')[0]
     const color = rule.match(/color: var\(--ps-muted, (#[a-f\d]{6})\)/i)?.[1]
     assert.ok(color, `${selector} must supply a readable color outside the user shell`)

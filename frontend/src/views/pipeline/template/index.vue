@@ -15,7 +15,7 @@
     </section>
     <nav v-if="activePurpose === 'research'" class="template-categories" aria-label="科研报告类型">
       <el-segmented v-model="activeCategory" :options="categories" :props="{ label: 'name', value: 'value' }">
-        <template #default="{ item }"><span>{{ item.name }}</span><span class="template-category-count">{{ countCategory(item.value) }}</span></template>
+        <template #default="{ item }"><el-icon class="template-category-icon"><component :is="item.icon" /></el-icon><span>{{ item.name }}</span></template>
       </el-segmented>
     </nav>
     <el-alert v-if="templateError" type="warning" show-icon :closable="false" class="template-load-error">
@@ -317,9 +317,9 @@ onMounted(() => { loadTemplates(); loadModels() })
 .template-toolbar .el-button { margin: 0; }
 .template-categories { overflow-x: auto; padding: 0 0 2px; }
 .template-categories :deep(.el-segmented) { --el-segmented-item-selected-bg-color: #1f64a6; }
-.template-categories :deep(.el-segmented__item-label) { display: flex; align-items: center; gap: 8px; }
-.template-category-count { color: var(--ps-muted, #526277); font-size: 13px; font-variant-numeric: tabular-nums; }
-.template-categories :deep(.el-segmented__item.is-selected) .template-category-count { color: #fff; }
+.template-categories :deep(.el-segmented__item-label) { display: flex; align-items: center; gap: 6px; }
+.template-category-icon { color: var(--el-text-color-secondary); font-size: 15px; }
+.template-categories :deep(.el-segmented__item.is-selected) .template-category-icon { color: #fff; }
 .template-results { min-width: 0; }
 .template-card-main { display: contents; }
 .template-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
