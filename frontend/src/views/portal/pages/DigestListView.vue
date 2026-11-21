@@ -2,7 +2,7 @@
   <div class="ps-page ps-list-page ps-digest-page">
     <div class="ps-toolbar ps-digest-toolbar"><div class="ps-search-inline"><Search /><input v-model.trim="keyword" aria-label="搜索简报或计划名称" placeholder="搜索简报或计划名称" /></div><template v-if="activeTab !== '自动任务'"><el-date-picker v-model="date" aria-label="简报覆盖周期" type="daterange" value-format="YYYY-MM-DD" start-placeholder="覆盖开始日期" end-placeholder="覆盖结束日期" /><el-select v-model="status" aria-label="简报状态" style="width: 130px"><el-option label="全部状态" value="all" /><el-option v-for="value in reportStatuses" :key="value" :label="value" :value="value" /></el-select></template><el-button v-if="hasActiveFilters" @click="resetFilters">清除筛选</el-button><el-button :icon="Plus" @click="editSchedule()">新建任务</el-button><el-button type="primary" :icon="Plus" @click="router.push('/portal/digests/create')">新建简报</el-button></div>
     <div v-if="currentError" class="ps-inline-state is-warning" role="alert"><span>{{ currentError }}</span><el-button plain @click="refreshCurrent">重试</el-button></div>
-    <div class="ps-tabs-line ps-segmented-row"><el-segmented v-model="activeTab" :options="tabs" aria-label="简报与自动计划"  /></div>
+    <div class="ps-digest-tabs ps-segmented-row"><el-segmented v-model="activeTab" :options="tabs" aria-label="简报与自动计划" /></div>
     <section v-if="activeTab !== '自动任务'" ref="listRegion" class="ps-panel ps-digest-list ps-list-scroll" tabindex="0" aria-label="简报列表">
       <el-table v-if="filteredReports.length" :data="pagedReports" row-key="id" :max-height="listHeight" :default-sort="tableSort" @sort-change="changeReportSort" style="width: 100%" class="ps-digest-records-table">
         <el-table-column header-align="center" prop="title" label="简报名称" min-width="320" sortable="custom" :sort-orders="['ascending', 'descending']"><template #default="{ row }">
@@ -293,6 +293,7 @@ onMounted(() => { void loadSchedules() })
 </script>
 
 <style scoped>
+.ps-digest-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; }
 .ps-digest-page .ps-digest-list { padding: 0; border: 0; border-radius: 0; background: transparent; overflow: hidden; }
 .ps-digest-page > .ps-pagination { margin: 0; padding: 12px 16px; border: 1px solid var(--ps-line); border-radius: 10px; background: #fff; }
 .ps-digest-records-table { border: 1px solid var(--ps-line); border-radius: 10px; }
