@@ -2,6 +2,12 @@ import { downloadGet } from '@/utils/request'
 import request from './request'
 import { requireBusinessId } from '@/utils/portal/businessId'
 
+// crypto.randomUUID 只在安全上下文（HTTPS/localhost）可用；HTTP 部署下回退到时间戳+随机数。
+function manualRequestId() {
+  const uuid = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  return `manual:${uuid}`
+}
+
 export function getPipelinePortalOverview() {
   return request({ url: '/pipeline/portal/overview', method: 'get' })
 }
@@ -153,7 +159,7 @@ export function listPipelineTasks() {
   })
 }
 
-export function runPipelineTask(taskId, requestId = `manual:${crypto.randomUUID()}`) {
+export function runPipelineTask(taskId, requestId = manualRequestId()) {
   return request({
     url: `/pipeline/tasks/${encodeURIComponent(requireBusinessId(taskId))}/run`,
     method: 'post',
@@ -168,7 +174,7 @@ export function getPipelineCollectionRun(runId) {
   })
 }
 
-export function retryPipelineTask(runId, requestId = `manual:${crypto.randomUUID()}`) {
+export function retryPipelineTask(runId, requestId = manualRequestId()) {
   return request({
     url: `/pipeline/tasks/runs/${encodeURIComponent(requireBusinessId(runId))}/retry`,
     method: 'post',
