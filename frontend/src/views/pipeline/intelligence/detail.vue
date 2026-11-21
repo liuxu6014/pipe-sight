@@ -28,11 +28,11 @@
             </div>
           </template>
           <section class="detail-section">
-            <h2 class="section-title"><el-icon class="section-icon"><Document /></el-icon>摘要</h2>
+            <h2 class="section-title"><el-icon class="section-icon"><Memo /></el-icon>摘要</h2>
             <p class="content-text">{{ detail.category === 'paper' ? detail.abstract || detail.summary || '摘要未提供' : detail.summary || '摘要未提供' }}</p>
           </section>
           <section v-if="detail.category !== 'paper'" class="detail-section">
-            <h2 class="section-title"><el-icon class="section-icon"><Reading /></el-icon>全文</h2>
+            <h2 class="section-title"><el-icon class="section-icon"><Notebook /></el-icon>全文</h2>
             <p class="content-text">{{ detail.content_original || detail.contentOriginal || detail.content || '当前记录未提供全文' }}</p>
           </section>
           <section v-if="savedTranslation" class="detail-section">
@@ -54,7 +54,7 @@
 import { returnToPreviousPage } from '@/utils/portal/openContent'
 import { formatBusinessTime } from '@/utils/portal/businessTime'
 import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
-import { Back, Document, Reading } from '@element-plus/icons-vue'
+import { Back, Document, Memo, Notebook } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getPipelineIntelligenceDetail } from '@/api/pipeline/intelligence'
 import ContentEntities from '@/views/portal/components/ContentEntities.vue'

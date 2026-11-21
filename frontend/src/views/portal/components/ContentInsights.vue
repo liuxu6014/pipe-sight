@@ -1,6 +1,6 @@
 <template>
   <section class="ps-content-insights" :aria-label="title">
-    <h2><el-icon class="insight-icon"><TrendCharts v-if="kind === 'news'" /><DataAnalysis v-else /></el-icon>{{ title }}</h2>
+    <h2><el-icon class="insight-icon"><Opportunity /></el-icon>{{ title }}</h2>
     <template v-if="kind === 'paper'">
       <p v-if="paragraph" class="insight-paragraph">{{ paragraph }}</p>
       <p v-else class="insight-empty">暂无 AI 解读</p>
@@ -14,7 +14,7 @@
 </template>
 <script setup>
 import { computed } from 'vue'
-import { DataAnalysis, TrendCharts } from '@element-plus/icons-vue'
+import { Opportunity } from '@element-plus/icons-vue'
 import { insightSections, paperInsightParagraph } from '@/utils/portal/contentPresentation'
 const props = defineProps({ item: { type: Object, default: () => ({}) }, kind: { type: String, default: 'news' } })
 const title = computed(() => props.kind === 'paper' ? 'AI 解读' : '行业洞察')
