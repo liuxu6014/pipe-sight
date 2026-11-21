@@ -12,12 +12,19 @@
       <template #default><el-button v-if="detailId" plain type="primary" :disabled="loading" @click="loadDetail">重新加载</el-button></template>
     </el-alert>
     <el-row v-else :gutter="16">
-      <el-col :xs="24" :lg="16">
+      <el-col :xs="24" :lg="24">
         <el-card v-loading="loading" shadow="never" class="panel-card">
           <template #header>
             <div class="card-header">
               <span>{{ detail.category === 'paper' ? '论文内容' : '资讯内容' }}</span>
-              <el-tag :type="categoryType(detail.category)" effect="light">{{ categoryText(detail.category) }}</el-tag>
+              <div class="card-tags">
+                <el-tag :type="categoryType(detail.category)" effect="light">{{ categoryText(detail.category) }}</el-tag>
+                <el-tag v-if="detail.category_name" type="info" effect="plain">{{ detail.category_name }}</el-tag>
+                <el-tag v-if="sourceLabel(detail)" type="info" effect="plain">{{ sourceLabel(detail) }}</el-tag>
+                <el-tag v-if="formatBusinessTime(detail.publish_time)" type="info" effect="plain">{{ formatBusinessTime(detail.publish_time) }}</el-tag>
+                <el-tag v-if="detail.category === 'paper' && detail.journal" type="info" effect="plain">{{ detail.journal }}</el-tag>
+                <el-tag v-if="detail.category === 'paper' && paperAuthors(detail)" type="info" effect="plain">{{ paperAuthors(detail) }}</el-tag>
+              </div>
             </div>
           </template>
           <section class="detail-section">
@@ -41,20 +48,6 @@
           </div>
         </el-card>
         <ContentEntities :entities="detail.entities || []" />
-
-      </el-col>
-
-      <el-col :xs="24" :lg="8">
-        <el-card shadow="never" class="panel-card">
-          <template #header>结构化信息</template>
-          <el-descriptions :column="1" border>
-            <el-descriptions-item label="来源">{{ detail.source }}</el-descriptions-item>
-            <el-descriptions-item label="发布时间">{{ formatBusinessTime(detail.publish_time) }}</el-descriptions-item>
-            <el-descriptions-item label="类别">{{ detail.category_name || '类别未提供' }}</el-descriptions-item>
-            <el-descriptions-item v-if="detail.category === 'paper'" label="期刊">{{ detail.journal || '当前接口未提供' }}</el-descriptions-item>
-            <el-descriptions-item v-if="detail.category === 'paper'" label="作者">{{ Array.isArray(detail.authors) ? detail.authors.join(' · ') : detail.authors || '当前接口未提供' }}</el-descriptions-item>
-          </el-descriptions>
-        </el-card>
 
       </el-col>
     </el-row>
@@ -105,6 +98,22 @@ function categoryText(category) {
 
 function categoryType(category) {
   return { news: 'primary', wechat: 'success', paper: 'warning' }[category] || 'info'
+}
+
+function sourceLabel(item) {
+  const source = item?.source
+  if (!source) return ''
+  try {
+    const url = new URL(source)
+    return url.hostname || source
+  } catch {
+    return source
+  }
+}
+
+function paperAuthors(item) {
+  if (!Array.isArray(item?.authors)) return item?.authors || ''
+  return item.authors.join(' · ')
 }
 
 async function loadDetail() {
@@ -165,6 +174,21 @@ onBeforeUnmount(() => { active = false; disposed = true; invalidateDetail() })
 .content-text {
   margin: 0;
   white-space: pre-line;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.card-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .detail-section {
