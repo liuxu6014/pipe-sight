@@ -16,7 +16,7 @@
         </template></el-table-column>
         <el-table-column header-align="center" align="center" label="类型" width="90"><template #default="{ row }"><el-tag effect="plain" :type="scheduleType(row.reportType || row.type) === '月报' ? 'success' : 'primary'">{{ scheduleType(row.reportType || row.type) }}</el-tag></template></el-table-column>
         <el-table-column header-align="center" prop="period" label="覆盖周期" width="220"><template #default="{ row }"><span class="ps-digest-period">{{ row.period }}</span></template></el-table-column>
-        <el-table-column header-align="center" label="状态" width="104"><template #default="{ row }"><el-tag :type="({ success: 'success', warning: 'warning', running: 'primary' })[statusClass(row.status)] || 'info'">{{ row.status }}</el-tag></template></el-table-column>
+        <el-table-column header-align="center" label="状态" width="104"><template #default="{ row }"><el-tag :type="({ success: 'success', warning: 'warning', running: 'primary', danger: 'danger' })[statusClass(row.status)] || 'info'">{{ row.status }}</el-tag></template></el-table-column>
         <el-table-column header-align="center" prop="generatedAt" label="生成时间" width="180" sortable="custom" :sort-orders="['descending', 'ascending']"><template #default="{ row }"><time v-if="row.generatedAt">{{ row.generatedAt }}</time><span v-else>—</span></template></el-table-column>
         <el-table-column header-align="center" label="操作" width="164" align="right">
           <template #default="{ row: report }">
@@ -175,7 +175,7 @@ const listTotal = computed(() => activeTab.value === '自动任务' ? filteredSc
 const pagedSchedules = computed(() => filteredSchedules.value.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value))
 watch(listTotal, count => { if (activeTab.value === '自动任务') currentPage.value = Math.min(currentPage.value, Math.max(1, Math.ceil(count / pageSize.value))) })
 function typeClass(value) { return ({ '日报': 'daily', '周报': 'weekly', '月报': 'monthly', '自动任务': 'auto' })[value] || 'daily' }
-function statusClass(value) { return ({ '已完成': 'success', '待审核': 'warning', '草稿': 'muted', '运行中': 'running' })[value] || 'muted' }
+function statusClass(value) { return ({ '已完成': 'success', '生成中': 'running', '排队中': 'running', '生成失败': 'danger', '已取消': 'info', '暂无正文': 'info' })[value] || 'info' }
 function scheduleType(value) { return ({ daily: '日报', weekly: '周报', monthly: '月报' })[value] || value }
 function digestReportState(report) {
   if (hasReportOutput(report)) return { hasOutput: true, path: `/portal/digests/${report.id}`, status: report.status }
