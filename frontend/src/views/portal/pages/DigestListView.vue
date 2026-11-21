@@ -18,13 +18,14 @@
         <el-table-column header-align="center" prop="period" label="覆盖周期" width="220"><template #default="{ row }"><span class="ps-digest-period">{{ row.period }}</span></template></el-table-column>
         <el-table-column header-align="center" label="状态" width="104"><template #default="{ row }"><el-tag :type="({ success: 'success', warning: 'warning', running: 'primary', danger: 'danger' })[statusClass(row.status)] || 'info'">{{ row.status }}</el-tag></template></el-table-column>
         <el-table-column header-align="center" prop="generatedAt" label="生成时间" width="180" sortable="custom" :sort-orders="['descending', 'ascending']"><template #default="{ row }"><time v-if="row.generatedAt">{{ row.generatedAt }}</time><span v-else>—</span></template></el-table-column>
-        <el-table-column header-align="center" label="操作" width="164" align="right">
+        <el-table-column header-align="center" label="操作" width="240" align="right">
           <template #default="{ row: report }">
             <div class="ps-digest-row-actions">
               <el-button type="primary" plain :disabled="!report.path" @click="router.push(report.path)">{{ report.hasOutput ? '查看' : '生成记录' }}</el-button>
               <template v-if="report.hasOutput">
                 <el-button plain :loading="exportingId === report.id" :disabled="Boolean(exportingId)" :title="report.requiresReview ? '导出草稿 Markdown' : '导出 Markdown'" @click="exportDigest(report)">导出</el-button>
               </template>
+              <el-button type="danger" plain :loading="deletingReportId === report.id" :disabled="deletingReportId !== null" @click="deleteReport(report)">删除</el-button>
             </div>
           </template>
         </el-table-column>
@@ -98,7 +99,7 @@ import { toRefs, computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { bindListQuery } from '@/utils/portal/listQuery'
 import { usePagedResults } from '@/utils/portal/usePagedResults'
 import { reportSummaryRow } from '@/utils/portal/reportSummary'
-import { listPipelineResearchReports } from '@/api/pipeline/intelligence'
+import { deletePipelineResearchReport, listPipelineResearchReports } from '@/api/pipeline/intelligence'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Document, Plus, Search } from '@element-plus/icons-vue'
@@ -149,6 +150,7 @@ function editSchedule(row = null) { editingSchedule.value = row; scheduleDialog.
 async function scheduleSaved() { activeTab.value = '自动任务'; await loadSchedules() }
 function scheduleTimeDescription(row) { return scheduleSummary(readScheduleForm(row), { showTimezone: false }) }
 const exportingId = ref('')
+const deletingReportId = ref('')
 const schedules = ref([])
 const schedulesLoading = ref(false)
 const schedulesError = ref('')
@@ -207,6 +209,20 @@ async function exportDigest(report) {
     ElMessage.error('导出失败，请确认报告已保存且后端服务可用')
   } finally {
     exportingId.value = ''
+  }
+}
+async function deleteReport(report) {
+  if (deletingReportId.value !== null) return
+  deletingReportId.value = report.id
+  try {
+    await ElMessageBox.confirm(`确认删除简报“${report.title}”？删除后无法恢复，生成记录与导出记录会一并删除。`, '删除简报', { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' })
+    await deletePipelineResearchReport(report.id)
+    ElMessage.success('简报已删除')
+    await loadReports()
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') ElMessage.error(error?.msg || error?.message || '简报删除失败，请重试')
+  } finally {
+    deletingReportId.value = ''
   }
 }
 async function loadSchedules() {
