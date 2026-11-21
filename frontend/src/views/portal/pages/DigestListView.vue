@@ -150,7 +150,7 @@ function editSchedule(row = null) { editingSchedule.value = row; scheduleDialog.
 async function scheduleSaved() { activeTab.value = '自动任务'; await loadSchedules() }
 function scheduleTimeDescription(row) { return scheduleSummary(readScheduleForm(row), { showTimezone: false }) }
 const exportingId = ref('')
-const deletingReportId = ref('')
+const deletingReportId = ref(null)
 const schedules = ref([])
 const schedulesLoading = ref(false)
 const schedulesError = ref('')
@@ -222,7 +222,7 @@ async function deleteReport(report) {
   } catch (error) {
     if (error !== 'cancel' && error !== 'close') ElMessage.error(error?.msg || error?.message || '简报删除失败，请重试')
   } finally {
-    deletingReportId.value = ''
+    deletingReportId.value = null
   }
 }
 async function loadSchedules() {
