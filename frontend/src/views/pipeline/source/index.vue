@@ -23,11 +23,21 @@
         <el-table-column label="来源类型" width="120" align="center">
           <template #default="{ row }"><el-tag :type="typeTag(sourceType(row))" effect="light">{{ typeText(sourceType(row)) }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="采集频率" width="180" align="center">
+        <el-table-column label="采集频率" width="200" align="center">
           <template #default="{ row }">
-            <div v-if="!isExternalSource(row)" class="source-frequency-cell">
-              <el-button v-if="canSourceSave" plain type="primary" :icon="Clock" :disabled="busy" @click="openFrequencyDialog(row)">设置频率</el-button>
-            </div>
+            <el-select
+              v-if="!isExternalSource(row)"
+              :model-value="frequencyValue(row)"
+              size="small"
+              class="source-frequency-select"
+              :disabled="!canSourceSave || busy"
+              :loading="frequencySourceId === row.id"
+              aria-label="采集频率"
+              @change="changeFrequency(row, $event)"
+            >
+              <el-option v-if="frequencyValue(row) === 'preserve'" value="preserve" label="保留现有时间计划" />
+              <el-option v-for="opt in frequencyOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+            </el-select>
             <span v-else class="source-cell-empty">外部调度</span>
           </template>
         </el-table-column>
@@ -98,7 +108,7 @@
 import { formatBusinessTime } from '@/utils/portal/businessTime'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Clock, Plus } from '@element-plus/icons-vue'
+import { Plus } from '@element-plus/icons-vue'
 import { createPipelineSource, deletePipelineSource, listPipelineSources, setPipelineSourceEnabled, updatePipelineSource, runPipelineTask } from '@/api/pipeline/intelligence'
 import { sourceEnabled } from '@/utils/pipeline/compactContract'
 import { checkPermi } from '@/utils/permission'
@@ -123,6 +133,20 @@ const canSourceSave = computed(() => checkPermi(['pipeline:source:save']))
 const busy = computed(() => loading.value || saving.value || pendingSourceId.value !== null)
 const sourceForm = reactive({ name: '', sourceType: 'wechat', feedUrl: '', url: '', query: '', limit: 12 })
 const frequency = reactive({ unit: 'hour', amount: 6 })
+const frequencySourceId = ref(null)
+const frequencyOptions = computed(() => [
+  ...sourceIntervalChoices.minute.map(amount => ({ value: `minute:${amount}`, label: amount === 1 ? '每 1 分钟' : `每 ${amount} 分钟` })),
+  ...sourceIntervalChoices.hour.map(amount => ({ value: `hour:${amount}`, label: amount === 1 ? '每 1 小时' : `每 ${amount} 小时` })),
+  { value: 'day:1', label: '每天 00:00' },
+  { value: 'week:1', label: '每周一 00:00' },
+  { value: 'off', label: '不定时采集' }
+])
+function frequencyValue(source) {
+  const current = sourceFrequency(sourceCron(source))
+  if (current.unit === 'off') return 'off'
+  if (current.unit === 'preserve') return 'preserve'
+  return `${current.unit}:${current.amount}`
+}
 watch(() => sourceForm.sourceType, () => { dialogError.value = '' })
 const intervalChoices = computed(() => sourceIntervalChoices[frequency.unit] || [])
 const hasExistingSchedule = computed(() => editingSource.value && sourceFrequency(sourceCron(editingSource.value)).unit === 'preserve')
@@ -262,6 +286,23 @@ async function removeSource(source) {
   }
 }
 
+async function changeFrequency(source, value) {
+  if (!canSourceSave.value || busy.value || value === 'preserve') return
+  const next = value === 'off'
+    ? { unit: 'off', amount: 1 }
+    : { unit: value.split(':')[0], amount: Number(value.split(':')[1]) }
+  frequencySourceId.value = source.id
+  try {
+    await updatePipelineSource(source.id, existingSourcePayload(source, { cron: sourceIntervalCron(next, sourceCron(source)) }))
+    ElMessage.success('采集频率已更新')
+    await loadSources()
+  } catch (error) {
+    ElMessage.error(error?.msg || error?.message || '采集频率更新失败')
+  } finally {
+    frequencySourceId.value = null
+  }
+}
+
 async function runSource(source) {
   if (!canSourceRun.value || isExternalSource(source) || busy.value || runningId.value) return
   runningId.value = source.id
@@ -294,6 +335,7 @@ onMounted(loadSources)
 .source-name { font-size: 14px; line-height: 1.6; font-weight: 600; color: var(--el-text-color-primary); overflow-wrap: anywhere; }
 .source-frequency-cell { display: flex; align-items: center; justify-content: center; gap: 12px; }
 .source-frequency-cell > :deep(.el-button) { flex-shrink: 0; margin: 0; }
+.source-frequency-select { width: 156px; }
 .source-cell-empty { color: var(--el-text-color-secondary); }
 .source-cell-empty { display: block; text-align: center; }
 .source-list-actions { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }

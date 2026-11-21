@@ -366,8 +366,8 @@ test('actual source SFC compiles, exposes guarded edit, frequency, trial and sta
   assert.match(actions, /:model-value="sourceEnabled\(row\)"/)
   assert.match(actions, /:loading="pendingSourceId === row.id"/)
   const frequencyColumn = descriptor.template.content.match(/<el-table-column label="采集频率"[\s\S]*?<\/el-table-column>/)[0]
-  assert.match(frequencyColumn, /openFrequencyDialog\(row\)/)
-  assert.match(frequencyColumn, /v-if="canSourceSave"/)
+  assert.match(frequencyColumn, /changeFrequency\(row/)
+  assert.match(frequencyColumn, /!canSourceSave \|\| busy/)
   assert.match(actions, /toggleSource\(row\)/)
   assert.doesNotMatch(source, /VideoPlay|listModelAll|翻译模型|调度表达式/)
   assert.doesNotMatch(descriptor.template.content, /sourceForm\.modelId/)
