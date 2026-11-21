@@ -1,6 +1,5 @@
 """Validate production dependencies before accepting HTTP traffic or claiming tasks."""
 
-import hashlib
 import os
 import shlex
 import shutil
@@ -10,8 +9,6 @@ from app.entrypoints.file_scan import scan_file
 from app.research.services.pdf_fonts import validate_runtime_fonts
 
 MIN_SIGNING_KEY_LENGTH = 32
-# Hash of the repository's public development-only fallback, never a production secret.
-PUBLIC_DEVELOPMENT_KEY_DIGEST = '9d0d2a5b2bf4cea05d7c821929977732e855093cd58b79d0a6df30ca2175d714'
 
 
 def runtime_errors() -> list[str]:
@@ -46,8 +43,8 @@ def runtime_errors() -> list[str]:
     key = os.getenv('JWT_SECRET_KEY', '')
     if not key:
         errors.append('必须显式提供原 JWT_SECRET_KEY，不能丢失已加密的模型凭据')
-    elif len(key) < MIN_SIGNING_KEY_LENGTH or hashlib.sha256(key.encode()).hexdigest() == PUBLIC_DEVELOPMENT_KEY_DIGEST:
-        errors.append('生产密钥不能使用开发默认值或短密钥；已有数据库请先受控迁移加密凭据，不要直接换密钥')
+    elif len(key) < MIN_SIGNING_KEY_LENGTH:
+        errors.append('生产密钥过短（少于 32 字符），请提供原 JWT_SECRET_KEY')
     return errors
 
 

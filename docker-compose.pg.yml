@@ -82,7 +82,7 @@ services:
       FILE_SCAN_COMMAND: ${FILE_SCAN_COMMAND:-pipesight-file-scan}
       FILE_SCAN_HOST: pipesight-clamav
       FILE_SCAN_PORT: 3310
-      PDF_DIGEST_FONT_PATH: /app/fonts/FangSong_GB2312.ttf
+      PDF_DIGEST_FONT_PATH: /usr/share/fonts/truetype/arphic-gbsn00lp/gbsn00lp.ttf
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Provide the original JWT_SECRET_KEY}
       FILE_SCAN_TIMEOUT_SECONDS: ${FILE_SCAN_TIMEOUT_SECONDS:-30}
     volumes:
@@ -132,7 +132,7 @@ services:
       FILE_SCAN_COMMAND: ${FILE_SCAN_COMMAND:-pipesight-file-scan}
       FILE_SCAN_HOST: pipesight-clamav
       FILE_SCAN_PORT: 3310
-      PDF_DIGEST_FONT_PATH: /app/fonts/FangSong_GB2312.ttf
+      PDF_DIGEST_FONT_PATH: /usr/share/fonts/truetype/arphic-gbsn00lp/gbsn00lp.ttf
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Provide the original JWT_SECRET_KEY}
       FILE_SCAN_TIMEOUT_SECONDS: ${FILE_SCAN_TIMEOUT_SECONDS:-30}
     volumes:
