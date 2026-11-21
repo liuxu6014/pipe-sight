@@ -40,7 +40,6 @@
             <p class="content-text">{{ savedTranslation }}</p>
           </section>
           <section class="detail-section">
-            <h2 class="section-title">{{ detail.category === 'paper' ? 'AI 解读' : '行业洞察' }}</h2>
             <ContentInsights :item="detail" :kind="detail.category === 'paper' ? 'paper' : 'news'" />
           </section>
         </el-card>
