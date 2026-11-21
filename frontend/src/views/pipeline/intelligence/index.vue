@@ -6,7 +6,8 @@
           <el-input v-model="queryParams.keyword" aria-label="搜索标题、摘要或标签" :prefix-icon="Search" placeholder="搜索标题、摘要或标签" clearable />
         </el-form-item>
         <el-form-item class="type-filter">
-          <el-select v-model="queryParams.category" aria-label="内容类型" placeholder="全部类型" clearable>
+          <el-select v-model="queryParams.category" aria-label="内容类型" placeholder="全部类型">
+            <el-option label="全部类型" value="" />
             <el-option label="新闻" value="news" />
             <el-option label="公众号" value="wechat" />
             <el-option label="论文" value="paper" />
@@ -30,7 +31,7 @@
             <div class="item-header">
               <div class="item-meta">
                 <el-tag :type="categoryType(row.category)" effect="light" size="small">{{ categoryText(row.category) }}</el-tag>
-                <span v-if="row.source" class="item-source">{{ row.source }}</span>
+                <span v-if="sourceDomain(row.source)" class="item-source">{{ sourceDomain(row.source) }}</span>
                 <time v-if="row.publish_time" class="item-date" title="发布时间"><el-icon aria-hidden="true"><Calendar /></el-icon>{{ formatBusinessTime(row.publish_time) }}</time>
               </div>
               <el-button class="detail-action" plain type="primary" :icon="View" @click="openDetail(row)">查看详情</el-button>
@@ -64,6 +65,7 @@ import { Calendar, Refresh, Search, View } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import { listPipelineIntelligence } from '@/api/pipeline/intelligence'
 import ContentEntities from '@/views/portal/components/ContentEntities.vue'
+import { sourceDomain } from '@/utils/portal/contentPresentation'
 defineOptions({ name: 'PipelineIntelligence' })
 const router = useRouter()
 const loading = ref(false), loadError = ref(''), rows = ref([]), total = ref(0)

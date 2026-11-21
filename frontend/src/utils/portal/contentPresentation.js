@@ -26,6 +26,18 @@ export function collectionTime(item = {}) {
   return formatBusinessTime(item.collectedAt || item.collected_at || item.crawledAt || item.crawled_at || item.collectedTime || item.collected_time || '')
 }
 
+// 来源字段可能是名称也可能是完整 URL；展示时只保留域名，不暴露长链接。
+export function sourceDomain(source) {
+  if (typeof source !== 'string' || !source.trim()) return ''
+  const value = source.trim()
+  try {
+    const url = new URL(value)
+    return url.hostname || value
+  } catch {
+    return value
+  }
+}
+
 function paragraphs(value) {
   if (Array.isArray(value)) return value.filter(value => typeof value === 'string' && value.trim())
   return typeof value === 'string' ? value.split(/[\r\n]+/).map(value => value.trim()).filter(Boolean) : []
