@@ -28,15 +28,15 @@
             </div>
           </template>
           <section class="detail-section">
-            <h2 class="section-title"><el-icon class="section-icon"><Memo /></el-icon>摘要</h2>
+            <h2 class="detail-section-title"><el-icon class="section-icon"><Memo /></el-icon>摘要</h2>
             <p class="content-text">{{ detail.category === 'paper' ? detail.abstract || detail.summary || '摘要未提供' : detail.summary || '摘要未提供' }}</p>
           </section>
           <section v-if="detail.category !== 'paper'" class="detail-section">
-            <h2 class="section-title"><el-icon class="section-icon"><Notebook /></el-icon>全文</h2>
+            <h2 class="detail-section-title"><el-icon class="section-icon"><Notebook /></el-icon>全文</h2>
             <p class="content-text">{{ detail.content_original || detail.contentOriginal || detail.content || '当前记录未提供全文' }}</p>
           </section>
           <section v-if="savedTranslation" class="detail-section">
-            <h2 class="section-title"><el-icon class="section-icon"><Document /></el-icon>已保存中文</h2>
+            <h2 class="detail-section-title"><el-icon class="section-icon"><Document /></el-icon>已保存中文</h2>
             <p class="content-text">{{ savedTranslation }}</p>
           </section>
           <section class="detail-section">
@@ -185,7 +185,7 @@ onBeforeUnmount(() => { active = false; disposed = true; invalidateDetail() })
   margin-bottom: 24px;
 }
 
-.section-title {
+.detail-section-title {
   margin: 0 0 10px;
   font-size: 15px;
   font-weight: 600;
