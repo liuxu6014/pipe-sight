@@ -54,7 +54,7 @@
         <el-table-column label="最后采集" width="180" align="center">
           <template #default="{ row }">{{ formatBusinessTime(row.lastRunAt ?? row.last_run_at) || '—' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="200" align="center">
+        <el-table-column label="操作" width="230" align="center">
           <template #default="{ row }">
             <div class="source-list-actions" role="group" :aria-label="`${row.name}操作`">
               <el-button v-if="canSourceSave && !isExternalSource(row)" plain type="primary" :disabled="busy" @click="openEditDialog(row)">编辑</el-button>
@@ -331,10 +331,10 @@ onMounted(loadSources)
 .source-frequency-select { width: 156px; }
 .source-cell-empty { color: var(--el-text-color-secondary); }
 .source-cell-empty { display: block; text-align: center; }
-.source-list-actions { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
-.source-list-actions > :deep(.el-button) { margin: 0; }
+.source-list-actions { display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: nowrap; white-space: nowrap; }
+.source-list-actions > :deep(.el-button) { margin: 0; flex-shrink: 0; }
 .source-summary-actions > :deep(.el-button) { margin-left: 0; }
-.source-list-actions > :deep(.el-switch) { margin: 0; }
+.source-list-actions > :deep(.el-switch) { margin: 0; flex-shrink: 0; }
 .source-retry { min-height: 44px; color: #409eff; }
 .source-dialog-name { margin: 0 0 16px; font-weight: 600; overflow-wrap: anywhere; }
 .source-frequency-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; width: 100%; }
