@@ -67,7 +67,7 @@ test('management intelligence reader and retry state compile', () => {
   assert.deepEqual(template.errors, [])
 })
 
-test('changing query ID reloads the cached reader, clears old content, and resets its tab', async () => {
+test('changing query ID reloads the cached reader and clears old content', async () => {
   const second = deferred(), calls = []
   const ctx = await mountDetail(id => {
     calls.push(id)
@@ -77,11 +77,9 @@ test('changing query ID reloads the cached reader, clears old content, and reset
     const first = ctx.view
     assert.equal(first.detail.value.title, '资讯20')
     assert.deepEqual(calls, ['20'], 'initial KeepAlive activation must not duplicate the request')
-    first.activeTab.value = 'fulltext'
     await ctx.router.push('/pipeline/intelligence/detail?id=268')
     assert.equal(ctx.instances.length, 1, 'query-only navigation reuses the real Vue component')
     assert.equal(first.detail.value.title, undefined)
-    assert.equal(first.activeTab.value, 'summary')
     assert.equal(first.loading.value, true)
     second.resolve({ data: { id: '268', title: '论文268', category: 'paper', tags: null } })
     await settle()

@@ -20,7 +20,22 @@
               <el-tag :type="categoryType(detail.category)" effect="light">{{ categoryText(detail.category) }}</el-tag>
             </div>
           </template>
-          <el-tabs v-model="activeTab" aria-label="内容切换"><el-tab-pane label="摘要" name="summary"><p class="content-text">{{ detail.category === 'paper' ? detail.abstract || detail.summary || '摘要未提供' : detail.summary || '摘要未提供' }}</p></el-tab-pane><el-tab-pane v-if="detail.category !== 'paper'" label="全文" name="fulltext"><p class="content-text">{{ detail.content_original || detail.contentOriginal || detail.content || '当前记录未提供全文' }}</p></el-tab-pane><el-tab-pane v-if="savedTranslation" label="已保存中文" name="zh"><p class="content-text">{{ savedTranslation }}</p></el-tab-pane><el-tab-pane :label="detail.category === 'paper' ? 'AI 解读' : '行业洞察'" name="insight"><ContentInsights :item="detail" :kind="detail.category === 'paper' ? 'paper' : 'news'" /></el-tab-pane></el-tabs>
+          <section class="detail-section">
+            <h2 class="section-title">摘要</h2>
+            <p class="content-text">{{ detail.category === 'paper' ? detail.abstract || detail.summary || '摘要未提供' : detail.summary || '摘要未提供' }}</p>
+          </section>
+          <section v-if="detail.category !== 'paper'" class="detail-section">
+            <h2 class="section-title">全文</h2>
+            <p class="content-text">{{ detail.content_original || detail.contentOriginal || detail.content || '当前记录未提供全文' }}</p>
+          </section>
+          <section v-if="savedTranslation" class="detail-section">
+            <h2 class="section-title">已保存中文</h2>
+            <p class="content-text">{{ savedTranslation }}</p>
+          </section>
+          <section class="detail-section">
+            <h2 class="section-title">{{ detail.category === 'paper' ? 'AI 解读' : '行业洞察' }}</h2>
+            <ContentInsights :item="detail" :kind="detail.category === 'paper' ? 'paper' : 'news'" />
+          </section>
           <div class="tag-line">
             <el-tag v-for="tag in detail.tags" :key="tag" effect="plain">{{ tag }}</el-tag>
           </div>
@@ -65,7 +80,6 @@ const router = useRouter()
 const loading = ref(false)
 const loadError = ref('')
 const detail = ref({ tags: [] })
-const activeTab = ref('summary')
 const savedTranslation = computed(() => detail.value.category === 'paper' ? detail.value.abstractZh || detail.value.abstract_zh : detail.value.contentZh || detail.value.content_zh)
 const detailId = computed(() => typeof route.query.id === 'string' ? route.query.id.trim() : '')
 let active = false
@@ -78,7 +92,6 @@ function isDetailRoute() {
 
 function resetDetail() {
   detail.value = { tags: [] }
-  activeTab.value = 'summary'
   loadError.value = ''
   loading.value = false
 }
@@ -154,5 +167,16 @@ onBeforeUnmount(() => { active = false; disposed = true; invalidateDetail() })
 .content-text {
   margin: 0;
   white-space: pre-line;
+}
+
+.detail-section {
+  margin-bottom: 24px;
+}
+
+.section-title {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
 }
 </style>
