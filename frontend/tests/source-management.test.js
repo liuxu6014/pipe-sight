@@ -34,7 +34,7 @@ function harness({ rows = [], permissions = true, list, update, create, disable,
     deletePipelineSource: async id => { calls.remove.push(id); return remove?.(id) }
   })
   const script = parse(source).descriptor.scriptSetup.content.replace(/^import .*$/gm, '')
-  vm.runInContext(`${script}\nglobalThis.view = { rows, sourceError, loading, dialogVisible, dialogError, saving, sourceForm, frequency, intervalChoices, frequencyPreview, editingSource, pendingSourceId, busy, activeType, sourceTypeOptions, filteredRows, openEditDialog, editDetails, sourceTable, page, pageSize, pagedRows, loadSources, openCreateDialog, openFrequencyDialog, resetIntervalAmount, saveSource, toggleSource, removeSource, changeFrequency, frequencyValue, frequencySourceId }`, context)
+  vm.runInContext(`${script}\nglobalThis.view = { rows, sourceError, loading, dialogVisible, dialogError, saving, sourceForm, frequency, intervalChoices, frequencyPreview, editingSource, pendingSourceId, busy, activeType, sourceTypeOptions, filteredRows, openEditDialog, editDetails, sourceTable, page, pageSize, pagedRows, loadSources, openCreateDialog, openFrequencyDialog, resetIntervalAmount, saveSource, toggleSource, removeSource }`, context)
   return { state: context.view, calls }
 }
 
@@ -336,12 +336,11 @@ test('actual source SFC compiles, exposes guarded edit, frequency, trial and sta
   assert.match(actions, /:model-value="sourceEnabled\(row\)"/)
   assert.match(actions, /:loading="pendingSourceId === row.id"/)
   const frequencyColumn = descriptor.template.content.match(/<el-table-column label="采集频率"[\s\S]*?<\/el-table-column>/)[0]
-  assert.match(frequencyColumn, /changeFrequency\(row/)
-  assert.match(frequencyColumn, /!canSourceSave \|\| busy/)
+  assert.match(frequencyColumn, /sourceFrequencyText\(sourceCron\(row\)\)/)
+  assert.match(frequencyColumn, /!isExternalSource\(row\)/)
   assert.match(actions, /toggleSource\(row\)/)
   assert.doesNotMatch(source, /VideoPlay|listModelAll|翻译模型|调度表达式/)
   assert.doesNotMatch(descriptor.template.content, /sourceForm\.modelId/)
-  assert.match(frequencyColumn, /!isExternalSource\(row\)/)
   assert.match(descriptor.template.content, /v-model="sourceForm.sourceType"/)
   assert.match(descriptor.template.content, /<el-table[^>]*height="100%"/)
   for (const label of ['数据源名称', '来源类型', '采集频率', '最后采集', '操作']) assert.ok(descriptor.template.content.includes(`label="${label}"`))

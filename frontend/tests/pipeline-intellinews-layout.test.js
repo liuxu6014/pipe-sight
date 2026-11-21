@@ -665,7 +665,7 @@ test('source management configures supported source types and frequency dropdown
  assert.doesNotMatch(page, /立即采集|翻译模型|手动试采|runSource/)
  assert.match(page, /@click="openCreateDialog">新增数据源/)
  assert.match(page, /configuredSourcePayload\(sourceForm, frequency/)
- assert.match(page, /changeFrequency\(row/)
+ assert.match(page, /sourceFrequencyText\(sourceCron\(row\)\)/)
  assert.doesNotMatch(page, /handoffMode|processorSourceCode|InsightHub/)
 })
 

@@ -23,31 +23,9 @@
         <el-table-column label="来源类型" width="120" align="center">
           <template #default="{ row }"><el-tag :type="typeTag(sourceType(row))" effect="light">{{ typeText(sourceType(row)) }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="采集频率" width="200" align="center">
+        <el-table-column label="采集频率" width="180" align="center">
           <template #default="{ row }">
-            <el-select
-              v-if="!isExternalSource(row)"
-              :model-value="frequencyValue(row)"
-              size="small"
-              class="source-frequency-select"
-              :disabled="!canSourceSave || busy"
-              :loading="frequencySourceId === row.id"
-              aria-label="采集频率"
-              @change="changeFrequency(row, $event)"
-            >
-              <el-option v-if="frequencyValue(row) === 'preserve'" value="preserve" label="保留现有时间计划" />
-              <el-option-group label="按分钟">
-                <el-option v-for="amount in sourceIntervalChoices.minute" :key="`minute:${amount}`" :label="amount === 1 ? '每 1 分钟' : `每 ${amount} 分钟`" :value="`minute:${amount}`" />
-              </el-option-group>
-              <el-option-group label="按小时">
-                <el-option v-for="amount in sourceIntervalChoices.hour" :key="`hour:${amount}`" :label="amount === 1 ? '每 1 小时' : `每 ${amount} 小时`" :value="`hour:${amount}`" />
-              </el-option-group>
-              <el-option-group label="按天 / 周">
-                <el-option label="每天 00:00" value="day:1" />
-                <el-option label="每周一 00:00" value="week:1" />
-              </el-option-group>
-              <el-option label="不定时采集" value="off" />
-            </el-select>
+            <span v-if="!isExternalSource(row)">{{ sourceFrequencyText(sourceCron(row)) }}</span>
             <span v-else class="source-cell-empty">外部调度</span>
           </template>
         </el-table-column>
@@ -140,13 +118,6 @@ const canSourceSave = computed(() => checkPermi(['pipeline:source:save']))
 const busy = computed(() => loading.value || saving.value || pendingSourceId.value !== null)
 const sourceForm = reactive({ name: '', sourceType: 'wechat', feedUrl: '', url: '', query: '', limit: 12 })
 const frequency = reactive({ unit: 'hour', amount: 6 })
-const frequencySourceId = ref(null)
-function frequencyValue(source) {
-  const current = sourceFrequency(sourceCron(source))
-  if (current.unit === 'off') return 'off'
-  if (current.unit === 'preserve') return 'preserve'
-  return `${current.unit}:${current.amount}`
-}
 watch(() => sourceForm.sourceType, () => { dialogError.value = '' })
 const intervalChoices = computed(() => sourceIntervalChoices[frequency.unit] || [])
 const hasExistingSchedule = computed(() => editingSource.value && sourceFrequency(sourceCron(editingSource.value)).unit === 'preserve')
@@ -286,23 +257,6 @@ async function removeSource(source) {
   }
 }
 
-async function changeFrequency(source, value) {
-  if (!canSourceSave.value || busy.value || value === 'preserve') return
-  const next = value === 'off'
-    ? { unit: 'off', amount: 1 }
-    : { unit: value.split(':')[0], amount: Number(value.split(':')[1]) }
-  frequencySourceId.value = source.id
-  try {
-    await updatePipelineSource(source.id, existingSourcePayload(source, { cron: sourceIntervalCron(next, sourceCron(source)) }))
-    ElMessage.success('采集频率已更新')
-    await loadSources()
-  } catch (error) {
-    ElMessage.error(error?.msg || error?.message || '采集频率更新失败')
-  } finally {
-    frequencySourceId.value = null
-  }
-}
-
 onMounted(loadSources)
 </script>
 
@@ -326,9 +280,6 @@ onMounted(loadSources)
 .source-table :deep(.cell) { padding-inline: 16px; }
 .source-table :deep(th.el-table__cell) { padding: 12px 0; }
 .source-name { font-size: 14px; line-height: 1.6; font-weight: 600; color: var(--el-text-color-primary); overflow-wrap: anywhere; }
-.source-frequency-cell { display: flex; align-items: center; justify-content: center; gap: 12px; }
-.source-frequency-cell > :deep(.el-button) { flex-shrink: 0; margin: 0; }
-.source-frequency-select { width: 156px; }
 .source-cell-empty { color: var(--el-text-color-secondary); }
 .source-cell-empty { display: block; text-align: center; }
 .source-list-actions { display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: nowrap; white-space: nowrap; }
