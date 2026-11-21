@@ -43,9 +43,6 @@
             <h2 class="section-title">{{ detail.category === 'paper' ? 'AI 解读' : '行业洞察' }}</h2>
             <ContentInsights :item="detail" :kind="detail.category === 'paper' ? 'paper' : 'news'" />
           </section>
-          <div class="tag-line">
-            <el-tag v-for="tag in detail.tags" :key="tag" effect="plain">{{ tag }}</el-tag>
-          </div>
         </el-card>
         <ContentEntities :entities="detail.entities || []" />
 
@@ -163,12 +160,6 @@ onBeforeUnmount(() => { active = false; disposed = true; invalidateDetail() })
 .content-text {
   color: #526b7d;
   line-height: 1.8;
-}
-
-.tag-line {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
 }
 
 .content-text {
