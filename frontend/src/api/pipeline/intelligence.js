@@ -98,7 +98,15 @@ export function updatePipelineSource(sourceId, data) {
   })
 }
 
-export function disablePipelineSource(sourceId) {
+export function setPipelineSourceEnabled(sourceId, isEnabled) {
+  return request({
+    url: `/pipeline/sources/${requireBusinessId(sourceId)}/enabled`,
+    method: 'put',
+    data: { isEnabled }
+  })
+}
+
+export function deletePipelineSource(sourceId) {
   return request({
     url: `/pipeline/sources/${requireBusinessId(sourceId)}`,
     method: 'delete'

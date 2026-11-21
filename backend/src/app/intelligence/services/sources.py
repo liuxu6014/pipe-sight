@@ -14,6 +14,7 @@ from app.business_ids import parse_business_id, wire_id
 from app.business_time import format_business_time
 from app.intelligence.models.collection import PipelineCrawlRun as Run
 from app.intelligence.models.collection import PipelineSource as Source
+from app.intelligence.models.content import PipelineArticle
 from app.intelligence.repositories.collection_repository import CollectionConflict, CollectionRepository, aware
 from app.intelligence.services.collection import ADAPTERS, ConfigurationError, validate_config
 from app.intelligence.services.collection_translation import CollectionTranslationService, TranslationConfigurationError
@@ -233,6 +234,22 @@ class IntelligenceSourceService:
         cursor = next_occurrence(source.cron, source.timezone, now) if enabled else None
         source = await CollectionRepository.set_enabled(db, source_id, enabled, now=now, next_run_at=cursor)
         return cls.source_dict(source, date_formatter)
+
+    @classmethod
+    @transaction
+    async def delete(cls, db, source_id) -> dict:
+        """永久删除来源；已有采集记录或资讯时拒绝删除，改提示停用。"""
+        source_id = parse_business_id(source_id)
+        source = await CollectionRepository.source(db, source_id, lock=True)
+        has_run = await db.scalar(select(Run.id).where(Run.source_id == source_id).limit(1))
+        has_article = await db.scalar(
+            select(PipelineArticle.id).where(PipelineArticle.source_id == source_id).limit(1)
+        )
+        if has_run is not None or has_article is not None:
+            raise CollectionConflict('该来源已有采集记录或资讯，无法删除；请改用停用')
+        await db.delete(source)
+        await db.commit()
+        return {'id': wire_id(source_id)}
 
     @classmethod
     @transaction

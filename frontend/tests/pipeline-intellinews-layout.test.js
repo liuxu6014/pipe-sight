@@ -661,7 +661,7 @@ test('keeps model and Prompt controls aligned with backend permissions', () => {
 
 test('source management configures supported source types and runs permission-guarded manual trials', () => {
  const page = read('../src/views/pipeline/source/index.vue')
- for (const name of ['createPipelineSource','updatePipelineSource','disablePipelineSource','existingSourcePayload','configuredSourcePayload','runPipelineTask']) assert.ok(page.includes(name))
+ for (const name of ['createPipelineSource','updatePipelineSource','setPipelineSourceEnabled','deletePipelineSource','existingSourcePayload','configuredSourcePayload','runPipelineTask']) assert.ok(page.includes(name))
  assert.doesNotMatch(page, /立即采集|翻译模型/)
  assert.match(page, /@click="openCreateDialog">新增数据源/)
  assert.match(page, /configuredSourcePayload\(sourceForm, frequency/)

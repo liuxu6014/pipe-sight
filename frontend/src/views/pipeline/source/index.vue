@@ -35,10 +35,11 @@
         <el-table-column label="最后采集" width="180" align="center">
           <template #default="{ row }">{{ formatBusinessTime(row.lastRunAt ?? row.last_run_at) || '—' }}</template>
         </el-table-column>
-        <el-table-column label="是否启用" width="180" align="center">
+        <el-table-column label="操作" width="200" align="center">
           <template #default="{ row }">
             <div class="source-list-actions" role="group" :aria-label="`${row.name}操作`">
               <el-button v-if="canSourceSave && !isExternalSource(row)" plain type="primary" :disabled="busy" @click="openEditDialog(row)">编辑</el-button>
+              <el-button v-if="canSourceSave && !isExternalSource(row)" plain type="danger" :disabled="busy" @click="removeSource(row)">删除</el-button>
               <el-switch :model-value="sourceEnabled(row)" :disabled="!canSourceSave || busy" :loading="pendingSourceId === row.id" :aria-label="`${row.name}采集开关`" @change="toggleSource(row)" />
             </div>
           </template>
@@ -96,9 +97,9 @@
 <script setup>
 import { formatBusinessTime } from '@/utils/portal/businessTime'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Clock, Plus } from '@element-plus/icons-vue'
-import { createPipelineSource, disablePipelineSource, listPipelineSources, updatePipelineSource, runPipelineTask } from '@/api/pipeline/intelligence'
+import { createPipelineSource, deletePipelineSource, listPipelineSources, setPipelineSourceEnabled, updatePipelineSource, runPipelineTask } from '@/api/pipeline/intelligence'
 import { sourceEnabled } from '@/utils/pipeline/compactContract'
 import { checkPermi } from '@/utils/permission'
 import { configuredSourcePayload, existingSourcePayload, sourceCron, sourceFrequency, sourceFrequencyText, sourceIntervalChoices, sourceIntervalCron } from '@/utils/pipeline/sourceManagement'
@@ -228,12 +229,34 @@ async function toggleSource(source) {
   const enabled = sourceEnabled(source)
   pendingSourceId.value = source.id
   try {
-    if (enabled) await disablePipelineSource(source.id)
-    else await updatePipelineSource(source.id, existingSourcePayload(source, { isEnabled: true }))
+    await setPipelineSourceEnabled(source.id, !enabled)
     ElMessage.success(enabled ? '来源已停用；已开始的采集不会立即停止' : '来源已启用')
     await loadSources()
   } catch (error) {
     ElMessage.error(error?.msg || error?.message || '数据源状态更新失败')
+  } finally {
+    pendingSourceId.value = null
+  }
+}
+
+async function removeSource(source) {
+  if (!canSourceSave.value || busy.value || isExternalSource(source)) return
+  try {
+    await ElMessageBox.confirm(`确定删除数据源「${source.name}」吗？删除后不可恢复。`, '删除数据源', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消'
+    })
+  } catch {
+    return
+  }
+  pendingSourceId.value = source.id
+  try {
+    await deletePipelineSource(source.id)
+    ElMessage.success('数据源已删除')
+    await loadSources()
+  } catch (error) {
+    ElMessage.error(error?.msg || error?.message || '删除失败')
   } finally {
     pendingSourceId.value = null
   }
@@ -273,10 +296,10 @@ onMounted(loadSources)
 .source-frequency-cell > :deep(.el-button) { flex-shrink: 0; margin: 0; }
 .source-cell-empty { color: var(--el-text-color-secondary); }
 .source-cell-empty { display: block; text-align: center; }
-.source-list-actions { display: grid; grid-template-columns: 64px 40px; gap: 12px; align-items: center; justify-content: center; }
-.source-list-actions > :deep(.el-button) { grid-column: 1; margin: 0; }
+.source-list-actions { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
+.source-list-actions > :deep(.el-button) { margin: 0; }
 .source-summary-actions > :deep(.el-button) { margin-left: 0; }
-.source-list-actions > :deep(.el-switch) { grid-column: 2; grid-row: 1; margin: 0; }
+.source-list-actions > :deep(.el-switch) { margin: 0; }
 .source-retry { min-height: 44px; color: #409eff; }
 .source-dialog-name { margin: 0 0 16px; font-weight: 600; overflow-wrap: anywhere; }
 .source-frequency-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; width: 100%; }

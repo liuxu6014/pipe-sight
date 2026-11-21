@@ -190,7 +190,7 @@ test('source configuration changes frequency only, preserves disabled state and 
     ...sourceManagement,
     listPipelineSources: async () => ({ data: { rows: [] } }),
     updatePipelineSource: async (id, payload) => { if (fail) throw new Error('保存失败'); writes.push({ id, payload }) },
-    disablePipelineSource: async () => { throw new Error('停用失败') }
+    setPipelineSourceEnabled: async () => { throw new Error('停用失败') }
   }, 'openFrequencyDialog, frequency, saveSource, toggleSource')
   try {
     const original = { id: 's', name: '来源', type: 'wechat', adapter: 'wechat_rss', config: { timeout: 30, feed_url: 'https://example.com/rss' }, modelId: 12, isEnabled: false }

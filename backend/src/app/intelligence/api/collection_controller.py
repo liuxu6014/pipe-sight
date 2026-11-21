@@ -121,6 +121,6 @@ async def confirm_stop(request: Request, run_id: BusinessId, payload: IsolationC
 @collection_controller.delete(
     '/sources/{source_id}', dependencies=[UserInterfaceAuthDependency('pipeline:source:save')]
 )
-@Log(title='采集停用', business_type=BusinessType.UPDATE, request_log_mode='summary', response_log_mode='summary')
-async def disable_source(request: Request, source_id: BusinessId, query_db: DB) -> Response:
-    return await response(Sources.set_enabled(query_db, source_id, False))
+@Log(title='采集来源', business_type=BusinessType.DELETE, request_log_mode='summary', response_log_mode='summary')
+async def delete_source(request: Request, source_id: BusinessId, query_db: DB) -> Response:
+    return await response(Sources.delete(query_db, source_id))

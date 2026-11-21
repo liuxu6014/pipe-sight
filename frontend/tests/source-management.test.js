@@ -20,20 +20,22 @@ const sample = (extra = {}) => ({
 })
 
 // Execute actual page handlers with local spies only. Never import the API client.
-function harness({ rows = [], permissions = true, list, update, create, disable, run } = {}) {
-  const calls = { list: 0, update: [], create: [], disable: [], run: [], errors: [] }
+function harness({ rows = [], permissions = true, list, update, create, disable, remove, run } = {}) {
+  const calls = { list: 0, update: [], create: [], setEnabled: [], remove: [], run: [], errors: [] }
   const context = vm.createContext({
     ...Vue, ...management, sourceEnabled, defineOptions() {}, onMounted() {},
     checkPermi: keys => typeof permissions === 'function' ? permissions(keys) : permissions,
     ElMessage: { success() {}, error: message => calls.errors.push(message) },
+    ElMessageBox: { confirm: async () => {} },
     listPipelineSources: async () => { calls.list++; return list ? list() : { data: { rows } } },
     updatePipelineSource: async (...args) => { calls.update.push(args); return update?.(...args) },
     createPipelineSource: async data => { calls.create.push(data); return create?.(data) },
-    disablePipelineSource: async id => { calls.disable.push(id); return disable?.(id) },
+    setPipelineSourceEnabled: async (id, isEnabled) => { calls.setEnabled.push([id, isEnabled]); return disable?.(id, isEnabled) },
+    deletePipelineSource: async id => { calls.remove.push(id); return remove?.(id) },
     runPipelineTask: async id => { calls.run.push(id); return run ? run(id) : { data: { id: 'run-1' } } }
   })
   const script = parse(source).descriptor.scriptSetup.content.replace(/^import .*$/gm, '')
-  vm.runInContext(`${script}\nglobalThis.view = { rows, sourceError, loading, dialogVisible, dialogError, saving, sourceForm, frequency, intervalChoices, frequencyPreview, editingSource, pendingSourceId, busy, activeType, sourceTypeOptions, filteredRows, openEditDialog, editDetails, sourceTable, page, pageSize, pagedRows, loadSources, openCreateDialog, openFrequencyDialog, resetIntervalAmount, saveSource, toggleSource, runSource, runningId }`, context)
+  vm.runInContext(`${script}\nglobalThis.view = { rows, sourceError, loading, dialogVisible, dialogError, saving, sourceForm, frequency, intervalChoices, frequencyPreview, editingSource, pendingSourceId, busy, activeType, sourceTypeOptions, filteredRows, openEditDialog, editDetails, sourceTable, page, pageSize, pagedRows, loadSources, openCreateDialog, openFrequencyDialog, resetIntervalAmount, saveSource, toggleSource, removeSource, runSource, runningId }`, context)
   return { state: context.view, calls }
 }
 
@@ -202,7 +204,7 @@ test('page loads all existing types including unsupported adapters and normalize
   state.activeType.value = 'all'
   assert.equal(state.filteredRows.value.length, 5)
   assert.equal(calls.list, 1)
-  assert.equal(calls.create.length + calls.update.length + calls.disable.length, 0)
+  assert.equal(calls.create.length + calls.update.length + calls.setEnabled.length, 0)
 })
 
 test('malformed/failed list responses show a retryable error; unauthorized pages never request data', async () => {
@@ -274,11 +276,11 @@ test('failed status changes leave rows unchanged and release pending state', asy
   const { state, calls } = harness({ update: async () => { throw new Error('启用失败') }, disable: async () => { throw new Error('停用失败') } })
   await state.toggleSource(row)
   assert.equal(row.isEnabled, false)
-  assert.equal(calls.update[0][1].isEnabled, true)
+  assert.equal(calls.setEnabled[0][1], true)
   row.isEnabled = true
   await state.toggleSource(row)
   assert.equal(row.isEnabled, true)
-  assert.equal(calls.disable[0], row.id)
+  assert.equal(calls.setEnabled[1][0], row.id)
   assert.equal(state.pendingSourceId.value, null)
   assert.equal(calls.errors.length, 2)
 })
@@ -317,7 +319,7 @@ test('read-only permission permits listing but prevents creation, frequency chan
   await state.toggleSource(sample())
   assert.equal(state.dialogVisible.value, false)
   assert.equal(calls.list, 1)
-  assert.equal(calls.create.length + calls.update.length + calls.disable.length, 0)
+  assert.equal(calls.create.length + calls.update.length + calls.setEnabled.length, 0)
 })
 
 test('collection is one top-level source link, tasks stay available in the unmodified registration tree', () => {
@@ -359,7 +361,7 @@ test('actual source SFC compiles, exposes guarded edit, frequency, trial and sta
   assert.equal(descriptor.styles[0].scoped, true)
   assert.deepEqual(compileStyle({ source: descriptor.styles[0].content, id: 'data-v-source-management', scoped: true }).errors, [])
   const actions = descriptor.template.content.match(/<div class="source-list-actions"[\s\S]*?<\/div>/)[0]
-  assert.equal((actions.match(/<el-button /g) || []).length, 1)
+  assert.equal((actions.match(/<el-button /g) || []).length, 2)
   assert.equal((actions.match(/<el-switch /g) || []).length, 1)
   assert.match(actions, /:model-value="sourceEnabled\(row\)"/)
   assert.match(actions, /:loading="pendingSourceId === row.id"/)
@@ -373,7 +375,7 @@ test('actual source SFC compiles, exposes guarded edit, frequency, trial and sta
   assert.match(descriptor.template.content, /canSourceRun && !isExternalSource\(row\)/)
   assert.match(descriptor.template.content, /v-model="sourceForm.sourceType"/)
   assert.match(descriptor.template.content, /<el-table[^>]*height="100%"/)
-  for (const label of ['数据源名称', '来源类型', '采集频率', '最后采集', '是否启用']) assert.ok(descriptor.template.content.includes(`label="${label}"`))
+  for (const label of ['数据源名称', '来源类型', '采集频率', '最后采集', '操作']) assert.ok(descriptor.template.content.includes(`label="${label}"`))
 })
 
 
@@ -394,9 +396,10 @@ test('three source categories stay visible when empty and external sources retai
   assert.equal(state.dialogVisible.value, false)
   const row = sample({ type: 'website' })
   await state.toggleSource(row)
-  assert.equal(calls.update.length, 4)
-  assert.equal(calls.update.at(-1)[1].cron, row.cron)
-  assert.equal(calls.update.at(-1)[1].isEnabled, true)
+  assert.equal(calls.update.length, 3)
+  assert.equal(calls.setEnabled.length, 1)
+  assert.equal(calls.setEnabled[0][0], row.id)
+  assert.equal(calls.setEnabled[0][1], true)
 })
 
 
@@ -431,7 +434,7 @@ test('source pagination slices filtered results, resets filters and sizes, and c
   assert.equal(state.pagedRows.value.length, 0)
   assert.equal(state.page.value, 1)
   assert.equal(calls.list, 1)
-  assert.equal(calls.update.length + calls.create.length + calls.disable.length, 0)
+  assert.equal(calls.update.length + calls.create.length + calls.setEnabled.length, 0)
 })
 
 
