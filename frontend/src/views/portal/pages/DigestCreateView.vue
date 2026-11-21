@@ -86,13 +86,13 @@
         <small v-if="activeStep === 0" class="ps-digest-rule-note">系统按本次规则筛选资讯。另存后可在以后的简报中复用。</small>
         <el-button v-if="activeStep > 0" :disabled="submitting" @click="goBack">上一步</el-button>
         <span class="ps-digest-footer-spacer" />
-        <el-button v-if="activeStep === 0" :disabled="!canSaveTemplate" @click="openSaveTemplate">另存为我的模板</el-button>
+        <el-button v-if="activeStep === 0" :disabled="!canSaveTemplate" @click="openSaveTemplate">存为模板</el-button>
         <el-button v-if="activeStep === 0" @click="goBack">取消</el-button>
         <el-button v-if="activeStep === 0" type="primary" :disabled="!canStart" @click="confirmGeneration">下一步</el-button>
         <el-button v-else type="primary" :loading="submitting" :disabled="!canGenerate" @click="createDigest">提交生成任务</el-button>
       </footer>
     </section>
-    <el-dialog v-model="saveDialogOpen" title="另存为我的模板" width="min(440px, calc(100vw - 32px))"
+    <el-dialog v-model="saveDialogOpen" title="存为模板" width="min(440px, calc(100vw - 32px))"
       :close-on-click-modal="false" :close-on-press-escape="!savingTemplate" :show-close="!savingTemplate" append-to-body align-center>
       <el-form label-position="top" @submit.prevent="saveAsTemplate">
         <el-form-item label="模板名称" for="digest-new-template-name" :error="saveTemplateError">
