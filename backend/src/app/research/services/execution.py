@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+import traceback
 from copy import deepcopy
 from typing import Any
 
@@ -182,6 +183,8 @@ class ResearchExecutionService:
             raise
         except Exception as error:
             logger.exception('科研生成任务 %s 失败，真实异常已记录', job_id)
+            print(f'[GEN-DEBUG] job {job_id} failed: {type(error).__name__}: {error}', flush=True)
+            traceback.print_exc()
             async with AsyncSessionLocal() as error_db:
                 job = await ResearchDao.lock_running_research_job(error_db, job_id, user_id, token)
                 if job:
