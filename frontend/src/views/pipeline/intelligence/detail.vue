@@ -53,7 +53,6 @@
             <el-descriptions-item label="类别">{{ detail.category_name || '类别未提供' }}</el-descriptions-item>
             <el-descriptions-item v-if="detail.category === 'paper'" label="期刊">{{ detail.journal || '当前接口未提供' }}</el-descriptions-item>
             <el-descriptions-item v-if="detail.category === 'paper'" label="作者">{{ Array.isArray(detail.authors) ? detail.authors.join(' · ') : detail.authors || '当前接口未提供' }}</el-descriptions-item>
-            <el-descriptions-item label="采集时间">{{ collectionTime(detail) || '当前接口未提供' }}</el-descriptions-item>
           </el-descriptions>
         </el-card>
 
@@ -71,7 +70,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { getPipelineIntelligenceDetail } from '@/api/pipeline/intelligence'
 import ContentEntities from '@/views/portal/components/ContentEntities.vue'
 import ContentInsights from '@/views/portal/components/ContentInsights.vue'
-import { collectionTime } from '@/utils/portal/contentPresentation'
 
 defineOptions({ name: 'PipelineIntelligenceDetail' })
 
