@@ -43,6 +43,7 @@
        <footer>
         <div class="model-status"><span>{{ model.status === '0' ? '已启用' : '已停用' }}</span><el-switch v-if="canModelEdit" :aria-label="(model.modelName || model.modelCode) + '启用状态'" :model-value="model.status === '0'" :loading="modelToggling === model.modelId" :disabled="modelToggling !== null" @change="toggleModel(model, $event)" /></div>
         <el-button v-if="canModelEdit" plain type="primary" :icon="Edit" @click="editModel(model)">配置</el-button>
+        <el-button v-if="canModelRemove" plain type="danger" :loading="modelDeleting === model.modelId" :disabled="modelDeleting !== null" @click="deleteModel(model)">删除</el-button>
        </footer>
       </article>
      </div>
@@ -162,7 +163,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, Picture, Cpu, Edit, ArrowDown } from '@element-plus/icons-vue'
-import { addModel, listModelAll, updateModel } from '@/api/ai/model'
+import { addModel, delModel, listModelAll, updateModel } from '@/api/ai/model'
 import { listPipelineCategories, createPipelineCategory, updatePipelineCategory, deletePipelineCategory } from '@/api/pipeline/categories'
 import ModelPurposeSettings from './components/ModelPurposeSettings.vue'
 import { categoryPayload, modelCapabilities, modelsFor } from '@/utils/pipeline/compactContract'
@@ -191,11 +192,12 @@ function modelsInGroup(group, useKeyword = true) {
   return inGroup && (!keyword || [model.modelName, model.modelCode, model.provider].filter(Boolean).join(' ').toLocaleLowerCase().includes(keyword))
  })
 }
-const models = ref([]), modelLoading = ref(false), modelError = ref(''), modelSaving = ref(false)
+const models = ref([]), modelLoading = ref(false), modelError = ref(''), modelSaving = ref(false), modelDeleting = ref(null)
 const modelDialogVisible = ref(false), editingModel = ref(null)
 const canModelQuery = computed(() => checkPermi(['ai:model:query']))
 const canModelAdd = computed(() => checkPermi(['ai:model:add']))
 const canModelEdit = computed(() => checkPermi(['ai:model:edit']))
+const canModelRemove = computed(() => checkPermi(['ai:model:remove']))
 const canModelSave = computed(() => editingModel.value ? canModelEdit.value : canModelAdd.value)
 const canCategoryList = computed(() => checkRole(['admin']))
 const canCategorySave = computed(() => checkRole(['admin']))
@@ -254,6 +256,20 @@ async function toggleModel(model, enabled) {
  try { await updateModel({ modelId: model.modelId, status: enabled ? '0' : '1' }); model.status = enabled ? '0' : '1'; ElMessage.success(`模型已${enabled ? '启用' : '停用'}`) }
  catch (error) { ElMessage.error(error?.msg || error?.message || '模型状态更新失败') }
  finally { modelToggling.value = null }
+}
+async function deleteModel(model) {
+ if (!canModelRemove.value || modelDeleting.value !== null) return
+ modelDeleting.value = model.modelId
+ try {
+  await ElMessageBox.confirm(`确认删除模型“${model.modelName || model.modelCode}”？删除后无法恢复；已被模板或资源引用的模型无法删除，可选择停用。`, '删除模型', { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' })
+  await delModel(model.modelId)
+  ElMessage.success('模型已删除')
+  await loadModels()
+ } catch (error) {
+  if (error !== 'cancel' && error !== 'close') ElMessage.error(error?.msg || error?.message || '模型删除失败，请重试')
+ } finally {
+  modelDeleting.value = null
+ }
 }
 
 const categories = ref([]), categoryLoading = ref(false), categoryError = ref('')
