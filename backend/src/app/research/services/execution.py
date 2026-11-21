@@ -185,6 +185,11 @@ class ResearchExecutionService:
             logger.exception('科研生成任务 %s 失败，真实异常已记录', job_id)
             print(f'[GEN-DEBUG] job {job_id} failed: {type(error).__name__}: {error}', flush=True)
             traceback.print_exc()
+            try:
+                with open('/tmp/gen_error.log', 'a', encoding='utf-8') as _f:
+                    _f.write(f'job {job_id}: {type(error).__name__}: {error}\n{traceback.format_exc()}\n')
+            except OSError:
+                pass
             async with AsyncSessionLocal() as error_db:
                 job = await ResearchDao.lock_running_research_job(error_db, job_id, user_id, token)
                 if job:
