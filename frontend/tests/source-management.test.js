@@ -20,8 +20,8 @@ const sample = (extra = {}) => ({
 })
 
 // Execute actual page handlers with local spies only. Never import the API client.
-function harness({ rows = [], permissions = true, list, update, create, disable, remove, run } = {}) {
-  const calls = { list: 0, update: [], create: [], setEnabled: [], remove: [], run: [], errors: [] }
+function harness({ rows = [], permissions = true, list, update, create, disable, remove } = {}) {
+  const calls = { list: 0, update: [], create: [], setEnabled: [], remove: [], errors: [] }
   const context = vm.createContext({
     ...Vue, ...management, sourceEnabled, defineOptions() {}, onMounted() {},
     checkPermi: keys => typeof permissions === 'function' ? permissions(keys) : permissions,
@@ -31,11 +31,10 @@ function harness({ rows = [], permissions = true, list, update, create, disable,
     updatePipelineSource: async (...args) => { calls.update.push(args); return update?.(...args) },
     createPipelineSource: async data => { calls.create.push(data); return create?.(data) },
     setPipelineSourceEnabled: async (id, isEnabled) => { calls.setEnabled.push([id, isEnabled]); return disable?.(id, isEnabled) },
-    deletePipelineSource: async id => { calls.remove.push(id); return remove?.(id) },
-    runPipelineTask: async id => { calls.run.push(id); return run ? run(id) : { data: { id: 'run-1' } } }
+    deletePipelineSource: async id => { calls.remove.push(id); return remove?.(id) }
   })
   const script = parse(source).descriptor.scriptSetup.content.replace(/^import .*$/gm, '')
-  vm.runInContext(`${script}\nglobalThis.view = { rows, sourceError, loading, dialogVisible, dialogError, saving, sourceForm, frequency, intervalChoices, frequencyPreview, editingSource, pendingSourceId, busy, activeType, sourceTypeOptions, filteredRows, openEditDialog, editDetails, sourceTable, page, pageSize, pagedRows, loadSources, openCreateDialog, openFrequencyDialog, resetIntervalAmount, saveSource, toggleSource, removeSource, runSource, runningId }`, context)
+  vm.runInContext(`${script}\nglobalThis.view = { rows, sourceError, loading, dialogVisible, dialogError, saving, sourceForm, frequency, intervalChoices, frequencyPreview, editingSource, pendingSourceId, busy, activeType, sourceTypeOptions, filteredRows, openEditDialog, editDetails, sourceTable, page, pageSize, pagedRows, loadSources, openCreateDialog, openFrequencyDialog, resetIntervalAmount, saveSource, toggleSource, removeSource, changeFrequency, frequencyValue, frequencySourceId }`, context)
   return { state: context.view, calls }
 }
 
@@ -158,35 +157,6 @@ test('editing historical manual website adapter repairs it while preserving appr
   assert.equal(payload.isEnabled, false)
   assert.deepEqual(payload.config, config)
   assert.equal(row.adapter, 'manual')
-})
-
-test('trial collection reports errors, releases pending state and blocks duplicate or unauthorized requests', async () => {
-  const row = sample()
-  let reject
-  const { state, calls } = harness({ run: () => new Promise((resolve, fail) => { reject = fail }) })
-  const running = state.runSource(row)
-  assert.equal(state.runningId.value, row.id)
-  await state.runSource(row)
-  assert.equal(calls.run.length, 1)
-  reject(new Error('尚未配置内容处理模型'))
-  await running
-  assert.equal(state.runningId.value, '')
-  assert.deepEqual(calls.errors, ['尚未配置内容处理模型'])
-  const readOnly = harness({ permissions: keys => keys.includes('pipeline:source:list') })
-  await readOnly.state.runSource(row)
-  assert.equal(readOnly.calls.run.length, 0)
-  await state.runSource(sample({ adapter: 'kafka_content_import' }))
-  assert.equal(calls.run.length, 1)
-})
-
-test('successful manual trial accepts a stopped source and refreshes the visible list', async () => {
-  const row = sample({ isEnabled: false })
-  const { state, calls } = harness({ rows: [row] })
-  await state.runSource(row)
-  assert.deepEqual(calls.run, [row.id])
-  assert.equal(calls.list, 1)
-  assert.equal(row.isEnabled, false)
-  assert.equal(state.runningId.value, '')
 })
 
 test('page loads all existing types including unsupported adapters and normalizes news type statistics', async () => {
@@ -372,7 +342,6 @@ test('actual source SFC compiles, exposes guarded edit, frequency, trial and sta
   assert.doesNotMatch(source, /VideoPlay|listModelAll|翻译模型|调度表达式/)
   assert.doesNotMatch(descriptor.template.content, /sourceForm\.modelId/)
   assert.match(frequencyColumn, /!isExternalSource\(row\)/)
-  assert.match(descriptor.template.content, /canSourceRun && !isExternalSource\(row\)/)
   assert.match(descriptor.template.content, /v-model="sourceForm.sourceType"/)
   assert.match(descriptor.template.content, /<el-table[^>]*height="100%"/)
   for (const label of ['数据源名称', '来源类型', '采集频率', '最后采集', '操作']) assert.ok(descriptor.template.content.includes(`label="${label}"`))

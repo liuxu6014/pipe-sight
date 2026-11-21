@@ -36,12 +36,21 @@
               @change="changeFrequency(row, $event)"
             >
               <el-option v-if="frequencyValue(row) === 'preserve'" value="preserve" label="保留现有时间计划" />
-              <el-option v-for="opt in frequencyOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+              <el-option-group label="按分钟">
+                <el-option v-for="amount in sourceIntervalChoices.minute" :key="`minute:${amount}`" :label="amount === 1 ? '每 1 分钟' : `每 ${amount} 分钟`" :value="`minute:${amount}`" />
+              </el-option-group>
+              <el-option-group label="按小时">
+                <el-option v-for="amount in sourceIntervalChoices.hour" :key="`hour:${amount}`" :label="amount === 1 ? '每 1 小时' : `每 ${amount} 小时`" :value="`hour:${amount}`" />
+              </el-option-group>
+              <el-option-group label="按天 / 周">
+                <el-option label="每天 00:00" value="day:1" />
+                <el-option label="每周一 00:00" value="week:1" />
+              </el-option-group>
+              <el-option label="不定时采集" value="off" />
             </el-select>
             <span v-else class="source-cell-empty">外部调度</span>
           </template>
         </el-table-column>
-        <el-table-column label="手动试采" width="120" align="center"><template #default="{ row }"><el-button v-if="canSourceRun && !isExternalSource(row)" :loading="runningId === row.id" :disabled="busy" @click="runSource(row)">试采</el-button><span v-else>—</span></template></el-table-column>
         <el-table-column label="最后采集" width="180" align="center">
           <template #default="{ row }">{{ formatBusinessTime(row.lastRunAt ?? row.last_run_at) || '—' }}</template>
         </el-table-column>
@@ -109,15 +118,13 @@ import { formatBusinessTime } from '@/utils/portal/businessTime'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { createPipelineSource, deletePipelineSource, listPipelineSources, setPipelineSourceEnabled, updatePipelineSource, runPipelineTask } from '@/api/pipeline/intelligence'
+import { createPipelineSource, deletePipelineSource, listPipelineSources, setPipelineSourceEnabled, updatePipelineSource } from '@/api/pipeline/intelligence'
 import { sourceEnabled } from '@/utils/pipeline/compactContract'
 import { checkPermi } from '@/utils/permission'
 import { configuredSourcePayload, existingSourcePayload, sourceCron, sourceFrequency, sourceFrequencyText, sourceIntervalChoices, sourceIntervalCron } from '@/utils/pipeline/sourceManagement'
 
 defineOptions({ name: 'PipelineSource' })
 
-const runningId = ref('')
-const canSourceRun = computed(() => checkPermi(['pipeline:task:run']))
 const isExternalSource = row => ['news_pipelines_spider', 'kafka_content_import'].includes(row.adapter)
 const loading = ref(false)
 const sourceError = ref('')
@@ -134,13 +141,6 @@ const busy = computed(() => loading.value || saving.value || pendingSourceId.val
 const sourceForm = reactive({ name: '', sourceType: 'wechat', feedUrl: '', url: '', query: '', limit: 12 })
 const frequency = reactive({ unit: 'hour', amount: 6 })
 const frequencySourceId = ref(null)
-const frequencyOptions = computed(() => [
-  ...sourceIntervalChoices.minute.map(amount => ({ value: `minute:${amount}`, label: amount === 1 ? '每 1 分钟' : `每 ${amount} 分钟` })),
-  ...sourceIntervalChoices.hour.map(amount => ({ value: `hour:${amount}`, label: amount === 1 ? '每 1 小时' : `每 ${amount} 小时` })),
-  { value: 'day:1', label: '每天 00:00' },
-  { value: 'week:1', label: '每周一 00:00' },
-  { value: 'off', label: '不定时采集' }
-])
 function frequencyValue(source) {
   const current = sourceFrequency(sourceCron(source))
   if (current.unit === 'off') return 'off'
@@ -303,13 +303,6 @@ async function changeFrequency(source, value) {
   }
 }
 
-async function runSource(source) {
-  if (!canSourceRun.value || isExternalSource(source) || busy.value || runningId.value) return
-  runningId.value = source.id
-  try { const result = await runPipelineTask(source.id); ElMessage.success(`试采已入队：${result.data?.id || result.data?.runId || ''}，点击“采集任务”查看执行结果`); await loadSources() }
-  catch (error) { ElMessage.error(error?.msg || error?.message || '试采未能启动') }
-  finally { runningId.value = '' }
-}
 onMounted(loadSources)
 </script>
 

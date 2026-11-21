@@ -659,13 +659,13 @@ test('keeps model and Prompt controls aligned with backend permissions', () => {
  assert.doesNotMatch(page, /场景路由|Prompt 版本|调用审计/)
 })
 
-test('source management configures supported source types and runs permission-guarded manual trials', () => {
+test('source management configures supported source types and frequency dropdown', () => {
  const page = read('../src/views/pipeline/source/index.vue')
- for (const name of ['createPipelineSource','updatePipelineSource','setPipelineSourceEnabled','deletePipelineSource','existingSourcePayload','configuredSourcePayload','runPipelineTask']) assert.ok(page.includes(name))
- assert.doesNotMatch(page, /立即采集|翻译模型/)
+ for (const name of ['createPipelineSource','updatePipelineSource','setPipelineSourceEnabled','deletePipelineSource','existingSourcePayload','configuredSourcePayload']) assert.ok(page.includes(name))
+ assert.doesNotMatch(page, /立即采集|翻译模型|手动试采|runSource/)
  assert.match(page, /@click="openCreateDialog">新增数据源/)
  assert.match(page, /configuredSourcePayload\(sourceForm, frequency/)
- assert.match(page, /canSourceRun && !isExternalSource\(row\)/)
+ assert.match(page, /changeFrequency\(row/)
  assert.doesNotMatch(page, /handoffMode|processorSourceCode|InsightHub/)
 })
 
