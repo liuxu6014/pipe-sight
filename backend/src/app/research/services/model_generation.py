@@ -484,12 +484,19 @@ class ResearchModelGenerationService:
             + '\n'.join(f'{index}. {section["title"]}' for index, section in enumerate(outline, 1))
             + '\n'
         ) if outline else ''
+        available_ids = [f'{item["type"]}:{item["id"]}' for item in materials]
+        citation_contract = (
+            '引用铁律：本次选材的可用引用编号仅限 ' + '、'.join(available_ids) + '。'
+            '只能引用这些编号，禁止编造、猜测或使用任何不在其中的编号；'
+            '某句若无对应选材支撑，必须改写为待验证表述，不得虚构引用编号。\n'
+        ) if available_ids else ''
         return await ModelGateway.call(
             db,
             snapshot['model'],
             capability='text_generate',
             prompt=prompt,
             system_prompt=outline_contract
+            + citation_contract
             + template_writing_prompt(
                 writing_template, snapshot.get('type') or request.get('report_type', '')
             )
