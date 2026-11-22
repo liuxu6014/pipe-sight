@@ -5561,6 +5561,12 @@
           "valid": true
         },
         {
+          "name": "idx_papers_source_id",
+          "definition": "CREATE INDEX idx_papers_source_id ON public.papers USING btree (source_id)",
+          "unique": false,
+          "valid": true
+        },
+        {
           "name": "uk_papers_doi",
           "definition": "CREATE UNIQUE INDEX uk_papers_doi ON public.papers USING btree (doi) WHERE (doi IS NOT NULL)",
           "unique": true,
@@ -5570,12 +5576,6 @@
           "name": "uk_papers_url",
           "definition": "CREATE UNIQUE INDEX uk_papers_url ON public.papers USING btree (md5(url)) WHERE ((doi IS NULL) AND (url IS NOT NULL))",
           "unique": true,
-          "valid": true
-        },
-        {
-          "name": "idx_papers_source_id",
-          "definition": "CREATE INDEX idx_papers_source_id ON public.papers USING btree (source_id)",
-          "unique": false,
           "valid": true
         }
       ],
