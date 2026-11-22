@@ -217,7 +217,7 @@ test('digest submits all ordered categories together and discards stale results 
     assert.deepEqual(calls.map(call => call.screeningCategories), [[templateRules[1], templateRules[0]]])
     assert.deepEqual(page.categoryCounts.value, [{ name: '工程应用', count: 1 }, { name: '检测技术', count: 1 }])
     assert.deepEqual(page.passedRows.value.map(row => row.id), ['111', '112'])
-    assert.equal(page.buildDigestPayload().screeningId, screeningId)
+    assert.equal(page.buildDigestPayload().screeningPrompt, null)
     page.screeningCategories.value = [templateRules[0], { name: '检测技术', prompt: '另一规则' }]
     assert.equal(page.canStart.value, false)
     assert.equal(page.screeningId.value, '')
@@ -238,7 +238,7 @@ test('digest can use the system default without selecting a personal template', 
     await screenWeekly(ctx.page)
     await ctx.page.createDigest()
     assert.equal(payload.reportType, 'weekly')
-    assert.equal(payload.screeningId, screeningId)
+    assert.equal(payload.screeningPrompt, null)
     assert.equal(Object.hasOwn(payload, 'materials'), false)
     assert.equal(Object.hasOwn(payload, 'selectedItemIds'), false)
     for (const field of ['templateId', 'templateVersion', 'outline', 'templatePrompt', 'template_prompt']) {
@@ -275,7 +275,7 @@ test('digest displays backend model configuration errors and preserves selected 
     assert.equal(ctx.page.form.summaryLength, 'short')
     assert.equal(ctx.page.submitting.value, false)
     assert.ok(ctx.messages.some(item => item.level === 'error' && item.text === '请先配置简报生成模型'))
-    assert.equal(ctx.page.buildDigestPayload().screeningId, screeningId)
+    assert.equal(ctx.page.buildDigestPayload().screeningPrompt, null)
   } finally { ctx.close() }
 })
 
@@ -954,7 +954,7 @@ test('digest waits for every automatic screening batch and submits its receipt w
     const payload = ctx.page.buildDigestPayload()
     assert.equal(Object.hasOwn(payload, 'materials'), false)
     assert.equal(Object.hasOwn(payload, 'selectedItemIds'), false)
-    assert.equal(payload.screeningId, screeningId)
+    assert.equal(payload.screeningPrompt, null)
     assert.equal(batches, 2)
     assert.equal(ctx.mutations, 0)
   } finally { ctx.close() }
@@ -995,7 +995,7 @@ test('digest batch failure is distinct from no matches and can resume', async ()
     assert.equal(ctx.page.activeStep.value, 1)
     assert.equal(ctx.page.previewError.value, '模型复筛失败')
     assert.equal(ctx.page.refreshing.value, false)
-    assert.throws(() => ctx.page.buildDigestPayload(), /完成系统筛选/)
+    assert.throws(() => ctx.page.buildDigestPayload(), /请确认简报配置后提交/)
     fail = false
     await ctx.page.refreshPreview()
     assert.equal(ctx.page.previewError.value, '')
@@ -1153,7 +1153,7 @@ test('digest copy restores a screening prompt but never submits a stale writing 
   try {
     await ctx.page.refreshPreview()
     const payload = ctx.page.buildDigestPayload()
-    assert.equal(payload.screeningId, screeningId)
+    assert.equal(payload.screeningPrompt, null)
     assert.equal(Object.hasOwn(payload, 'materials'), false)
     assert.equal(Object.hasOwn(payload, 'selectedItemIds'), false)
     assert.equal(ctx.page.screeningPrompt.value, '仅纳入创新进展')
@@ -1165,7 +1165,7 @@ test('digest copy restores a screening prompt but never submits a stale writing 
     }
     await ctx.router.replace({ path: '/create', query: { template: 'another-old-template-uuid', sourceTask: '77' } })
     await settle()
-    assert.equal(ctx.page.buildDigestPayload().screeningId, screeningId)
+    assert.equal(ctx.page.buildDigestPayload().screeningPrompt, null)
     assert.equal(catalogCalls, 1)
     assert.equal(ctx.mutations, 0)
   } finally { ctx.close() }
