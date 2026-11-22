@@ -107,8 +107,9 @@
           v-model:current-page="pageNum"
           v-model:page-size="pageSize"
           background
-          layout="sizes, prev, pager, next"
+          layout="total, sizes, ->, prev, pager, next, jumper"
           :page-sizes="[10, 20, 50]"
+          :pager-count="5"
           :total="filteredDocuments.length"
         />
       </div>

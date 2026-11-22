@@ -19,7 +19,7 @@
       </section>
       <PortalEmptyState v-if="!visibleRows.length && !loadError" :title="query.q || query.status !== 'all' ? '没有匹配记录' : '还没有报告记录'" :description="query.q || query.status !== 'all' ? '请调整关键词或生成状态。' : '科研报告与情报简报的生成进度、失败记录和结果都在这里查看。'" />
       </div>
-      <el-pagination v-if="total" v-model:current-page="page" v-model:page-size="pageSize" :total="total" :page-sizes="[10,20,50]" layout="total, sizes, prev, pager, next" />
+      <el-pagination v-if="total" v-model:current-page="page" v-model:page-size="pageSize" :total="total" :page-sizes="[10, 20, 50]" :pager-count="5" layout="total, sizes, ->, prev, pager, next, jumper" background />
     </template>
   </div>
 </template>

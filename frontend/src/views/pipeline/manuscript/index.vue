@@ -113,7 +113,9 @@
           v-model:page-size="pageSize"
           :page-sizes="[10, 20, 50]"
           :total="jobsTotal"
-          layout="total, sizes, prev, pager, next"
+          :pager-count="5"
+          layout="total, sizes, ->, prev, pager, next, jumper"
+          background
           class="jobs-pagination"
           @current-change="loadJobs"
           @size-change="searchJobs"

@@ -33,17 +33,17 @@ const props = defineProps({
   pageSizes: {
     type: Array,
     default() {
-      return [10, 20, 30, 50]
+      return [10, 20, 50]
     }
   },
   // 移动端页码按钮的数量端默认值5
   pagerCount: {
     type: Number,
-    default: document.body.clientWidth < 992 ? 5 : 7
+    default: 5
   },
   layout: {
     type: String,
-    default: 'total, sizes, prev, pager, next, jumper'
+    default: 'total, sizes, ->, prev, pager, next, jumper'
   },
   background: {
     type: Boolean,
