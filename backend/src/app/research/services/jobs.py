@@ -63,7 +63,10 @@ class ResearchJobService:
         candidates, total = await ResearchDao.search_digest_candidates(db, scope, all_candidates=True)
         if not total:
             raise ServiceException(message='报告周期内没有符合范围的资讯，请调整周期')
-        return [{'type': 'article', 'id': wire_id(row.id)} for row in candidates[:DIGEST_SELECTION_LIMIT]]
+        limit = int((data.get('options') or {}).get('itemCount') or 10)
+        if not 1 <= limit <= DIGEST_SELECTION_LIMIT:
+            limit = DIGEST_SELECTION_LIMIT
+        return [{'type': 'article', 'id': wire_id(row.id)} for row in candidates[:limit]]
 
     @staticmethod
     def queued_stage_rows(stage_labels) -> list[dict]:
