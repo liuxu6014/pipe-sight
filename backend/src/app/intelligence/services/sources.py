@@ -14,7 +14,6 @@ from app.business_ids import parse_business_id, wire_id
 from app.business_time import format_business_time
 from app.intelligence.models.collection import PipelineCrawlRun as Run
 from app.intelligence.models.collection import PipelineSource as Source
-from app.intelligence.models.content import PipelineArticle
 from app.intelligence.repositories.collection_repository import CollectionConflict, CollectionRepository, aware
 from app.intelligence.services.collection import ADAPTERS, ConfigurationError, validate_config
 from app.intelligence.services.collection_translation import CollectionTranslationService, TranslationConfigurationError
@@ -238,16 +237,13 @@ class IntelligenceSourceService:
     @classmethod
     @transaction
     async def delete(cls, db, source_id) -> dict:
-        """永久删除来源；已有采集记录或资讯时拒绝删除，改提示停用。"""
+        """软删除来源：标记删除并停用，保留采集记录与资讯。"""
         source_id = parse_business_id(source_id)
         source = await CollectionRepository.source(db, source_id, lock=True)
-        has_run = await db.scalar(select(Run.id).where(Run.source_id == source_id).limit(1))
-        has_article = await db.scalar(
-            select(PipelineArticle.id).where(PipelineArticle.source_id == source_id).limit(1)
-        )
-        if has_run is not None or has_article is not None:
-            raise CollectionConflict('该来源已有采集记录或资讯，无法删除；请改用停用')
-        await db.delete(source)
+        source.is_deleted = True
+        source.is_enabled = False
+        source.cron = None
+        source.next_run_at = None
         await db.commit()
         return {'id': wire_id(source_id)}
 
@@ -375,7 +371,15 @@ class IntelligenceSourceService:
 
     @classmethod
     async def list_sources(cls, db, *, date_formatter=None) -> dict:
-        rows = list((await db.execute(select(Source).order_by(Source.created_at.desc(), Source.id))).scalars().all())
+        rows = list(
+            (
+                await db.execute(
+                    select(Source).where(Source.is_deleted.is_(False)).order_by(Source.created_at.desc(), Source.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
         return {
             'rows': [cls.source_dict(row, date_formatter) for row in rows],
             'total': len(rows),

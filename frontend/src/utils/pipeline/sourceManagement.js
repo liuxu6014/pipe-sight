@@ -78,7 +78,7 @@ export function newWechatSourcePayload(form, frequency) {
   return {
     name, type: 'wechat', url: null, adapter: 'wechat_rss',
     cron: sourceIntervalCron(frequency), timezone: 'Asia/Shanghai',
-    config: { feed_url: feedUrl, limit: 12 }, modelId: null, isEnabled: true
+    config: { feed_url: feedUrl }, modelId: null, isEnabled: true
   }
 }
 
@@ -94,10 +94,8 @@ export function configuredSourcePayload(form, frequency, source = null) {
   const parsed = new URL(url)
   const host = type === 'paper' ? 'api.crossref.org' : 'www.pipechina.com.cn'
   if (parsed.protocol !== 'https:' || parsed.hostname !== host || parsed.username || parsed.password || parsed.search || parsed.hash || (parsed.port && parsed.port !== '443') || (type === 'paper' && parsed.pathname !== '/works')) throw new Error(`请使用 ${host} 的 HTTPS 入口`)
-  const limit = Number(form.limit ?? 12)
-  if (!Number.isInteger(limit) || limit < 1 || limit > 30) throw new Error('每次采集数量须为 1～30')
   const previousConfig = Object.fromEntries(Object.entries(source?.config || {}).filter(([key]) => ['request_timeout', 'total_timeout', 'retry', 'request_interval'].includes(key)))
-  const config = { ...previousConfig, limit, ...(type === 'paper' ? { query: String(form.query || '').trim() || 'oil gas pipeline integrity monitoring', batch_size: source?.config?.batch_size || 5 } : {}) }
+  const config = { ...previousConfig, ...(type === 'paper' ? { query: String(form.query || '').trim() || 'oil gas pipeline integrity monitoring', batch_size: source?.config?.batch_size || 5 } : {}) }
   return { name, type, url, adapter, config, cron: sourceIntervalCron(frequency, sourceCron(source || {})), timezone: source?.timezone || 'Asia/Shanghai', modelId: source?.modelId ?? source?.model_id ?? null, isEnabled: source ? sourceEnabled(source) : false }
 }
 

@@ -56,7 +56,6 @@
             <el-form-item label="采集适配器"><el-input :model-value="sourceForm.sourceType === 'paper' ? 'Crossref 论文' : '国家管网资讯'" disabled /></el-form-item>
             <el-form-item label="HTTPS 来源入口"><el-input v-model="sourceForm.url" :placeholder="sourceForm.sourceType === 'paper' ? 'https://api.crossref.org/works' : 'https://www.pipechina.com.cn/groupnews.html'" /></el-form-item>
             <el-form-item v-if="sourceForm.sourceType === 'paper'" label="检索主题"><el-input v-model="sourceForm.query" maxlength="1000" placeholder="oil gas pipeline integrity monitoring" /></el-form-item>
-            <el-form-item label="单次采集上限"><el-input-number v-model="sourceForm.limit" :min="1" :max="30" /></el-form-item>
           </template>
         </template>
         <el-form-item label="采集间隔">
@@ -116,7 +115,7 @@ const pendingSourceId = ref(null)
 const canSourceList = computed(() => checkPermi(['pipeline:source:list']))
 const canSourceSave = computed(() => checkPermi(['pipeline:source:save']))
 const busy = computed(() => loading.value || saving.value || pendingSourceId.value !== null)
-const sourceForm = reactive({ name: '', sourceType: 'wechat', feedUrl: '', url: '', query: '', limit: 12 })
+const sourceForm = reactive({ name: '', sourceType: 'wechat', feedUrl: '', url: '', query: '' })
 const frequency = reactive({ unit: 'hour', amount: 6 })
 watch(() => sourceForm.sourceType, () => { dialogError.value = '' })
 const intervalChoices = computed(() => sourceIntervalChoices[frequency.unit] || [])
@@ -175,7 +174,7 @@ function openCreateDialog() {
   if (!canSourceSave.value || busy.value) return
   editDetails.value = false
   editingSource.value = null
-  Object.assign(sourceForm, { name: '', sourceType: 'wechat', feedUrl: '', url: '', query: '', limit: 12 })
+  Object.assign(sourceForm, { name: '', sourceType: 'wechat', feedUrl: '', url: '', query: '' })
   Object.assign(frequency, { unit: 'hour', amount: 6 })
   dialogError.value = ''
   dialogVisible.value = true
@@ -192,7 +191,7 @@ function openEditDialog(source) {
   if (!canSourceSave.value || busy.value || isExternalSource(source)) return
   openFrequencyDialog(source)
   editDetails.value = true
-  Object.assign(sourceForm, { name: source.name, sourceType: sourceType(source), feedUrl: source.config?.feed_url || '', url: source.url || '', query: source.config?.query || '', limit: source.config?.limit || 12 })
+  Object.assign(sourceForm, { name: source.name, sourceType: sourceType(source), feedUrl: source.config?.feed_url || '', url: source.url || '', query: source.config?.query || '' })
 }
 async function saveSource() {
   if (!canSourceSave.value || busy.value) return
