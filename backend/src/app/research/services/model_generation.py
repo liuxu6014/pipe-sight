@@ -98,8 +98,8 @@ class ModelGateway:
             raise ServiceException(message='模型配置已变化，请重新提交任务')
         params = dict(snapshot.get('parameters') or {})
         timeout = int(params.get('timeout_seconds', 60))
-        if not 1 <= timeout <= 120:  # noqa: PLR2004
-            raise ServiceException(message='模型超时须在 1 至 120 秒')
+        if not 1 <= timeout <= 600:  # noqa: PLR2004
+            raise ServiceException(message='模型超时须在 1 至 600 秒')
         limit = int(params.get('max_response_bytes', 16 * 1024 * 1024))
         if not 1 <= limit <= 32 * 1024 * 1024:
             raise ServiceException(message='模型响应大小限制无效')
