@@ -24,7 +24,7 @@
         <ol v-if="pagedRows.length" :start="pageOffset + 1" class="report-list" role="list" :aria-label="reportKind === 'digest' ? '简报列表' : '报告列表'">
           <li v-for="(row, index) in pagedRows" :key="row.id" class="report-list-item">
             <span class="report-list-index">{{ pageOffset + index + 1 }}</span>
-            <div class="report-list-main" :class="{ 'is-centered': reportKind === 'research' }">
+            <div class="report-list-main is-centered">
               <h2>{{ row.title }}</h2>
               <div class="report-list-meta">
                 <el-tag :type="getReportStatusMeta(row.status).type" effect="light" size="small">{{ getReportStatusMeta(row.status).label }}</el-tag>
