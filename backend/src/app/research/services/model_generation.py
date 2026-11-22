@@ -476,12 +476,21 @@ class ResearchModelGenerationService:
                 request_id=task_id,
                 task_id=task_id,
             )
+        outline = instructions.get('outline') or []
+        outline_contract = (
+            '严格成文契约（最高优先级）：本次报告必须逐章使用以下章节标题，并严格按此顺序成文，'
+            '章节标题单独一行加粗；不得改名、漏章、合并、调整顺序或增设同级章节。'
+            '以下章节顺序优先于任何通用的“现状/问题/目标/方案/结论”结构安排：\n'
+            + '\n'.join(f'{index}. {section["title"]}' for index, section in enumerate(outline, 1))
+            + '\n'
+        ) if outline else ''
         return await ModelGateway.call(
             db,
             snapshot['model'],
             capability='text_generate',
             prompt=prompt,
-            system_prompt=template_writing_prompt(
+            system_prompt=outline_contract
+            + template_writing_prompt(
                 writing_template, snapshot.get('type') or request.get('report_type', '')
             )
             + '\n遵循生成要求JSON中的用户大纲及篇幅规划，不能以重复扩写或编造信息满足字数。'
