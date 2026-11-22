@@ -203,8 +203,8 @@ def test_v4_stays_frozen_when_runtime_contract_advances() -> None:
         json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()
     ).hexdigest()
     assert digest == '88491613e027bcdc0058837512053d68eae7a757d9ebcadad16e46e92316b8bc'
-    assert load_contract() == load_contract('v21')
-    assert load_contract()['version'] == '20261122-compact-v21'
+    assert load_contract() == load_contract('v22')
+    assert load_contract()['version'] == '20261122-compact-v22'
 
 
 def test_v4_preserves_v3_physical_core_without_freezing_unstable_orm_ddl() -> None:

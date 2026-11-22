@@ -71,7 +71,7 @@ class PipelineSource(Base):
     config = Column(JSON_OBJECT, nullable=False, default=dict, server_default=text("'{}'"))
     model_id = Column(BigInteger, ForeignKey('ai_models.id', ondelete='RESTRICT'))
     is_enabled = Column(Boolean, nullable=False, default=True, server_default=text('true'))
-    is_deleted = Column(Boolean, nullable=False, default=False, server_default=text('false'))
+    deleted_at = Column(BeijingAuditTime(), nullable=True)
     created_at = Column(BeijingAuditTime(), nullable=False, default=audit_now, server_default=server_now())
     updated_at = Column(
         BeijingAuditTime(),

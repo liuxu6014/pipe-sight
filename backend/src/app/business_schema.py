@@ -33,7 +33,7 @@ BUSINESS_TABLES = (
     'reports',
     'templates',
 )
-FROZEN_PATH = Path(__file__).resolve().parents[2] / 'data/schema/business-v21.json'
+FROZEN_PATH = Path(__file__).resolve().parents[2] / 'data/schema/business-v22.json'
 
 
 def quote_identifier(value: str) -> str:
@@ -280,6 +280,7 @@ def load_frozen(version: str | None = None) -> dict:
         'v19',
         'v20',
         'v21',
+        'v22',
     }:
         raise ValueError('Unsupported frozen business schema version')
     path = FROZEN_PATH if version is None else FROZEN_PATH.with_name(f'business-{version}.json')

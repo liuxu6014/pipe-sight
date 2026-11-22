@@ -100,7 +100,7 @@ COLUMN_COMMENTS = {
         'config': '采集参数JSON对象；保存分页、限速、超时、增量及重试策略，凭证仅存引用',
         'model_id': '自动翻译模型ID，关联ai_models.id；为空不自动翻译，不静默换用其他模型',
         'is_enabled': '来源入队及启动开关；true启用、false停用，停用不等于当前运行已停止',
-        'is_deleted': '来源软删除标记；true表示已删除，来源列表不再展示，保留采集记录与资讯',
+        'deleted_at': '来源软删除时间；为空表示未删除，已删除来源不在来源列表展示，采集记录与资讯保留；北京时间Asia/Shanghai本地墙钟',
         'created_at': '来源建档时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss',
         'updated_at': '来源名称、采集配置或开关最近修改时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss',
     },

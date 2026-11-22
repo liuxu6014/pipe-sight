@@ -11,7 +11,7 @@ class SchemaPrerequisiteError(ValueError):
     """A data-preserving migration prerequisite needs an explicit choice."""
 
 
-DEFAULT_CONTRACT_VERSION = 'v21'
+DEFAULT_CONTRACT_VERSION = 'v22'
 FOUNDATION_TABLE_RENAMES = {
     'users': 'sys_user',
     'roles': 'sys_role',
@@ -52,6 +52,7 @@ def load_contract(version: str = DEFAULT_CONTRACT_VERSION) -> dict[str, Any]:
         'v19',
         'v20',
         'v21',
+        'v22',
     ):
         raise ValueError(f'Unsupported schema contract version: {version}')
     path = Path(__file__).resolve().parents[2] / f'data/schema/compact-{version}.json'

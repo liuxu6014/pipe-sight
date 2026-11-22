@@ -11,7 +11,7 @@ from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import select
 
 from app.business_ids import parse_business_id, wire_id
-from app.business_time import format_business_time
+from app.business_time import audit_now, format_business_time
 from app.intelligence.models.collection import PipelineCrawlRun as Run
 from app.intelligence.models.collection import PipelineSource as Source
 from app.intelligence.repositories.collection_repository import CollectionConflict, CollectionRepository, aware
@@ -240,7 +240,7 @@ class IntelligenceSourceService:
         """软删除来源：标记删除并停用，保留采集记录与资讯。"""
         source_id = parse_business_id(source_id)
         source = await CollectionRepository.source(db, source_id, lock=True)
-        source.is_deleted = True
+        source.deleted_at = audit_now()
         source.is_enabled = False
         source.cron = None
         source.next_run_at = None
@@ -374,7 +374,7 @@ class IntelligenceSourceService:
         rows = list(
             (
                 await db.execute(
-                    select(Source).where(Source.is_deleted.is_(False)).order_by(Source.created_at.desc(), Source.id)
+                    select(Source).where(Source.deleted_at.is_(None)).order_by(Source.created_at.desc(), Source.id)
                 )
             )
             .scalars()
