@@ -42,6 +42,30 @@ class ResearchJobService:
             raise ServiceException(message='周报、月报不支持上传资料，请选择采集内容')
 
     @staticmethod
+    async def _resolve_digest_candidates(db, data, kind) -> list[dict]:
+        """周报/月报未提交复筛结果时，按报告周期自动圈定候选资讯，后台再复筛。"""
+        from datetime import date  # noqa: PLC0415
+
+        from app.intelligence.schemas.pipeline import PipelineDigestScreeningModel  # noqa: PLC0415
+        from app.research.digest_policy import DIGEST_SELECTION_LIMIT  # noqa: PLC0415
+
+        period = data.get('period') or []
+        if len(period) != 2:
+            raise ServiceException(message='周报和月报需要完整的报告周期')
+        try:
+            scope = PipelineDigestScreeningModel(
+                period=[date.fromisoformat(str(value)[:10]) for value in period],
+                report_type=kind,
+                template_id=data.get('template_id'),
+            )
+        except (TypeError, ValueError) as exc:
+            raise ServiceException(message='报告周期格式无效') from exc
+        candidates, total = await ResearchDao.search_digest_candidates(db, scope, all_candidates=True)
+        if not total:
+            raise ServiceException(message='报告周期内没有符合范围的资讯，请调整周期')
+        return [{'type': 'article', 'id': wire_id(row.id)} for row in candidates[:DIGEST_SELECTION_LIMIT]]
+
+    @staticmethod
     def queued_stage_rows(stage_labels) -> list[dict]:
         return [{'key': key, 'label': label, 'status': 'waiting', 'progress': 0} for key, label in stage_labels]
 
@@ -85,13 +109,16 @@ class ResearchJobService:
         cls._validate_options(data.get('options') or {})
         selections = data.get('materials') or data.get('selected_item_ids') or []
         screening_id = data.get('screening_id')
-        if screening_id and selections:
-            raise ServiceException(message='简报资料由系统筛选结果确定，无需提交资料编号')
-        if not screening_id and not 1 <= len(selections) <= 50:  # noqa: PLR2004
-            raise ServiceException(message='请选择 1 至 50 条资料，超限不会截断')
         kind = report_type(data.get('report_type', data.get('type')))
         if kind not in {'article', 'research', 'daily', 'weekly', 'monthly'}:
             raise ServiceException(message='成果类型不合法')
+        structured_digest = kind in {'weekly', 'monthly'}
+        if screening_id and selections:
+            raise ServiceException(message='简报资料由系统筛选结果确定，无需提交资料编号')
+        if not screening_id and structured_digest and not selections:
+            selections = await cls._resolve_digest_candidates(db, data, kind)
+        if not screening_id and not 1 <= len(selections) <= 50:  # noqa: PLR2004
+            raise ServiceException(message='请选择 1 至 50 条资料，超限不会截断')
         title = str(data.get('title') or '').strip()
         if not title:
             raise ServiceException(message='成果标题不能为空')
@@ -106,7 +133,6 @@ class ResearchJobService:
             fingerprint = generation_request_fingerprint(clean_request, existing.materials)
             return await cls._reused(db, existing, user_id, fingerprint, job_serializer)
         purpose = 'digest' if kind in {'daily', 'weekly', 'monthly'} else kind
-        structured_digest = kind in {'weekly', 'monthly'}
         if structured_digest:
             template = await template_service.get_digest_for_run(db, kind, user_id, data.get('template_id'))
         else:
@@ -210,7 +236,11 @@ class ResearchJobService:
         if structured_digest:
             snapshot['document_format'] = 'digest-reference-v1'
             snapshot['fixed_digest_format'] = PipelineTemplateService.is_fixed_digest(template)
-            snapshot['digest_screening'] = screened or screening_rule_snapshot(template)
+            snapshot['digest_screening'] = screened or screening_rule_snapshot(
+                template,
+                general_prompt=data.get('screening_prompt'),
+                categories=data.get('screening_categories'),
+            )
             for field in ('outline', 'template_prompt', 'templatePrompt', 'template_version'):
                 snapshot['request'].pop(field, None)
         elif (

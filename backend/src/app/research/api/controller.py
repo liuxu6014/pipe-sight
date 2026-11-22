@@ -24,7 +24,6 @@ from app.research.repositories.research_repository import ResearchDao as Pipelin
 from app.research.schemas.generation import ApplyGenerationResultModel, ReportRewriteModel
 from app.research.schemas.listing import JobListQuery, ReportListQuery
 from app.research.services.application import ResearchApplicationService
-from app.research.services.digest_document import DigestScreeningError
 from app.research.services.digest_screening import DigestScreeningService
 from app.research.services.exports import ResearchReportExportService
 from app.research.services.list_queries import job_page, report_page
@@ -187,8 +186,6 @@ async def create_pipeline_research_job(
     query_db: Annotated[AsyncSession, DBSessionDependency()],
     current_user: Annotated[CurrentUserModel, CurrentUserDependency()],
 ) -> Response:
-    if body.report_type in {'weekly', 'monthly'} and not body.screening_id:
-        raise DigestScreeningError(message='请先按筛选提示词完成系统筛选，再提交简报')
     data = await ResearchApplicationService.queue_job(
         query_db,
         user_id=current_user.user.user_id,

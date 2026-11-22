@@ -47,30 +47,11 @@
       </div>
 
       <div v-else class="ps-step-content ps-digest-confirm" tabindex="0" aria-label="确认生成简报">
-        <section v-if="refreshing" class="ps-digest-screening-status" role="status" aria-live="polite">
-          <strong>系统正在按提示词自动筛选、分类并打标签</strong>
-          <el-progress v-if="screeningTotal" :percentage="Math.floor(screeningProcessed * 100 / screeningTotal)" :show-text="false" />
-          <span>{{ screeningTotal ? `已处理 ${screeningProcessed} / ${screeningTotal} 篇，完成后即可提交生成。` : '正在查询本期资讯…' }}</span>
-        </section>
-        <div v-else-if="previewError" class="ps-inline-state is-warning" role="alert">
-          <span>{{ previewError }}</span>
-          <el-button :disabled="!canStart" @click="refreshPreview">{{ screeningId ? '继续筛选' : '重新筛选' }}</el-button>
-        </div>
-        <div v-else-if="capacityNotice" class="ps-inline-state is-warning" role="alert">{{ capacityNotice }}</div>
-        <div v-else-if="screeningRows && !passedRows.length" class="ps-inline-state is-warning" role="status">
-          <span>{{ screeningTotal ? '没有文章符合本次提示词，请返回调整筛选规则。' : '报告周期内没有资讯，请返回调整报告周期。' }}</span>
-        </div>
         <el-descriptions title="生成信息" :column="2" border>
           <el-descriptions-item label="简报类型">{{ form.type }}</el-descriptions-item>
           <el-descriptions-item label="报告周期">{{ periodLabel }}</el-descriptions-item>
           <el-descriptions-item label="简报模板">{{ templateName }}</el-descriptions-item>
-          <el-descriptions-item label="系统筛选">
-            <template v-if="screeningRows">本期 {{ screeningTotal }} 篇，自动纳入 {{ passedRows.length }} 篇</template>
-            <template v-else>{{ previewError ? '筛选未完成' : '正在自动筛选…' }}</template>
-          </el-descriptions-item>
-          <el-descriptions-item v-if="screeningRows && categoryCounts.length" label="分类结果" :span="2">
-            {{ categoryCounts.map(item => `${item.name} ${item.count} 篇`).join('、') }}
-          </el-descriptions-item>
+          <el-descriptions-item label="系统筛选">提交后由系统自动按本次规则筛选、分类并打标签</el-descriptions-item>
         </el-descriptions>
         <section aria-labelledby="digest-generation-settings">
           <h2 id="digest-generation-settings">生成设置</h2>
@@ -250,8 +231,7 @@ const categoryCounts = computed(() => {
 const capacityNotice = computed(() => passedRows.value.length > DIGEST_SELECTION_LIMIT
   ? `通过筛选的资讯有 ${passedRows.value.length} 篇，每份简报最多纳入 ${DIGEST_SELECTION_LIMIT} 篇。请返回收紧筛选提示词。`
   : '')
-const canGenerate = computed(() => Boolean(screeningId.value && passedRows.value.length
-  && !refreshing.value && !previewError.value && !capacityNotice.value && canStart.value))
+const canGenerate = computed(() => Boolean(canStart.value && !submitting.value))
 function ensureRequestId(payload) {
   const fingerprint = JSON.stringify(payload)
   if (!requestId.value || requestFingerprint !== fingerprint) {
@@ -290,9 +270,6 @@ function confirmGeneration() {
   if (!canStart.value) return
   advanceStep()
 }
-watch(activeStep, step => {
-  if (step === 1 && !screeningRows.value && !refreshing.value && !previewError.value) void refreshPreview()
-}, { flush: 'sync' })
 async function refreshPreview() {
   if (refreshing.value || !canStart.value) return
   const generation = ++previewGeneration
@@ -410,7 +387,7 @@ async function createDigest() {
 }
 function buildDigestPayload() {
   if (!['周报', '月报'].includes(form.type)) throw new Error('仅支持新建周报或月报')
-  if (!canGenerate.value) throw new Error(capacityNotice.value || '请先完成系统筛选')
+  if (!canGenerate.value) throw new Error('请确认简报配置后提交')
   if (form.templateId && templateUnavailable.value) throw new Error('请选择可用的简报模板')
   const reportType = currentTypeConfig.value.reportType
   const { period, label } = buildReportPeriod()
@@ -418,11 +395,12 @@ function buildDigestPayload() {
   return {
       title: `科技情报${form.type} ${label}`.trim(),
       reportType,
-      screeningId: screeningId.value,
       ...(form.templateId ? { templateId: requireBusinessId(form.templateId) } : {}),
       period,
       requirements: `报告周期：${label}；每栏 ${form.itemCount} 条；摘要长度：${form.summaryLength}`,
       citationCheck: true,
+      screeningPrompt: screeningPromptOverride.value?.trim() || null,
+      screeningCategories: categoryOverride.value ?? null,
       options: { cadence: reportType, summaryLength: form.summaryLength, itemCount: form.itemCount, hotAnalysis: form.hotAnalysis, duplicateMerge: form.duplicateMerge }
   }
 }

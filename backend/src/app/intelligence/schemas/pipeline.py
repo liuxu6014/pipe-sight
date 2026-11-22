@@ -122,6 +122,8 @@ class PipelineResearchJobCreateModel(BaseModel):
     )
     outline: list[dict] = Field(default_factory=list, description='报告大纲')
     options: dict = Field(default_factory=dict, description='扩展配置')
+    screening_prompt: str | None = Field(default=None, max_length=5000, description='本次复筛提示词，未提供时沿用模板配置')
+    screening_categories: list[dict] | None = Field(default=None, description='本次复筛分类规则，未提供时沿用模板配置')
 
     @model_validator(mode='after')
     def validate_digest_selection_limit(self) -> 'PipelineResearchJobCreateModel':
