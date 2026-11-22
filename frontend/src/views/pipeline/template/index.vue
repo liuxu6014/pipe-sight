@@ -314,7 +314,7 @@ onMounted(() => { loadTemplates(); loadModels() })
 }
 .template-toolbar .el-input { flex: 1; min-width: 180px; }
 .template-toolbar .el-select { width: 140px; flex-shrink: 0; }
-.template-toolbar .el-button { margin: 0; }
+.template-toolbar .el-button { margin: 0 0 0 auto; }
 .template-categories { overflow-x: auto; padding: 0 0 2px; }
 .template-categories :deep(.el-segmented) { --el-segmented-item-selected-bg-color: #1f64a6; }
 .template-categories :deep(.el-segmented__item-label) { display: flex; align-items: center; gap: 6px; }

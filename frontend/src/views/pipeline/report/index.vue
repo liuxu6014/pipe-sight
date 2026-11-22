@@ -196,7 +196,7 @@ function openReport(row) {
 .report-list-actions .el-button { margin: 0; }
 .report-list-card .report-list-pagination { padding-inline: 16px; border-top: 1px solid var(--el-border-color-lighter); }
 .report-list-pagination :deep(.el-pagination) { flex-wrap: wrap; justify-content: flex-end; }
-.heading-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.heading-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-left: auto; }
 .heading-actions .el-button { margin: 0; }
 .report-load-error { margin: 18px 0; }
 .report-retry { padding: 0; border: 0; background: transparent; color: #409eff; cursor: pointer; font-size: 13px; }

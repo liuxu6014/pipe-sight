@@ -472,7 +472,7 @@ onMounted(() => {
 .category-toolbar > .el-input { flex: 1; min-width: 160px; }
 .category-toolbar > .el-select { width: 140px; flex-shrink: 0; }
 .category-toolbar-actions, .category-examples { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.category-toolbar-actions { flex-shrink: 0; }
+.category-toolbar-actions { flex-shrink: 0; margin-left: auto; }
 .category-toolbar-actions .el-button, .category-examples .el-button { margin: 0; }
 .category-examples { margin-bottom: 18px; }
 .category-examples > span { font-size: 13px; color: var(--el-text-color-secondary); margin-right: 4px; }
