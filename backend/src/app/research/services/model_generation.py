@@ -379,7 +379,7 @@ class ResearchModelGenerationService:
     @staticmethod
     def generation_outline(snapshot: dict) -> list[dict]:
         request = snapshot.get('request') or {}
-        outline = request['outline'] if 'outline' in request else snapshot['template'].get('sections', [])
+        outline = request.get('outline') or snapshot['template'].get('sections', [])
         if not isinstance(outline, list) or len(outline) > MAX_OUTLINE_SECTIONS:
             raise ServiceException(message='报告大纲必须为不超过 100 项的章节列表')
         result = []
