@@ -231,7 +231,7 @@ const categoryCounts = computed(() => {
 const capacityNotice = computed(() => passedRows.value.length > DIGEST_SELECTION_LIMIT
   ? `通过筛选的资讯有 ${passedRows.value.length} 篇，每份简报最多纳入 ${DIGEST_SELECTION_LIMIT} 篇。请返回收紧筛选提示词。`
   : '')
-const canGenerate = computed(() => Boolean(canStart.value && !submitting.value))
+const canGenerate = computed(() => Boolean(canStart.value))
 function ensureRequestId(payload) {
   const fingerprint = JSON.stringify(payload)
   if (!requestId.value || requestFingerprint !== fingerprint) {

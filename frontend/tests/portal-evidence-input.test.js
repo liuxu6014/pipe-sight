@@ -860,23 +860,6 @@ test('manual digest generation switches cadence without schedule configuration',
   } finally { ctx.close() }
 })
 
-test('digest above capacity requests a tighter rule without dropping articles', async () => {
-  const rows = Array.from({ length: 51 }, (_, i) => screenedArticle(`${900 + i}`))
-  const ctx = await mount('DigestCreateView', { api: {
-    startPipelineDigestScreening: async () => screeningStart(rows.length),
-    advancePipelineDigestScreening: async () => screeningResult(rows)
-  } })
-  try {
-    await screenWeekly(ctx.page)
-    assert.equal(ctx.page.passedRows.value.length, 51)
-    assert.match(ctx.page.capacityNotice.value, /50 篇.*收紧筛选提示词/)
-    assert.equal(ctx.page.canGenerate.value, false)
-    await ctx.page.createDigest()
-    assert.equal(ctx.mutations, 0)
-  } finally { ctx.close() }
-})
-
-
 test('digest queries the server by direction/keyword and actual page, then checks detail dates and sources', async () => {
   const calls = []
   const details = {
@@ -983,26 +966,7 @@ test('digest scope changes invalidate old classifications and reject late batch 
 })
 
 
-test('digest batch failure is distinct from no matches and can resume', async () => {
-  let fail = true, starts = 0
-  const ctx = await mount('DigestCreateView', { api: {
-    startPipelineDigestScreening: async () => { starts++; return screeningStart() },
-    advancePipelineDigestScreening: async () => { if (fail) throw { msg: '模型复筛失败' }; return screeningResult([screenedArticle('111')]) }
-  } })
-  try {
-    ctx.page.confirmGeneration()
-    await settle()
-    assert.equal(ctx.page.activeStep.value, 1)
-    assert.equal(ctx.page.previewError.value, '模型复筛失败')
-    assert.equal(ctx.page.refreshing.value, false)
-    assert.throws(() => ctx.page.buildDigestPayload(), /请确认简报配置后提交/)
-    fail = false
-    await ctx.page.refreshPreview()
-    assert.equal(ctx.page.previewError.value, '')
-    assert.equal(ctx.page.passedRows.value.length, 1)
-    assert.equal(starts, 1)
-    assert.equal(ctx.mutations, 0)
-  } finally { ctx.close() }
+test('digest detail fetch failures surface the affected article and revoke reason', async () => {
   await assert.rejects(() => evidence.fetchDigestPage({ period: ['2026-10-13'], sources: ['新闻网站'], directions: [], keywords: [] }, {
     search: async () => ({ data: { rows: [{ id: '108' }], total: 1 } }), getIntelligence: async () => { throw { msg: '已撤权' } }
   }, 1), /108.*已撤权/)
@@ -1029,49 +993,18 @@ test('digest cannot advance with missing template rules after a catalog failure'
   } finally { ctx.close() }
 })
 
-test('an expired screening receipt can restart instead of retrying its invalid batch forever', async () => {
-  let starts = 0, expired = true
+test('digest submission error preserves authored screening rules and clears submitting state', async () => {
+  let creates = 0
   const ctx = await mount('DigestCreateView', { api: {
-    startPipelineDigestScreening: async () => { starts++; return screeningStart() },
-    advancePipelineDigestScreening: async () => {
-      if (expired) throw Object.assign(new Error('复筛结果已失效，请重新筛选'), { data: 'digest_screening_restart' })
-      return screeningResult([screenedArticle('111')])
-    }
-  } })
-  try {
-    ctx.page.confirmGeneration()
-    await settle()
-    assert.equal(ctx.page.screeningId.value, '')
-    assert.equal(ctx.page.canGenerate.value, false)
-    expired = false
-    await ctx.page.refreshPreview()
-    assert.equal(starts, 2)
-    assert.equal(ctx.page.canGenerate.value, true)
-  } finally { ctx.close() }
-})
-
-test('a stale receipt rejected at submission returns to automatic screening without losing authored rules', async () => {
-  let starts = 0, creates = 0
-  const ctx = await mount('DigestCreateView', { api: {
-    startPipelineDigestScreening: async () => { starts++; return screeningStart() },
-    createPipelineResearchJob: async () => {
-      creates++
-      throw Object.assign(new Error('通过筛选的资料正文已更新，请重新筛选'), { data: 'digest_screening_restart' })
-    }
+    createPipelineResearchJob: async () => { creates++; throw { msg: '请先配置简报生成模型' } }
   } })
   try {
     ctx.page.screeningPrompt.value = '仅保留新的工程试验'
-    ctx.page.confirmGeneration()
-    await settle()
     await ctx.page.createDigest()
     assert.equal(creates, 1)
-    assert.equal(ctx.page.canGenerate.value, false)
-    assert.equal(ctx.page.screeningId.value, '')
-    assert.match(ctx.page.previewError.value, /正文已更新/)
     assert.equal(ctx.page.screeningPrompt.value, '仅保留新的工程试验')
-    await ctx.page.refreshPreview()
-    assert.equal(starts, 2)
-    assert.equal(ctx.page.canGenerate.value, true)
+    assert.equal(ctx.page.submitting.value, false)
+    assert.ok(ctx.messages.some(item => item.level === 'error' && item.text === '请先配置简报生成模型'))
   } finally { ctx.close() }
 })
 
@@ -1151,9 +1084,10 @@ test('digest copy restores a screening prompt but never submits a stale writing 
     } } }),
   } })
   try {
-    await ctx.page.refreshPreview()
+    await ctx.page.loadSourceTask()
+    await settle()
     const payload = ctx.page.buildDigestPayload()
-    assert.equal(payload.screeningPrompt, null)
+    assert.equal(payload.screeningPrompt, '仅纳入创新进展')
     assert.equal(Object.hasOwn(payload, 'materials'), false)
     assert.equal(Object.hasOwn(payload, 'selectedItemIds'), false)
     assert.equal(ctx.page.screeningPrompt.value, '仅纳入创新进展')
@@ -1165,7 +1099,7 @@ test('digest copy restores a screening prompt but never submits a stale writing 
     }
     await ctx.router.replace({ path: '/create', query: { template: 'another-old-template-uuid', sourceTask: '77' } })
     await settle()
-    assert.equal(ctx.page.buildDigestPayload().screeningPrompt, null)
+    assert.equal(ctx.page.buildDigestPayload().screeningPrompt, '仅纳入创新进展')
     assert.equal(catalogCalls, 1)
     assert.equal(ctx.mutations, 0)
   } finally { ctx.close() }
@@ -1222,16 +1156,12 @@ test('research legacy template queries never select a replacement and retain use
   }
 })
 
-test('digest Back and Forward restore the same screening without submitting or screening twice', async () => {
-  let screenings = 0
-  const ctx = await mount('DigestCreateView', { api: {
-    startPipelineDigestScreening: async () => { screenings++; return screeningStart() }
-  } })
+test('digest Back and Forward preserve the confirmation step without submitting', async () => {
+  const ctx = await mount('DigestCreateView')
   try {
     ctx.page.confirmGeneration()
     await settle()
     assert.equal(ctx.page.activeStep.value, 1)
-    assert.equal(ctx.page.passedRows.value.length, 1)
     ctx.page.advanceStep()
     assert.equal(ctx.page.activeStep.value, 1)
     ctx.page.goBack()
@@ -1240,21 +1170,15 @@ test('digest Back and Forward restore the same screening without submitting or s
     ctx.router.forward()
     await settle()
     assert.equal(ctx.page.activeStep.value, 1)
-    assert.equal(ctx.page.passedRows.value.length, 1)
-    assert.equal(screenings, 1)
     assert.equal(ctx.mutations, 0)
   } finally { ctx.close() }
 })
 
 
-test('weekly and monthly move directly to confirmation while the system screens and generation waits for completion', async () => {
+test('weekly and monthly submit directly to the background generation queue', async () => {
   for (const type of ['周报', '月报']) {
-    const batch = later()
     const created = []
-    let starts = 0
     const ctx = await mount('DigestCreateView', { api: {
-      startPipelineDigestScreening: async () => { starts++; return screeningStart(2) },
-      advancePipelineDigestScreening: () => batch.promise,
       createPipelineResearchJob: async payload => { created.push(payload); return { data: { jobId: '432' } } }
     } })
     const page = ctx.page
@@ -1264,42 +1188,30 @@ test('weekly and monthly move directly to confirmation while the system screens 
       page.confirmGeneration()
       await settle()
       assert.equal(page.activeStep.value, 1)
-      assert.equal(page.refreshing.value, true)
-      assert.equal(page.canGenerate.value, false)
-      await page.createDigest()
-      assert.equal(created.length, 0)
-      page.form.summaryLength = 'long'
-      batch.resolve(screeningResult([screenedArticle('701'), screenedArticle('702', false)]))
-      await settle()
-      assert.equal(page.activeStep.value, 1)
-      assert.equal(page.refreshing.value, false)
       assert.equal(page.canGenerate.value, true)
-      assert.equal(starts, 1)
-      assert.equal(created.length, 0)
+      page.form.summaryLength = 'long'
       await page.createDigest()
       assert.equal(created.length, 1)
       assert.equal(created[0].reportType, type === '周报' ? 'weekly' : 'monthly')
-      assert.equal(created[0].screeningId, screeningId)
       assert.equal(created[0].options.summaryLength, 'long')
       assert.equal(Object.hasOwn(created[0], 'selectedItemIds'), false)
+      assert.equal(Object.hasOwn(created[0], 'screeningId'), false)
     } finally { ctx.close() }
   }
 })
 
 
-test('confirmation stays on the second step and blocks generation when every article is excluded', async () => {
+test('confirmation stays on the second step and generation waits for submission', async () => {
+  const created = []
   const ctx = await mount('DigestCreateView', { api: {
-    advancePipelineDigestScreening: async () => screeningResult([screenedArticle('701', false)])
+    createPipelineResearchJob: async payload => { created.push(payload); return { data: { jobId: '433' } } }
   } })
   try {
     ctx.page.confirmGeneration()
     await settle()
     assert.equal(ctx.page.activeStep.value, 1)
-    assert.equal(ctx.page.screeningTotal.value, 1)
-    assert.equal(ctx.page.refreshing.value, false)
-    assert.equal(ctx.page.previewError.value, '')
-    assert.equal(ctx.page.canGenerate.value, false)
+    assert.equal(ctx.page.canGenerate.value, true)
     await ctx.page.createDigest()
-    assert.equal(ctx.mutations, 0)
+    assert.equal(created.length, 1)
   } finally { ctx.close() }
 })
