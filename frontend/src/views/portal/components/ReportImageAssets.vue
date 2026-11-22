@@ -12,6 +12,7 @@
         <p v-else-if="image.imageLoading" role="status">正在读取图片…</p>
         <p v-if="image.imageError" role="alert">{{ image.imageError }} <el-button plain @click="reloadImage(image)">重新加载图片</el-button></p>
         <a v-if="image.imageUrl && !image.imageError" :href="image.imageUrl" :download="`${image.id}.${image.extension}`">下载图片</a>
+        <p v-if="image.caption" class="ps-image-caption">{{ image.caption }}</p>
       </template>
       <p v-else-if="image.status === 'failed'" role="alert">{{ image.error || '配图生成失败，请检查后台图片模型配置。' }} <el-button plain type="warning" :loading="image.retrying" @click="retry(image)">重试此图</el-button></p>
       <p v-else role="status">配图{{ imageStatusLabel(image.status) }}，状态将自动刷新。</p>
@@ -35,6 +36,7 @@ const { images, loading, loadError, actionError, load, retry, reloadImage } = us
 h3 { margin: 0; font-size: 16px; }
 .ps-report-image { margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--ps-line); }
 figcaption span, p { color: var(--ps-muted); font-size: 13px; line-height: 1.7; }
+.ps-image-caption { margin: 8px 0 0; color: var(--ps-text, #163c55); font-size: 14px; font-weight: 500; text-align: center; }
 img { display: block; max-width: 100%; height: auto; margin: 12px auto; }
 a { display: inline-block; color: var(--ps-blue); margin-top: 8px; }
 </style>

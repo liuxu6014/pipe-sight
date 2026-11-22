@@ -90,7 +90,7 @@ def test_v7_adds_only_nullable_entities_to_news_articles_and_preserves_every_pri
     assert old['optional_table_definitions'] == new['optional_table_definitions']
     contract = load_contract()
     assert len(contract['tables']) == 28
-    assert sum(len(t['columns']) for t in contract['tables']) == 360
+    assert sum(len(t['columns']) for t in contract['tables']) == 361
     assert {t['name'] for t in contract['tables']} >= {'sys_user', 'papers', 'collection_runs'}
     for table in contract['tables']:
         if table['name'] not in FOUNDATION_TABLE_RENAMES.values():
@@ -203,8 +203,8 @@ def test_v4_stays_frozen_when_runtime_contract_advances() -> None:
         json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()
     ).hexdigest()
     assert digest == '88491613e027bcdc0058837512053d68eae7a757d9ebcadad16e46e92316b8bc'
-    assert load_contract() == load_contract('v23')
-    assert load_contract()['version'] == '20261122-compact-v23'
+    assert load_contract() == load_contract('v24')
+    assert load_contract()['version'] == '20261122-compact-v24'
 
 
 def test_v4_preserves_v3_physical_core_without_freezing_unstable_orm_ddl() -> None:
@@ -530,3 +530,19 @@ def test_v15_scopes_templates_to_an_owner_user() -> None:
     assert [f for f in new['foreign_keys'] if f not in old['foreign_keys']] == [expected_fk]
     assert len(new['foreign_keys']) == len(old['foreign_keys']) + 1
     assert new['business_schema_snapshot'] == 'business-v14.json'
+
+
+def test_v24_adds_only_nullable_caption_to_report_assets() -> None:
+    old, new = load_contract('v23'), load_contract('v24')
+    before = {table['name']: table for table in old['tables']}
+    after = {table['name']: table for table in new['tables']}
+    assert before.keys() == after.keys()
+    for name, table in before.items():
+        if name != 'report_assets':
+            assert table == after[name]
+        else:
+            assert table['columns'] == [c for c in after[name]['columns'] if c['name'] != 'caption']
+            added = [c for c in after[name]['columns'] if c['name'] == 'caption']
+            assert len(added) == 1 and added[0]['nullable'] and added[0]['type'] == 'text'
+    assert old['foreign_keys'] == new['foreign_keys']
+    assert new['business_schema_snapshot'] == 'business-v24.json'

@@ -203,6 +203,7 @@ COLUMN_COMMENTS = {
         'position': '图片所在章节或占位符标识；独立导出文件为空',
         'status': '资源执行状态：queued排队、running执行中、completed完成、failed失败；失败可独立重试',
         'error': '图片生成或文件导出失败的脱敏简短原因',
+        'caption': '配图图注：文本模型结合报告主题与配图生成提示词写出的一句简短中文说明；图注生成失败可为空，不影响图片本身',
         'created_at': '资源生成或导出请求保存时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss',
         'updated_at': '资源状态或文件存储结果最近更新时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss',
     },

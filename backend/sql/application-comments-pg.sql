@@ -1,7 +1,7 @@
--- compact-v20中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；自动计划累计执行结果。
+-- compact-v24中文注释；12业务PK及引用FK为BIGINT，共享business_id_seq；自动计划累计执行结果。
 -- 27个业务created_at/updated_at为北京时间timestamp(0)无时区；其他运行时间字段保持原类型。
 -- 普通不透明令牌保留；系统幂等键内嵌ID、显式JSON引用及语义指纹按实体映射核验。
--- 28张基线表359字段，2张保留功能表23字段；共30张物理表382字段。
+-- 28张基线表361字段，2张保留功能表23字段；共30张物理表384字段。
 -- 仅COMMENT及存在性保护块；调用方管理事务，不修改字段、约束或业务数据。
 
 COMMENT ON TABLE public."news_articles" IS '网站与公众号新闻原文及中文译文；每篇最多关联一个类别，无人工审核流程';
@@ -64,6 +64,7 @@ COMMENT ON COLUMN public."data_sources"."next_run_at" IS '下次采集调度时�
 COMMENT ON COLUMN public."data_sources"."config" IS '采集参数JSON对象；保存分页、限速、超时、增量及重试策略，凭证仅存引用';
 COMMENT ON COLUMN public."data_sources"."model_id" IS '自动翻译模型ID，关联ai_models.id；为空不自动翻译，不静默换用其他模型';
 COMMENT ON COLUMN public."data_sources"."is_enabled" IS '来源入队及启动开关；true启用、false停用，停用不等于当前运行已停止';
+COMMENT ON COLUMN public."data_sources"."deleted_at" IS '来源软删除时间；为空表示未删除，已删除来源不在来源列表展示，采集记录与资讯保留；北京时间Asia/Shanghai本地墙钟';
 COMMENT ON COLUMN public."data_sources"."created_at" IS '来源建档时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss';
 COMMENT ON COLUMN public."data_sources"."updated_at" IS '来源名称、采集配置或开关最近修改时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss';
 
@@ -166,6 +167,7 @@ COMMENT ON COLUMN public."report_assets"."config_snapshot" IS '资源配置JSON�
 COMMENT ON COLUMN public."report_assets"."position" IS '图片所在章节或占位符标识；独立导出文件为空';
 COMMENT ON COLUMN public."report_assets"."status" IS '资源执行状态：queued排队、running执行中、completed完成、failed失败；失败可独立重试';
 COMMENT ON COLUMN public."report_assets"."error" IS '图片生成或文件导出失败的脱敏简短原因';
+COMMENT ON COLUMN public."report_assets"."caption" IS '配图图注：文本模型结合报告主题与配图生成提示词写出的一句简短中文说明；图注生成失败可为空，不影响图片本身';
 COMMENT ON COLUMN public."report_assets"."created_at" IS '资源生成或导出请求保存时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss';
 COMMENT ON COLUMN public."report_assets"."updated_at" IS '资源状态或文件存储结果最近更新时间；北京时间Asia/Shanghai本地墙钟，timestamp(0)无时区，精度到秒；API/页面格式YYYY-MM-DD HH:mm:ss';
 

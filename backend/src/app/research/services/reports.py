@@ -360,6 +360,7 @@ class ResearchReportService:
                     'id': wire_id(r.id),
                     'status': r.status,
                     'position': r.position,
+                    'caption': r.caption or '',
                     'url': f'/pipeline/research/assets/{r.id}/download' if r.status == 'completed' else '',
                     'error': r.error or '',
                 }

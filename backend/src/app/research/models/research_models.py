@@ -236,6 +236,7 @@ class PipelineReportExport(Base):
     position = Column(String(100))
     status = Column(String(16), nullable=False, default='queued', server_default='queued')
     error = Column(Text)
+    caption = Column(Text)
     created_at = Column(BeijingAuditTime(), nullable=False, default=audit_now, server_default=server_now())
     updated_at = Column(
         BeijingAuditTime(),

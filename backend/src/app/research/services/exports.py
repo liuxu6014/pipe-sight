@@ -115,6 +115,7 @@ class ResearchReportExportService:
         count = int(config.get('count', 1))
         if not 1 <= count <= 10:  # noqa: PLR2004
             raise ServiceException(message='配图数量须在 1 至 10 之间')
+        text_model = job.config_snapshot.get('model')
         for index in range(count):
             row = PipelineReportAsset(
                 report_id=report.id,
@@ -123,7 +124,12 @@ class ResearchReportExportService:
                 mime_type='image/png',
                 prompt=str(config.get('prompt') or report.title),
                 model_id=parse_business_id(model['id']),
-                config_snapshot={'model': deepcopy(model), 'image_config': deepcopy(config)},
+                config_snapshot={
+                    'model': deepcopy(model),
+                    'image_config': deepcopy(config),
+                    'text_model': deepcopy(text_model) if text_model else None,
+                    'title': report.title,
+                },
                 position=str(index + 1),
                 status='queued',
                 created_at=utcnow(),
@@ -171,12 +177,39 @@ class ResearchReportExportService:
                     await asyncio.to_thread(ReportExportStorage.write, key, content)
                 row.storage_key = key
                 row.status, row.error = 'completed', None
+                if row.type == 'image':
+                    await cls._generate_caption(row, db)
             except asyncio.CancelledError:
                 raise
             except Exception:
                 row.status, row.error = 'failed', '资源生成失败；请检查模型配置后明确重试'
             row.updated_at = utcnow()
             await db.commit()
+
+    @classmethod
+    async def _generate_caption(cls, row, db) -> None:
+        text_model = (row.config_snapshot or {}).get('text_model')
+        if not text_model:
+            return
+        title = (row.config_snapshot or {}).get('title') or ''
+        try:
+            caption = await ModelGateway.call(
+                db,
+                text_model,
+                capability='text_generate',
+                prompt=(
+                    '为下面这张报告配图写一句简短的中文图注，只描述图片内容，10 到 30 字，'
+                    '不要包含“图”字编号，不要输出引号或多余解释。\n'
+                    f'报告标题：{title}\n配图生成提示词：{row.prompt}'
+                ),
+                system_prompt='你是科技报告配图说明撰写助手，只输出一句中文图注，不输出任何其他内容。',
+                request_id=f'{row.id}:caption',
+                task_id=row.task_id,
+            )
+            row.caption = str(caption).strip()[:200]
+        except Exception:
+            # 图注失败不连累图片本身；保持为空，前端按无图注处理。
+            row.caption = None
 
     @classmethod
     async def retry(cls, db, user_id, asset_id) -> dict:
