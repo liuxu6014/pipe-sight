@@ -18,22 +18,21 @@
       <div ref="listRegion" v-loading="loading" :aria-busy="loading" class="ws-list-scroll report-list-grid" tabindex="0" aria-label="成果列表滚动区">
         <div class="report-list-header">
           <span>序号</span>
-          <span>{{ reportKind === 'digest' ? '简报信息' : '报告信息' }}</span>
+          <span>名称</span>
+          <span>类型</span>
+          <span>状态</span>
+          <span>{{ reportKind === 'digest' ? '覆盖周期' : '作者' }}</span>
+          <span>更新时间</span>
           <span>操作</span>
         </div>
         <ol v-if="pagedRows.length" :start="pageOffset + 1" class="report-list" role="list" :aria-label="reportKind === 'digest' ? '简报列表' : '报告列表'">
           <li v-for="(row, index) in pagedRows" :key="row.id" class="report-list-item">
             <span class="report-list-index">{{ pageOffset + index + 1 }}</span>
-            <div class="report-list-main is-centered">
-              <h2>{{ row.title }}</h2>
-              <div class="report-list-meta">
-                <el-tag :type="getReportStatusMeta(row.status).type" effect="light" size="small">{{ getReportStatusMeta(row.status).label }}</el-tag>
-                <span>{{ reportTypeLabel(row.reportType || row.type) }}</span>
-                <span v-if="row.owner">作者 {{ row.owner }}</span>
-                <span v-if="reportKind === 'digest' && reportPeriod(row)">覆盖周期 {{ reportPeriod(row) }}</span>
-                <span v-if="row.updated_at || row.updatedAt">更新于 {{ row.updated_at || row.updatedAt }}</span>
-              </div>
-            </div>
+            <h2 class="report-list-title">{{ row.title }}</h2>
+            <span class="report-list-type">{{ reportTypeLabel(row.reportType || row.type) }}</span>
+            <el-tag class="report-list-status" :type="getReportStatusMeta(row.status).type" effect="light" size="small">{{ getReportStatusMeta(row.status).label }}</el-tag>
+            <span class="report-list-period">{{ reportKind === 'digest' ? (reportPeriod(row) || '—') : (row.owner || '—') }}</span>
+            <time class="report-list-time">{{ row.updated_at || row.updatedAt || '—' }}</time>
             <div class="report-list-actions">
               <el-button plain type="primary" :icon="View" @click="openReport(row)">查看详情</el-button>
               <el-button v-hasPermi="['pipeline:report:export']" plain type="primary" :icon="Download" :disabled="!canExportReport(row) || Boolean(downloadingReportId)" :loading="downloadingReportId === row.id" @click="handleExportReport(row)">导出</el-button>
@@ -151,7 +150,7 @@ function openReport(row) {
 .report-list-grid {
   --report-list-inset: 20px;
   display: grid;
-  grid-template-columns: calc(32px + var(--report-list-inset)) minmax(0, 1fr) max-content;
+  grid-template-columns: calc(32px + var(--report-list-inset)) minmax(0, 1fr) max-content max-content minmax(0, max-content) minmax(0, max-content) max-content;
   column-gap: 16px;
   align-content: start;
 }
@@ -187,11 +186,19 @@ function openReport(row) {
 .report-list-header > :last-child,
 .report-list-actions { margin-inline-end: var(--report-list-inset); }
 .report-list-header > :last-child { text-align: center; }
+.report-list-header > :nth-child(3),
+.report-list-header > :nth-child(4),
+.report-list-header > :nth-child(5),
+.report-list-header > :nth-child(6) { text-align: center; }
 .report-list-item:last-child { border-bottom: 0; }
 .report-list-index { color: var(--el-text-color-secondary); font-size: 13px; font-variant-numeric: tabular-nums; }
-.report-list-main { min-width: 0; overflow-wrap: anywhere; }
-.report-list-main h2 { margin: 0; color: var(--el-text-color-primary); font-size: 16px; font-weight: 600; line-height: 1.5; }
-.report-list-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 6px; color: var(--el-text-color-secondary); font-size: 13px; line-height: 1.6; }
+.report-list-title { margin: 0; min-width: 0; color: var(--el-text-color-primary); font-size: 16px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.report-list-type,
+.report-list-period,
+.report-list-time { min-width: 0; color: var(--el-text-color-secondary); font-size: 13px; white-space: nowrap; justify-self: center; }
+.report-list-status { justify-self: center; }
+.report-list-period,
+.report-list-time { overflow: hidden; text-overflow: ellipsis; }
 .report-list-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .report-list-actions .el-button { margin: 0; }
 .report-list-card .report-list-pagination { padding-inline: 16px; border-top: 1px solid var(--el-border-color-lighter); }
@@ -204,12 +211,6 @@ function openReport(row) {
 .report-management-filters .el-input { flex: 1 1 260px; }
 .report-management-filters .el-select { flex: 0 1 180px; }
 .report-management-scope { margin: 0; color: #526277; font-size: 13px; white-space: nowrap; }
-@media (width > 640px) {
-  .report-list-header > :nth-child(2),
-  .report-list-main.is-centered { text-align: center; }
-  .report-list-main.is-centered .report-list-meta { justify-content: center; }
-  .report-list-main:not(.is-centered) { padding-inline-start: clamp(24px, 12%, 112px); }
-}
 @media (max-width: 640px) {
   .report-list-grid {
     --report-list-inset: 14px;
@@ -217,12 +218,20 @@ function openReport(row) {
     column-gap: 12px;
   }
   .report-list-header,
-  .report-list-item { align-items: start; row-gap: 8px; }
+  .report-list-item {
+    grid-template-columns: calc(24px + var(--report-list-inset)) minmax(0, 1fr);
+    align-items: start;
+    row-gap: 8px;
+  }
   .report-list-header { font-size: 12px; }
-  .report-list-header > :last-child { display: none; }
-  .report-list-main { margin-inline-end: var(--report-list-inset); }
-  .report-list-index { line-height: 24px; }
-  .report-list-actions { grid-column: 2; justify-content: flex-start; }
+  .report-list-header > :nth-child(n + 3) { display: none; }
+  .report-list-index { grid-column: 1; grid-row: 1; line-height: 24px; }
+  .report-list-title { grid-column: 2; grid-row: 1; margin-inline-end: var(--report-list-inset); }
+  .report-list-type,
+  .report-list-status,
+  .report-list-period,
+  .report-list-time { grid-column: 2; justify-self: start; }
+  .report-list-actions { grid-column: 2; margin-inline-end: var(--report-list-inset); justify-content: flex-start; }
   .report-list-pagination :deep(.el-pagination__jump) { display: none; }
   .report-management-filters > * { flex: 1 1 100%; min-width: 0; }
   .heading-actions { width: 100%; }
