@@ -109,9 +109,10 @@ def test_digest_screening_snapshots_preserve_the_published_schedule_index() -> N
     config = Config()
     config.set_main_option('script_location', str(Path(__file__).resolve().parents[1] / 'alembic'))
     scripts = ScriptDirectory.from_config(config)
-    assert scripts.get_heads() == ['20261122_source_deleted_at']
+    assert scripts.get_heads() == ['20261122_papers_source_index']
     assert scripts.get_revision('20261120_material_classification').down_revision == '20261118_digest_categories'
     assert scripts.get_revision('20261120_material_comments').down_revision == '20261120_material_classification'
     assert scripts.get_revision('20261122_source_soft_delete').down_revision == '20261120_material_comments'
     assert scripts.get_revision('20261122_source_deleted_at').down_revision == '20261122_source_soft_delete'
+    assert scripts.get_revision('20261122_papers_source_index').down_revision == '20261122_source_deleted_at'
     assert scripts.get_revision('20261118_digest_screening').down_revision == old['revision']

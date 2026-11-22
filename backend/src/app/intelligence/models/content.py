@@ -174,3 +174,4 @@ Index('idx_papers_date', paper_date.desc(), PipelinePaper.id).ddl_if(dialect='po
 Index('idx_papers_category_id', PipelinePaper.category_id, paper_date.desc(), PipelinePaper.id).ddl_if(
     dialect='postgresql'
 )
+Index('idx_papers_source_id', PipelinePaper.source_id)
