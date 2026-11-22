@@ -236,7 +236,7 @@ async function toggleSource(source) {
 async function removeSource(source) {
   if (!canSourceSave.value || busy.value || isExternalSource(source)) return
   try {
-    await ElMessageBox.confirm(`确定删除数据源「${source.name}」吗？删除后不可恢复。`, '删除数据源', {
+    await ElMessageBox.confirm(`确定删除数据源「${source.name}」吗？删除后将停用并隐藏该来源，采集记录与资讯会保留。`, '删除数据源', {
       type: 'warning',
       confirmButtonText: '删除',
       cancelButtonText: '取消'
