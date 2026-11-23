@@ -43,9 +43,28 @@ class ContentDao:
             .scalars()
             .all()
         )
-        paper_facets = (
-            await db.execute(select(PipelinePaper.journal, func.substr(PipelinePaper.published_date, 1, 4)).distinct())
-        ).all()
+        paper_journals = (
+            (
+                await db.execute(
+                    select(PipelinePaper.journal)
+                    .where(PipelinePaper.journal.isnot(None), PipelinePaper.journal != '')
+                    .distinct()
+                )
+            )
+            .scalars()
+            .all()
+        )
+        paper_years = (
+            (
+                await db.execute(
+                    select(func.substr(PipelinePaper.published_date, 1, 4))
+                    .where(PipelinePaper.published_date.isnot(None))
+                    .distinct()
+                )
+            )
+            .scalars()
+            .all()
+        )
         referenced = select(PipelineArticle.category_id).union(select(PipelinePaper.category_id))
         categories = (
             (
@@ -75,8 +94,8 @@ class ContentDao:
         return {
             'articleCategories': list(article_categories),
             'newsTags': list(news_tags),
-            'journals': sorted({journal for journal, _ in paper_facets if journal and journal.strip()}),
-            'years': sorted({int(year) for _, year in paper_facets if year and str(year).isdigit()}, reverse=True),
+            'journals': sorted({journal for journal in paper_journals if journal and journal.strip()}),
+            'years': sorted({int(year) for year in paper_years if year and str(year).isdigit()}, reverse=True),
             'categories': list(categories),
         }
 
@@ -244,7 +263,8 @@ class ContentDao:
     @classmethod
     async def _count(cls, db: Any, model: Any, **filters: Any) -> int:
         statement, _, _ = cls.query(model, **filters)
-        return (await db.execute(select(func.count()).select_from(statement.subquery()))).scalar_one()
+        # Count the joined rows directly instead of materializing every column in a subquery.
+        return (await db.execute(statement.with_only_columns(func.count()))).scalar_one()
 
     @classmethod
     async def list_articles(cls, db: Any, **filters: Any) -> list[Any]:
