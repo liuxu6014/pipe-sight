@@ -300,15 +300,10 @@ async def _paper_translation_guard(db, paper_id, field) -> AsyncIterator[None]:
                     raise TimeoutError
                 async with lock_engine.connect() as connection:
                     try:
-                        async with asyncio.timeout(remaining):
-                            acquired = bool(
-                                (
-                                    await connection.execute(
-                                        text('SELECT pg_try_advisory_lock(:key)'), {'key': identity}
-                                    )
-                                ).scalar()
-                            )
-                            await connection.commit()
+                        acquired = await asyncio.wait_for(
+                            _acquire_translation_lock(connection, identity),
+                            timeout=remaining,
+                        )
                         if acquired:
                             yield
                             return
@@ -319,6 +314,15 @@ async def _paper_translation_guard(db, paper_id, field) -> AsyncIterator[None]:
                 await asyncio.sleep(0.1)
         finally:
             await lock_engine.dispose()
+
+
+async def _acquire_translation_lock(connection, identity) -> bool:
+    """在专属连接上执行 pg_try_advisory_lock 并提交；供 asyncio.wait_for 限时。"""
+    acquired = bool(
+        (await connection.execute(text('SELECT pg_try_advisory_lock(:key)'), {'key': identity})).scalar()
+    )
+    await connection.commit()
+    return acquired
 
 
 async def _release_translation_lock(connection, identity) -> None:
