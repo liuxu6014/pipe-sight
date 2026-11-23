@@ -1,15 +1,18 @@
 # Kafka 统一内容采集格式
 
-真实爬虫（`news-pipelines`）把 **news / wechat / paper** 三类内容推送到 Kafka topic
-`news_pipeline`，消费端统一处理后写入 `public.*`（`news_articles` / `papers`）。
-本文是这条契约的唯一说明。
+本仓库的 `pipesight-kafka-consumer` 从 Kafka topic `news_pipeline` 读取
+**news / wechat / paper**，处理后写入 `public.*`（`news_articles` / `papers`）。
+本文只说明这个消费端接受的消息契约，不表示已经有生产者在发布。
 
 ## 拓扑
 
 ```
-news-pipelines 爬虫 ──→ Kafka `news_pipeline` ──→ pipesight-kafka-consumer ──→ 183/pipesight
-                            │                            │ 解析/校验/翻译/分类/去重
-                            └─（envelope 或爬虫历史格式）└─ 只写「有效数据」进 public.*
+（发布方未在本仓库或 news-pipelines 当前代码中实现）
+        │
+        ▼
+Kafka `news_pipeline` ──→ pipesight-kafka-consumer ──→ 183/pipesight
+                              │ 解析/校验/翻译/分类/去重
+                              └─ 只写「有效数据」进 public.*
 ```
 
 - Broker：`172.16.4.182:9092`（`KAFKA_BOOTSTRAP_SERVERS`）
@@ -21,11 +24,12 @@ news-pipelines 爬虫 ──→ Kafka `news_pipeline` ──→ pipesight-kafka-
 消息体优先是一个符合本契约的 JSON 对象。字段是三类内容的**并集**，按 `content_type`
 取子集。
 
-> 兼容说明：news-pipelines 爬虫当前仍用历史格式
-> `{title,url,author,ctime(unix秒),content,content_md,site_name,domain}` 发布。
-> 消费端 `kafka_content_consumer._normalize_crawler_message` 会把它映射进本 envelope
+> 兼容说明：消费端另外接受扁平 JSON
+> `{title,url,author,ctime(unix秒),content,content_md,site_name,domain}`。
+> 这是 news-pipelines `NewsArticlesPipeline.map_message` 读取的形状，不是该仓库当前的发布格式。
+> `kafka_content_consumer._normalize_crawler_message` 会把它映射进本 envelope
 > （`domain == 'mp.weixin.qq.com'` → `wechat`，否则 `news`；`ctime` → `published_at`），
-> 之后走同一条处理链路，不另起分支。
+> 之后走同一条处理链路。扁平格式不覆盖论文。
 
 | 字段 | 类型 | 适用 | 必填 | 说明 |
 | --- | --- | --- | --- | --- |
@@ -119,16 +123,13 @@ news-pipelines 爬虫 ──→ Kafka `news_pipeline` ──→ pipesight-kafka-
 
 offset 手动按消息提交：**写入失败不提交**（稍后重试）；校验拒绝/重复跳过则提交。
 
-## 生产者责任（news-pipelines 爬虫侧）
+## 与 news-pipelines 的关系
 
-理想形态：爬虫不再直写 183 的 PG，改为把每条内容序列化成上面的 envelope 发布到
-`news_pipeline`：news/wechat 提供 `title`+`url`，paper 提供 `title`+（`doi` 或 `url`）；
-`published_at` 必须带时区；`content_type` 三类任选其一。翻译/分类/去重/入库由消费端完成。
+消费端希望 `news_pipeline` 上已经有消息：news/wechat 提供 `title`+`url`，paper 提供 `title`+（`doi` 或 `url`）；`published_at` 带时区；`content_type` 为三类之一。翻译、分类、去重和入库由本消费端完成。
 
-当前形态：爬虫仍直写 183（`PG_ENABLED=1`、`adapter='kafka'`），并以历史格式发布到
-`news_pipeline`。消费端把历史格式映射进 envelope 后同样处理；两者因 URL 去重而幂等、
-不重复入库。要让数据真正只走「Kafka → 处理 → 入库」这条链路，应把爬虫侧 `PG_ENABLED`
-置为 0，保留其 Kafka 发布。
+对照 news-pipelines 当前 `main`：有 Kafka 消费实现（`app/runtime/kafka_consumer.py`、`tools/kafka_consume.py`，消费组缺省 `news-pipelines-rss-consumer`），没有把抓取结果发到该主题的生产者。Scrapy `ITEM_PIPELINES` 只注册字段清洗和可选 MySQL。`NewsArticlesPipeline` 仅在 `PG_ENABLED=1` 时由上述消费脚本写入 `news_articles`（`.env.example` 里该开关缺省为 `0`），并可能用 `adapter=kafka` 新建来源。它使用消息里的原始 URL，冲突键是 `md5(url)`。本仓库入库前会规范化 URL，唯一索引同样是 `md5(url)`。两边同时写时，完全相同的 URL 会撞上同一索引，写法不同的同一原文可能变成两行。
+
+news-pipelines 的来源门控读取 `adapter=news_pipelines_spider` 和 `config.spider_name`，但 `PIPESIGHT_SOURCE_GATE` 缺省为 `0`。门控关闭时，爬虫按自己的运行清单执行，不看 `data_sources`。
 
 ## 运行消费端
 
