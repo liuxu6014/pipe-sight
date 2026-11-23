@@ -33,8 +33,6 @@ WECHAT_FEED_HOSTS = ('172.16.4.181',)
 WECHAT_FEED_PORT = 8081
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 MAX_TITLE_CHARS = 1000
-DEFAULT_LIMIT = 12
-MAX_LIMIT = 30
 MAX_REQUEST_INTERVAL_SECONDS = 60
 USER_AGENT = 'PipeSight/1.0 (+wechat rss collector)'
 BEIJING = ZoneInfo('Asia/Shanghai')
@@ -136,16 +134,13 @@ def validate_wechat_rss_config(snapshot: dict[str, Any]) -> None:
     config = snapshot['config']
     if set(config) - COMMON_CONFIG:
         raise ConfigurationError('公众号 RSS 适配器含不支持的采集配置，请核对来源设置')
-    limit = config.get('limit', DEFAULT_LIMIT)
-    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_LIMIT:
-        raise ConfigurationError(f'采集 limit 必须为 1～{MAX_LIMIT} 的整数')
     interval = config.get('request_interval', 0)
     if isinstance(interval, bool) or not isinstance(interval, (int, float)) or not 0 <= interval <= MAX_REQUEST_INTERVAL_SECONDS:
         raise ConfigurationError(f'request_interval 必须为 0～{MAX_REQUEST_INTERVAL_SECONDS} 秒')
     validate_feed_url(config.get('feed_url'))
 
 
-def _parse_feed(xml_text: str, feed_url: str, limit: int) -> tuple[str, str, list[dict[str, str]]]:
+def _parse_feed(xml_text: str, feed_url: str) -> tuple[str, str, list[dict[str, str]]]:
     """解析 wechat2rss RSS 文档为 (account, bizid, items)。"""
     root = ET.fromstring(xml_text)
     channel = root.find('channel')
@@ -166,8 +161,6 @@ def _parse_feed(xml_text: str, feed_url: str, limit: int) -> tuple[str, str, lis
 
     items: list[dict[str, str]] = []
     for item in channel.findall('item'):
-        if limit and len(items) >= limit:
-            break
         title = _clean_text(text_of(item, 'title'))
         link = text_of(item, 'link') or text_of(item, 'guid')
         body = ''
@@ -236,7 +229,7 @@ async def wechat_rss_batches(snapshot: dict[str, Any], checkpoint: dict[str, Any
     async with _make_client(config) as client:
         xml_text = await _fetch_feed(client, feed_url)
     try:
-        account, _bizid, items = _parse_feed(xml_text, feed_url, config.get('limit', DEFAULT_LIMIT))
+        account, _bizid, items = _parse_feed(xml_text, feed_url)
     except (ET.ParseError, ValueError) as exc:
         raise ConfigurationError('公众号 RSS 结构无效，不能将解析失败作为空采集成功') from exc
     records = [record for item in items if (record := _to_record(account, item)) is not None]
