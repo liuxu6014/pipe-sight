@@ -304,7 +304,10 @@ async def test_kafka_handler_uses_the_same_processing_contract_before_persistenc
     # no broker or production-only database is contacted.
     import ast
     import logging
+    from datetime import datetime, timezone
     from pathlib import Path
+    from types import SimpleNamespace
+    from typing import Any
 
     from sqlalchemy.exc import IntegrityError
     from test_collection_rollout import AsyncMemorySession
@@ -321,17 +324,26 @@ async def test_kafka_handler_uses_the_same_processing_contract_before_persistenc
     async def ensure_source(*args):
         return source
 
+    def session_factory():
+        session = AsyncMemorySession(e.engine)
+        session.bind = e.engine
+        return session
+
     module_path = Path(__file__).resolve().parents[2] / 'src/app/intelligence/tasks/kafka_content_consumer.py'  # noqa: ASYNC240
     tree = ast.parse(module_path.read_text())
     function = next(
-        node for node in tree.body if isinstance(node, ast.AsyncFunctionDef) and node.name == '_process_and_save'
+        node for node in tree.body if isinstance(node, ast.AsyncFunctionDef) and node.name == '_process_batch'
     )
     scope = {
-        'KafkaContentMessage': object,
+        'datetime': datetime,
+        'timezone': timezone,
+        'Any': Any,
+        '_parse_message': lambda value: object(),
         '_ensure_source': ensure_source,
         '_to_record': lambda message: deepcopy(item),
         'wire_id': str,
         'async_sessionmaker': lambda **kwargs: lambda: AsyncMemorySession(e.engine),
+        'AsyncSessionLocal': session_factory,
         'CollectionTranslationService': translation.CollectionTranslationService,
         'TranslationConfigurationError': translation.TranslationConfigurationError,
         'TranslationFailure': translation.TranslationFailure,
@@ -340,7 +352,9 @@ async def test_kafka_handler_uses_the_same_processing_contract_before_persistenc
         'IntegrityError': IntegrityError,
     }
     exec(compile(ast.Module(body=[function], type_ignores=[]), str(module_path), 'exec'), scope)
-    assert await scope['_process_and_save'](e.db, object(), NOW) == expected
+    msg = SimpleNamespace(value=b'{}')
+    results = await scope['_process_batch']([msg], SimpleNamespace(dry_run=False))
+    assert results == [(msg, expected)]
     assert sum(call[1]['request_id'].startswith('collection-processing:') for call in e.state.category_requests) == 1
     articles = e.db.sync.scalars(select(e.content.PipelineArticle)).all()
     assert len(articles) == int(expected == 'inserted')

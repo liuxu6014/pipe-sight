@@ -44,15 +44,19 @@ async def test_processing_configuration_error_rewinds_before_later_offsets_can_c
         async def commit(self, offsets):
             commits.append(offsets)
 
-    async def handle(msg, args):
-        seen.append(msg.offset)
-        return 'error' if len(seen) == 1 else 'inserted'
+    async def process_batch(messages, args):
+        results = []
+        for msg in messages:
+            seen.append(msg.offset)
+            results.append((msg, 'error' if len(seen) == 1 else 'inserted'))
+        return results
 
     scope = {
         'asyncio': asyncio,
         'AIOKafkaConsumer': Consumer,
         'KafkaConfig': SimpleNamespace(kafka_topic='content', kafka_bootstrap_servers='', kafka_group_id='test'),
-        '_handle_message': handle,
+        '_process_batch': process_batch,
+        'PROCESS_BATCH_SIZE': 20,
         'TopicPartition': lambda topic, partition: (topic, partition),
         'OffsetAndMetadata': lambda offset, metadata: offset,
         'monotonic': lambda: 0,
@@ -61,6 +65,6 @@ async def test_processing_configuration_error_rewinds_before_later_offsets_can_c
     }
     exec(compile(ast.Module(body=[function], type_ignores=[]), str(path), 'exec'), scope)
     await scope['_consume_once'](asyncio.Event(), SimpleNamespace(from_earliest=False, limit=2, dry_run=False))
-    assert seen == [5, 5]
+    assert seen == [5, 6, 5]
     assert rewinds == [(('content', 0), 5)]
     assert commits == [{('content', 0): 6}]

@@ -59,6 +59,7 @@ CONTENT_TYPE_TO_SOURCE_TYPE = {'news': 'website', 'wechat': 'wechat', 'paper': '
 TARGET_HOST = '172.16.4.183'
 TARGET_DATABASE = 'pipesight'
 STATS_LOG_INTERVAL_SECONDS = 30
+PROCESS_BATCH_SIZE = 20
 
 
 def _guard_target() -> None:
@@ -244,47 +245,73 @@ async def _ensure_source(db, message: KafkaContentMessage, now) -> Any:
     return source
 
 
-async def _process_and_save(db, message: KafkaContentMessage, now) -> str:
-    """处理单条消息并写有效数据，返回 'inserted' 或 'skipped'。"""
-    source = await _ensure_source(db, message, now)
-    record = _to_record(message)
-
+async def _process_batch(messages: list, args) -> list[tuple[Any, str]]:
+    """批量处理消息：同类型合并为一次翻译 + 一次打标签调用，再逐条写库。"""
     from app.intelligence.services.content_processing import ContentProcessingService  # noqa: PLC0415
 
-    snapshot = await ContentProcessingService.freeze(
-        db,
-        {
-            'type': source.type,
-            'model_id': source.model_id,
-            'source': {'id': wire_id(source.id), 'name': source.name},
-        },
-    )
-    sessions = async_sessionmaker(bind=db.bind, expire_on_commit=False, autoflush=False)
-    try:
-        snapshot = await CollectionTranslationService.freeze(db, snapshot)
-        await db.commit()
-        (record,) = await CollectionTranslationService.translate(sessions, snapshot, [record])
-    except (TranslationConfigurationError, TranslationFailure) as exc:
-        logger.warning('翻译跳过（保留原文）：%s', exc)
-    # The same one-call processing contract applies to HTTP collectors and Kafka.
-    await db.commit()
-    records, outcomes = await ContentProcessingService.prepare(sessions, snapshot, [record])
-    category_id, failed = outcomes[0]
-    if failed:
-        raise ValueError('内容处理失败，请检查模型配置或重试')
-    record = records[0]
+    now = datetime.now(timezone.utc)
+    outcome_by_msg: dict[Any, str] = {}
 
-    try:
-        saved = await CollectionPersistenceService.save_record(db, source, record, now, category_id=category_id)
-        await db.commit()
-    except (ValueError, TypeError, KeyError, IntegrityError) as exc:
-        await db.rollback()
-        logger.warning('拒绝无效内容（不入库）：%s', exc)
-        return 'skipped'
-    except BaseException:
-        await db.rollback()
-        raise
-    return 'inserted' if saved else 'skipped'
+    async with AsyncSessionLocal() as db:
+        groups: dict[str, dict] = {}
+        for msg in messages:
+            message = _parse_message(msg.value)
+            if message is None:
+                outcome_by_msg[msg] = 'skipped'
+                continue
+            if args.dry_run:
+                _preview(message)
+                outcome_by_msg[msg] = 'skipped'
+                continue
+            source = await _ensure_source(db, message, now)
+            record = _to_record(message)
+            kind = 'paper' if source.type == 'paper' else 'news'
+            group = groups.setdefault(kind, {'sources': [], 'records': [], 'msgs': []})
+            group['sources'].append(source)
+            group['records'].append(record)
+            group['msgs'].append(msg)
+
+        sessions = async_sessionmaker(bind=db.bind, expire_on_commit=False, autoflush=False)
+        for kind, group in groups.items():
+            try:
+                first_source = group['sources'][0]
+                snapshot = await ContentProcessingService.freeze(
+                    db,
+                    {'type': first_source.type, 'model_id': first_source.model_id, 'source': {'id': wire_id(first_source.id), 'name': first_source.name}},
+                )
+                try:
+                    snapshot = await CollectionTranslationService.freeze(db, snapshot)
+                    await db.commit()
+                    group['records'] = await CollectionTranslationService.translate(sessions, snapshot, group['records'])
+                except (TranslationConfigurationError, TranslationFailure) as exc:
+                    logger.warning('翻译跳过（保留原文）：%s', exc)
+                await db.commit()
+                records, classifications = await ContentProcessingService.prepare(sessions, snapshot, group['records'])
+
+                for source, record, msg, (category_id, failed) in zip(group['sources'], records, group['msgs'], classifications):
+                    if failed:
+                        outcome_by_msg[msg] = 'error'
+                        continue
+                    if record.get('_processing_excluded'):
+                        outcome_by_msg[msg] = 'skipped'
+                        continue
+                    try:
+                        saved = await CollectionPersistenceService.save_record(db, source, record, now, category_id=category_id)
+                        await db.commit()
+                        outcome_by_msg[msg] = 'inserted' if saved else 'skipped'
+                    except (ValueError, TypeError, KeyError, IntegrityError) as exc:
+                        await db.rollback()
+                        logger.warning('拒绝无效内容（不入库）：%s', exc)
+                        outcome_by_msg[msg] = 'skipped'
+                    except BaseException:
+                        await db.rollback()
+                        raise
+            except Exception as exc:
+                logger.error('批量处理失败（不提交 offset，稍后重试）：%s', exc)
+                for msg in group['msgs']:
+                    outcome_by_msg.setdefault(msg, 'error')
+
+    return [(msg, outcome_by_msg.get(msg, 'skipped')) for msg in messages]
 
 
 def _preview(message: KafkaContentMessage) -> None:
@@ -311,13 +338,8 @@ async def _handle_message(msg, args) -> str:
     if args.dry_run:
         _preview(message)
         return 'skipped'
-    try:
-        async with AsyncSessionLocal() as db:
-            return await _process_and_save(db, message, datetime.now(timezone.utc))
-    except Exception as exc:
-        logger.error('处理消息失败（不提交 offset，稍后重试）：%s', exc)
-        await asyncio.sleep(1)
-        return 'error'
+    results = await _process_batch([msg], args)
+    return results[0][1]
 
 
 async def _consume_once(stop_event: asyncio.Event, args) -> None:
@@ -339,36 +361,43 @@ async def _consume_once(stop_event: asyncio.Event, args) -> None:
             except asyncio.TimeoutError:
                 continue
             for records in batch.values():
-                for msg in records:
+                if not records:
+                    continue
+                for start in range(0, len(records), PROCESS_BATCH_SIZE):
                     if stop_event.is_set() or (args.limit and stats['received'] >= args.limit):
                         break
-                    stats['received'] += 1
-                    outcome = await _handle_message(msg, args)
-                    if outcome == 'inserted':
-                        stats['inserted'] += 1
-                    elif outcome == 'skipped':
-                        stats['skipped'] += 1
-                    else:
-                        stats['errors'] += 1
-                        # getmany already advanced this consumer's position. Not
-                        # committing alone would still skip the failed article on
-                        # the next poll, and a later success could commit past it.
-                        # Retry the failed offset before processing this partition.
-                        if not args.dry_run:
-                            consumer.seek(TopicPartition(msg.topic, msg.partition), msg.offset)
+                    chunk = records[start : start + PROCESS_BATCH_SIZE]
+                    results = await _process_batch(chunk, args)
+                    for msg, outcome in results:
+                        if stop_event.is_set() or (args.limit and stats['received'] >= args.limit):
+                            break
+                        stats['received'] += 1
+                        if outcome == 'inserted':
+                            stats['inserted'] += 1
+                        elif outcome == 'skipped':
+                            stats['skipped'] += 1
+                        else:
+                            stats['errors'] += 1
+                            # getmany already advanced this consumer's position. Not
+                            # committing alone would still skip the failed article on
+                            # the next poll, and a later success could commit past it.
+                            # Retry the failed offset before processing this partition.
+                            if not args.dry_run:
+                                consumer.seek(TopicPartition(msg.topic, msg.partition), msg.offset)
+                            break
+                        if not args.dry_run and outcome != 'error':
+                            try:
+                                await consumer.commit(
+                                    {TopicPartition(msg.topic, msg.partition): OffsetAndMetadata(msg.offset + 1, '')}
+                                )
+                            except Exception as exc:
+                                logger.warning('提交 offset 失败：%s', exc)
+                    if stop_event.is_set() or (args.limit and stats['received'] >= args.limit):
                         break
-                    if not args.dry_run and outcome != 'error':
-                        try:
-                            await consumer.commit(
-                                {TopicPartition(msg.topic, msg.partition): OffsetAndMetadata(msg.offset + 1, '')}
-                            )
-                        except Exception as exc:
-                            logger.warning('提交 offset 失败：%s', exc)
-                    if args.limit and stats['received'] >= args.limit:
-                        stop_event.set()
-                        break
-                if stop_event.is_set():
+                if stop_event.is_set() or (args.limit and stats['received'] >= args.limit):
                     break
+            if args.limit and stats['received'] >= args.limit:
+                stop_event.set()
             if monotonic() - last_log >= STATS_LOG_INTERVAL_SECONDS:
                 logger.info('Kafka 消费统计：%s', stats)
                 last_log = monotonic()
