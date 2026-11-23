@@ -59,7 +59,7 @@ CONTENT_TYPE_TO_SOURCE_TYPE = {'news': 'website', 'wechat': 'wechat', 'paper': '
 TARGET_HOST = '172.16.4.183'
 TARGET_DATABASE = 'pipesight'
 STATS_LOG_INTERVAL_SECONDS = 30
-PROCESS_BATCH_SIZE = 20
+PROCESS_BATCH_SIZE = 10
 
 
 def _guard_target() -> None:
@@ -250,18 +250,18 @@ async def _process_batch(messages: list, args) -> list[tuple[Any, str]]:
     from app.intelligence.services.content_processing import ContentProcessingService  # noqa: PLC0415
 
     now = datetime.now(timezone.utc)
-    outcome_by_msg: dict[Any, str] = {}
+    outcome_by_msg: dict[int, str] = {}
 
     async with AsyncSessionLocal() as db:
         groups: dict[str, dict] = {}
         for msg in messages:
             message = _parse_message(msg.value)
             if message is None:
-                outcome_by_msg[msg] = 'skipped'
+                outcome_by_msg[id(msg)] = 'skipped'
                 continue
             if args.dry_run:
                 _preview(message)
-                outcome_by_msg[msg] = 'skipped'
+                outcome_by_msg[id(msg)] = 'skipped'
                 continue
             source = await _ensure_source(db, message, now)
             record = _to_record(message)
@@ -284,34 +284,34 @@ async def _process_batch(messages: list, args) -> list[tuple[Any, str]]:
                     await db.commit()
                     group['records'] = await CollectionTranslationService.translate(sessions, snapshot, group['records'])
                 except (TranslationConfigurationError, TranslationFailure) as exc:
-                    logger.warning('翻译跳过（保留原文）：%s', exc)
+                    logger.warning('翻译跳过（保留原文）：{}', exc)
                 await db.commit()
                 records, classifications = await ContentProcessingService.prepare(sessions, snapshot, group['records'])
 
                 for source, record, msg, (category_id, failed) in zip(group['sources'], records, group['msgs'], classifications):
                     if failed:
-                        outcome_by_msg[msg] = 'error'
+                        outcome_by_msg[id(msg)] = 'error'
                         continue
                     if record.get('_processing_excluded'):
-                        outcome_by_msg[msg] = 'skipped'
+                        outcome_by_msg[id(msg)] = 'skipped'
                         continue
                     try:
                         saved = await CollectionPersistenceService.save_record(db, source, record, now, category_id=category_id)
                         await db.commit()
-                        outcome_by_msg[msg] = 'inserted' if saved else 'skipped'
+                        outcome_by_msg[id(msg)] = 'inserted' if saved else 'skipped'
                     except (ValueError, TypeError, KeyError, IntegrityError) as exc:
                         await db.rollback()
                         logger.warning('拒绝无效内容（不入库）：%s', exc)
-                        outcome_by_msg[msg] = 'skipped'
+                        outcome_by_msg[id(msg)] = 'skipped'
                     except BaseException:
                         await db.rollback()
                         raise
-            except Exception as exc:
-                logger.error('批量处理失败（不提交 offset，稍后重试）：%s', exc)
+            except Exception:
+                logger.exception('批量处理失败（不提交 offset，稍后重试）')
                 for msg in group['msgs']:
-                    outcome_by_msg.setdefault(msg, 'error')
+                    outcome_by_msg.setdefault(id(msg), 'error')
 
-    return [(msg, outcome_by_msg.get(msg, 'skipped')) for msg in messages]
+    return [(msg, outcome_by_msg.get(id(msg), 'skipped')) for msg in messages]
 
 
 def _preview(message: KafkaContentMessage) -> None:
@@ -413,7 +413,7 @@ async def _run(stop_event: asyncio.Event, args) -> None:
         try:
             await _consume_once(stop_event, args)
         except Exception as exc:  # noqa: PERF203 —— Kafka 断连自动重连
-            logger.error('Kafka 消费异常，5 秒后重连：%s', exc)
+            logger.exception('Kafka 消费异常，5 秒后重连')
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=5)
             except asyncio.TimeoutError:
