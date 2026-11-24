@@ -214,7 +214,7 @@ class ContentDao:
                 'UTC', cast(func.rpad(func.coalesce(date, '1970'), 10, '-01'), DateTime(timezone=False))
             )
             # 纯论文分页可用不可变文本日期命中索引；跨类型游标才需要上面的绝对时间。
-            paper_sort_date = func.rpad(func.coalesce(date, '1970'), 10, '-01')
+            paper_sort_date = func.rpad(date, 10, '-01')
         elif isinstance(date.type, BeijingAuditTime):
             # Audit storage is Beijing wall time. Normalize SQL values before
             # coalescing/comparing with absolute search cursors, independently
