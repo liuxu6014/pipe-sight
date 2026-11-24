@@ -169,7 +169,7 @@ Index(
     'uk_papers_url', func.md5(PipelinePaper.url), unique=True, postgresql_where=text('doi IS NULL AND url IS NOT NULL')
 )
 # Match the existing PostgreSQL partial-date ordering expression, not lexical YYYY[-MM[-DD]].
-paper_date = func.rpad(PipelinePaper.published_date, 10, '-01')
+paper_date = func.rpad(func.coalesce(PipelinePaper.published_date, '1970'), 10, '-01')
 Index('idx_papers_date', paper_date.desc(), PipelinePaper.id).ddl_if(dialect='postgresql')
 Index('idx_papers_category_id', PipelinePaper.category_id, paper_date.desc(), PipelinePaper.id).ddl_if(
     dialect='postgresql'

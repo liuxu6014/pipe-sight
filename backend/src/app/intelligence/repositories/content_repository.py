@@ -213,13 +213,17 @@ class ContentDao:
             order_date = func.timezone(
                 'UTC', cast(func.rpad(func.coalesce(date, '1970'), 10, '-01'), DateTime(timezone=False))
             )
+            # 纯论文分页可用不可变文本日期命中索引；跨类型游标才需要上面的绝对时间。
+            paper_sort_date = func.rpad(func.coalesce(date, '1970'), 10, '-01')
         elif isinstance(date.type, BeijingAuditTime):
             # Audit storage is Beijing wall time. Normalize SQL values before
             # coalescing/comparing with absolute search cursors, independently
             # of the PostgreSQL session TimeZone.
             order_date = func.coalesce(audit_as_utc(date), datetime(1970, 1, 1, tzinfo=timezone.utc))
+            paper_sort_date = None
         else:
             order_date = func.coalesce(date, datetime(1970, 1, 1, tzinfo=timezone.utc))
+            paper_sort_date = None
         cursor = filters.get('search_after')
         if cursor:
             score, cursor_date, cursor_kind, identity = cursor
@@ -242,7 +246,13 @@ class ContentDao:
             )
         if not isinstance(rank, int):
             statement = statement.order_by(rank.desc())
-        statement = statement.order_by(order_date.desc(), model.id.desc())
+        # 纯论文分页（无游标、无排名）按不可变文本日期排序以命中索引；其余用绝对时间。
+        sort_date = (
+            paper_sort_date
+            if paper_sort_date is not None and cursor is None and not filters.get('ranked', False)
+            else order_date
+        )
+        statement = statement.order_by(sort_date.desc(), model.id.desc())
         if filters.get('ranked', False) or cursor is not None:
             statement = statement.add_columns(
                 (literal(rank) if isinstance(rank, int) else rank).label('_search_rank'),
