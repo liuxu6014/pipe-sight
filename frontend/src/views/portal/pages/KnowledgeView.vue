@@ -1,9 +1,5 @@
 <template>
   <div class="ps-page ps-knowledge-page ps-basket-page">
-    <nav class="ps-workspace-tabs" aria-label="资料库栏目">
-      <router-link to="/portal/basket">收藏资料</router-link>
-      <router-link to="/portal/knowledge" aria-current="page">上传资料</router-link>
-    </nav>
     <div v-if="documentsError || parsingRefreshError" class="ps-inline-state is-warning" role="status">
       <WarningFilled />
       <span>{{ documentsError || parsingRefreshError }}</span>
