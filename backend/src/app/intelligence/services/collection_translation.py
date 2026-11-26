@@ -20,7 +20,7 @@ from app.business_ids import parse_business_id, wire_id
 MAX_INPUT_CHARS = 20_000
 MAX_OUTPUT_CHARS = 40_000
 MAX_RESPONSE_BYTES = 256 * 1024
-MAX_CALL_TIMEOUT_SECONDS = 60
+MAX_CALL_TIMEOUT_SECONDS = 180
 _paper_translation_locks = WeakValueDictionary()
 MODEL_PARAMETER_KEYS = frozenset(
     {
@@ -59,7 +59,7 @@ def _parameters(raw) -> dict:
     if isinstance(temperature, bool) or not isinstance(temperature, (int, float)) or not 0 <= temperature <= 2:  # noqa: PLR2004
         raise TranslationConfigurationError('翻译模型温度参数无效')
     return {
-        'timeout_seconds': min(_integer(raw, 'timeout_seconds', 60, 1, 120), MAX_CALL_TIMEOUT_SECONDS),
+        'timeout_seconds': min(_integer(raw, 'timeout_seconds', 60, 1, 180), MAX_CALL_TIMEOUT_SECONDS),
         'max_tokens': min(_integer(raw, 'max_tokens', 2048, 1, 32768), 8192),
         'temperature': temperature,
         'daily_limit': _integer(raw, 'daily_limit', 0, 0, 2_147_483_647),

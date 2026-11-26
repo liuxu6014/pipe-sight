@@ -84,5 +84,6 @@ export function testModel(modelId) {
   return request({
     url: "/ai/model/" + requireBusinessId(modelId) + "/test",
     method: "post",
+    timeout: 180000,
   });
 }

@@ -607,7 +607,7 @@ async def test_effective_model_timeout_and_output_limits_are_frozen_before_call(
     )
     r = await enqueue(e, s['id'])
     parameters = (await e.repo.run(e.db, r['id'])).config_snapshot['translation_model']['parameters']
-    assert parameters['timeout_seconds'] == 60
+    assert parameters['timeout_seconds'] == 120
     assert parameters['max_tokens'] == 8192 and parameters['max_response_bytes'] == 256 * 1024
 
 

@@ -120,7 +120,7 @@ class AiModelService:
         ):
             raise ServiceException(message='模型地址必须为有效 HTTP(S) 基础地址')
         if (
-            not 1 <= int(params.get('timeout_seconds', 60)) <= 120  # noqa: PLR2004
+            not 1 <= int(params.get('timeout_seconds', 60)) <= 180  # noqa: PLR2004
             or not 1 <= int(params.get('max_tokens', 2048)) <= 32768  # noqa: PLR2004
             or not 0 <= float(params.get('temperature', 0.2)) <= 2  # noqa: PLR2004
         ):

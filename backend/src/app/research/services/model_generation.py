@@ -136,9 +136,17 @@ class ModelGateway:
             path = '/chat/completions'
         started = perf_counter()
         usage = {}
+        # 拆分超时：connect/池短、read 等于整段生成预算。OpenAI 兼容端点为非流式，
+        # 服务端生成完整后才返回，read 超时即模型生成总时长，不能和 connect 混用同一标量。
+        client_timeout = httpx.Timeout(
+            connect=min(timeout, 15),
+            read=timeout,
+            write=min(timeout, 30),
+            pool=min(timeout, 15),
+        )
         try:
             async with (
-                httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client,
+                httpx.AsyncClient(timeout=client_timeout, follow_redirects=False) as client,
                 client.stream('POST', model.base_url.rstrip('/') + path, headers=headers, json=body) as response,
             ):
                 response.raise_for_status()

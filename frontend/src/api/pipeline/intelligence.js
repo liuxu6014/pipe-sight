@@ -51,7 +51,7 @@ export function translatePipelinePaperTitle(itemId) {
   return request({
     url: `/pipeline/intelligence/${requireBusinessId(itemId)}/translate-title`,
     method: 'post',
-    timeout: 75000
+    timeout: 180000
   })
 }
 
@@ -59,7 +59,7 @@ export function translatePipelinePaperAbstract(itemId) {
   return request({
     url: `/pipeline/intelligence/${requireBusinessId(itemId)}/translate-abstract`,
     method: 'post',
-    timeout: 75000
+    timeout: 180000
   })
 }
 
