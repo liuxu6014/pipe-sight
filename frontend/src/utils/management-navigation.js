@@ -23,7 +23,6 @@ const ENTRIES = {
   '/pipeline/source': ['collection', '数据源管理'],
   '/pipeline/intelligence': ['data', '情报查询'],
   '/pipeline/report': ['reports', '科研报告'],
-  '/pipeline/manuscript': ['reports', '论文生成'],
   '/pipeline/digest': ['digests', '简报管理'],
   '/pipeline/template': ['templates', '模板管理'],
   '/pipeline/model': ['model', '模型管理'],
