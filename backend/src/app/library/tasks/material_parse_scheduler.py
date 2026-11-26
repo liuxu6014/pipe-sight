@@ -24,6 +24,7 @@ async def process_material_parse(material_id, worker_id='material-worker') -> No
         if not row:
             return
         token, path, name = row._parse_token, MaterialFileService.safe_local_path(row.storage_key), row.filename
+    title = None
     try:
         scan = await asyncio.to_thread(FileScanService.scan, str(path) if path else None, name)
         if scan.status != 'clean':
@@ -35,13 +36,24 @@ async def process_material_parse(material_id, worker_id='material-worker') -> No
             error = None if status == 'ready' else message
             if status == 'queued':
                 status, error = 'failed', '此文件类型尚未配置解析器'
+            elif status == 'ready' and text:
+                # 解析成功后尝试用 AI 提取标题自动命名；失败保留原文件名。
+                try:
+                    async with AsyncSessionLocal() as db:
+                        title = await MaterialClassificationService.extract_title(
+                            db,
+                            content=text,
+                            request_id=f'material-title:{material_id}:{token}',
+                        )
+                except Exception:
+                    title = None
     except asyncio.CancelledError:
         raise
     except Exception:
         status, error, text = 'failed', '资料解析失败，请检查原文件后重试', None
     async with AsyncSessionLocal() as db:
         await MaterialDao.finish_material_parse(
-            db, material_id, parse_token=token, status=status, extracted_text=text, error=error
+            db, material_id, parse_token=token, status=status, extracted_text=text, error=error, name=title
         )
 
 

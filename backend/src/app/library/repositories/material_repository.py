@@ -113,7 +113,9 @@ class MaterialDao:
         return row
 
     @staticmethod
-    async def finish_material_parse(db, material_id, *, parse_token, status, extracted_text, error=None) -> bool:
+    async def finish_material_parse(
+        db, material_id, *, parse_token, status, extracted_text, error=None, name=None
+    ) -> bool:
         material_id = parse_business_id(material_id)
         if not isinstance(parse_token, str):
             return False
@@ -135,27 +137,30 @@ class MaterialDao:
             return False
         classifying = (Material.classification_status == 'running') & Material.classification_token.is_not(None)
         classification_failed = Material.classification_status == 'failed'
+        values = {
+            'status': status,
+            'extracted_text': extracted_text,
+            'error': error,
+            'updated_at': utcnow(),
+            'category_id': None,
+            'classification_status': case(
+                (classifying, 'running'),
+                (classification_failed, 'failed'),
+                else_='not_configured',
+            ),
+            'classification_error': case(
+                (classifying, SUPERSEDED_MESSAGE),
+                (classification_failed, Material.classification_error),
+                else_=None,
+            ),
+            'classification_token': case((classifying, Material.classification_token), else_=None),
+        }
+        if name is not None:
+            values['name'] = name
         result = await db.execute(
             update(Material)
             .where(Material.id == material_id, Material.status == 'parsing', guard)
-            .values(
-                status=status,
-                extracted_text=extracted_text,
-                error=error,
-                updated_at=utcnow(),
-                category_id=None,
-                classification_status=case(
-                    (classifying, 'running'),
-                    (classification_failed, 'failed'),
-                    else_='not_configured',
-                ),
-                classification_error=case(
-                    (classifying, SUPERSEDED_MESSAGE),
-                    (classification_failed, Material.classification_error),
-                    else_=None,
-                ),
-                classification_token=case((classifying, Material.classification_token), else_=None),
-            )
+            .values(**values)
             .execution_options(synchronize_session=False)
         )
         await db.commit()
