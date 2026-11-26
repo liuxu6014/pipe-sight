@@ -59,7 +59,7 @@ CONTENT_TYPE_TO_SOURCE_TYPE = {'news': 'website', 'wechat': 'wechat', 'paper': '
 TARGET_HOST = '172.16.4.183'
 TARGET_DATABASE = 'pipesight'
 STATS_LOG_INTERVAL_SECONDS = 30
-PROCESS_BATCH_SIZE = 10
+PROCESS_BATCH_SIZE = 3
 
 
 def _guard_target() -> None:
