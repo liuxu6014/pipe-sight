@@ -234,6 +234,7 @@ export function uploadPipelineKnowledgeDocument(data) {
     url: '/pipeline/knowledge/documents',
     method: 'post',
     data,
+    timeout: 60000,
     headers: { 'Content-Type': 'multipart/form-data' }
   })
 }
