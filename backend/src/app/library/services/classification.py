@@ -17,7 +17,7 @@ from app.intelligence.services.translation_settings import PROCESSING_MODEL_KEY,
 from app.research.services.model_generation import ModelGateway
 from exceptions.exception import ServiceException
 
-MAX_EVIDENCE_CHARS = 240
+MAX_EVIDENCE_CHARS = 500
 MAX_TITLE_SNIPPET_CHARS = 4000
 MAX_TITLE_CHARS = 50
 
@@ -108,13 +108,15 @@ class MaterialClassificationService:
             identity = parse_business_id(result['categoryId'])
             category = next((c for c in categories if c.id == identity), None)
             evidence = result.get('evidence')
+            evidence_compact = re.sub(r'\s+', ' ', evidence).strip() if isinstance(evidence, str) else ''
+            content_compact = re.sub(r'\s+', ' ', content).strip()
             if (
                 category is None
                 or result.get('categoryName') != category.name
                 or not isinstance(evidence, str)
                 or not evidence.strip()
                 or len(evidence) > MAX_EVIDENCE_CHARS
-                or evidence not in content
+                or evidence_compact not in content_compact
             ):
                 raise ValueError('unsupported classification')
             return 'completed', identity, None
