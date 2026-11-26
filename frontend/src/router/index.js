@@ -90,11 +90,11 @@ export const constantRoutes = [
       { path: 'me', redirect: '/portal/me/reports' },
       { path: 'templates', name: 'PortalTemplates', component: () => import('@/views/portal/pages/PersonalTemplatesView.vue'), meta: { title: '我的模板' } },
       { path: 'profile', name: 'PortalProfile', component: () => import('@/views/portal/pages/ProfileView.vue'), meta: { title: '个人资料设置' } },
-      { path: 'basket', name: 'PortalBasket', component: () => import('@/views/portal/pages/MyWorkspaceView.vue'), props: { mode: 'basket' }, meta: { title: '资料库' } },
-      { path: 'me/basket', name: 'PortalMyBasket', redirect: '/portal/basket' },
+      { path: 'basket', name: 'PortalBasket', redirect: '/portal/knowledge' },
+      { path: 'me/basket', name: 'PortalMyBasket', redirect: '/portal/knowledge' },
       { path: 'me/tasks', name: 'PortalMyTasks', redirect: to => ({ path: '/portal/me/reports', query: { ...to.query, ...(to.query.status === 'completed' ? { status: 'generated' } : {}) }, hash: to.hash }) },
       { path: 'me/reports', name: 'PortalMyReports', redirect: to => ({ path: '/portal/research', query: to.query, hash: to.hash }) },
-      { path: 'me/favorites', name: 'PortalMyFavorites', redirect: '/portal/basket' }
+      { path: 'me/favorites', name: 'PortalMyFavorites', redirect: '/portal/knowledge' }
     ]
   },
   {

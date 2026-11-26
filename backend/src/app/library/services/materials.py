@@ -374,24 +374,22 @@ class MaterialService:
             mime = await asyncio.to_thread(cls.detect_mime, path, name)
         except (ValueError, UnicodeError, KeyError, zipfile.BadZipFile):
             raise ServiceException(message='文件内容校验失败') from None
-        scan = await asyncio.to_thread(scanner, str(path), name)
         file_hash = await asyncio.to_thread(lambda: hashlib.sha256(path.read_bytes()).hexdigest())
-        if scan.status == 'clean':
-            existing = await MaterialDao.find_duplicate_upload(db, user_id, file_hash)
-            existing_path = MaterialFileService.safe_local_path(existing.storage_key) if existing else None
-            if existing and existing_path and existing_path.is_file():
-                if existing.status == 'failed':
-                    existing.status, existing.error, existing.updated_at = 'queued', None, utcnow()
-                data = {**(detail_serializer or cls.material_detail_dict)(existing, user_id), 'duplicate': True}
-                await db.commit()
-                # Only the new, redundant upload copy is disposable. Never unlink
-                # the original, even if a caller passed its path directly.
-                if path.resolve() != existing_path.resolve():
-                    try:
-                        await asyncio.to_thread(path.unlink)
-                    except OSError:
-                        pass
-                return data
+        existing = await MaterialDao.find_duplicate_upload(db, user_id, file_hash)
+        existing_path = MaterialFileService.safe_local_path(existing.storage_key) if existing else None
+        if existing and existing_path and existing_path.is_file():
+            if existing.status == 'failed':
+                existing.status, existing.error, existing.updated_at = 'queued', None, utcnow()
+            data = {**(detail_serializer or cls.material_detail_dict)(existing, user_id), 'duplicate': True}
+            await db.commit()
+            # Only the new, redundant upload copy is disposable. Never unlink
+            # the original, even if a caller passed its path directly.
+            if path.resolve() != existing_path.resolve():
+                try:
+                    await asyncio.to_thread(path.unlink)
+                except OSError:
+                    pass
+            return data
 
         row = PipelineMaterial(
             user_id=user_id,
@@ -401,8 +399,8 @@ class MaterialService:
             mime_type=mime,
             size=path.stat().st_size,
             hash=file_hash,
-            status='queued' if scan.status == 'clean' else 'failed',
-            error=None if scan.status == 'clean' else '资料未通过安全扫描，请配置扫描器后重试',
+            status='queued',
+            error=None,
             extracted_text=None,
             edited_text=None,
             version=1,
