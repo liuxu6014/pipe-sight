@@ -392,6 +392,15 @@ function buildDigestPayload() {
   const reportType = currentTypeConfig.value.reportType
   const { period, label } = buildReportPeriod()
   if (!period.length || period.length !== 2 || period[0] > period.at(-1)) throw new Error(`请选择完整且有效的${periodFieldLabel.value}`)
+  const periodStart = parseCalendarDate(period[0])
+  const periodEnd = parseCalendarDate(period[1])
+  const today = parseCalendarDate(new Date())
+  if (!periodStart || !periodEnd) throw new Error(`请选择完整且有效的${periodFieldLabel.value}`)
+  if (periodEnd > today) throw new Error('报告周期不能选择未来时间')
+  if (form.type === '周报') {
+    const days = Math.round((periodEnd - periodStart) / 86400000)
+    if (days !== 6) throw new Error('周报周期必须为连续的 7 天')
+  }
   return {
       title: `科技情报${form.type} ${label}`.trim(),
       reportType,

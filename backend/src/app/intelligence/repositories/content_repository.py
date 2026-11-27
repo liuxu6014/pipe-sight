@@ -46,7 +46,7 @@ class ContentDao:
         paper_journals = (
             (
                 await db.execute(
-                    select(PipelinePaper.journal)
+                    select(func.lower(func.trim(PipelinePaper.journal)))
                     .where(PipelinePaper.journal.isnot(None), PipelinePaper.journal != '')
                     .distinct()
                 )
