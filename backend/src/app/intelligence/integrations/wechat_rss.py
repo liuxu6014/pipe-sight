@@ -1,7 +1,7 @@
 """WeChat 公众号 RSS 采集适配器：从内部 wechat2rss feed 拉取并产出文章批次。
 
-外部爬虫（172.16.4.181）为每个公众号暴露一个 wechat2rss feed
-（``http://172.16.4.181:8081/feed/{bizid}.xml``）。本适配器把该 feed 接入受控采集
+自部署 wewe-rss（150.158.163.6）为每个公众号暴露一个 RSS feed
+（``http://150.158.163.6:4000/feeds/{id}.rss``）。本适配器把该 feed 接入受控采集
 执行器，产出 news_articles 候选批次，交由 PipelineCollectionService 统一翻译 /
 分类 / 有效性裁决后入库。
 
@@ -29,8 +29,8 @@ if TYPE_CHECKING:
 
     from app.intelligence.services.collection import CollectionBatch
 
-WECHAT_FEED_HOSTS = ('172.16.4.181',)
-WECHAT_FEED_PORT = 8081
+WECHAT_FEED_HOSTS = ('150.158.163.6',)
+WECHAT_FEED_PORT = 4000
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 MAX_TITLE_CHARS = 1000
 MAX_REQUEST_INTERVAL_SECONDS = 60
@@ -118,12 +118,12 @@ def validate_feed_url(url: str | None) -> str:
         and parsed.port == WECHAT_FEED_PORT
         and not parsed.username
         and not parsed.password
-        and re.fullmatch(r'/feed/\d+\.xml', parsed.path or '')
+        and re.fullmatch(r'/feeds/\S+\.rss', parsed.path or '')
         and not parsed.query
         and not parsed.fragment
     )
     if not valid:
-        raise ConfigurationError('公众号 RSS 链接须为 http://172.16.4.181:8081/feed/{bizid}.xml')
+        raise ConfigurationError('公众号 RSS 链接须为 http://150.158.163.6:4000/feeds/{id}.rss')
     return candidate
 
 
@@ -152,7 +152,7 @@ def _parse_feed(xml_text: str, feed_url: str) -> tuple[str, str, list[dict[str, 
     if title_node is not None and title_node.text:
         account = title_node.text.strip()
 
-    match = re.search(r'/feed/(\d+)\.xml$', feed_url)
+    match = re.search(r'/feeds/(\S+)\.rss$', feed_url)
     bizid = match.group(1) if match else hashlib.sha256(feed_url.encode()).hexdigest()[:16]
 
     def text_of(node: ET.Element, tag: str) -> str:
