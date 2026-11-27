@@ -167,7 +167,17 @@ class PipelineCollectionService:
         translated = await CollectionTranslationService.translate(classification_session_factory(db), snapshot, records)
         from app.intelligence.services.content_processing import ContentProcessingService  # noqa: PLC0415
 
-        return await ContentProcessingService.prepare(classification_session_factory(db), snapshot, translated)
+        sessions = classification_session_factory(db)
+        # 分批调用模型，避免一次处理全部候选超出模型上下文/超时。
+        batch_size = 3
+        prepared_records: list = []
+        prepared_classifications: list = []
+        for start in range(0, len(translated), batch_size):
+            chunk = translated[start : start + batch_size]
+            chunk_records, chunk_classifications = await ContentProcessingService.prepare(sessions, snapshot, chunk)
+            prepared_records.extend(chunk_records)
+            prepared_classifications.extend(chunk_classifications)
+        return prepared_records, prepared_classifications
 
     @staticmethod
     async def classify_records(db, records, kind) -> list[tuple]:
